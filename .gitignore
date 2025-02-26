@@ -1,3 +1,17 @@
+data/
+mongodb/
+NapCat.Framework.Windows.Once/
+log/
+src/plugins/memory
+/test
+message_queue_content.txt
+message_queue_content.bat
+message_queue_window.bat
+message_queue_window.txt
+reasoning_content.txt
+reasoning_content.bat
+reasoning_window.bat
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
