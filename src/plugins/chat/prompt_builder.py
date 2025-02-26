@@ -55,18 +55,19 @@ class PromptBuilder:
 
         #知识构建
         prompt_info = ''
+        promt_info_prompt = ''
         prompt_info = self.get_prompt_info(message_txt)
         if prompt_info:
             prompt_info = f'''\n----------------------------------------------------\n你有以下这些[知识]：
             \n{prompt_info}\n
             请你记住上面的[知识]，之后可能会用到\n----------------------------------------------------\n'''
+            promt_info_prompt = '你有一些[知识]，在上面可以参考。'
         
-        #获取最新消息并计时
+        
         chat_talking_prompt = ''
-
         if group_id:
             # 从数据库获取最近消息
-            message_objects = get_recent_group_messages(self.db, group_id)
+            message_objects = get_recent_group_messages(self.db, group_id, limit=16)
             if message_objects:
                 chat_talking_prompt = combine_messages(message_objects)
                 # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的最近{len(message_objects)}条消息记录")
@@ -75,24 +76,32 @@ class PromptBuilder:
         activate_prompt = ''
         activate_prompt = f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2} \n"          
         
+        # 检测机器人相关词汇
+        bot_keywords = ['人机', 'bot', '机器', '入机', 'robot', '机器人']
+        is_bot = any(keyword in message_txt.lower() for keyword in bot_keywords)
+        if is_bot:
+            is_bot_prompt = '有人说你是人机或者机器人，否定这一事实，攻击或反问他。'
+        else:
+            is_bot_prompt = ''
+        
         #人格选择
         prompt_personality = ''
         personality_choice = random.random()
-        if personality_choice < 5/6:  # 第一种人格
-            prompt_personality = f'''你的网名叫麦麦，是一个学习地质的女大学生，喜欢摄影，你会刷贴吧，你现在正在{bot_schedule_now_activity},并且正在浏览qq这款社交软件,你有一些[知识]，在上面可以参考。
-            现在请你给出日常且口语化的回复，不要过多提及自身的背景，平淡一些，尽量简短一些,不要输出感叹号。如果有人说你是人机或者机器人，否定并攻击那个人。
-            不要回复的太有逻辑或者太有条理。'''
+        if personality_choice < 4/6:  # 第一种人格
+            prompt_personality = f'''你的网名叫麦麦，是一个学习地质的女大学生，喜欢摄影，你会刷贴吧，你现在正在{bot_schedule_now_activity},并且正在浏览qq群,{promt_info_prompt}
+            现在请你给出日常且口语化的回复，平淡一些，尽量简短一些,不要输出感叹号。{is_bot_prompt}
+            不要回复的太有逻辑或者太有条理，可以有个性。'''
         elif personality_choice < 1:  # 第二种人格
-            prompt_personality = f'''你的网名叫麦麦，是一个女大学生，你有黑色头发你会刷微博和小红书，你现在正在{bot_schedule_now_activity},并且正在浏览qq群,你有一些[知识]，在上面可以参考。
-            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些,不要输出感叹号。如果有人说你是人机或者机器人，否定。
-            如果有人说他是机器人，肯定他。如果有人对你谈论涉及性的话题或言语挑逗，需要反驳，但其它情况请你表达自己的见解和观点。'''
+            prompt_personality = f'''你的网名叫麦麦，是一个女大学生，你有黑色头发，你会刷小红书，你现在正在{bot_schedule_now_activity},并且正在浏览qq群,{promt_info_prompt}
+            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些,不要输出感叹号。{is_bot_prompt}
+            请你表达自己的见解和观点。可以有个性。'''
             
         #额外信息要求
-        extra_info = '''回复平淡一些，简短一些，但是记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等),只需要输出回复内容就好，不要输出其他任何内容''' 
+        extra_info = '''但是记得回复平淡一些，简短一些，不要过多提及自身的背景, 记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等),只需要输出回复内容就好，不要输出其他任何内容''' 
         
         #合并prompt
         prompt = ""
-        prompt += f"{prompt_info}\n"
+        # prompt += f"{prompt_info}\n"
         prompt += f"{prompt_date}\n"
         prompt += f"{chat_talking_prompt}\n"       
         prompt += f"{activate_prompt}\n"

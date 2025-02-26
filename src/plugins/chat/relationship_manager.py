@@ -121,7 +121,7 @@ class RelationshipManager:
     async def _save_all_relationships(self):
         """将所有关系数据保存到数据库"""         
         # 保存所有关系数据
-        for userid, relationship in self.relationships:
+        for userid, relationship in self.relationships.items():
             if not relationship.saved:
                 relationship.saved = True
                 await self.storage_relationship(relationship)

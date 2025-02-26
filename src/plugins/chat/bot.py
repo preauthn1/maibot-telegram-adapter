@@ -215,10 +215,6 @@ class ChatBot:
                             is_emoji=True
                         )
                     message_sender.send_temp_container.add_message(bot_message)
-                    
-        
-        
-        
         
         # 如果收到新消息，提高回复意愿
         willing_manager.change_reply_willing_after_sent(event.group_id)

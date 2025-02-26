@@ -241,9 +241,9 @@ class GPTResponseGenerator:
         """根据当前模型类型选择对应的生成函数"""
         # 使用随机数选择模型
         rand = random.random()
-        if rand < 0.15:  # 40%概率使用 R1
+        if rand < 0.6:  # 40%概率使用 R1
             self.current_model_type = "r1"
-        elif rand < 0.8:  # 30%概率使用 V3
+        elif rand < 0.5:  # 30%概率使用 V3
             self.current_model_type = "v3"
         else:  # 30%概率使用 R1-Distill
             self.current_model_type = "r1_distill"

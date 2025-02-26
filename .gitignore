@@ -3,6 +3,7 @@ mongodb/
 NapCat.Framework.Windows.Once/
 log/
 src/plugins/memory
+src/plugins/chat/bot_config.toml
 /test
 message_queue_content.txt
 message_queue_content.bat
@@ -11,6 +12,7 @@ message_queue_window.txt
 reasoning_content.txt
 reasoning_content.bat
 reasoning_window.bat
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,6 +1,9 @@
 # MaiMBot
 麦麦 qq机器人
 
+
+
+
 <<<<<<< Updated upstream
 还在整理中
 =======
@@ -16,3 +19,6 @@
 主要代码在/src/plugins/chat下
 
 >>>>>>> Stashed changes
+
+
+纯编程外行，很多代码史一样多多包涵

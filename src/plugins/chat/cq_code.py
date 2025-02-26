@@ -96,58 +96,75 @@ class CQCode:
         sub_type = int(self.params.get('sub_type', '0'))
         is_emoji = (sub_type == 1)
         
-        # 添加请求头
+        # 添加更多请求头
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive'
+            'Connection': 'keep-alive',
+            'Referer': 'https://multimedia.nt.qq.com.cn',
+            'Origin': 'https://multimedia.nt.qq.com.cn',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
         }
         
         # 处理URL编码问题
         url = html.unescape(self.params['url'])
         
         if not url.startswith(('http://', 'https://')):
-            raise ValueError(f"无效的URL格式: {url}")
+            return '[图片]'  # 直接返回而不是抛出异常
         
-        # 下载图片
-        response = requests.get(url, headers=headers, timeout=10, verify=False)
-        
-        if response.status_code == 200:
+        try:
+            # 下载图片，增加重试机制
+            max_retries = 3
+            for retry in range(max_retries):
+                try:
+                    response = requests.get(url, headers=headers, timeout=10, verify=False)
+                    if response.status_code == 200:
+                        break
+                    elif response.status_code == 400 and 'multimedia.nt.qq.com.cn' in url:
+                        # 对于腾讯多媒体服务器的链接，直接返回图片描述
+                        if sub_type == 1:
+                            return '[QQ表情]'
+                        return '[图片]'
+                    time.sleep(1)  # 重试前等待1秒
+                except requests.RequestException:
+                    if retry == max_retries - 1:
+                        raise
+                    time.sleep(1)
+            
+            if response.status_code != 200:
+                print(f"\033[1;31m[警告]\033[0m 图片下载失败: HTTP {response.status_code}, URL: {url}")
+                return '[图片]'  # 直接返回而不是抛出异常
+                
             # 检查响应内容类型
             content_type = response.headers.get('content-type', '')
             if not content_type.startswith('image/'):
-                raise ValueError(f"响应不是图片类型: {content_type}")
+                print(f"\033[1;31m[警告]\033[0m 非图片类型响应: {content_type}")
+                return '[图片]'  # 直接返回而不是抛出异常
             
             content = response.content
-
             image_base64 = base64.b64encode(content).decode('utf-8')
             
             # 根据子类型选择不同的处理方式
             if sub_type == 1:  # 表情包
-                return self.get_emoji_description(image_base64)
+                try:
+                    return self.get_emoji_description(image_base64)
+                except Exception as e:
+                    print(f"\033[1;31m[警告]\033[0m 表情描述生成失败: {str(e)}")
+                    return '[QQ表情]'
             elif sub_type == 0:  # 普通图片
-                if self.get_image_description_is_setu(image_base64) == "是":
-                    print(f"\033[1;34m[调试]\033[0m 哇！涩情图片")
-                    # 使用相对路径创建目录
-                    # data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "data", "setu")
-                    # os.makedirs(data_dir, exist_ok=True)
-                    # # 生成随机文件名
-                    # file_name = f"{int(time.time())}_{int(random() * 10000)}.jpg"
-                    # file_path = os.path.join(data_dir, file_name)
-                    # # 将base64解码并保存图片
-                    # image_data = base64.b64decode(image_base64)
-                    # with open(file_path, "wb") as f:
-                    #     f.write(image_data)
-                    # print(f"\033[1;34m[调试]\033[0m 涩图已保存至: {file_path}")
-                        
-                    return f"[一张涩情图片]"
-                return self.get_image_description(image_base64)
+                try:
+                    return self.get_image_description(image_base64)
+                except Exception as e:
+                    print(f"\033[1;31m[警告]\033[0m 图片描述生成失败: {str(e)}")
+                    return '[图片]'
             else:  # 其他类型都按普通图片处理
                 return '[图片]'
-        else:
-            raise ValueError(f"下载图片失败: HTTP状态码 {response.status_code}")
                 
+        except Exception as e:
+            print(f"\033[1;31m[警告]\033[0m 图片处理失败: {str(e)}")
+            return '[图片]'  # 出现任何错误都返回默认文本而不是抛出异常
 
     def get_emoji_description(self, image_base64: str) -> str:
         """调用AI接口获取表情包描述"""

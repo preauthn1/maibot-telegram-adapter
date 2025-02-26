@@ -7,6 +7,8 @@ from .cq_code import CQCode
 from collections import deque
 import time
 from .storage import MessageStorage  # 添加这行导入
+from .config import global_config
+from .message_visualizer import message_visualizer
 
 
 class SendTemp:
@@ -173,6 +175,7 @@ class MessageSendControl:
         self._paused = False
         self._current_bot = None
         self.storage = MessageStorage()  # 添加存储实例
+        message_visualizer.start()
         
     def set_bot(self, bot: Bot):
         """设置当前bot实例"""
@@ -193,8 +196,8 @@ class MessageSendControl:
                     if message:
                         if isinstance(message, Message_Thinking):
                             # 如果是思考中的消息，检查是否需要继续等待
-                            # message.update_thinking_time()
-                            thinking_time = time.time() - message.time
+                            message.update_thinking_time()
+                            thinking_time = message.thinking_time
                             if thinking_time < 60:  # 最少思考2秒
                                 if int(thinking_time) % 10 == 0:
                                     print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{thinking_time:.1f}秒")
@@ -215,12 +218,15 @@ class MessageSendControl:
                                     
                                
                                
-                                
+                                cur_time = time.time()
                                 await self._current_bot.send_group_msg(
                                     group_id=group_id,
                                     message=str(message.processed_plain_text),
                                     auto_escape=False
                                 )
+                                cost_time = round(time.time(), 2) - cur_time
+                                print(f"\033[1;34m[调试]\033[0m 消息发送时间: {cost_time}秒")
+                                
                                 
                                 current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.time))
                                 print(f"\033[1;32m群 {group_id} 消息, 用户 麦麦, 时间: {current_time}:\033[0m {str(message.processed_plain_text)}")
@@ -235,6 +241,7 @@ class MessageSendControl:
                                             self.message_interval[1]
                                         )
                                     )
+            message_visualizer.update_content(self.send_temp_container)
                             
 
     async def process_group_queue(self, bot: Bot, group_id: int) -> None:

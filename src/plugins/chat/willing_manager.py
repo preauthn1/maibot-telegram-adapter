@@ -27,7 +27,7 @@ class WillingManager:
         current_willing = self.group_reply_willing.get(group_id, 0)
         
         if topic and current_willing < 1:
-            current_willing += 0.6
+            current_willing += 0.4
         elif topic:
             current_willing += 0.05
             

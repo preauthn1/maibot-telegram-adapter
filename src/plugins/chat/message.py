@@ -222,11 +222,15 @@ class Message_Thinking:
         # 思考状态相关属性
         self.thinking_text = "正在思考..."
         self.time = int(time.time())
+        self.thinking_time = 0
         
     def update_to_message(self, done_message: Message) -> Message:
         """更新为完整消息"""
         
         return done_message
+    
+    def update_thinking_time(self):
+        self.thinking_time = round(time.time(), 2) - self.time
     
     @property
     def processed_plain_text(self) -> str:
