@@ -4,7 +4,7 @@ port = 27017
 name = "MegBot"
 
 [bot]
-qq = 123456785
+qq = 1
 
 [message]
 min_text_length = 2
@@ -21,55 +21,21 @@ model_r1_probability = 0.2
 
 [groups]
 read_allowed = [
-    1030993430, #bot_test_group_1
-    # 1015816696, #m43white
-    739044565, #my_group
-    192194125, #ms
-    591693379, #bot_test_group_2
-    179648561, #nkyy
-    764408046, #daily_news
-    435591861, #m43black
-    851345375, #hjy群
-    708847644, #rotate_cmy
-    534940728, #bh_llh_HYY
-    # 549292720, #mrfz
-    # 231561425, #粉丝群
-    975992476,
-    1140700103,
-    752426484,#nd1
-    115843978,#nd2
-    # 168718420 #bh
-    # 912378791
+
 ]
 
 talk_allowed = [
-    1030993430, #bot_test_group_1
-    # 1015816696, #m43white
-    739044565, #my_group
-    192194125, #ms
-    591693379, #bot_test_group_2
-    179648561, #nkyy
-    764408046, #daily_news
-    #435591861, #m43black
-    851345375, #hjy群
-    708847644, #rotate_cmy
-    534940728,  #bh_llh_HYY
-    # 231561425, #粉丝群
-    975992476,
-    1140700103,
-    # 168718420#bh
-    # 752426484,#nd1
-    # 115843978,#nd2
-    # 912378791
+
 ]
 
 talk_frequency_down = [
-    549292720, #mrfz
-    435591861, #m43black
-    # 231561425,
-    # 975992476,
-    1140700103,
-    # 534940728
-    # 752426484,#nd1
-    # 115843978,#nd2
+
+]
+
+talk_allowed = [
+
+]
+
+talk_frequency_down = [
+
 ]
