@@ -183,7 +183,7 @@ class MessageSendControl:
         self._current_bot = bot
         
         while self._running:
-            await asyncio.sleep(0.5)                
+            await asyncio.sleep(1.5)                
             # 处理所有群组的消息队列
             for group_id in self.send_temp_container.get_all_groups():
                 queue = self.send_temp_container.get_queue(group_id)

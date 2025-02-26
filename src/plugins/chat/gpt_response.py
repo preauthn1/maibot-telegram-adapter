@@ -295,8 +295,8 @@ class GPTResponseGenerator:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, create_completion)
         if response.choices[0].message.content:
-            print(response.choices[0].message.content)
-            print(response.choices[0].message.reasoning_content)
+            # print(response.choices[0].message.content)
+            # print(response.choices[0].message.reasoning_content)
             # 处理 R1 特有的返回格式
             content = response.choices[0].message.content
             reasoning_content = response.choices[0].message.reasoning_content
@@ -374,8 +374,8 @@ class GPTResponseGenerator:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, create_completion)
         if response.choices[0].message.content:
-            print(response.choices[0].message.content)
-            print(response.choices[0].message.reasoning_content)
+            # print(response.choices[0].message.content)
+            # print(response.choices[0].message.reasoning_content)
             # 处理 R1 特有的返回格式
             content = response.choices[0].message.content
             reasoning_content = response.choices[0].message.reasoning_content
