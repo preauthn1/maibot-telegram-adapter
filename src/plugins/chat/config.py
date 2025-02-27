@@ -10,11 +10,11 @@ import tomli  # 添加这行导入
 # logger.remove()
 
 # # 只禁用 INFO 级别的日志输出到控制台
-# logging.getLogger('nonebot').handlers.clear()
-# console_handler = logging.StreamHandler()
-# console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
-# logging.getLogger('nonebot').addHandler(console_handler)
-# logging.getLogger('nonebot').setLevel(logging.WARNING)
+logging.getLogger('nonebot').handlers.clear()
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
+logging.getLogger('nonebot').addHandler(console_handler)
+logging.getLogger('nonebot').setLevel(logging.WARNING)
 
 @dataclass
 class BotConfig:

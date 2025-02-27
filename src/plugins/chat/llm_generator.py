@@ -8,95 +8,20 @@ from .config import BotConfig
 from ...common.database import Database
 import random
 import time
-import subprocess
 import os
-import sys
-import threading
-import queue
 import numpy as np
 from dotenv import load_dotenv
 from .relationship_manager import relationship_manager
 from ..schedule.schedule_generator import bot_schedule
 from .prompt_builder import prompt_builder
 from .config import llm_config
-from .willing_manager import willing_manager
 from .utils import get_embedding, split_into_sentences, process_text_with_typos
-import aiohttp
+
 
 # 获取当前文件的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
 load_dotenv(os.path.join(root_dir, '.env'))
-
-class ReasoningWindow:
-    def __init__(self):
-        self.process = None
-        self.message_queue = queue.Queue()
-        self.is_running = False
-        self.content_file = "reasoning_content.txt"
-        
-    def start(self):
-        if self.process is None:
-            # 创建用于显示的批处理文件
-            with open("reasoning_window.bat", "w", encoding="utf-8") as f:
-                f.write('@echo off\n')
-                f.write('chcp 65001\n')  # 设置UTF-8编码
-                f.write('title Magellan Reasoning Process\n')
-                f.write('echo Waiting for reasoning content...\n')
-                f.write(':loop\n')
-                f.write('if exist "reasoning_update.txt" (\n')
-                f.write('    type "reasoning_update.txt" >> "reasoning_content.txt"\n')
-                f.write('    del "reasoning_update.txt"\n')
-                f.write('    cls\n')
-                f.write('    type "reasoning_content.txt"\n')
-                f.write(')\n')
-                f.write('timeout /t 1 /nobreak >nul\n')
-                f.write('goto loop\n')
-            
-            # 清空内容文件
-            with open(self.content_file, "w", encoding="utf-8") as f:
-                f.write("")
-            
-            # 启动新窗口
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            self.process = subprocess.Popen(['cmd', '/c', 'start', 'reasoning_window.bat'], 
-                                         shell=True, 
-                                         startupinfo=startupinfo)
-            self.is_running = True
-            
-            # 启动处理线程
-            threading.Thread(target=self._process_messages, daemon=True).start()
-    
-    def _process_messages(self):
-        while self.is_running:
-            try:
-                # 获取新消息
-                text = self.message_queue.get(timeout=1)
-                # 写入更新文件
-                with open("reasoning_update.txt", "w", encoding="utf-8") as f:
-                    f.write(text)
-            except queue.Empty:
-                continue
-            except Exception as e:
-                print(f"处理推理内容时出错: {e}")
-    
-    def update_content(self, text: str):
-        if self.is_running:
-            self.message_queue.put(text)
-    
-    def stop(self):
-        self.is_running = False
-        if self.process:
-            self.process.terminate()
-            self.process = None
-        # 清理文件
-        for file in ["reasoning_window.bat", "reasoning_content.txt", "reasoning_update.txt"]:
-            if os.path.exists(file):
-                os.remove(file)
-
-# 创建全局单例
-reasoning_window = ReasoningWindow()
 
 class LLMResponseGenerator:
     def __init__(self, config: BotConfig):
@@ -107,7 +32,7 @@ class LLMResponseGenerator:
         )
 
         self.db = Database.get_instance()
-        reasoning_window.start()
+        
         # 当前使用的模型类型
         self.current_model_type = 'r1'  # 默认使用 R1
 
@@ -115,7 +40,7 @@ class LLMResponseGenerator:
         """根据当前模型类型选择对应的生成函数"""
         # 使用随机数选择模型
         rand = random.random()
-        if rand < 0.6:  # 60%概率使用 R1
+        if rand < 0.8:  # 60%概率使用 R1
             self.current_model_type = "r1"
         elif rand < 0.5:  # 20%概率使用 V3
             self.current_model_type = "v3"
@@ -170,11 +95,26 @@ class LLMResponseGenerator:
         response = await loop.run_in_executor(None, create_completion)
         if response.choices[0].message.content:
             content = response.choices[0].message.content
-            reasoning_content = response.choices[0].message.reasoning_content
+            # 获取推理内容
+            reasoning_content = "模型思考过程：\n" + prompt
+            if hasattr(response.choices[0].message, "reasoning"):
+                reasoning_content = response.choices[0].message.reasoning or reasoning_content
+            elif hasattr(response.choices[0].message, "reasoning_content"):
+                reasoning_content = response.choices[0].message.reasoning_content or reasoning_content
+
+            # 保存推理结果到数据库
+            self.db.db.reasoning_logs.insert_one({
+                'time': time.time(),
+                'group_id': message.group_id,
+                'user': sender_name,
+                'message': message.processed_plain_text,
+                'model': "DeepSeek-R1",
+                'reasoning': reasoning_content,
+                'response': content,
+                'prompt': prompt
+            })
         else:
             return None
-        # 更新推理窗口
-        self._update_reasoning_window(message, prompt, reasoning_content, content, sender_name)
         
         return content
 
@@ -207,8 +147,18 @@ class LLMResponseGenerator:
         
         if response.choices[0].message.content:
             content = response.choices[0].message.content
-            # V3 模型没有 reasoning_content
-            self._update_reasoning_window(message, prompt, "V3模型无推理过程", content, sender_name)
+            # 保存推理结果到数据库
+            self.db.db.reasoning_logs.insert_one({
+                'time': time.time(),
+                'group_id': message.group_id,
+                'user': sender_name,
+                'message': message.processed_plain_text,
+                'model': "DeepSeek-V3",
+                'reasoning': "V3模型无推理过程",
+                'response': content,
+                'prompt': prompt
+            })
+
             return content
         else:
             print(f"[ERROR] V3 回复发送生成失败: {response}")
@@ -246,11 +196,27 @@ class LLMResponseGenerator:
         response = await loop.run_in_executor(None, create_completion)
         if response.choices[0].message.content:
             content = response.choices[0].message.content
-            reasoning_content = response.choices[0].message.reasoning_content
+            # 获取推理内容
+            reasoning_content = "模型思考过程：\n" + prompt
+            if hasattr(response.choices[0].message, "reasoning"):
+                reasoning_content = response.choices[0].message.reasoning or reasoning_content
+            elif hasattr(response.choices[0].message, "reasoning_content"):
+                reasoning_content = response.choices[0].message.reasoning_content or reasoning_content
+
+            # 保存推理结果到数据库
+            self.db.db.reasoning_logs.insert_one({
+                'time': time.time(),
+                'group_id': message.group_id,
+                'user': sender_name,
+                'message': message.processed_plain_text,
+                'model': "DeepSeek-R1-Distill",
+                'reasoning': reasoning_content,
+                'response': content,
+                'prompt': prompt
+            })
         else:
             return None
-        # 更新推理窗口
-        self._update_reasoning_window(message, prompt, reasoning_content, content, sender_name)
+            
         
         return content
 
@@ -271,31 +237,6 @@ class LLMResponseGenerator:
             group_chat += f"[{time_str}] {display_name}: {content}\n"
             
         return group_chat
-
-    def _update_reasoning_window(self, message, prompt, reasoning_content, content, sender_name):
-        """更新推理窗口内容"""
-        current_time = time.strftime("%Y-%m-%d %H:%M:%S")
-        
-        # 获取当前使用的模型名称
-        model_name = {
-            'r1': 'DeepSeek-R1',
-            'v3': 'DeepSeek-V3',
-            'r1_distill': 'DeepSeek-R1-Distill-Qwen-32B'
-        }.get(self.current_model_type, '未知模型')
-        
-        display_text = (
-            f"Time: {current_time}\n"
-            f"Group: {message.group_name}\n"
-            f"User: {sender_name}\n"
-            f"Model: {model_name}\n"
-            f"\033[1;32mMessage:\033[0m {message.processed_plain_text}\n\n"
-            f"\033[1;32mPrompt:\033[0m \n{prompt}\n"
-            f"\n-------------------------------------------------------"
-            f"\n\033[1;32mReasoning Process:\033[0m\n{reasoning_content}\n"
-            f"\n\033[1;32mResponse Content:\033[0m\n{content}\n"
-            f"\n{'='*50}\n"
-        )
-        reasoning_window.update_content(display_text)
 
     async def _get_emotion_tags(self, content: str) -> List[str]:
         """提取情感标签"""
@@ -335,6 +276,11 @@ class LLMResponseGenerator:
         if not content:
             return None, []
         
+        # 检查回复是否过长（超过200个字符）
+        if len(content) > 200:
+            print(f"回复过长 ({len(content)} 字符)，返回默认回复")
+            return "麦麦不知道哦", ["angry"]
+        
         emotion_tags = await self._get_emotion_tags(content)
         
         # 添加错别字和处理标点符号
@@ -358,6 +304,11 @@ class LLMResponseGenerator:
             
             if current_message:
                 messages.append(current_message.strip())
+            
+            # 检查分割后的消息数量是否过多（超过3条）
+            if len(messages) > 3:
+                print(f"分割后消息数量过多 ({len(messages)} 条)，返回默认回复")
+                return "麦麦不知道哦", ["angry"]
             
             return messages, emotion_tags
         

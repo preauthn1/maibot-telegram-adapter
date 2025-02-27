@@ -6,7 +6,6 @@ from .llm_generator import LLMResponseGenerator
 from .message_stream import MessageStream, MessageStreamContainer
 from .topic_identifier import topic_identifier
 from random import random
-from nonebot.log import logger
 from .group_info_manager import GroupInfoManager  # 导入群信息管理器
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 import time
@@ -15,7 +14,6 @@ from .cq_code import CQCode  # 导入CQCode模块
 from .message_send_control import message_sender  # 导入消息发送控制器
 from .message import Message_Thinking  # 导入 Message_Thinking 类
 from .relationship_manager import relationship_manager
-from .prompt_builder import prompt_builder
 from .willing_manager import willing_manager  # 导入意愿管理器
 
 
@@ -132,7 +130,7 @@ class ChatBot:
         )
         current_willing = willing_manager.get_willing(event.group_id)
         
-
+        
         print(f"\033[1;32m[{current_time}][{message.group_name}]{message.user_nickname}:\033[0m {message.processed_plain_text}\033[1;36m[回复意愿:{current_willing:.2f}][概率:{reply_probability:.1f}]\033[0m")
         response = ""
         if random() < reply_probability:

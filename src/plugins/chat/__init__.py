@@ -11,7 +11,6 @@ from ..schedule.schedule_generator import bot_schedule
 from .willing_manager import willing_manager
 
 
-
 # 获取驱动器
 driver = get_driver()
 

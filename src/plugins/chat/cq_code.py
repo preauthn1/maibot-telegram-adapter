@@ -98,12 +98,10 @@ class CQCode:
         
         # 添加更多请求头
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+            'User-Agent': 'QQ/8.9.68.11565 CFNetwork/1220.1 Darwin/20.3.0',
+            'Accept': 'image/*;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
-            'Referer': 'https://multimedia.nt.qq.com.cn',
-            'Origin': 'https://multimedia.nt.qq.com.cn',
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
         }
