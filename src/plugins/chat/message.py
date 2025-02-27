@@ -9,6 +9,7 @@ from PIL import Image
 from .config import BotConfig, global_config
 import urllib3
 from .cq_code import CQCode
+from .utils_user import get_user_nickname
 
 Message = ForwardRef('Message')  # 添加这行
 
@@ -44,32 +45,19 @@ class Message:
     time: float = None
     
     is_emoji: bool = False # 是否是表情包
+    has_emoji: bool = False # 是否包含表情包
 
-    
     
     reply_benefits: float = 0.0
     
     type: str = 'received' # 消息类型，可以是received或者send
-    
-    
-    
-    """消息数据类:思考消息"""
-    
-    # 思考状态相关属性
-    is_thinking: bool = False
-    thinking_text: str = "正在思考..."
-    thingking_start_time: float = None
-    thinking_time: float = 0
-    
-    received_message = ''
-    thinking_response = ''
     
     def __post_init__(self):
         if self.time is None:
             self.time = int(time.time())
         
         if not self.user_nickname:
-            self.user_nickname = self.get_user_nickname(self.user_id)
+            self.user_nickname = get_user_nickname(self.user_id)
         
         if not self.group_name:
             self.group_name = self.get_groupname(self.group_id)
@@ -84,28 +72,6 @@ class Message:
                     for seg in self.message_segments
                 )
                 
-        # print(f"\033[1;34m[调试]\033[0m pppttt消息: {self.processed_plain_text}")
-    def get_user_nickname(self, user_id: int) -> str:
-        """
-        根据user_id获取用户昵称
-        如果数据库中找不到，则返回默认昵称
-        """
-        if not user_id:
-            return "未知用户"
-        
-        user_id = int(user_id)  
-        if user_id == int(global_config.BOT_QQ):
-            return "麦麦"
-          
-        # 使用数据库单例
-        db = Database.get_instance()
-        # 查找用户，打印查询条件和结果
-        query = {'user_id': user_id}
-        user = db.db.user_info.find_one(query)
-        if user:
-            return user.get('nickname') or f"用户{user_id}"
-        else:
-            return f"用户{user_id}"
         
     def get_groupname(self, group_id: int) -> str:
         if not group_id:
@@ -127,7 +93,7 @@ class Message:
         返回的列表中每个元素都是字典，包含：
         - type: 'text' 或 CQ码类型
         - data: 对于text类型是文本内容，对于CQ码是参数字典
-        - translated_text: 经过处理（如AI翻译）后的文本
+        - translated_text: 经过处理后的文本
         """
         segments = []
         start = 0
@@ -199,12 +165,16 @@ class Message:
                 })
             
             start = cq_end + 1
-            
-        # 检查是否只包含一个表情包CQ码
+        
+        
         if len(segments) == 1 and segments[0]['type'] == 'image':
-            # 检查图片的 subtype 是否为 0（表情包）
-            if segments[0]['data'].get('subtype') == '0':
-                self.is_emoji = True
+            self.is_emoji = True
+            self.has_emoji_emoji = True
+        else:
+            for segment in segments:
+                if segment['type'] == 'image' and segment['data'].get('sub_type') == '1':
+                    self.has_emoji_emoji = True
+                    break
             
         return segments
 
@@ -223,11 +193,6 @@ class Message_Thinking:
         self.thinking_text = "正在思考..."
         self.time = int(time.time())
         self.thinking_time = 0
-        
-    def update_to_message(self, done_message: Message) -> Message:
-        """更新为完整消息"""
-        
-        return done_message
     
     def update_thinking_time(self):
         self.thinking_time = round(time.time(), 2) - self.time
@@ -278,21 +243,6 @@ class MessageSet:
                 
         return self.messages[left]
         
-    def get_latest_message(self) -> Optional[Message]:
-        """获取最新的消息"""
-        return self.messages[-1] if self.messages else None
-        
-    def get_earliest_message(self) -> Optional[Message]:
-        """获取最早的消息"""
-        return self.messages[0] if self.messages else None
-        
-    def get_all_messages(self) -> List[Message]:
-        """获取所有消息"""
-        return self.messages.copy()
-        
-    def get_message_count(self) -> int:
-        """获取消息数量"""
-        return len(self.messages)
         
     def clear_messages(self) -> None:
         """清空所有消息"""
@@ -311,10 +261,7 @@ class MessageSet:
     def __len__(self) -> int:
         return len(self.messages)
         
-    @property
-    def processed_plain_text(self) -> str:
-        """获取所有消息的文本内容"""
-        return "\n".join(msg.processed_plain_text for msg in self.messages if msg.processed_plain_text)
+
         
         
         

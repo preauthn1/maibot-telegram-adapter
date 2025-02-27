@@ -26,6 +26,7 @@ class BotConfig:
     DATABASE_NAME: str = "MegBot"
     
     BOT_QQ: Optional[int] = None
+    BOT_NICKNAME: Optional[str] = None
     
     # 消息处理相关配置
     MIN_TEXT_LENGTH: int = 2  # 最小处理文本长度
@@ -39,7 +40,9 @@ class BotConfig:
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     
-    MODEL_R1_PROBABILITY: float = 0.3  # R1模型概率
+    MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
+    MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
+    MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
     
     @classmethod
     def load_config(cls, config_path: str = "bot_config.toml") -> "BotConfig":
@@ -66,11 +69,13 @@ class BotConfig:
                 bot_config = toml_dict["bot"]
                 bot_qq = bot_config.get("qq")
                 config.BOT_QQ = int(bot_qq)
-
+                config.BOT_NICKNAME = bot_config.get("nickname", config.BOT_NICKNAME)
                 
             if "response" in toml_dict:
                 response_config = toml_dict["response"]
                 config.MODEL_R1_PROBABILITY = response_config.get("model_r1_probability", config.MODEL_R1_PROBABILITY)
+                config.MODEL_V3_PROBABILITY = response_config.get("model_v3_probability", config.MODEL_V3_PROBABILITY)
+                config.MODEL_R1_DISTILL_PROBABILITY = response_config.get("model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY)
             
             # 消息配置
             if "message" in toml_dict:

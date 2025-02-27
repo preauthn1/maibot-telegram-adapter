@@ -92,7 +92,7 @@ class MessageVisualizer:
                         display_text += f"群组: {msg.group_id}\n"
                         display_text += f"用户: {msg.user_nickname}({msg.user_id})\n"
                         display_text += f"内容: {msg.thinking_text}\n"
-                        display_text += f"思考时间: {msg.thinking_time}秒\n"
+                        display_text += f"思考时间: {int(msg.thinking_time)}秒\n"
                     else:
                         display_text += f"类型: 普通消息\n"
                         display_text += f"时间: {msg_time}\n"

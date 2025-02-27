@@ -76,7 +76,7 @@ class PromptBuilder:
         activate_prompt = ''
         activate_prompt = f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}。"          
         
-        # 检测机器人相关词汇
+        #检测机器人相关词汇
         bot_keywords = ['人机', 'bot', '机器', '入机', 'robot', '机器人']
         is_bot = any(keyword in message_txt.lower() for keyword in bot_keywords)
         if is_bot:
@@ -90,16 +90,28 @@ class PromptBuilder:
         if personality_choice < 4/6:  # 第一种人格
             prompt_personality = f'''你的网名叫麦麦，是一个学习地质的女大学生，喜欢摄影，你会刷贴吧，你正在浏览qq群,{promt_info_prompt},
             {activate_prompt}
-            现在请你给出日常且口语化的回复，平淡一些，尽量简短一些,不要输出感叹号。{is_bot_prompt}
+            现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{is_bot_prompt}
             请注意把握群里的聊天内容，不要回复的太有条理，可以有个性。'''
         elif personality_choice < 1:  # 第二种人格
             prompt_personality = f'''你的网名叫麦麦，是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群,{promt_info_prompt},
             {activate_prompt}
-            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些,不要输出感叹号。{is_bot_prompt}
+            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
             请你表达自己的见解和观点。可以有个性。'''
+        
+        #中文高手
+        prompt_ger = ''
+        if random.random() < 0.04:
+            prompt_ger += '你喜欢用倒装句'
+        if random.random() < 0.02:
+            prompt_ger += '你喜欢用反问句'
+        if random.random() < 0.01:
+            prompt_ger += '你喜欢用文言文'
+        
             
         #额外信息要求
         extra_info = '''但是记得回复平淡一些，简短一些，不要过多提及自身的背景, 记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等),只需要输出回复内容就好，不要输出其他任何内容''' 
+        
+        
         
         #合并prompt
         prompt = ""
@@ -108,6 +120,7 @@ class PromptBuilder:
         prompt += f"{chat_talking_prompt}\n"       
         # prompt += f"{activate_prompt}\n"
         prompt += f"{prompt_personality}\n"
+        prompt += f"{prompt_ger}\n"
         prompt += f"{extra_info}\n"     
         
         return prompt

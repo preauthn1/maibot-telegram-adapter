@@ -46,8 +46,8 @@ class Relationship:
 class RelationshipManager:
     def __init__(self):
         self.relationships: dict[int, Relationship] = {}  # user_id -> Relationship
-        #保存 qq号，现在使用昵称，别称
-        self.id_name_nickname_table: dict[str, str, list] = {}  # name -> [nickname, nickname, ...]
+        # self.id_name_nickname_table: dict[str, list] = {}  # name -> [nickname, nickname, ...]
+        # print("[关系管理] 初始化 id_name_nickname_table")  # 调试信息
     
     async def update_relationship(self, user_id: int, data=None, **kwargs):
         # 检查是否在内存中已存在
@@ -66,6 +66,9 @@ class RelationshipManager:
             # 如果不存在，创建新对象
             relationship = Relationship(user_id, data=data) if isinstance(data, dict) else Relationship(user_id, **kwargs)
             self.relationships[user_id] = relationship
+
+        # 更新 id_name_nickname_table
+        # self.id_name_nickname_table[user_id] = [relationship.nickname]  # 别称设置为空列表
 
         # 保存到数据库
         await self.storage_relationship(relationship)
@@ -149,31 +152,12 @@ class RelationshipManager:
             }},
             upsert=True
         )
-
-    @staticmethod
-    async def get_user_nickname(bot: Bot, user_id: int, group_id: int = None) -> Tuple[str, Optional[str]]:
-        """
-        通过QQ API获取用户昵称
-        """
-
-        # 获取QQ昵称
-        stranger_info = await bot.get_stranger_info(user_id=user_id)
-        qq_nickname = stranger_info['nickname']
         
-        # 如果提供了群号，获取群昵称
-        if group_id:
-            try:
-                member_info = await bot.get_group_member_info(
-                    group_id=group_id,
-                    user_id=user_id,
-                    no_cache=True
-                )
-                group_nickname = member_info['card'] or None
-                return qq_nickname, group_nickname
-            except:
-                return qq_nickname, None
-        
-        return qq_nickname, None
+    def get_name(self, user_id: int) -> str:
+        if user_id in self.relationships:
+            return self.relationships[user_id].nickname
+        else:
+            return "[某人]"
 
     def print_all_relationships(self):
         """打印内存中所有的关系记录"""
@@ -193,8 +177,4 @@ class RelationshipManager:
         print("=" * 50)
 
 
-
-
-        
-        
 relationship_manager = RelationshipManager()

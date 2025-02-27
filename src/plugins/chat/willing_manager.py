@@ -27,12 +27,12 @@ class WillingManager:
         current_willing = self.group_reply_willing.get(group_id, 0)
         
         if topic and current_willing < 1:
-            current_willing += 0.4
+            current_willing += 0.3
         elif topic:
             current_willing += 0.05
             
         if is_mentioned_bot and current_willing < 1.0:
-            current_willing += 1
+            current_willing += 0.9
         elif is_mentioned_bot:
             current_willing += 0.05
         
@@ -47,7 +47,7 @@ class WillingManager:
             reply_probability = 0
             
         if group_id in config.talk_frequency_down_groups:
-            reply_probability = reply_probability / 2
+            reply_probability = reply_probability / 3.5
             
         if is_mentioned_bot and user_id == int(123456784):
             reply_probability = 1
@@ -62,9 +62,8 @@ class WillingManager:
     def change_reply_willing_after_sent(self, group_id: int):
         """发送消息后提高群组的回复意愿"""
         current_willing = self.group_reply_willing.get(group_id, 0)
-        # 如果当前意愿小于1，增加0.3的意愿值
         if current_willing < 1:
-            self.group_reply_willing[group_id] = min(1, current_willing + 0.8)
+            self.group_reply_willing[group_id] = min(1, current_willing + 0.4)
         
     async def ensure_started(self):
         """确保衰减任务已启动"""

@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 from .relationship_manager import relationship_manager
 from ..schedule.schedule_generator import bot_schedule
 from .prompt_builder import prompt_builder
-from .config import llm_config
-from .utils import get_embedding, split_into_sentences, process_text_with_typos
+from .config import llm_config, global_config
+from .utils import process_llm_response
 
 
 # 获取当前文件的绝对路径
@@ -38,15 +38,20 @@ class LLMResponseGenerator:
 
     async def generate_response(self, message: Message) -> Optional[Union[str, List[str]]]:
         """根据当前模型类型选择对应的生成函数"""
-        # 使用随机数选择模型
+        # 从global_config中获取模型概率值
+        model_r1_probability = global_config.MODEL_R1_PROBABILITY
+        model_v3_probability = global_config.MODEL_V3_PROBABILITY
+        model_r1_distill_probability = global_config.MODEL_R1_DISTILL_PROBABILITY
+
+        # 生成随机数并根据概率选择模型
         rand = random.random()
-        if rand < 0.8:  # 60%概率使用 R1
-            self.current_model_type = "r1"
-        elif rand < 0.5:  # 20%概率使用 V3
-            self.current_model_type = "v3"
-        else:  # 20%概率使用 R1-Distill
-            self.current_model_type = "r1_distill"
-        
+        if rand < model_r1_probability:
+            self.current_model_type = 'r1'
+        elif rand < model_r1_probability + model_v3_probability:
+            self.current_model_type = 'v3'
+        else:
+            self.current_model_type = 'r1_distill'  # 默认使用 R1-Distill
+
         print(f"+++++++++++++++++麦麦{self.current_model_type}思考中+++++++++++++++++")
         if self.current_model_type == 'r1':
             model_response = await self._generate_r1_response(message)
@@ -64,18 +69,22 @@ class LLMResponseGenerator:
         
         return model_response, emotion
 
-    async def _generate_r1_response(self, message: Message) -> Optional[str]:
-        """使用 DeepSeek-R1 模型生成回复"""
-        # 获取群聊上下文
-        group_chat = await self._get_group_chat_context(message)
+    async def _generate_base_response(
+        self, 
+        message: Message, 
+        model_name: str,
+        model_params: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         sender_name = message.user_nickname or f"用户{message.user_id}"
+        
+        # 获取关系值
         if relationship_manager.get_relationship(message.user_id):
             relationship_value = relationship_manager.get_relationship(message.user_id).relationship_value
             print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
         else:
             relationship_value = 0.0
-        
-        # 构建 prompt
+            
+        # 构建prompt
         prompt = prompt_builder._build_prompt(
             message_txt=message.processed_plain_text,
             sender_name=sender_name,
@@ -83,142 +92,75 @@ class LLMResponseGenerator:
             group_id=message.group_id
         )
         
+        # 设置默认参数
+        default_params = {
+            "model": model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "max_tokens": 1024,
+            "temperature": 0.7
+        }
+        
+        # 更新参数
+        if model_params:
+            default_params.update(model_params)
+        
         def create_completion():
-            return self.client.chat.completions.create(
-                model="Pro/deepseek-ai/DeepSeek-R1",
-                messages=[{"role": "user", "content": prompt}],
-                stream=False,
-                max_tokens=1024
-            )
-            
+            return self.client.chat.completions.create(**default_params)
+        
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, create_completion)
-        if response.choices[0].message.content:
-            content = response.choices[0].message.content
-            # 获取推理内容
-            reasoning_content = "模型思考过程：\n" + prompt
-            if hasattr(response.choices[0].message, "reasoning"):
-                reasoning_content = response.choices[0].message.reasoning or reasoning_content
-            elif hasattr(response.choices[0].message, "reasoning_content"):
-                reasoning_content = response.choices[0].message.reasoning_content or reasoning_content
-
-            # 保存推理结果到数据库
-            self.db.db.reasoning_logs.insert_one({
-                'time': time.time(),
-                'group_id': message.group_id,
-                'user': sender_name,
-                'message': message.processed_plain_text,
-                'model': "DeepSeek-R1",
-                'reasoning': reasoning_content,
-                'response': content,
-                'prompt': prompt
-            })
-        else:
+        
+        if not response.choices[0].message.content:
             return None
+            
+        content = response.choices[0].message.content
+        
+        # 获取推理内容
+        reasoning_content = "模型思考过程：\n" + prompt
+        if hasattr(response.choices[0].message, "reasoning"):
+            reasoning_content = response.choices[0].message.reasoning or reasoning_content
+        elif hasattr(response.choices[0].message, "reasoning_content"):
+            reasoning_content = response.choices[0].message.reasoning_content or reasoning_content
+            
+        # 保存到数据库
+        self.db.db.reasoning_logs.insert_one({
+            'time': time.time(),
+            'group_id': message.group_id,
+            'user': sender_name,
+            'message': message.processed_plain_text,
+            'model': model_name,
+            'reasoning': reasoning_content,
+            'response': content,
+            'prompt': prompt,
+            'model_params': default_params
+        })
         
         return content
+
+    async def _generate_r1_response(self, message: Message) -> Optional[str]:
+        """使用 DeepSeek-R1 模型生成回复"""
+        return await self._generate_base_response(
+            message, 
+            "Pro/deepseek-ai/DeepSeek-R1",
+            {"temperature": 0.7, "max_tokens": 1024}
+        )
 
     async def _generate_v3_response(self, message: Message) -> Optional[str]:
         """使用 DeepSeek-V3 模型生成回复"""
-        # 获取群聊上下文
-        group_chat = await self._get_group_chat_context(message)
-        sender_name = message.user_nickname or f"用户{message.user_id}"
-        
-        if relationship_manager.get_relationship(message.user_id):
-            relationship_value = relationship_manager.get_relationship(message.user_id).relationship_value
-            print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
-        else:
-            relationship_value = 0.0
-        
-        prompt = prompt_builder._build_prompt(message.processed_plain_text, sender_name, relationship_value, group_id=message.group_id)
-        
-        messages = [{"role": "user", "content": prompt}]
-        
-        loop = asyncio.get_event_loop()
-        create_completion = partial(
-            self.client.chat.completions.create,
-            model="Pro/deepseek-ai/DeepSeek-V3",
-            messages=messages,
-            stream=False,
-            max_tokens=1024,
-            temperature=0.8
+        return await self._generate_base_response(
+            message, 
+            "Pro/deepseek-ai/DeepSeek-V3",
+            {"temperature": 0.8, "max_tokens": 1024}
         )
-        response = await loop.run_in_executor(None, create_completion)
-        
-        if response.choices[0].message.content:
-            content = response.choices[0].message.content
-            # 保存推理结果到数据库
-            self.db.db.reasoning_logs.insert_one({
-                'time': time.time(),
-                'group_id': message.group_id,
-                'user': sender_name,
-                'message': message.processed_plain_text,
-                'model': "DeepSeek-V3",
-                'reasoning': "V3模型无推理过程",
-                'response': content,
-                'prompt': prompt
-            })
-
-            return content
-        else:
-            print(f"[ERROR] V3 回复发送生成失败: {response}")
-            
-        return None
 
     async def _generate_r1_distill_response(self, message: Message) -> Optional[str]:
         """使用 DeepSeek-R1-Distill-Qwen-32B 模型生成回复"""
-        # 获取群聊上下文
-        group_chat = await self._get_group_chat_context(message)
-        sender_name = message.user_nickname or f"用户{message.user_id}"
-        if relationship_manager.get_relationship(message.user_id):
-            relationship_value = relationship_manager.get_relationship(message.user_id).relationship_value
-            print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
-        else:
-            relationship_value = 0.0
-        
-        # 构建 prompt
-        prompt = prompt_builder._build_prompt(
-            message_txt=message.processed_plain_text,
-            sender_name=sender_name,
-            relationship_value=relationship_value,
-            group_id=message.group_id
+        return await self._generate_base_response(
+            message, 
+            "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+            {"temperature": 0.7, "max_tokens": 1024}
         )
-        
-        def create_completion():
-            return self.client.chat.completions.create(
-                model="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-                messages=[{"role": "user", "content": prompt}],
-                stream=False,
-                max_tokens=1024
-            )
-            
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, create_completion)
-        if response.choices[0].message.content:
-            content = response.choices[0].message.content
-            # 获取推理内容
-            reasoning_content = "模型思考过程：\n" + prompt
-            if hasattr(response.choices[0].message, "reasoning"):
-                reasoning_content = response.choices[0].message.reasoning or reasoning_content
-            elif hasattr(response.choices[0].message, "reasoning_content"):
-                reasoning_content = response.choices[0].message.reasoning_content or reasoning_content
-
-            # 保存推理结果到数据库
-            self.db.db.reasoning_logs.insert_one({
-                'time': time.time(),
-                'group_id': message.group_id,
-                'user': sender_name,
-                'message': message.processed_plain_text,
-                'model': "DeepSeek-R1-Distill",
-                'reasoning': reasoning_content,
-                'response': content,
-                'prompt': prompt
-            })
-        else:
-            return None
-            
-        
-        return content
 
     async def _get_group_chat_context(self, message: Message) -> str:
         """获取群聊上下文"""
@@ -271,46 +213,14 @@ class LLMResponseGenerator:
             print(f"获取情感标签时出错: {e}")
             return ["neutral"]  # 发生错误时返回默认值
     
-    async def _process_response(self, content: str) -> Tuple[Union[str, List[str]], List[str]]:
+    async def _process_response(self, content: str) -> Tuple[List[str], List[str]]:
         """处理响应内容，返回处理后的内容和情感标签"""
         if not content:
             return None, []
         
-        # 检查回复是否过长（超过200个字符）
-        if len(content) > 200:
-            print(f"回复过长 ({len(content)} 字符)，返回默认回复")
-            return "麦麦不知道哦", ["angry"]
-        
         emotion_tags = await self._get_emotion_tags(content)
-        
-        # 添加错别字和处理标点符号
-        processed_response = process_text_with_typos(content)
-        
-        # 处理长消息
-        if len(processed_response) > 5:
-            sentences = split_into_sentences(processed_response)
-            print(f"分割后的句子: {sentences}")
-            messages = []
-            current_message = ""
-            
-            for sentence in sentences:
-                if len(current_message) + len(sentence) <= 5:
-                    current_message += ' '
-                    current_message += sentence
-                else:
-                    if current_message:
-                        messages.append(current_message.strip())
-                    current_message = sentence
-            
-            if current_message:
-                messages.append(current_message.strip())
-            
-            # 检查分割后的消息数量是否过多（超过3条）
-            if len(messages) > 3:
-                print(f"分割后消息数量过多 ({len(messages)} 条)，返回默认回复")
-                return "麦麦不知道哦", ["angry"]
-            
-            return messages, emotion_tags
+    
+        processed_response = process_llm_response(content)
         
         return processed_response, emotion_tags
 

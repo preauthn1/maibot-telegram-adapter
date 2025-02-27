@@ -5,6 +5,7 @@ name = "MegBot"
 
 [bot]
 qq = #填入你的机器人QQ
+nickname = "麦麦"
 
 [message]
 min_text_length = 2
@@ -16,7 +17,9 @@ check_interval = 120
 register_interval = 10
 
 [response]
-model_r1_probability = 0.2 #使用R1回复的概率（没启用）
+model_r1_probability = 0.8
+model_v3_probability = 0.1
+model_r1_distill_probability = 0.1
 
 
 [groups]
