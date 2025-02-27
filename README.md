@@ -34,13 +34,14 @@
 
 3. **Napcat配置**
    - 安装并允许Napcat
-   - 设置ws反向代理
+   - 设置ws反向代理:ws://localhost:8080/onebot/v11/ws
 
 4. **配置文件设置**
    - 把env.example改成.env，并填上你的apikey（硅基流动）
    - 把bot_config_toml改名为bot_config.toml，并填写相关内容
 
 5. **运行麦麦**
+      从 runniuniu.bat 启动
 
 ## 🎯 功能介绍
 
