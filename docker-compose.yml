@@ -39,7 +39,7 @@ services:
       - napcat
     volumes:
       - maimbotCONFIG:/MaiMBot/config
-    image: jiajiu/maimbot:latest
+    image: sengokucola/maimbot:latest
   
 
 volumes:
