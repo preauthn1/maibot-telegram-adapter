@@ -1,7 +1,7 @@
 FROM nonebot/nb-cli:latest
 WORKDIR /
 RUN apt update && apt install -y git
-RUN git clone https://github.com/jiajiu123/MaiMBot
+RUN git clone https://github.com/SengokuCola/MaiMBot
 WORKDIR /MaiMBot
 RUN mkdir config
 RUN mv /MaiMBot/env.example /MaiMBot/config/.env \
