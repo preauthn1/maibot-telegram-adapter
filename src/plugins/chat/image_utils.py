@@ -31,7 +31,10 @@ def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
         db = Database(
             host=bot_config.MONGODB_HOST,
             port=bot_config.MONGODB_PORT,
-            db_name=bot_config.DATABASE_NAME
+            db_name=bot_config.DATABASE_NAME,
+            username=bot_config.MONGODB_USERNAME,
+            password=bot_config.MONGODB_PASSWORD,
+            auth_source=bot_config.MONGODB_AUTH_SOURCE
         )
         
         # 检查是否已存在相同哈希值的图片

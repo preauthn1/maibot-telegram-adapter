@@ -12,9 +12,12 @@ from ...common.database import Database  # 使用正确的导入语法
 # from src.common.database import Database  # 使用正确的导入语法
 
 Database.initialize(
-            os.getenv("MONGODB_HOST"),
-            int(os.getenv("MONGODB_PORT")),
-            os.getenv("DATABASE_NAME")
+            host= os.getenv("MONGODB_HOST"),
+            port= int(os.getenv("MONGODB_PORT")),
+            db_name=  os.getenv("DATABASE_NAME"),
+            username= os.getenv("MONGODB_USERNAME"),
+            password= os.getenv("MONGODB_PASSWORD"),
+            auth_source=os.getenv("MONGODB_AUTH_SOURCE")
         )
 
 class ScheduleGenerator:
