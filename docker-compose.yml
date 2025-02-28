@@ -29,7 +29,6 @@ services:
     
   maimbot:
     container_name: maimbot
-    build: .
     environment:
       - tz=Asia/Shanghai
     expose:
