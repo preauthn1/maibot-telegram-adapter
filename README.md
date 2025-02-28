@@ -1,10 +1,10 @@
-# MaiMBot (WIPWIPWIPWIP) 🤖
+# 麦麦！MaiMBot (编辑中) 
 
 
 <div align="center">
 
+
 ![Python Version](https://img.shields.io/badge/Python-3.8-blue)
-# Start of Selection
 ![License](https://img.shields.io/badge/license-GNL-green)
 ![Status](https://img.shields.io/badge/状态-开发中-yellow)
 
@@ -17,34 +17,48 @@
 基于llm、napcat、nonebot和mongodb的专注于群聊天的qqbot
 
 > ⚠️ **警告**：代码可能随时更改，目前版本不一定是稳定版本
-⚠️ **警告**：请自行了解qqbot的风险，麦麦有时候一天被腾讯肘七八次
+> ⚠️ **警告**：请自行了解qqbot的风险，麦麦有时候一天被腾讯肘七八次
 > ⚠️ **警告**：由于麦麦一直在迭代，所以可能存在一些bug，请自行测试，包括胡言乱语（
 
-## 🚀 快速开始
+关于麦麦的开发和部署相关的讨论群（不建议发布无关消息）
+
+<div align="center">
+<img src="docs/qq.png" width="300" />
+</div>
+
+
 
 ### 安装方法（还没测试好，现在部署可能遇到未知问题！！！！！！）
 
 1. **创建Python环境**
+   推荐使用conda或其他环境管理来管理你的python环境
    ```bash
    # 安装requirements（还没检查好，可能有包漏了）
+   conda activate 你的环境
+   cd 对应路径
    pip install -r requirements.txt
    ```
-
 2. **MongoDB设置**
    - 安装并运行mongodb
-   - 麦麦bot会自动连接默认的mongodb，可配置
+   - 麦麦bot会自动连接默认的mongodb，端口和数据库名可配置
 
 3. **Napcat配置**
-   - 安装并运行Napcat
-   - 设置ws反向代理:ws://localhost:8080/onebot/v11/ws，启动
+   - 安装并运行Napcat，登录
+   - 在Napcat的网络设置中添加ws反向代理:ws://localhost:8080/onebot/v11/ws
 
 4. **配置文件设置**
    - 把env.example改成.env，并填上你的apikey（硅基流动或deepseekapi）
    - 把bot_config_toml改名为bot_config.toml，并填写相关内容
 
 5. **运行麦麦**
-      从 run_maimai.bat 启动
-      run_thingking.bat 可以启动可视化的推理界面
+   ```bash
+   conda activate 你的环境
+   cd 对应路径
+   nb run
+   ```
+6. **运行其他组件**
+   run_thingking.bat 可以启动可视化的推理界面（未完善）和消息队列及其他信息预览（WIP）
+   knowledge.bat可以将/data/raw_info下的文本文档载入到数据库（未启动）
 
 ## 🎯 功能介绍
 
@@ -82,8 +96,5 @@
 
 ## 📌 注意事项
 纯编程外行，面向cursor编程，很多代码史一样多多包涵
-
-## 🤝 参与贡献
-欢迎提交 Issue 和 Pull Request！
 
 > ⚠️ **警告**：本应用生成内容来自人工智能模型，由 AI 生成，请仔细甄别，请勿用于违反法律的用途，AI生成内容不代表本人观点和立场。
