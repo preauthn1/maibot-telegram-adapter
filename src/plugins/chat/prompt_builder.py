@@ -53,7 +53,7 @@ class PromptBuilder:
         bot_schedule_now_time,bot_schedule_now_activity = bot_schedule.get_current_task()
         prompt_date = f'''今天是{current_date}，现在是{current_time}，你今天的日程是：\n{bot_schedule.today_schedule}\n你现在正在{bot_schedule_now_activity}\n'''
 
-        #知识构建
+        #知识构建（暂时禁用，因为知识库太少了）
         prompt_info = ''
         promt_info_prompt = ''
         prompt_info = self.get_prompt_info(message_txt)
@@ -98,7 +98,7 @@ class PromptBuilder:
             现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
             请你表达自己的见解和观点。可以有个性。'''
         
-        #中文高手
+        #中文高手(新加的好玩功能)
         prompt_ger = ''
         if random.random() < 0.04:
             prompt_ger += '你喜欢用倒装句'

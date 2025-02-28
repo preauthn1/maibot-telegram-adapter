@@ -13,9 +13,10 @@
 
 **麦麦qq机器人的源代码仓库**
 
-基于napcat、nonebot和mongodb的专注于群聊天的qqbot
+基于llm、napcat、nonebot和mongodb的专注于群聊天的qqbot
 
-> ⚠️ **警告**：代码可能随时更改，目前版本不一定是稳定版本，并请自行了解qqbot的风险
+> ⚠️ **警告**：代码可能随时更改，目前版本不一定是稳定版本
+⚠️ **警告**：请自行了解qqbot的风险，麦麦有时候一天被腾讯肘七八次
 > ⚠️ **警告**：由于麦麦一直在迭代，所以可能存在一些bug，请自行测试，包括胡言乱语（
 
 ## 🚀 快速开始
@@ -33,20 +34,21 @@
    - 麦麦bot会自动连接默认的mongodb，可配置
 
 3. **Napcat配置**
-   - 安装并允许Napcat
-   - 设置ws反向代理:ws://localhost:8080/onebot/v11/ws
+   - 安装并运行Napcat
+   - 设置ws反向代理:ws://localhost:8080/onebot/v11/ws，启动
 
 4. **配置文件设置**
-   - 把env.example改成.env，并填上你的apikey（硅基流动）
+   - 把env.example改成.env，并填上你的apikey（硅基流动或deepseekapi）
    - 把bot_config_toml改名为bot_config.toml，并填写相关内容
 
 5. **运行麦麦**
-      从 runniuniu.bat 启动
+      从 run_maimai.bat 启动
+      run_thingking.bat 可以启动可视化的推理界面
 
 ## 🎯 功能介绍
 
 ### 💬 聊天功能
-- 支持关键词检索主动发言：对消息的话题topic进行识别，如果检测到麦麦存储过的话题就会主动进行发言，目前有bug
+- 支持关键词检索主动发言：对消息的话题topic进行识别，如果检测到麦麦存储过的话题就会主动进行发言，目前有bug,所以现在只会检测主题，不会进行存储
 - 支持bot名字呼唤发言：检测到"麦麦"会主动发言，可配置
 - 使用硅基流动的api进行回复生成，可随机使用R1，V3，R1-distill等模型，未来将加入官网api支持
 - 动态的prompt构建器，更拟人
