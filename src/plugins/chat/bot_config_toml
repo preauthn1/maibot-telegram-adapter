@@ -2,6 +2,9 @@
 host = "127.0.0.1"
 port = 27017
 name = "MegBot"
+username = ""  # 默认空值
+password = ""  # 默认空值
+auth_source = ""  # 默认空值
 
 [bot]
 qq = #填入你的机器人QQ

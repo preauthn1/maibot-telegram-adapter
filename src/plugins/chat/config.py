@@ -1,10 +1,10 @@
 from dataclasses import dataclass
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 import os
 from nonebot.log import logger, default_format
 import logging
-import configparser  # 添加这行导入
-import tomli  # 添加这行导入
+import configparser
+import tomli
 
 # 禁用默认的日志输出
 # logger.remove()
@@ -24,6 +24,9 @@ class BotConfig:
     MONGODB_HOST: str = "127.0.0.1"
     MONGODB_PORT: int = 27017
     DATABASE_NAME: str = "MegBot"
+    MONGODB_USERNAME: Optional[str] = None  # 默认空值
+    MONGODB_PASSWORD: Optional[str] = None  # 默认空值
+    MONGODB_AUTH_SOURCE: Optional[str] = None  # 默认空值
     
     BOT_QQ: Optional[int] = None
     BOT_NICKNAME: Optional[str] = None
@@ -61,7 +64,10 @@ class BotConfig:
                 config.MONGODB_HOST = db_config.get("host", config.MONGODB_HOST)
                 config.MONGODB_PORT = db_config.get("port", config.MONGODB_PORT)
                 config.DATABASE_NAME = db_config.get("name", config.DATABASE_NAME)
-            
+                config.MONGODB_USERNAME = db_config.get("username", config.MONGODB_USERNAME) or None  # 空字符串转为 None
+                config.MONGODB_PASSWORD = db_config.get("password", config.MONGODB_PASSWORD) or None  # 空字符串转为 None
+                config.MONGODB_AUTH_SOURCE = db_config.get("auth_source", config.MONGODB_AUTH_SOURCE) or None  # 空字符串转为 None
+                
             if "emoji" in toml_dict:
                 emoji_config = toml_dict["emoji"]
                 config.EMOJI_CHECK_INTERVAL = emoji_config.get("check_interval", config.EMOJI_CHECK_INTERVAL)

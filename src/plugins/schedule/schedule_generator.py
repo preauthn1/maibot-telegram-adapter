@@ -11,10 +11,19 @@ from ...common.database import Database  # 使用正确的导入语法
 # from src.plugins.schedule.schedule_llm_module import LLMModel
 # from src.common.database import Database  # 使用正确的导入语法
 
+# 获取当前文件的绝对路径
+#TODO: 这个好几个地方用需要封装
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
+load_dotenv(os.path.join(root_dir, '.env'))
+
 Database.initialize(
-            os.getenv("MONGODB_HOST"),
-            int(os.getenv("MONGODB_PORT")),
-            os.getenv("DATABASE_NAME")
+            host= os.getenv("MONGODB_HOST"),
+            port= int(os.getenv("MONGODB_PORT")),
+            db_name=  os.getenv("DATABASE_NAME"),
+            username= os.getenv("MONGODB_USERNAME"),
+            password= os.getenv("MONGODB_PASSWORD"),
+            auth_source=os.getenv("MONGODB_AUTH_SOURCE")
         )
 
 class ScheduleGenerator:
