@@ -50,6 +50,9 @@ class ChatBot:
             return
         self.bot = bot  # 更新 bot 实例
         
+        if event.user_id in self.config.ban_user_id:
+            return
+        
         # 打印原始消息内容
         '''
         print(f"\n\033[1;33m[消息详情]\033[0m")
