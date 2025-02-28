@@ -3,8 +3,9 @@
 
 <div align="center">
 
-![Python Version](https://img.shields.io/badge/Python-3.x-blue)
-<!-- ![License](https://img.shields.io/badge/license-MIT-green) -->
+![Python Version](https://img.shields.io/badge/Python-3.8-blue)
+# Start of Selection
+![License](https://img.shields.io/badge/license-GNL-green)
 ![Status](https://img.shields.io/badge/状态-开发中-yellow)
 
 </div>

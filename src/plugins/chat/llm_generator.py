@@ -117,7 +117,13 @@ class LLMResponseGenerator:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, create_completion)
         
-        if not response.choices[0].message.content:
+        # 检查响应内容
+        if not response:
+            print("请求未返回任何内容")
+            return None
+        
+        if not response.choices or not response.choices[0].message.content:
+            print("请求返回的内容无效:", response)
             return None
             
         content = response.choices[0].message.content
