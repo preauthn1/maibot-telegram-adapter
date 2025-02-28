@@ -31,6 +31,17 @@
 
 ### 安装方法（还没测试好，现在部署可能遇到未知问题！！！！）
 
+#### Linux 使用 Docker Compose 部署
+获取项目根目录中的```docker-compose.yml```文件，运行以下命令
+```bash
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose up -d
+```
+配置文件修改完成后，运行以下命令
+```bash
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
+```
+
+#### 手动运行
 1. **创建Python环境**
    推荐使用conda或其他环境管理来管理你的python环境
    ```bash

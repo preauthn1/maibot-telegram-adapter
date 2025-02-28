@@ -1,6 +1,8 @@
 import datetime
+import os
 from typing import List, Dict
 from .schedule_llm_module import LLMModel
+from dotenv import load_dotenv
 from ...common.database import Database  # 使用正确的导入语法
 
 
@@ -10,9 +12,9 @@ from ...common.database import Database  # 使用正确的导入语法
 # from src.common.database import Database  # 使用正确的导入语法
 
 Database.initialize(
-            "127.0.0.1",
-            27017,
-            "MegBot"
+            os.getenv("MONGODB_HOST"),
+            int(os.getenv("MONGODB_PORT")),
+            os.getenv("DATABASE_NAME")
         )
 
 class ScheduleGenerator:
