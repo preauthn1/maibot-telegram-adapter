@@ -5,7 +5,6 @@ from collections import defaultdict
 import asyncio
 from .message import Message
 from ...common.database import Database
-from .image_utils import storage_compress_image
 
 class MessageStorage:
     def __init__(self):

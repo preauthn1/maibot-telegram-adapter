@@ -10,6 +10,16 @@ import base64
 
 bot_config = BotConfig.load_config()
 
+
+def storage_image(image_data: bytes,type: str, max_size: int = 200) -> bytes:
+    if type == 'image':
+        return storage_compress_image(image_data, max_size)
+    elif type == 'emoji':
+        return storage_emoji(image_data)
+    else:
+        raise ValueError(f"不支持的图片类型: {type}")
+
+
 def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
     """
     压缩图片到指定大小（单位：KB）并在数据库中记录图片信息
@@ -162,4 +172,45 @@ def storage_emoji(image_data: bytes) -> bytes:
         
     except Exception as e:
         print(f"\033[1;31m[错误]\033[0m 保存表情包失败: {str(e)}")
+        return image_data 
+    
+
+def storage_image(image_data: bytes) -> bytes:
+    """
+    存储图片到本地文件夹
+    Args:
+        image_data: 图片字节数据
+        group_id: 群组ID（仅用于日志）
+        user_id: 用户ID（仅用于日志）
+    Returns:
+        bytes: 原始图片数据
+    """
+    try:
+        # 使用 CRC32 计算哈希值
+        hash_value = format(zlib.crc32(image_data) & 0xFFFFFFFF, 'x')
+        
+        # 确保表情包目录存在
+        image_dir = "data/image"
+        os.makedirs(image_dir, exist_ok=True)
+        
+        # 检查是否已存在相同哈希值的文件
+        for filename in os.listdir(image_dir):
+            if hash_value in filename:
+                # print(f"\033[1;33m[提示]\033[0m 发现重复表情包: {filename}")
+                return image_data
+        
+        # 生成文件名
+        timestamp = int(time.time())
+        filename = f"{timestamp}_{hash_value}.jpg"
+        image_path = os.path.join(image_dir, filename)
+        
+        # 直接保存原始文件
+        with open(image_path, "wb") as f:
+            f.write(image_data)
+            
+        print(f"\033[1;32m[成功]\033[0m 保存图片到: {image_path}")
+        return image_data
+        
+    except Exception as e:
+        print(f"\033[1;31m[错误]\033[0m 保存图片失败: {str(e)}")
         return image_data 

@@ -4,15 +4,14 @@ import html
 import requests
 import base64
 from PIL import Image
-import io 
-from .image_utils import storage_compress_image, storage_emoji
 import os
 from random import random
 from nonebot.adapters.onebot.v11 import Bot
 from .config import global_config, llm_config
 import time
 import asyncio
-
+from .utils_image import storage_image,storage_emoji
+from .utils_user import get_user_nickname
 #解析各种CQ码
 #包含CQ码类
 
@@ -85,11 +84,11 @@ class CQCode:
             else:
                 self.translated_plain_text = self.translate_emoji()
         elif self.type == 'at':
-            from .message import Message
-            message_obj = Message(
-                user_id=str(self.params.get('qq', ''))
-            )
-            self.translated_plain_text = f"@{message_obj.user_nickname}"
+            user_nickname = get_user_nickname(self.params.get('qq', ''))
+            if user_nickname:
+                self.translated_plain_text = f"[@{user_nickname}]"
+            else:
+                self.translated_plain_text = f"[@某人]"
         elif self.type == 'reply':
             self.translated_plain_text = self.translate_reply()
         elif self.type == 'face':
@@ -151,6 +150,7 @@ class CQCode:
         image_base64 = base64.b64encode(content).decode('utf-8')
         if image_base64:
             self.image_base64 = image_base64
+            
             return image_base64
         else:
             return None
@@ -159,9 +159,12 @@ class CQCode:
         """处理表情包类型的CQ码"""
         if 'url' not in self.params:
             return '[表情包]'
-        base64 = self.get_img()
-        if base64:
-            return self.get_image_description(base64)
+        base64_str = self.get_img()
+        if base64_str:
+            # 将 base64 字符串转换为字节类型
+            image_bytes = base64.b64decode(base64_str)
+            storage_emoji(image_bytes)
+            return self.get_image_description(base64_str)
         else:
             return '[表情包]'
     
@@ -171,9 +174,11 @@ class CQCode:
         #没有url，直接返回默认文本
         if 'url' not in self.params:
             return '[图片]'
-        base64 = self.get_img()
-        if base64:
-            return self.get_image_description(base64)
+        base64_str = self.get_img()
+        if base64_str:
+            image_bytes = base64.b64decode(base64_str)
+            storage_image(image_bytes)
+            return self.get_image_description(base64_str)
         else:
             return '[图片]'
 
