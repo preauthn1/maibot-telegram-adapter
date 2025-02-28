@@ -39,7 +39,7 @@ services:
       - mongodb
       - napcat
     volumes:
-      - maimbotCONFIG:/app/config
+      - maimbotCONFIG:/MaiMBot/config
     image: jiajiu/maimbot:latest
   
 
