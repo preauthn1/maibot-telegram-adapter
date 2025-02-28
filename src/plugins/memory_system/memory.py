@@ -91,22 +91,6 @@ class Memory_graph:
                 chat_text += f'[{time_str}] {record["user_nickname"] or "用户" + str(record["user_id"])}: {record["processed_plain_text"]}\n'  # 添加发送者和时间信息
             return chat_text
         
-        # all_record = list(self.db.db.messages.aggregate([
-        #     {"$match": {"time": {"$exists": True}}},  # 只选择有时间戳的记录
-        #     {"$group": {"_id": "$group_id", "records": {"$push": "$$ROOT"}}},
-        #     {"$unwind": "$records"},
-        #     {"$sort": {"records.time": 1}}
-        # ]))
-        # for record in all_record:
-        #     if 'time' in record:
-        #         time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(record['time'])));
-        #     else:
-        #         print(f"记录中缺少'time'键: {record}")
-        #         continue  # 跳过没有时间的记录
-        #     chat_text.append(f'[{time_str}] {record["user_nickname"] or "用户" + str(record["user_id"])}: {record["processed_plain_text"]}')  # 添加发送者和时间信息
-        # return chat_text
-        
-        
         return []  # 如果没有找到记录，返回空列表
 
     def save_graph_to_db(self):

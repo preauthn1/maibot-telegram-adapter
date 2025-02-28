@@ -45,11 +45,3 @@ class LLMModel:
             
         except requests.exceptions.RequestException as e:
             return f"请求失败: {str(e)}", ""  # 返回错误信息和空字符串
-
-# 示例用法
-if __name__ == "__main__":
-    model = LLMModel()  # 默认使用 DeepSeek-V3 模型
-    prompt = "你好，你喜欢我吗？"
-    result, reasoning = model.generate_response(prompt)
-    print("回复内容:", result)
-    print("推理内容:", reasoning)
