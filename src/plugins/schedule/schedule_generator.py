@@ -11,6 +11,12 @@ from ...common.database import Database  # 使用正确的导入语法
 # from src.plugins.schedule.schedule_llm_module import LLMModel
 # from src.common.database import Database  # 使用正确的导入语法
 
+# 获取当前文件的绝对路径
+#TODO: 这个好几个地方用需要封装
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
+load_dotenv(os.path.join(root_dir, '.env'))
+
 Database.initialize(
             host= os.getenv("MONGODB_HOST"),
             port= int(os.getenv("MONGODB_PORT")),
