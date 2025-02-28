@@ -2,13 +2,15 @@ from typing import Union, List, Optional, Deque, Dict
 from nonebot.adapters.onebot.v11 import Bot, MessageSegment
 import asyncio
 import random
+import os
 from .message import Message, Message_Thinking, MessageSet
 from .cq_code import CQCode
 from collections import deque
 import time
 from .storage import MessageStorage 
 from .config import global_config
-from .message_visualizer import message_visualizer
+if os.name == "nt":
+    from .message_visualizer import message_visualizer
 
 
 class SendTemp:
@@ -161,7 +163,10 @@ class MessageSendControl:
         self._paused = False
         self._current_bot = None
         self.storage = MessageStorage()  # 添加存储实例
-        message_visualizer.start()
+        try:
+            message_visualizer.start()
+        except(NameError):
+            pass
         
     def set_bot(self, bot: Bot):
         """设置当前bot实例"""
@@ -222,7 +227,10 @@ class MessageSendControl:
             
             # 并行处理所有群组的消息
             await asyncio.gather(*tasks)
-            message_visualizer.update_content(self.send_temp_container)
+            try:
+                message_visualizer.update_content(self.send_temp_container)
+            except(NameError):
+                pass
 
     def set_typing_speed(self, min_speed: float, max_speed: float):
         """设置打字速度范围"""
