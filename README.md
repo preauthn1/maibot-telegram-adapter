@@ -26,9 +26,10 @@
 <img src="docs/qq.png" width="300" />
 </div>
 
+## 📚 详细文档
+- [项目详细介绍和架构说明](docs/doc1.md) - 包含完整的项目结构、文件说明和核心功能实现细节(由claude-3.5-sonnet生成)
 
-
-### 安装方法（还没测试好，现在部署可能遇到未知问题！！！！！！）
+### 安装方法（还没测试好，现在部署可能遇到未知问题！！！！）
 
 1. **创建Python环境**
    推荐使用conda或其他环境管理来管理你的python环境
@@ -48,7 +49,7 @@
 
 4. **配置文件设置**
    - 把env.example改成.env，并填上你的apikey（硅基流动或deepseekapi）
-   - 把bot_config_toml改名为bot_config.toml，并填写相关内容
+   - 把bot_config_toml改名为bot_config.toml，并填写相关内容，不然无法正常运行
 
 5. **运行麦麦**
    ```bash
