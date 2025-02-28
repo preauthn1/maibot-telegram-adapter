@@ -4,6 +4,7 @@ from typing import List, Dict
 from .schedule_llm_module import LLMModel
 from dotenv import load_dotenv
 from ...common.database import Database  # 使用正确的导入语法
+from ..chat.config import global_config
 
 
 # import sys

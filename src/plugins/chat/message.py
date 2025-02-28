@@ -97,7 +97,6 @@ class Message:
         trans_list = []
         
         start = 0
-        print(f"\033[1;34m[调试信息]\033[0m 原始消息: {message}")
         while True:
             # 查找下一个CQ码的开始位置
             cq_start = message.find('[CQ:', start)
@@ -129,7 +128,7 @@ class Message:
             # 更新start位置到当前CQ码之后
             start = cq_end + 1
             
-        print(f"\033[1;34m[调试信息]\033[0m 提取的消息对象：列表: {cq_code_dict_list}")
+        # print(f"\033[1;34m[调试信息]\033[0m 提取的消息对象：列表: {cq_code_dict_list}")
         
         #判定是否是表情包消息，以及是否含有表情包
         if len(cq_code_dict_list) == 1 and cq_code_dict_list[0]['type'] == 'image':

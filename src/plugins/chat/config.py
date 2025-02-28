@@ -6,15 +6,7 @@ import logging
 import configparser
 import tomli
 
-# 禁用默认的日志输出
-# logger.remove()
 
-# # 只禁用 INFO 级别的日志输出到控制台
-# logging.getLogger('nonebot').handlers.clear()
-# console_handler = logging.StreamHandler()
-# console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
-# logging.getLogger('nonebot').addHandler(console_handler)
-# logging.getLogger('nonebot').setLevel(logging.WARNING)
 
 @dataclass
 class BotConfig:
@@ -49,6 +41,8 @@ class BotConfig:
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
     MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
+    
+    enable_advance_output: bool = False  # 是否启用高级输出
     
     @classmethod
     def load_config(cls, config_path: str = "bot_config.toml") -> "BotConfig":
@@ -105,6 +99,10 @@ class BotConfig:
                 config.talk_frequency_down_groups = set(groups_config.get("talk_frequency_down", []))
                 config.ban_user_id = set(groups_config.get("ban_user_id", []))
             
+            if "others" in toml_dict:
+                others_config = toml_dict["others"]
+                config.enable_advance_output = others_config.get("enable_advance_output", config.enable_advance_output)
+            
             print(f"\033[1;32m成功加载配置文件: {config_path}\033[0m")
                 
         return config 
@@ -130,3 +128,13 @@ llm_config.SILICONFLOW_API_KEY = os.getenv('SILICONFLOW_KEY')
 llm_config.SILICONFLOW_BASE_URL = os.getenv('SILICONFLOW_BASE_URL')
 llm_config.DEEP_SEEK_API_KEY = os.getenv('DEEP_SEEK_KEY')
 llm_config.DEEP_SEEK_BASE_URL = os.getenv('DEEP_SEEK_BASE_URL')
+
+
+if not global_config.enable_advance_output:
+    logger.remove()
+    
+    logging.getLogger('nonebot').handlers.clear()
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
+    logging.getLogger('nonebot').addHandler(console_handler)
+    logging.getLogger('nonebot').setLevel(logging.WARNING)

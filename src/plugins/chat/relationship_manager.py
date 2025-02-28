@@ -45,9 +45,7 @@ class Relationship:
 
 class RelationshipManager:
     def __init__(self):
-        self.relationships: dict[int, Relationship] = {}  # user_id -> Relationship
-        # self.id_name_nickname_table: dict[str, list] = {}  # name -> [nickname, nickname, ...]
-        # print("[关系管理] 初始化 id_name_nickname_table")  # 调试信息
+        self.relationships: dict[int, Relationship] = {}  
     
     async def update_relationship(self, user_id: int, data=None, **kwargs):
         # 检查是否在内存中已存在
@@ -102,7 +100,15 @@ class RelationshipManager:
         """从数据库加载或创建新的关系对象"""       
         rela = Relationship(user_id=data['user_id'], data=data)
         rela.saved = True
+        self.relationships[rela.user_id] = rela
         return rela
+    
+    async def load_all_relationships(self):
+        """加载所有关系对象"""
+        db = Database.get_instance()
+        all_relationships = db.db.relationships.find({})
+        for data in all_relationships:
+            await self.load_relationship(data)
     
     async def _start_relationship_manager(self):
         """每5分钟自动保存一次关系数据"""
@@ -154,27 +160,13 @@ class RelationshipManager:
         )
         
     def get_name(self, user_id: int) -> str:
+        # 确保user_id是整数类型
+        user_id = int(user_id)
         if user_id in self.relationships:
+
             return self.relationships[user_id].nickname
         else:
-            return "[某人]"
-
-    def print_all_relationships(self):
-        """打印内存中所有的关系记录"""
-        print("\n\033[1;32m[关系管理]\033[0m 当前内存中的所有关系:")
-        print("=" * 50)
-        
-        if not self.relationships:
-            print("暂无关系记录")
-            return
-            
-        for user_id, relationship in self.relationships.items():
-            print(f"用户ID: {user_id}")
-            print(f"昵称: {relationship.nickname}")
-            print(f"好感度: {relationship.relationship_value}")
-            print("-" * 30)
-            
-        print("=" * 50)
+            return "某人"
 
 
 relationship_manager = RelationshipManager()

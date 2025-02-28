@@ -39,40 +39,6 @@ class CQCode:
     translated_plain_text: Optional[str] = None
     reply_message: Dict = None  # 存储回复消息
     image_base64: Optional[str] = None
-    
-    @classmethod
-    def from_cq_code(cls, cq_code: str, reply: Dict = None) -> 'CQCode':
-        """
-        从CQ码字符串创建CQCode对象
-        例如：[CQ:image,file=1.jpg,url=http://example.com/1.jpg]
-        """
-        if not cq_code.startswith('[CQ:'):
-            return cls('text', {'text': cq_code}, cq_code, group_id=0, user_id=0)
-        
-        # 移除前后的[]
-        content = cq_code[1:-1]
-        # 分离类型和参数部分
-        parts = content.split(',')
-        if not parts:
-            return cls('text', {'text': cq_code}, cq_code, group_id=0, user_id=0)
-            
-        # 获取CQ类型
-        cq_type = parts[0][3:]  # 去掉'CQ:'
-        
-        # 解析参数
-        params = {}
-        for part in parts[1:]:
-            if '=' in part:
-                key, value = part.split('=', 1)
-                # 处理转义字符
-                value = cls.unescape(value)
-                params[key] = value
-        
-        # 创建实例
-        instance = cls(cq_type, params, cq_code, group_id=0, user_id=0, reply_message=reply)
-        # 根据类型进行相应的翻译处理
-        instance.translate()
-        return instance
 
     def translate(self):
         """根据CQ码类型进行相应的翻译处理"""
@@ -88,7 +54,7 @@ class CQCode:
             if user_nickname:
                 self.translated_plain_text = f"[@{user_nickname}]"
             else:
-                self.translated_plain_text = f"[@某人]"
+                self.translated_plain_text = f"@某人"
         elif self.type == 'reply':
             self.translated_plain_text = self.translate_reply()
         elif self.type == 'face':

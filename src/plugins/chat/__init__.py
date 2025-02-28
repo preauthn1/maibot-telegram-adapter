@@ -68,6 +68,7 @@ async def _(bot: Bot):
 async def init_relationships():
     """在 NoneBot2 启动时初始化关系管理器"""
     print("\033[1;32m[初始化]\033[0m 正在加载用户关系数据...")
+    await relationship_manager.load_all_relationships()
     asyncio.create_task(relationship_manager._start_relationship_manager())
 
 @group_msg.handle()
