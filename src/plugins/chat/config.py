@@ -33,9 +33,9 @@ class BotConfig:
     MAX_CONTEXT_SIZE: int = 15  # 上下文最大消息数
     emoji_chance: float = 0.2  # 发送表情包的基础概率
     
-    read_allowed_groups = set()
     talk_allowed_groups = set()
     talk_frequency_down_groups = set()
+    ban_user_id = set()
     
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
@@ -89,9 +89,9 @@ class BotConfig:
             # 群组配置
             if "groups" in toml_dict:
                 groups_config = toml_dict["groups"]
-                config.read_allowed_groups = set(groups_config.get("read_allowed", []))
                 config.talk_allowed_groups = set(groups_config.get("talk_allowed", []))
                 config.talk_frequency_down_groups = set(groups_config.get("talk_frequency_down", []))
+                config.ban_user_id = set(groups_config.get("ban_user_id", []))
             
             print(f"\033[1;32m成功加载配置文件: {config_path}\033[0m")
                 
