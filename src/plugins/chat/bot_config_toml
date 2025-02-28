@@ -17,6 +17,7 @@ check_interval = 120
 register_interval = 10
 
 [response]
+api_using = "siliconflow"
 model_r1_probability = 0.8
 model_v3_probability = 0.1
 model_r1_distill_probability = 0.1

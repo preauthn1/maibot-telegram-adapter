@@ -26,11 +26,17 @@ load_dotenv(os.path.join(root_dir, '.env'))
 class LLMResponseGenerator:
     def __init__(self, config: BotConfig):
         self.config = config
-        self.client = OpenAI(
-            api_key=llm_config.SILICONFLOW_API_KEY,
-            base_url=llm_config.SILICONFLOW_BASE_URL
-        )
-
+        if self.config.API_USING == "siliconflow":
+            self.client = OpenAI(
+                api_key=llm_config.SILICONFLOW_API_KEY,
+                base_url=llm_config.SILICONFLOW_BASE_URL
+            )
+        elif self.config.API_USING == "deepseek":
+            self.client = OpenAI(
+                api_key=llm_config.DEEP_SEEK_API_KEY,
+                base_url=llm_config.DEEP_SEEK_BASE_URL
+            )
+            
         self.db = Database.get_instance()
         
         # 当前使用的模型类型
@@ -140,19 +146,33 @@ class LLMResponseGenerator:
 
     async def _generate_r1_response(self, message: Message) -> Optional[str]:
         """使用 DeepSeek-R1 模型生成回复"""
-        return await self._generate_base_response(
-            message, 
-            "Pro/deepseek-ai/DeepSeek-R1",
-            {"temperature": 0.7, "max_tokens": 1024}
-        )
+        if self.config.API_USING == "deepseek":
+            return await self._generate_base_response(
+                message, 
+                "deepseek-reasoner",
+                {"temperature": 0.7, "max_tokens": 1024}
+            )
+        else:
+            return await self._generate_base_response(
+                message, 
+                "Pro/deepseek-ai/DeepSeek-R1",
+                {"temperature": 0.7, "max_tokens": 1024}
+            )
 
     async def _generate_v3_response(self, message: Message) -> Optional[str]:
         """使用 DeepSeek-V3 模型生成回复"""
-        return await self._generate_base_response(
-            message, 
-            "Pro/deepseek-ai/DeepSeek-V3",
-            {"temperature": 0.8, "max_tokens": 1024}
-        )
+        if self.config.API_USING == "deepseek":
+            return await self._generate_base_response(
+                message, 
+                "deepseek-chat",
+                {"temperature": 0.8, "max_tokens": 1024}
+            )
+        else:
+            return await self._generate_base_response(
+                message, 
+                "Pro/deepseek-ai/DeepSeek-V3",
+                {"temperature": 0.8, "max_tokens": 1024}
+            )
 
     async def _generate_r1_distill_response(self, message: Message) -> Optional[str]:
         """使用 DeepSeek-R1-Distill-Qwen-32B 模型生成回复"""
@@ -192,9 +212,13 @@ class LLMResponseGenerator:
             messages = [{"role": "user", "content": prompt}]
             
             loop = asyncio.get_event_loop()
+            if self.config.API_USING == "deepseek":
+                model = "deepseek-chat"
+            else:
+                model = "Pro/deepseek-ai/DeepSeek-V3"
             create_completion = partial(
                 self.client.chat.completions.create,
-                model="Pro/deepseek-ai/DeepSeek-V3",
+                model=model,
                 messages=messages,
                 stream=False,
                 max_tokens=30,

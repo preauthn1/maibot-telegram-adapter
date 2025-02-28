@@ -40,6 +40,7 @@ class BotConfig:
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     
+    API_USING: str = "siliconflow"  # 使用的API
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
     MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
@@ -76,7 +77,8 @@ class BotConfig:
                 config.MODEL_R1_PROBABILITY = response_config.get("model_r1_probability", config.MODEL_R1_PROBABILITY)
                 config.MODEL_V3_PROBABILITY = response_config.get("model_v3_probability", config.MODEL_V3_PROBABILITY)
                 config.MODEL_R1_DISTILL_PROBABILITY = response_config.get("model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY)
-            
+                config.API_USING = response_config.get("api_using", config.API_USING)
+                
             # 消息配置
             if "message" in toml_dict:
                 msg_config = toml_dict["message"]
@@ -108,7 +110,11 @@ class LLMConfig:
     # 基础配置
     SILICONFLOW_API_KEY: str = None
     SILICONFLOW_BASE_URL: str = None
+    DEEP_SEEK_API_KEY: str = None
+    DEEP_SEEK_BASE_URL: str = None
 
 llm_config = LLMConfig()
 llm_config.SILICONFLOW_API_KEY = os.getenv('SILICONFLOW_KEY')
 llm_config.SILICONFLOW_BASE_URL = os.getenv('SILICONFLOW_BASE_URL')
+llm_config.DEEP_SEEK_API_KEY = os.getenv('DEEP_SEEK_KEY')
+llm_config.DEEP_SEEK_BASE_URL = os.getenv('DEEP_SEEK_BASE_URL')
