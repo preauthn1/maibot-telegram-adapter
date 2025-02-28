@@ -5,6 +5,7 @@ from ..schedule.schedule_generator import bot_schedule
 import os
 from .utils import get_embedding, combine_messages, get_recent_group_messages
 from ...common.database import Database
+from .config import global_config
 
 # 获取当前文件的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -67,7 +68,7 @@ class PromptBuilder:
         chat_talking_prompt = ''
         if group_id:
             # 从数据库获取最近消息
-            message_objects = get_recent_group_messages(self.db, group_id, limit=16)
+            message_objects = get_recent_group_messages(self.db, group_id, limit=global_config.MAX_CONTEXT_SIZE)
             if message_objects:
                 chat_talking_prompt = combine_messages(message_objects)
                 # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的最近{len(message_objects)}条消息记录")
@@ -88,12 +89,12 @@ class PromptBuilder:
         prompt_personality = ''
         personality_choice = random.random()
         if personality_choice < 4/6:  # 第一种人格
-            prompt_personality = f'''你的网名叫麦麦，是一个学习地质的女大学生，喜欢摄影，你会刷贴吧，你正在浏览qq群,{promt_info_prompt},
+            prompt_personality = f'''你的网名叫{global_config.BOT_NICKNAME}，是一个学习地质的女大学生，喜欢摄影，你会刷贴吧，你正在浏览qq群,{promt_info_prompt},
             {activate_prompt}
             现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{is_bot_prompt}
             请注意把握群里的聊天内容，不要回复的太有条理，可以有个性。'''
         elif personality_choice < 1:  # 第二种人格
-            prompt_personality = f'''你的网名叫麦麦，是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群,{promt_info_prompt},
+            prompt_personality = f'''你的网名叫{global_config.BOT_NICKNAME}，是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群,{promt_info_prompt},
             {activate_prompt}
             现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
             请你表达自己的见解和观点。可以有个性。'''

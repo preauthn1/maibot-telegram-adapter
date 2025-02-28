@@ -8,8 +8,9 @@ from ...common.database import Database
 from PIL import Image
 from .config import BotConfig, global_config
 import urllib3
-from .cq_code import CQCode
 from .utils_user import get_user_nickname
+from .utils_cq import parse_cq_code
+from .cq_code import cq_code_tool,CQCode
 
 Message = ForwardRef('Message')  # 添加这行
 
@@ -63,12 +64,10 @@ class Message:
             self.group_name = self.get_groupname(self.group_id)
         
         if not self.processed_plain_text:
-        # 解析消息片段
             if self.raw_message:
-                # print(f"\033[1;34m[调试信息]\033[0m 原始消息: {self.raw_message}")
                 self.message_segments = self.parse_message_segments(str(self.raw_message))
                 self.processed_plain_text = ' '.join(
-                    seg['translated_text']
+                    seg.translated_plain_text
                     for seg in self.message_segments
                 )
                 
@@ -87,96 +86,80 @@ class Message:
         else:
             return f"群{group_id}"
     
-    def parse_message_segments(self, message: str) -> List[Dict]:
+    def parse_message_segments(self, message: str) -> List[CQCode]:
         """
         将消息解析为片段列表，包括纯文本和CQ码
         返回的列表中每个元素都是字典，包含：
-        - type: 'text' 或 CQ码类型
-        - data: 对于text类型是文本内容，对于CQ码是参数字典
-        - translated_text: 经过处理后的文本
+        - cq_code_list:分割出的聊天对象，包括文本和CQ码
+        - trans_list:翻译后的对象列表
         """
-        segments = []
-        start = 0
+        cq_code_dict_list = []
+        trans_list = []
         
+        start = 0
+        print(f"\033[1;34m[调试信息]\033[0m 原始消息: {message}")
         while True:
             # 查找下一个CQ码的开始位置
             cq_start = message.find('[CQ:', start)
+            #如果没有cq码，直接返回文本内容
             if cq_start == -1:
                 # 如果没有找到更多CQ码，添加剩余文本
                 if start < len(message):
                     text = message[start:].strip()
                     if text:  # 只添加非空文本
-                        segments.append({
-                            'type': 'text',
-                            'data': {'text': text},
-                            'translated_text': text
-                        })
+                        cq_code_dict_list.append(parse_cq_code(text))
                 break
-                
             # 添加CQ码前的文本
             if cq_start > start:
                 text = message[start:cq_start].strip()
                 if text:  # 只添加非空文本
-                    segments.append({
-                        'type': 'text',
-                        'data': {'text': text},
-                        'translated_text': text
-                    })
-            
+                    cq_code_dict_list.append(parse_cq_code(text))
             # 查找CQ码的结束位置
             cq_end = message.find(']', cq_start)
             if cq_end == -1:
                 # CQ码未闭合，作为普通文本处理
                 text = message[cq_start:].strip()
                 if text:
-                    segments.append({
-                        'type': 'text',
-                        'data': {'text': text},
-                        'translated_text': text
-                    })
+                    cq_code_dict_list.append(parse_cq_code(text))
                 break
-                
-            # 提取完整的CQ码并创建CQCode对象
             cq_code = message[cq_start:cq_end + 1]
-            try:
-                cq_obj = CQCode.from_cq_code(cq_code,reply = self.reply_message)
-                # 设置必要的属性
-                segments.append({
-                    'type': cq_obj.type,
-                    'data': cq_obj.params,
-                    'translated_text': cq_obj.translated_plain_text
-                })
-            except Exception as e:
-                import traceback
-                print(f"\033[1;31m[错误]\033[0m 处理CQ码失败: {str(e)}")
-                print(f"CQ码内容: {cq_code}")
-                print(f"当前消息属性:")
-                print(f"- group_id: {self.group_id}")
-                print(f"- user_id: {self.user_id}")
-                print(f"- user_nickname: {self.user_nickname}")
-                print(f"- group_name: {self.group_name}")
-                print("详细错误信息:")
-                print(traceback.format_exc())
-                # 处理失败时，将CQ码作为普通文本处理
-                segments.append({
-                    'type': 'text',
-                    'data': {'text': cq_code},
-                    'translated_text': cq_code
-                })
             
+            #将cq_code解析成字典
+            cq_code_dict_list.append(parse_cq_code(cq_code))
+            # 更新start位置到当前CQ码之后
             start = cq_end + 1
+            
+        print(f"\033[1;34m[调试信息]\033[0m 提取的消息对象：列表: {cq_code_dict_list}")
         
-        
-        if len(segments) == 1 and segments[0]['type'] == 'image':
+        #判定是否是表情包消息，以及是否含有表情包
+        if len(cq_code_dict_list) == 1 and cq_code_dict_list[0]['type'] == 'image':
             self.is_emoji = True
             self.has_emoji_emoji = True
         else:
-            for segment in segments:
+            for segment in cq_code_dict_list:
                 if segment['type'] == 'image' and segment['data'].get('sub_type') == '1':
                     self.has_emoji_emoji = True
                     break
+                
+        
+        #翻译作为字典的CQ码  
+        for _code_item in cq_code_dict_list:
+            #一个一个CQ码处理
+            message_obj = cq_code_tool.cq_from_dict_to_class(_code_item,reply = self.reply_message)
+            trans_list.append(message_obj)
+            # except Exception as e:
+            #     import traceback
+            #     print(f"\033[1;31m[错误]\033[0m 处理CQ码失败: {str(e)}")
+            #     print(f"CQ码内容: {cq_code}")
+            #     print(f"当前消息属性:")
+            #     print(f"- group_id: {self.group_id}")
+            #     print(f"- user_id: {self.user_id}")
+            #     print(f"- user_nickname: {self.user_nickname}")
+            #     print(f"- group_name: {self.group_name}")
+            #     print("详细错误信息:")
+            #     print(traceback.format_exc())
             
-        return segments
+        return trans_list
 
 class Message_Thinking:
     """消息思考类"""

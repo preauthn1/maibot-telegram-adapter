@@ -5,7 +5,7 @@
 
 
 ![Python Version](https://img.shields.io/badge/Python-3.8-blue)
-![License](https://img.shields.io/badge/license-GNL-green)
+![License](https://img.shields.io/github/license/SengokuCola/MaiMBot)
 ![Status](https://img.shields.io/badge/状态-开发中-yellow)
 
 </div>
@@ -20,7 +20,7 @@
 > ⚠️ **警告**：请自行了解qqbot的风险，麦麦有时候一天被腾讯肘七八次
 > ⚠️ **警告**：由于麦麦一直在迭代，所以可能存在一些bug，请自行测试，包括胡言乱语（
 
-关于麦麦的开发和部署相关的讨论群（不建议发布无关消息）
+关于麦麦的开发和部署相关的讨论群（不建议发布无关消息）这里不会有麦麦发言！
 
 <div align="center">
 <img src="docs/qq.png" width="300" />

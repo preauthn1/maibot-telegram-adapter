@@ -32,7 +32,7 @@ from .relationship_manager import relationship_manager
 # 初始化表情管理器
 emoji_manager.initialize()
 
-print("\033[1;32m正在唤醒麦麦......\033[0m")
+print(f"\033[1;32m正在唤醒{global_config.BOT_NICKNAME}......\033[0m")
 # 创建机器人实例
 chat_bot = ChatBot(global_config)
 
@@ -54,11 +54,11 @@ async def start_background_tasks():
 @driver.on_bot_connect
 async def _(bot: Bot):
     """Bot连接成功时的处理"""
-    print("\033[1;38;5;208m-----------麦麦成功连接！-----------\033[0m")
+    print(f"\033[1;38;5;208m-----------{global_config.BOT_NICKNAME}成功连接！-----------\033[0m")
     message_sender.set_bot(bot)
     asyncio.create_task(message_sender.start_processor(bot))
     await willing_manager.ensure_started()
-    print("\033[1;38;5;208m-----------麦麦消息发送器已启动！-----------\033[0m")
+    print("\033[1;38;5;208m-----------消息发送器已启动！-----------\033[0m")
     
     asyncio.create_task(emoji_manager._periodic_scan(interval_MINS=global_config.EMOJI_REGISTER_INTERVAL))
     print("\033[1;38;5;208m-----------开始偷表情包！-----------\033[0m")

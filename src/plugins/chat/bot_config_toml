@@ -16,6 +16,10 @@ emoji_chance = 0.2
 check_interval = 120
 register_interval = 10
 
+[cq_code]
+enable_pic_translate = true
+
+
 [response]
 api_using = "siliconflow"
 model_r1_probability = 0.8

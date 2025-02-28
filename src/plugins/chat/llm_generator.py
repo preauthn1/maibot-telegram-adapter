@@ -58,7 +58,7 @@ class LLMResponseGenerator:
         else:
             self.current_model_type = 'r1_distill'  # 默认使用 R1-Distill
 
-        print(f"+++++++++++++++++麦麦{self.current_model_type}思考中+++++++++++++++++")
+        print(f"+++++++++++++++++{global_config.BOT_NICKNAME}{self.current_model_type}思考中+++++++++++++++++")
         if self.current_model_type == 'r1':
             model_response = await self._generate_r1_response(message)
         elif self.current_model_type == 'v3':
@@ -67,7 +67,7 @@ class LLMResponseGenerator:
             model_response = await self._generate_r1_distill_response(message)
         
         # 打印情感标签
-        print(f'麦麦的回复是：{model_response}')
+        print(f'{global_config.BOT_NICKNAME}的回复是：{model_response}')
         model_response, emotion = await self._process_response(model_response)
         
         if model_response:

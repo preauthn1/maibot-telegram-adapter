@@ -33,14 +33,6 @@ class ChatBot:
         if not self._started:
             # 只保留必要的任务
             self._started = True
-            
-    def is_mentioned_bot(self, message: Message) -> bool:
-        """检查消息是否提到了机器人"""
-        keywords = ['麦麦']
-        for keyword in keywords:
-            if keyword in message.processed_plain_text:
-                return True
-        return False
                 
 
     async def handle_message(self, event: GroupMessageEvent, bot: Bot) -> None:
@@ -159,7 +151,7 @@ class ChatBot:
                     raw_message=msg,
                     plain_text=msg,
                     processed_plain_text=msg,
-                    user_nickname="麦麦",
+                    user_nickname=global_config.BOT_NICKNAME,
                     group_name=message.group_name,
                     time=timepoint
                 )
@@ -187,7 +179,7 @@ class ChatBot:
                             raw_message=emoji_cq,
                             plain_text=emoji_cq,
                             processed_plain_text=emoji_cq,
-                            user_nickname="麦麦",
+                            user_nickname=global_config.BOT_NICKNAME,
                             group_name=message.group_name,
                             time=bot_response_time,
                             is_emoji=True

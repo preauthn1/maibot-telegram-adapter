@@ -10,11 +10,11 @@ import tomli  # 添加这行导入
 # logger.remove()
 
 # # 只禁用 INFO 级别的日志输出到控制台
-logging.getLogger('nonebot').handlers.clear()
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
-logging.getLogger('nonebot').addHandler(console_handler)
-logging.getLogger('nonebot').setLevel(logging.WARNING)
+# logging.getLogger('nonebot').handlers.clear()
+# console_handler = logging.StreamHandler()
+# console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
+# logging.getLogger('nonebot').addHandler(console_handler)
+# logging.getLogger('nonebot').setLevel(logging.WARNING)
 
 @dataclass
 class BotConfig:
@@ -32,6 +32,8 @@ class BotConfig:
     MIN_TEXT_LENGTH: int = 2  # 最小处理文本长度
     MAX_CONTEXT_SIZE: int = 15  # 上下文最大消息数
     emoji_chance: float = 0.2  # 发送表情包的基础概率
+    
+    ENABLE_PIC_TRANSLATE: bool = True  # 是否启用图片翻译
     
     talk_allowed_groups = set()
     talk_frequency_down_groups = set()
@@ -64,6 +66,10 @@ class BotConfig:
                 emoji_config = toml_dict["emoji"]
                 config.EMOJI_CHECK_INTERVAL = emoji_config.get("check_interval", config.EMOJI_CHECK_INTERVAL)
                 config.EMOJI_REGISTER_INTERVAL = emoji_config.get("register_interval", config.EMOJI_REGISTER_INTERVAL)
+            
+            if "cq_code" in toml_dict:
+                cq_code_config = toml_dict["cq_code"]
+                config.ENABLE_PIC_TRANSLATE = cq_code_config.get("enable_pic_translate", config.ENABLE_PIC_TRANSLATE)
             
             # 机器人基础配置
             if "bot" in toml_dict:

@@ -9,8 +9,11 @@ from collections import deque
 import time
 from .storage import MessageStorage 
 from .config import global_config
+from .cq_code import cq_code_tool
+
 if os.name == "nt":
     from .message_visualizer import message_visualizer
+    
 
 
 class SendTemp:
@@ -194,7 +197,7 @@ class MessageSendControl:
                     print(f"- 群组: {group_id} - 内容: {message.processed_plain_text}")
                     cost_time = round(time.time(), 2) - message.time
                     if cost_time > 40:
-                        message.processed_plain_text = CQCode.create_reply_cq(message.message_based_id) + message.processed_plain_text
+                        message.processed_plain_text = cq_code_tool.create_reply_cq(message.message_based_id) + message.processed_plain_text
                     cur_time = time.time()
                     await self._current_bot.send_group_msg(
                         group_id=group_id,
@@ -204,7 +207,7 @@ class MessageSendControl:
                     cost_time = round(time.time(), 2) - cur_time
                     print(f"\033[1;34m[调试]\033[0m 消息发送时间: {cost_time}秒")
                     current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.time))
-                    print(f"\033[1;32m群 {group_id} 消息, 用户 麦麦, 时间: {current_time}:\033[0m {str(message.processed_plain_text)}")
+                    print(f"\033[1;32m群 {group_id} 消息, 用户 {global_config.BOT_NICKNAME}, 时间: {current_time}:\033[0m {str(message.processed_plain_text)}")
                     await self.storage.store_message(message, None)
                     queue.update_send_time()
                     if queue.has_messages():

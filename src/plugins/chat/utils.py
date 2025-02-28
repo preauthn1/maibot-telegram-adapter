@@ -4,7 +4,7 @@ from typing import List
 from .message import Message
 import requests
 import numpy as np
-from .config import llm_config
+from .config import llm_config, global_config
 import re
 
 
@@ -29,7 +29,7 @@ def combine_messages(messages: List[Message]) -> str:
 
 def is_mentioned_bot_in_message(message: Message) -> bool:
     """检查消息是否提到了机器人"""
-    keywords = ['麦麦', '麦哲伦']
+    keywords = [global_config.BOT_NICKNAME]
     for keyword in keywords:
         if keyword in message.processed_plain_text:
             return True
@@ -37,7 +37,7 @@ def is_mentioned_bot_in_message(message: Message) -> bool:
 
 def is_mentioned_bot_in_txt(message: str) -> bool:
     """检查消息是否提到了机器人"""
-    keywords = ['麦麦', '麦哲伦']
+    keywords = [global_config.BOT_NICKNAME]
     for keyword in keywords:
         if keyword in message:
             return True
@@ -315,7 +315,7 @@ def process_llm_response(text: str) -> List[str]:
     # 检查分割后的消息数量是否过多（超过3条）
     if len(sentences) > 3:
         print(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
-        return ['麦麦不知道哦']
+        return [f'{global_config.BOT_NICKNAME}不知道哦']
     
     return sentences
 
