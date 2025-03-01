@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import jieba
-from .llm_module import LLMModel
+from llm_module import LLMModel
 import networkx as nx
 import matplotlib.pyplot as plt
 import math
@@ -9,7 +9,7 @@ from collections import Counter
 import datetime
 import random
 import time
-from ..chat.config import global_config
+# from chat.config import global_config
 import sys
 sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
 from src.common.database import Database  # 使用正确的导入语法
@@ -165,22 +165,17 @@ def calculate_information_content(text):
     return entropy
 
 
-start_time = time.time()
+# Database.initialize(
+#     global_config.MONGODB_HOST,
+#     global_config.MONGODB_PORT,
+#     global_config.DATABASE_NAME
+# )
+# memory_graph = Memory_graph()
 
-Database.initialize(
-    global_config.MONGODB_HOST,
-    global_config.MONGODB_PORT,
-    global_config.DATABASE_NAME
-)
-memory_graph = Memory_graph()
+# llm_model = LLMModel()
+# llm_model_small = LLMModel(model_name="deepseek-ai/DeepSeek-V2.5")
 
-llm_model = LLMModel()
-llm_model_small = LLMModel(model_name="deepseek-ai/DeepSeek-V2.5")
-
-memory_graph.load_graph_from_db()
-
-end_time = time.time()
-print(f"加载海马体耗时: {end_time - start_time:.2f} 秒")
+# memory_graph.load_graph_from_db()
 
 
 
@@ -208,14 +203,22 @@ def main():
         print(f"随机时间戳对应的时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(random_time))}")
         chat_ = memory_graph.get_random_chat_from_db(chat_size, random_time)
         chat_text.append(chat_)  # 拼接所有text
-        time.sleep(5)
+        # time.sleep(1)
 
 
     
-    for input_text in chat_text:
-        print(input_text)
+    for i, input_text in enumerate(chat_text, 1):
+        
+        progress = (i / len(chat_text)) * 100
+        bar_length = 30
+        filled_length = int(bar_length * i // len(chat_text))
+        bar = '█' * filled_length + '-' * (bar_length - filled_length)
+        print(f"\n进度: [{bar}] {progress:.1f}% ({i}/{len(chat_text)})")
+        
+        # print(input_text)
         first_memory = set()
         first_memory = memory_compress(input_text, llm_model_small, llm_model_small, rate=2.5)
+        time.sleep(5)
         
         #将记忆加入到图谱中
         for topic, memory in first_memory:

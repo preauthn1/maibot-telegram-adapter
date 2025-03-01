@@ -5,7 +5,7 @@ from .storage import MessageStorage
 from .llm_generator import LLMResponseGenerator
 from .message_stream import MessageStream, MessageStreamContainer
 from .topic_identifier import topic_identifier
-from random import random
+from random import random, choice
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 import time
 import os
@@ -15,6 +15,7 @@ from .message import Message_Thinking  # 导入 Message_Thinking 类
 from .relationship_manager import relationship_manager
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .utils import is_mentioned_bot_in_txt, calculate_typing_time
+from ..memory_system.memory import memory_graph
 
 class ChatBot:
     def __init__(self, config: BotConfig):
@@ -99,6 +100,11 @@ class ChatBot:
         topic = topic_identifier.identify_topic_jieba(message.processed_plain_text)
         print(f"\033[1;32m[主题识别]\033[0m 主题: {topic}")
         
+        if topic:
+            for current_topic in topic:
+                first_layer_items, second_layer_items = memory_graph.get_related_item(current_topic, depth=2)
+                if first_layer_items:
+                    print(f"\033[1;32m[记忆检索-bot]\033[0m 有印象:{current_topic}")
         
         await self.storage.store_message(message, topic[0] if topic else None)
             

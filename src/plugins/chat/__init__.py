@@ -10,6 +10,8 @@ from .relationship_manager import relationship_manager
 from ..schedule.schedule_generator import bot_schedule
 from .willing_manager import willing_manager
 
+from ..memory_system.memory import memory_graph
+
 
 # 获取驱动器
 driver = get_driver()
@@ -21,6 +23,8 @@ Database.initialize(
 )
 
 print("\033[1;32m[初始化配置和数据库完成]\033[0m")
+
+
 
 
 # 导入其他模块

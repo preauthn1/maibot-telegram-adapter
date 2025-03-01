@@ -133,8 +133,8 @@ llm_config.DEEP_SEEK_BASE_URL = os.getenv('DEEP_SEEK_BASE_URL')
 if not global_config.enable_advance_output:
     logger.remove()
     
-    logging.getLogger('nonebot').handlers.clear()
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
-    logging.getLogger('nonebot').addHandler(console_handler)
-    logging.getLogger('nonebot').setLevel(logging.WARNING)
+    # logging.getLogger('nonebot').handlers.clear()
+    # console_handler = logging.StreamHandler()
+    # console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
+    # logging.getLogger('nonebot').addHandler(console_handler)
+    # logging.getLogger('nonebot').setLevel(logging.WARNING)
