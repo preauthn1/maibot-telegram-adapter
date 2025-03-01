@@ -22,6 +22,15 @@
 
 关于麦麦的开发和部署相关的讨论群（不建议发布无关消息）这里不会有麦麦发言！
 
+## 开发计划TODO：LIST
+
+- 兼容gif的解析和保存
+- 小程序转发链接解析
+- 对思考链长度限制
+- 修复已知bug
+- 完善文档
+
+
 <div align="center">
 <img src="docs/qq.png" width="300" />
 </div>
@@ -61,6 +70,92 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
 4. **配置文件设置**
    - 把env.example改成.env，并填上你的apikey（硅基流动或deepseekapi）
    - 把bot_config_toml改名为bot_config.toml，并填写相关内容，不然无法正常运行
+
+   #### .env 文件配置说明
+   ```ini
+   # 环境配置
+   ENVIRONMENT=dev          # 开发环境设置
+   HOST=127.0.0.1          # 主机地址
+   PORT=8080               # 端口号
+
+   # 命令前缀设置
+   COMMAND_START=["/"]     # 命令起始符
+
+   # 插件配置
+   PLUGINS=["src2.plugins.chat"]  # 启用的插件列表
+
+   # MongoDB配置
+   MONGODB_HOST=127.0.0.1        # MongoDB主机地址
+   MONGODB_PORT=27017            # MongoDB端口
+   DATABASE_NAME=MegBot          # 数据库名称
+   MONGODB_USERNAME=""           # MongoDB用户名（可选）
+   MONGODB_PASSWORD=""           # MongoDB密码（可选）
+   MONGODB_AUTH_SOURCE=""        # MongoDB认证源（可选）
+
+   # API密钥配置
+   CHAT_ANY_WHERE_KEY=           # ChatAnyWhere API密钥
+   SILICONFLOW_KEY=             # 硅基流动 API密钥（必填）
+   DEEP_SEEK_KEY=               # DeepSeek API密钥（必填）
+
+   # API地址配置
+   CHAT_ANY_WHERE_BASE_URL=https://api.chatanywhere.tech/v1
+   SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1/
+   DEEP_SEEK_BASE_URL=https://api.deepseek.com/v1
+   ```
+
+   #### bot_config.toml 文件配置说明
+   ```toml
+   # 数据库设置
+   [database]
+   host = "127.0.0.1"      # MongoDB主机地址
+   port = 27017            # MongoDB端口
+   name = "MegBot"         # 数据库名称
+
+   # 机器人基本设置
+   [bot]
+   qq =                    # 你的机器人QQ号（必填）
+   nickname = "麦麦"       # 机器人昵称
+
+   # 消息处理设置
+   [message]
+   min_text_length = 2     # 最小响应文本长度
+   max_context_size = 15   # 上下文最大保存数量
+   emoji_chance = 0.2      # 表情包使用概率
+
+   # 表情包功能设置
+   [emoji]
+   check_interval = 120    # 表情检查间隔（秒）
+   register_interval = 10  # 表情注册间隔（秒）
+
+   # CQ码设置
+   [cq_code]
+   enable_pic_translate = false  # 是否启用图片转换（无效）
+
+   # 响应设置
+   [response]
+   api_using = "siliconflow"     # 回复使用的API（siliconflow/deepseek）
+   model_r1_probability = 0.8    # R1模型使用概率
+   model_v3_probability = 0.1    # V3模型使用概率
+   model_r1_distill_probability = 0.1  # R1蒸馏模型使用概率（对deepseek api 无效）
+
+   # 其他设置
+   [others]
+   enable_advance_output = false  # 是否启用详细日志输出
+
+   # 群组设置
+   [groups]
+   talk_allowed = [              # 允许回复的群号列表
+       # 在这里添加群号,逗号隔开
+   ]
+   
+   talk_frequency_down = [       # 降低回复频率的群号列表
+       # 在这里添加群号,逗号隔开
+   ]
+   
+   ban_user_id = [              # 禁止回复的用户QQ号列表
+       # 在这里添加QQ号,逗号隔开
+   ]
+   ```
 
 5. **运行麦麦**
    ```bash
