@@ -196,10 +196,10 @@ def main():
     current_timestamp = datetime.datetime.now().timestamp()
     chat_text = []
     
-    chat_size =40
+    chat_size =20
     
-    for _ in range(100):  # 循环10次
-        random_time = current_timestamp - random.randint(1, 3600*39)  # 随机时间
+    for _ in range(10):  # 循环10次
+        random_time = current_timestamp - random.randint(1, 3600*3)  # 随机时间
         print(f"随机时间戳对应的时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(random_time))}")
         chat_ = memory_graph.get_random_chat_from_db(chat_size, random_time)
         chat_text.append(chat_)  # 拼接所有text
