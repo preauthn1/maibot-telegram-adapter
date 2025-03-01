@@ -58,7 +58,7 @@ class WillingManager:
         if group_id in config.talk_frequency_down_groups:
             reply_probability = reply_probability / 3.5
             
-        if is_mentioned_bot and user_id == int(123456784):
+        if is_mentioned_bot and user_id == int(964959351):
             reply_probability = 1
             
         return reply_probability
