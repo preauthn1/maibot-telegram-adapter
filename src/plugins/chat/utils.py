@@ -6,6 +6,7 @@ import requests
 import numpy as np
 from .config import llm_config, global_config
 import re
+from typing import Dict
 
 
 def combine_messages(messages: List[Message]) -> str:
@@ -26,6 +27,16 @@ def combine_messages(messages: List[Message]) -> str:
         result += f"[{time_str}] {name}: {content}\n"
         
     return result
+
+def db_message_to_str (message_dict: Dict) -> str:
+    print(f"message_dict: {message_dict}")
+    time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(message_dict["time"]))
+    name = message_dict.get("user_nickname", "") or f"用户{message_dict['user_id']}"
+    content = message_dict.get("processed_plain_text", "")
+    result = f"[{time_str}] {name}: {content}\n"
+    print(f"result: {result}")
+    return result
+
 
 def is_mentioned_bot_in_message(message: Message) -> bool:
     """检查消息是否提到了机器人"""
@@ -116,6 +127,36 @@ def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
     # 按时间正序排列
     message_objects.reverse()
     return message_objects
+
+def get_recent_group_detailed_plain_text(db, group_id: int, limit: int = 12,combine = False):
+    recent_messages = list(db.db.messages.find(
+        {"group_id": group_id},
+        {
+            "time": 1,  # 返回时间字段
+            "user_id": 1,  # 返回用户ID字段
+            "user_nickname": 1,  # 返回用户昵称字段
+            "message_id": 1,  # 返回消息ID字段
+            "detailed_plain_text": 1  # 返回处理后的文本字段
+        }
+    ).sort("time", -1).limit(limit))
+
+    if not recent_messages:
+        return []
+    
+    message_detailed_plain_text = ''
+    message_detailed_plain_text_list = []
+    
+    
+    if combine:
+        for msg_db_data in recent_messages:
+            message_detailed_plain_text+=str(msg_db_data["detailed_plain_text"])
+        return message_detailed_plain_text
+    else:
+        for msg_db_data in recent_messages:
+            message_detailed_plain_text_list.append(msg_db_data["detailed_plain_text"])
+        return message_detailed_plain_text_list
+
+
 
 def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     """将文本分割成句子，但保持书名号中的内容完整

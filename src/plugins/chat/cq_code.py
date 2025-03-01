@@ -42,6 +42,7 @@ class CQCode:
 
     def translate(self):
         """根据CQ码类型进行相应的翻译处理"""
+        print(f"\033[1;34m[调试信息]\033[0m 开始翻译CQ{self.params}码: {self.type}")
         if self.type == 'text':
             self.translated_plain_text = self.params.get('text', '')
         elif self.type == 'image':
@@ -318,6 +319,7 @@ class CQCode:
         # 创建Message对象
         from .message import Message
         if self.reply_message == None:
+            print(f"\033[1;31m[错误]\033[0m 回复消息为空")
             return '[回复某人消息]'
         
         if self.reply_message.sender.user_id:
@@ -333,6 +335,7 @@ class CQCode:
                 return f"[回复 {self.reply_message.sender.nickname} 的消息: {message_obj.processed_plain_text}]"
 
         else:
+            print(f"\033[1;31m[错误]\033[0m 回复消息的sender.user_id为空")
             return '[回复某人消息]'
 
     @staticmethod

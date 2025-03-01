@@ -25,6 +25,7 @@ class MessageStorage:
                     "user_nickname": message.user_nickname,
                     "group_name": message.group_name,
                     "topic": topic,
+                    "detailed_plain_text": message.detailed_plain_text,
                 }
             else:
                 message_data = {
@@ -38,6 +39,7 @@ class MessageStorage:
                     "user_nickname": message.user_nickname,
                     "group_name": message.group_name,
                     "topic": topic,
+                    "detailed_plain_text": message.detailed_plain_text,
                 }
                 
             self.db.db.messages.insert_one(message_data)

@@ -3,7 +3,7 @@ import random
 from dotenv import load_dotenv
 from ..schedule.schedule_generator import bot_schedule
 import os
-from .utils import get_embedding, combine_messages, get_recent_group_messages
+from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text
 from ...common.database import Database
 from .config import global_config
 
@@ -64,14 +64,12 @@ class PromptBuilder:
             请你记住上面的[知识]，之后可能会用到\n----------------------------------------------------\n'''
             promt_info_prompt = '你有一些[知识]，在上面可以参考。'
         
+        print(f"\033[1;34m[调试信息]\033[0m 正在构建聊天上下文")
         
         chat_talking_prompt = ''
         if group_id:
-            # 从数据库获取最近消息
-            message_objects = get_recent_group_messages(self.db, group_id, limit=global_config.MAX_CONTEXT_SIZE)
-            if message_objects:
-                chat_talking_prompt = combine_messages(message_objects)
-                # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的最近{len(message_objects)}条消息记录")
+            chat_talking_prompt = get_recent_group_detailed_plain_text(self.db, group_id, limit=global_config.MAX_CONTEXT_SIZE,combine = True)
+            print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
         
         #激活prompt构建
         activate_prompt = ''

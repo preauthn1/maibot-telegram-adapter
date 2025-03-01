@@ -42,6 +42,7 @@ class Message:
     
     message_segments: List[Dict] = None  # 存储解析后的消息片段
     processed_plain_text: str = None  # 用于存储处理后的plain_text
+    detailed_plain_text: str = None  # 用于存储详细可读文本
     
     time: float = None
     
@@ -70,6 +71,11 @@ class Message:
                     seg.translated_plain_text
                     for seg in self.message_segments
                 )
+        #将详细翻译为详细可读文本
+        time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.time))
+        name = self.user_nickname or f"用户{self.user_id}"
+        content = self.processed_plain_text
+        self.detailed_plain_text = f"[{time_str}] {name}: {content}\n"
                 
         
     def get_groupname(self, group_id: int) -> str:
@@ -93,6 +99,7 @@ class Message:
         - cq_code_list:分割出的聊天对象，包括文本和CQ码
         - trans_list:翻译后的对象列表
         """
+        print(f"\033[1;34m[调试信息]\033[0m 正在处理消息: {message}")
         cq_code_dict_list = []
         trans_list = []
         
@@ -143,21 +150,8 @@ class Message:
         
         #翻译作为字典的CQ码  
         for _code_item in cq_code_dict_list:
-            #一个一个CQ码处理
             message_obj = cq_code_tool.cq_from_dict_to_class(_code_item,reply = self.reply_message)
-            trans_list.append(message_obj)
-            # except Exception as e:
-            #     import traceback
-            #     print(f"\033[1;31m[错误]\033[0m 处理CQ码失败: {str(e)}")
-            #     print(f"CQ码内容: {cq_code}")
-            #     print(f"当前消息属性:")
-            #     print(f"- group_id: {self.group_id}")
-            #     print(f"- user_id: {self.user_id}")
-            #     print(f"- user_nickname: {self.user_nickname}")
-            #     print(f"- group_name: {self.group_name}")
-            #     print("详细错误信息:")
-            #     print(traceback.format_exc())
-            
+            trans_list.append(message_obj)       
         return trans_list
 
 class Message_Thinking:
