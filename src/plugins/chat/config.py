@@ -107,7 +107,7 @@ class BotConfig:
                 
         return config 
     
-global_config = BotConfig.load_config("./src/plugins/chat/bot_config.toml")
+global_config = BotConfig.load_config(".bot_config.toml")
 
 from dotenv import load_dotenv
 current_dir = os.path.dirname(os.path.abspath(__file__))
