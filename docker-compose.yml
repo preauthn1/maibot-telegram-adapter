@@ -13,6 +13,7 @@ services:
     volumes:
       - napcatQQ:/app/.config/QQ
       - napcatCONFIG:/app/napcat/config
+      - maimbotDATA:/MaiMBot/data #麦麦的图片等要给napcat不然发送图片会有问题
     image: mlikiowa/napcat-docker:latest
 
   mongodb:
@@ -39,12 +40,15 @@ services:
       - napcat
     volumes:
       - maimbotCONFIG:/MaiMBot/config
+      - maimbotDATA:/MaiMBot/data
     image: sengokucola/maimbot:latest
   
 
 volumes:
   maimbotCONFIG:
+  maimbotDATA:
   napcatQQ:
   napcatCONFIG:
   mongodb:
   mongodbCONFIG:
+  
