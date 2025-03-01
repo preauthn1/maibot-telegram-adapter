@@ -6,17 +6,13 @@ import os
 from datetime import datetime
 from ...common.database import Database
 from PIL import Image
-from .config import BotConfig, global_config
+from .config import global_config
 import urllib3
 from .utils_user import get_user_nickname
 from .utils_cq import parse_cq_code
 from .cq_code import cq_code_tool,CQCode
 
 Message = ForwardRef('Message')  # 添加这行
-
-# 加载配置
-bot_config = BotConfig.load_config()
-
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -48,6 +44,8 @@ class Message:
     
     is_emoji: bool = False # 是否是表情包
     has_emoji: bool = False # 是否包含表情包
+    
+    translate_cq: bool = True # 是否翻译cq码
 
     
     reply_benefits: float = 0.0
@@ -99,7 +97,7 @@ class Message:
         - cq_code_list:分割出的聊天对象，包括文本和CQ码
         - trans_list:翻译后的对象列表
         """
-        print(f"\033[1;34m[调试信息]\033[0m 正在处理消息: {message}")
+        # print(f"\033[1;34m[调试信息]\033[0m 正在处理消息: {message}")
         cq_code_dict_list = []
         trans_list = []
         

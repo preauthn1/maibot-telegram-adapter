@@ -4,11 +4,9 @@ import hashlib
 import time
 import os
 from ...common.database import Database
-from .config import BotConfig
 import zlib  # 用于 CRC32
 import base64
-
-bot_config = BotConfig.load_config()
+from .config import global_config
 
 
 def storage_image(image_data: bytes,type: str, max_size: int = 200) -> bytes:
@@ -39,12 +37,12 @@ def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
         
         # 连接数据库
         db = Database(
-            host=bot_config.MONGODB_HOST,
-            port=bot_config.MONGODB_PORT,
-            db_name=bot_config.DATABASE_NAME,
-            username=bot_config.MONGODB_USERNAME,
-            password=bot_config.MONGODB_PASSWORD,
-            auth_source=bot_config.MONGODB_AUTH_SOURCE
+            host=global_config.MONGODB_HOST,
+            port=global_config.MONGODB_PORT,
+            db_name=global_config.DATABASE_NAME,
+            username=global_config.MONGODB_USERNAME,
+            password=global_config.MONGODB_PASSWORD,
+            auth_source=global_config.MONGODB_AUTH_SOURCE
         )
         
         # 检查是否已存在相同哈希值的图片

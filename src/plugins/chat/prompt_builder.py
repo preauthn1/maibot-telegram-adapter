@@ -53,8 +53,8 @@ class PromptBuilder:
             # 遍历所有topic
             for current_topic in topic:
                 first_layer_items, second_layer_items = memory_graph.get_related_item(current_topic, depth=2)
-                if first_layer_items:
-                    print(f"\033[1;32m[pb记忆检索]\033[0m 主题 '{current_topic}' 的第一层记忆: {first_layer_items}")
+                # if first_layer_items:
+                    # print(f"\033[1;32m[前额叶]\033[0m 主题 '{current_topic}' 的第一层记忆: {first_layer_items}")
                 
                 # 记录第一层数据
                 all_first_layer_items.extend(first_layer_items)
@@ -68,14 +68,14 @@ class PromptBuilder:
                         # 找到重叠的记忆
                         overlap = set(second_layer_items) & set(other_second_layer)
                         if overlap:
-                            print(f"\033[1;32m[pb记忆检索]\033[0m 发现主题 '{current_topic}' 和 '{other_topic}' 有共同的第二层记忆: {overlap}")
+                            # print(f"\033[1;32m[前额叶]\033[0m 发现主题 '{current_topic}' 和 '{other_topic}' 有共同的第二层记忆: {overlap}")
                             overlapping_second_layer.update(overlap)
             
             # 合并所有需要的记忆
             if all_first_layer_items:   
-                print(f"\033[1;32m[pb记忆检索]\033[0m 合并所有需要的记忆1: {all_first_layer_items}")
+                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆1: {all_first_layer_items}")
             if overlapping_second_layer:
-                print(f"\033[1;32m[pb记忆检索]\033[0m 合并所有需要的记忆2: {list(overlapping_second_layer)}")
+                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆2: {list(overlapping_second_layer)}")
             
             all_memories = all_first_layer_items + list(overlapping_second_layer)
             

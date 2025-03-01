@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
 import jieba
-from llm_module import LLMModel
 import networkx as nx
 import matplotlib.pyplot as plt
 import math
@@ -9,10 +8,12 @@ from collections import Counter
 import datetime
 import random
 import time
+import os
+from dotenv import load_dotenv
 # from chat.config import global_config
-import sys
 sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
 from src.common.database import Database  # 使用正确的导入语法
+from src.plugins.memory_system.llm_module import LLMModel
    
 class Memory_graph:
     def __init__(self):
@@ -117,22 +118,60 @@ class Memory_graph:
         return []  # 如果没有找到记录，返回空列表
 
     def save_graph_to_db(self):
-        # 清空现有的图数据
-        self.db.db.graph_data.delete_many({})
         # 保存节点
         for node in self.G.nodes(data=True):
-            node_data = {
-                'concept': node[0],
-                'memory_items': node[1].get('memory_items', [])  # 默认为空列表
-            }
-            self.db.db.graph_data.nodes.insert_one(node_data)
+            concept = node[0]
+            memory_items = node[1].get('memory_items', [])
+            
+            # 查找是否存在同名节点
+            existing_node = self.db.db.graph_data.nodes.find_one({'concept': concept})
+            if existing_node:
+                # 如果存在,合并memory_items并去重
+                existing_items = existing_node.get('memory_items', [])
+                if not isinstance(existing_items, list):
+                    existing_items = [existing_items] if existing_items else []
+                
+                # 合并并去重
+                all_items = list(set(existing_items + memory_items))
+                
+                # 更新节点
+                self.db.db.graph_data.nodes.update_one(
+                    {'concept': concept},
+                    {'$set': {'memory_items': all_items}}
+                )
+            else:
+                # 如果不存在,创建新节点
+                node_data = {
+                    'concept': concept,
+                    'memory_items': memory_items
+                }
+                self.db.db.graph_data.nodes.insert_one(node_data)
+        
         # 保存边
         for edge in self.G.edges():
-            edge_data = {
-                'source': edge[0],
-                'target': edge[1]
-            }
-            self.db.db.graph_data.edges.insert_one(edge_data)
+            source, target = edge
+            
+            # 查找是否存在同样的边
+            existing_edge = self.db.db.graph_data.edges.find_one({
+                'source': source,
+                'target': target
+            })
+            
+            if existing_edge:
+                # 如果存在,增加num属性
+                num = existing_edge.get('num', 1) + 1
+                self.db.db.graph_data.edges.update_one(
+                    {'source': source, 'target': target},
+                    {'$set': {'num': num}}
+                )
+            else:
+                # 如果不存在,创建新边
+                edge_data = {
+                    'source': source,
+                    'target': target,
+                    'num': 1
+                }
+                self.db.db.graph_data.edges.insert_one(edge_data)
 
     def load_graph_from_db(self):
         # 清空当前图
@@ -147,7 +186,7 @@ class Memory_graph:
         # 加载边
         edges = self.db.db.graph_data.edges.find()
         for edge in edges:
-            self.G.add_edge(edge['source'], edge['target'])
+            self.G.add_edge(edge['source'], edge['target'], num=edge.get('num', 1))
 
 def calculate_information_content(text):
     
@@ -180,6 +219,19 @@ def calculate_information_content(text):
 
 
 def main():
+    # 获取当前文件的绝对路径
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
+    env_path = os.path.join(root_dir, 'config', '.env')
+
+    # 加载环境变量
+    print(f"尝试从 {env_path} 加载环境变量配置")
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print("成功加载环境变量配置")
+    else:
+        print(f"环境变量配置文件不存在: {env_path}")
+
     # 初始化数据库
     Database.initialize(
         "127.0.0.1",
@@ -196,10 +248,10 @@ def main():
     current_timestamp = datetime.datetime.now().timestamp()
     chat_text = []
     
-    chat_size =20
+    chat_size =25
     
-    for _ in range(10):  # 循环10次
-        random_time = current_timestamp - random.randint(1, 3600*3)  # 随机时间
+    for _ in range(30):  # 循环10次
+        random_time = current_timestamp - random.randint(1, 3600*10)  # 随机时间
         print(f"随机时间戳对应的时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(random_time))}")
         chat_ = memory_graph.get_random_chat_from_db(chat_size, random_time)
         chat_text.append(chat_)  # 拼接所有text
@@ -218,7 +270,7 @@ def main():
         # print(input_text)
         first_memory = set()
         first_memory = memory_compress(input_text, llm_model_small, llm_model_small, rate=2.5)
-        time.sleep(5)
+        # time.sleep(5)
         
         #将记忆加入到图谱中
         for topic, memory in first_memory:

@@ -16,11 +16,19 @@
 
 基于llm、napcat、nonebot和mongodb的专注于群聊天的qqbot
 
+<div align="center">
+<a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
+    <img src="https://i0.hdslb.com/bfs/archive/7d9fa0a88e8a1aa01b92b8a5a743a2671c0e1798.jpg" width="500" alt="麦麦演示视频">
+    <br>
+    👆 点击观看麦麦演示视频 👆
+</a>
+</div>
+
 > ⚠️ **警告**：代码可能随时更改，目前版本不一定是稳定版本
 > ⚠️ **警告**：请自行了解qqbot的风险，麦麦有时候一天被腾讯肘七八次
 > ⚠️ **警告**：由于麦麦一直在迭代，所以可能存在一些bug，请自行测试，包括胡言乱语（
 
-关于麦麦的开发和部署相关的讨论群（不建议发布无关消息）这里不会有麦麦发言！
+关于麦麦的开发和建议相关的讨论群（不建议发布无关消息）这里不会有麦麦发言！
 
 ## 开发计划TODO：LIST
 
@@ -29,6 +37,10 @@
 - 对思考链长度限制
 - 修复已知bug
 - 完善文档
+- 修复转发
+- config自动生成和检测
+- log别用print
+- 给发送消息写专门的类
 
 
 <div align="center">

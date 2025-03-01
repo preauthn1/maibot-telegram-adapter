@@ -6,6 +6,8 @@ import logging
 import configparser
 import tomli
 import sys
+from loguru import logger
+from dotenv import load_dotenv
 
 
 
@@ -21,7 +23,7 @@ class BotConfig:
     MONGODB_PASSWORD: Optional[str] = None  # 默认空值
     MONGODB_AUTH_SOURCE: Optional[str] = None  # 默认空值
     
-    BOT_QQ: Optional[int] = None
+    BOT_QQ: Optional[int] = 1
     BOT_NICKNAME: Optional[str] = None
     
     # 消息处理相关配置
@@ -35,6 +37,7 @@ class BotConfig:
     talk_frequency_down_groups = set()
     ban_user_id = set()
     
+    build_memory_interval: int = 60  # 记忆构建间隔（秒）
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     
@@ -45,9 +48,21 @@ class BotConfig:
     
     enable_advance_output: bool = False  # 是否启用高级输出
     
+    @staticmethod
+    def get_default_config_path() -> str:
+        """获取默认配置文件路径"""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
+        config_dir = os.path.join(root_dir, 'config')
+        return os.path.join(config_dir, 'bot_config.toml')
+    
     @classmethod
-    def load_config(cls, config_path: str = "bot_config.toml") -> "BotConfig":
+    def load_config(cls, config_path: str = None) -> "BotConfig":
         """从TOML配置文件加载配置"""
+        if config_path is None:
+            config_path = cls.get_default_config_path()
+            logger.info(f"使用默认配置文件路径: {config_path}")
+            
         config = cls()
         if os.path.exists(config_path):
             with open(config_path, "rb") as f:
@@ -93,6 +108,10 @@ class BotConfig:
                 config.MAX_CONTEXT_SIZE = msg_config.get("max_context_size", config.MAX_CONTEXT_SIZE)
                 config.emoji_chance = msg_config.get("emoji_chance", config.emoji_chance)
             
+            if "memory" in toml_dict:
+                memory_config = toml_dict["memory"]
+                config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
+            
             # 群组配置
             if "groups" in toml_dict:
                 groups_config = toml_dict["groups"]
@@ -104,16 +123,26 @@ class BotConfig:
                 others_config = toml_dict["others"]
                 config.enable_advance_output = others_config.get("enable_advance_output", config.enable_advance_output)
             
-            print(f"\033[1;32m成功加载配置文件: {config_path}\033[0m")
+            logger.success(f"成功加载配置文件: {config_path}")
                 
         return config 
     
-global_config = BotConfig.load_config(".bot_config.toml")
+# 获取配置文件路径
+bot_config_path = BotConfig.get_default_config_path()
+config_dir = os.path.dirname(bot_config_path)
+env_path = os.path.join(config_dir, '.env')
 
-from dotenv import load_dotenv
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-load_dotenv(os.path.join(root_dir, '.env'))
+logger.info(f"尝试从 {bot_config_path} 加载机器人配置")
+global_config = BotConfig.load_config(config_path=bot_config_path)
+
+# 加载环境变量
+
+logger.info(f"尝试从 {env_path} 加载环境变量配置")
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+    logger.success("成功加载环境变量配置")
+else:
+    logger.error(f"环境变量配置文件不存在: {env_path}")
 
 @dataclass
 class LLMConfig:
@@ -132,9 +161,5 @@ llm_config.DEEP_SEEK_BASE_URL = os.getenv('DEEP_SEEK_BASE_URL')
 
 
 if not global_config.enable_advance_output:
-    # 只降低日志级别而不是完全移除
-    logger.remove()
-    logger.add(sys.stderr, level="WARNING")  # 添加一个只输出 WARNING 及以上级别的处理器
-    
-    # 设置 nonebot 的日志级别
-    logging.getLogger('nonebot').setLevel(logging.WARNING)
+    # logger.remove()
+    pass

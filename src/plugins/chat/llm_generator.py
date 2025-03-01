@@ -4,7 +4,7 @@ import asyncio
 import requests
 from functools import partial
 from .message import Message
-from .config import BotConfig
+from .config import BotConfig, global_config
 from ...common.database import Database
 import random
 import time
@@ -255,4 +255,4 @@ class LLMResponseGenerator:
         return processed_response, emotion_tags
 
 # 创建全局实例
-llm_response = LLMResponseGenerator(config=BotConfig())
+llm_response = LLMResponseGenerator(global_config)

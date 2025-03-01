@@ -208,7 +208,15 @@ class MessageSendControl:
                     print(f"\033[1;34m[调试]\033[0m 消息发送时间: {cost_time}秒")
                     current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.time))
                     print(f"\033[1;32m群 {group_id} 消息, 用户 {global_config.BOT_NICKNAME}, 时间: {current_time}:\033[0m {str(message.processed_plain_text)}")
-                    await self.storage.store_message(message, None)
+                    
+                    if message.is_emoji:
+                        message.processed_plain_text = "[表情包]"
+                        await self.storage.store_message(message, None)
+                    else:
+                        await self.storage.store_message(message, None)
+                    
+                    
+                    
                     queue.update_send_time()
                     if queue.has_messages():
                         await asyncio.sleep(
