@@ -184,7 +184,7 @@ class MessageSendControl:
                 message.update_thinking_time()
                 thinking_time = message.thinking_time
                 if thinking_time < 90:  # 最少思考2秒
-                    if int(thinking_time) % 10 == 0:
+                    if int(thinking_time) % 15 == 0:
                         print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{thinking_time:.1f}秒")
                     return
                 else:

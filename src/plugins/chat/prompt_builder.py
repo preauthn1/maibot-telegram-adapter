@@ -54,22 +54,22 @@ class PromptBuilder:
         bot_schedule_now_time,bot_schedule_now_activity = bot_schedule.get_current_task()
         prompt_date = f'''今天是{current_date}，现在是{current_time}，你今天的日程是：\n{bot_schedule.today_schedule}\n你现在正在{bot_schedule_now_activity}\n'''
 
-        #知识构建（暂时禁用，因为知识库太少了）
+        #知识构建
         prompt_info = ''
         promt_info_prompt = ''
-        prompt_info = self.get_prompt_info(message_txt)
+        prompt_info = self.get_prompt_info(message_txt,threshold=0.5)
         if prompt_info:
-            prompt_info = f'''\n----------------------------------------------------\n你有以下这些[知识]：
-            \n{prompt_info}\n
-            请你记住上面的[知识]，之后可能会用到\n----------------------------------------------------\n'''
+            prompt_info = f'''\n----------------------------------------------------\n你有以下这些[知识]：\n{prompt_info}\n请你记住上面的[知识]，之后可能会用到\n----------------------------------------------------\n'''
             promt_info_prompt = '你有一些[知识]，在上面可以参考。'
+        # print(f"\033[1;34m[调试]\033[0m 获取知识库内容结果: {prompt_info}")
+            
         
-        print(f"\033[1;34m[调试信息]\033[0m 正在构建聊天上下文")
+        # print(f"\033[1;34m[调试信息]\033[0m 正在构建聊天上下文")
         
         chat_talking_prompt = ''
         if group_id:
             chat_talking_prompt = get_recent_group_detailed_plain_text(self.db, group_id, limit=global_config.MAX_CONTEXT_SIZE,combine = True)
-            print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
+            # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
         
         #激活prompt构建
         activate_prompt = ''
@@ -114,7 +114,7 @@ class PromptBuilder:
         
         #合并prompt
         prompt = ""
-        # prompt += f"{prompt_info}\n"
+        prompt += f"{prompt_info}\n"
         prompt += f"{prompt_date}\n"
         prompt += f"{chat_talking_prompt}\n"       
         # prompt += f"{activate_prompt}\n"
@@ -124,31 +124,23 @@ class PromptBuilder:
         
         return prompt
 
-    def get_prompt_info(self,message:str):
+    def get_prompt_info(self,message:str,threshold:float):
         related_info = ''
         if len(message) > 10:
             message_segments = [message[i:i+10] for i in range(0, len(message), 10)]
             for segment in message_segments:
                 embedding = get_embedding(segment)
-                related_info += self.get_info_from_db(embedding)
+                related_info += self.get_info_from_db(embedding,threshold=threshold)
                 
         else:
             embedding = get_embedding(message)
-            related_info += self.get_info_from_db(embedding)
+            related_info += self.get_info_from_db(embedding,threshold=threshold)
             
+        return related_info
+
     def get_info_from_db(self, query_embedding: list, limit: int = 1, threshold: float = 0.5) -> str:
-        """
-        从知识库中查找与输入向量最相似的内容
-        Args:
-            query_embedding: 查询向量
-            limit: 返回结果数量，默认为2
-            threshold: 相似度阈值，默认为0.5
-        Returns:
-            str: 找到的相关信息，如果相似度低于阈值则返回空字符串
-        """
         if not query_embedding:
             return ''
-            
         # 使用余弦相似度计算
         pipeline = [
             {
@@ -206,6 +198,7 @@ class PromptBuilder:
         ]
         
         results = list(self.db.db.knowledges.aggregate(pipeline))
+        # print(f"\033[1;34m[调试]\033[0m获取知识库内容结果: {results}")
         
         if not results:
             return ''
