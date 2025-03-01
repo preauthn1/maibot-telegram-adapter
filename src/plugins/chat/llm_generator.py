@@ -91,7 +91,7 @@ class LLMResponseGenerator:
             relationship_value = 0.0
             
         # 构建prompt
-        prompt = prompt_builder._build_prompt(
+        prompt,prompt_check = prompt_builder._build_prompt(
             message_txt=message.processed_plain_text,
             sender_name=sender_name,
             relationship_value=relationship_value,
@@ -106,6 +106,14 @@ class LLMResponseGenerator:
             "max_tokens": 1024,
             "temperature": 0.7
         }
+
+        default_params_check = {
+            "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+            "messages": [{"role": "user", "content": prompt_check}],
+            "stream": False,
+            "max_tokens": 1024,
+            "temperature": 0.7
+        }
         
         # 更新参数
         if model_params:
@@ -114,7 +122,43 @@ class LLMResponseGenerator:
         def create_completion():
             return self.client.chat.completions.create(**default_params)
         
+        def create_completion_check():
+            return self.client.chat.completions.create(**default_params_check)
+
         loop = asyncio.get_event_loop()
+
+        # 读空气模块
+        reasoning_content_check=''
+        content_check=''
+        if global_config.enable_kuuki_read:
+            response_check = await loop.run_in_executor(None, create_completion_check)
+            if response_check:
+                reasoning_content_check = ""
+                if hasattr(response_check.choices[0].message, "reasoning"):
+                    reasoning_content_check = response_check.choices[0].message.reasoning or reasoning_content_check
+                elif hasattr(response_check.choices[0].message, "reasoning_content"):
+                    reasoning_content_check = response_check.choices[0].message.reasoning_content or reasoning_content_check
+                content_check = response_check.choices[0].message.content
+                print(f"\033[1;32m[读空气]\033[0m 读空气结果为{content_check}")
+                if 'yes' not in content_check.lower():
+                    self.db.db.reasoning_logs.insert_one({
+                        'time': time.time(),
+                        'group_id': message.group_id,
+                        'user': sender_name,
+                        'message': message.processed_plain_text,
+                        'model': model_name,
+                        'reasoning_check': reasoning_content_check,
+                        'response_check': content_check,
+                        'reasoning': "",
+                        'response': "",
+                        'prompt': prompt,
+                        'prompt_check': prompt_check,
+                        'model_params': default_params
+                    })
+                    return None
+        
+            
+
         response = await loop.run_in_executor(None, create_completion)
         
         # 检查响应内容
@@ -142,9 +186,12 @@ class LLMResponseGenerator:
             'user': sender_name,
             'message': message.processed_plain_text,
             'model': model_name,
+            'reasoning_check': reasoning_content_check,
+            'response_check': content_check,
             'reasoning': reasoning_content,
             'response': content,
             'prompt': prompt,
+            'prompt_check': prompt_check,
             'model_params': default_params
         })
         

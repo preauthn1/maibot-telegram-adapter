@@ -16,7 +16,7 @@ class BotConfig:
     """机器人配置类"""
     
     # 基础配置
-    MONGODB_HOST: str = "127.0.0.1"
+    MONGODB_HOST: str = "mongodb"
     MONGODB_PORT: int = 27017
     DATABASE_NAME: str = "MegBot"
     MONGODB_USERNAME: Optional[str] = None  # 默认空值
@@ -47,6 +47,7 @@ class BotConfig:
     MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
     
     enable_advance_output: bool = False  # 是否启用高级输出
+    enable_kuuki_read: bool = True # 是否启用读空气功能
     
     @staticmethod
     def get_default_config_path() -> str:
