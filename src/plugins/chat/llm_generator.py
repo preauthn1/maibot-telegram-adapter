@@ -129,7 +129,7 @@ class LLMResponseGenerator:
         content = response.choices[0].message.content
         
         # 获取推理内容
-        reasoning_content = "模型思考过程：\n" + prompt
+        reasoning_content = ""
         if hasattr(response.choices[0].message, "reasoning"):
             reasoning_content = response.choices[0].message.reasoning or reasoning_content
         elif hasattr(response.choices[0].message, "reasoning_content"):

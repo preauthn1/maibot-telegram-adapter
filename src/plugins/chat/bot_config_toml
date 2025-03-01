@@ -20,7 +20,7 @@ check_interval = 120
 register_interval = 10
 
 [cq_code]
-enable_pic_translate = true
+enable_pic_translate = false
 
 
 [response]
@@ -30,7 +30,7 @@ model_v3_probability = 0.1 # 麦麦回答时选择V3模型的概率
 model_r1_distill_probability = 0.1 # 麦麦回答时选择R1蒸馏模型的概率
 
 [others]
-enable_advance_output = false # 开启后输出更多日志,false关闭true开启
+enable_advance_output = true # 开启后输出更多日志,false关闭true开启
 
 
 [groups]
