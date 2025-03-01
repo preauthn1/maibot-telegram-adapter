@@ -8,11 +8,19 @@ load_dotenv()
 
 class LLMModel:
     # def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", **kwargs):
-    def __init__(self, model_name="Pro/deepseek-ai/DeepSeek-R1", **kwargs):
-        self.model_name = model_name
+    def __init__(self, model_name="Pro/deepseek-ai/DeepSeek-R1",api_using=None, **kwargs):
+        if api_using == "deepseek":
+            self.api_key = os.getenv("DEEPSEEK_API_KEY")
+            self.base_url = os.getenv("DEEPSEEK_BASE_URL")
+            if model_name != "Pro/deepseek-ai/DeepSeek-R1":
+                self.model_name = model_name
+            else:
+                self.model_name = "deepseek-reasoner"
+        else:
+            self.api_key = os.getenv("SILICONFLOW_KEY")
+            self.base_url = os.getenv("SILICONFLOW_BASE_URL")
+            self.model_name = model_name
         self.params = kwargs
-        self.api_key = os.getenv("SILICONFLOW_KEY")
-        self.base_url = os.getenv("SILICONFLOW_BASE_URL")
 
     def generate_response(self, prompt: str) -> Tuple[str, str]:
         """根据输入的提示生成模型的响应"""
