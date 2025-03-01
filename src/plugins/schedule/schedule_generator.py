@@ -29,7 +29,10 @@ Database.initialize(
 
 class ScheduleGenerator:
     def __init__(self):
-        self.llm_scheduler = LLMModel(model_name="Pro/deepseek-ai/DeepSeek-V3")
+        if global_config.API_USING == "siliconflow":
+            self.llm_scheduler = LLMModel(model_name="Pro/deepseek-ai/DeepSeek-V3")
+        elif global_config.API_USING == "deepseek":
+            self.llm_scheduler = LLMModel(model_name="deepseek-chat",api_using="deepseek")
         self.db = Database.get_instance()
         
         today = datetime.datetime.now()
