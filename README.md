@@ -4,7 +4,7 @@
 <div align="center">
 
 
-![Python Version](https://img.shields.io/badge/Python-3.8-blue)
+![Python Version](https://img.shields.io/badge/Python-3.x-blue)
 ![License](https://img.shields.io/github/license/SengokuCola/MaiMBot)
 ![Status](https://img.shields.io/badge/状态-开发中-yellow)
 
@@ -16,11 +16,19 @@
 
 基于llm、napcat、nonebot和mongodb的专注于群聊天的qqbot
 
+<div align="center">
+<a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
+    <img src="https://i0.hdslb.com/bfs/archive/7d9fa0a88e8a1aa01b92b8a5a743a2671c0e1798.jpg" width="500" alt="麦麦演示视频">
+    <br>
+    👆 点击观看麦麦演示视频 👆
+</a>
+</div>
+
 > ⚠️ **警告**：代码可能随时更改，目前版本不一定是稳定版本
 > ⚠️ **警告**：请自行了解qqbot的风险，麦麦有时候一天被腾讯肘七八次
 > ⚠️ **警告**：由于麦麦一直在迭代，所以可能存在一些bug，请自行测试，包括胡言乱语（
 
-关于麦麦的开发和部署相关的讨论群（不建议发布无关消息）这里不会有麦麦发言！
+关于麦麦的开发和建议相关的讨论群（不建议发布无关消息）这里不会有麦麦发言！
 
 ## 开发计划TODO：LIST
 
@@ -29,6 +37,10 @@
 - 对思考链长度限制
 - 修复已知bug
 - 完善文档
+- 修复转发
+- config自动生成和检测
+- log别用print
+- 给发送消息写专门的类
 
 
 <div align="center">
@@ -52,11 +64,9 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
 
 #### 手动运行
 1. **创建Python环境**
-   推荐使用conda或其他环境管理来管理你的python环境
+   推荐使用conda或其他虚拟环境进行依赖安装，防止出现依赖版本冲突问题
    ```bash
-   # 安装requirements（还没检查好，可能有包漏了）
-   conda activate 你的环境
-   cd 对应路径
+   # 安装requirements
    pip install -r requirements.txt
    ```
 2. **MongoDB设置**
@@ -68,8 +78,8 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
    - 在Napcat的网络设置中添加ws反向代理:ws://localhost:8080/onebot/v11/ws
 
 4. **配置文件设置**
-   - 把env.example改成.env，并填上你的apikey（硅基流动或deepseekapi）
-   - 把bot_config_toml改名为bot_config.toml，并填写相关内容，不然无法正常运行
+   - 将.env文件打开，填上你的apikey（硅基流动或deepseekapi）
+   - 将bot_config.toml文件打开，并填写相关内容，不然无法正常运行
 
    #### .env 文件配置说明
    ```ini
@@ -92,14 +102,10 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
    MONGODB_PASSWORD=""           # MongoDB密码（可选）
    MONGODB_AUTH_SOURCE=""        # MongoDB认证源（可选）
 
-   # API密钥配置
-   CHAT_ANY_WHERE_KEY=           # ChatAnyWhere API密钥
-   SILICONFLOW_KEY=             # 硅基流动 API密钥（必填）
-   DEEP_SEEK_KEY=               # DeepSeek API密钥（必填）
-
-   # API地址配置
-   CHAT_ANY_WHERE_BASE_URL=https://api.chatanywhere.tech/v1
+   #api配置项，建议siliconflow必填，识图需要这个
+   SILICONFLOW_KEY=
    SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1/
+   DEEP_SEEK_KEY=
    DEEP_SEEK_BASE_URL=https://api.deepseek.com/v1
    ```
 
@@ -158,9 +164,8 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
    ```
 
 5. **运行麦麦**
+   在含有bot.py程序的目录下运行（如果使用了虚拟环境需要先进入虚拟环境）
    ```bash
-   conda activate 你的环境
-   cd 对应路径
    nb run
    ```
 6. **运行其他组件**
@@ -205,3 +210,13 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
 纯编程外行，面向cursor编程，很多代码史一样多多包涵
 
 > ⚠️ **警告**：本应用生成内容来自人工智能模型，由 AI 生成，请仔细甄别，请勿用于违反法律的用途，AI生成内容不代表本人观点和立场。
+
+## 致谢
+[nonebot2](https://github.com/nonebot/nonebot2): 跨平台 Python 异步聊天机器人框架  
+[NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现  
+
+### 贡献者
+
+感谢各位大佬！
+
+[![Contributors](https://contributors-img.web.app/image?repo=SengokuCola/MaiMBot)](https://github.com/SengokuCola/MaiMBot/graphs/contributors)

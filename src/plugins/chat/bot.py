@@ -5,7 +5,7 @@ from .storage import MessageStorage
 from .llm_generator import LLMResponseGenerator
 from .message_stream import MessageStream, MessageStreamContainer
 from .topic_identifier import topic_identifier
-from random import random
+from random import random, choice
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 import time
 import os
@@ -15,6 +15,7 @@ from .message import Message_Thinking  # 导入 Message_Thinking 类
 from .relationship_manager import relationship_manager
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .utils import is_mentioned_bot_in_txt, calculate_typing_time
+from ..memory_system.memory import memory_graph
 
 class ChatBot:
     def __init__(self, config: BotConfig):
@@ -82,7 +83,7 @@ class ChatBot:
 
         await relationship_manager.update_relationship(user_id = event.user_id, data = sender_info)
         await relationship_manager.update_relationship_value(user_id = event.user_id, relationship_value = 0.5)
-        print(f"\033[1;32m[关系管理]\033[0m 更新关系值: {relationship_manager.get_relationship(event.user_id).relationship_value}")
+        # print(f"\033[1;32m[关系管理]\033[0m 更新关系值: {relationship_manager.get_relationship(event.user_id).relationship_value}")
         
         
         message = Message(
@@ -99,9 +100,19 @@ class ChatBot:
         topic = topic_identifier.identify_topic_jieba(message.processed_plain_text)
         print(f"\033[1;32m[主题识别]\033[0m 主题: {topic}")
         
+        all_num = 0
+        interested_num = 0
+        if topic:
+            for current_topic in topic:
+                all_num += 1
+                first_layer_items, second_layer_items = memory_graph.get_related_item(current_topic, depth=2)
+                if first_layer_items:
+                    interested_num += 1
+                    print(f"\033[1;32m[前额叶]\033[0m 对|{current_topic}|有印象")
+        interested_rate = interested_num / all_num if all_num > 0 else 0
         
+     
         await self.storage.store_message(message, topic[0] if topic else None)
-            
         
 
         is_mentioned = is_mentioned_bot_in_txt(message.processed_plain_text)
@@ -111,7 +122,8 @@ class ChatBot:
             is_mentioned,
             self.config,
             event.user_id,
-            message.is_emoji
+            message.is_emoji,
+            interested_rate
         )
         current_willing = willing_manager.get_willing(event.group_id)
         
@@ -182,7 +194,8 @@ class ChatBot:
                             user_nickname=global_config.BOT_NICKNAME,
                             group_name=message.group_name,
                             time=bot_response_time,
-                            is_emoji=True
+                            is_emoji=True,
+                            translate_cq=False
                         )
                     message_sender.send_temp_container.add_message(bot_message)
         

@@ -22,22 +22,31 @@ class WillingManager:
         """设置指定群组的回复意愿"""
         self.group_reply_willing[group_id] = willing
         
-    def change_reply_willing_received(self, group_id: int, topic: str, is_mentioned_bot: bool, config, user_id: int = None, is_emoji: bool = False) -> float:
+    def change_reply_willing_received(self, group_id: int, topic: str, is_mentioned_bot: bool, config, user_id: int = None, is_emoji: bool = False, interested_rate: float = 0) -> float:
         """改变指定群组的回复意愿并返回回复概率"""
         current_willing = self.group_reply_willing.get(group_id, 0)
         
-        if topic and current_willing < 1:
-            current_willing += 0.2
-        elif topic:
-            current_willing += 0.05
+        print(f"初始意愿: {current_willing}")
+        
+        # if topic and current_willing < 1:
+        #     current_willing += 0.2
+        # elif topic:
+        #     current_willing += 0.05
             
         if is_mentioned_bot and current_willing < 1.0:
             current_willing += 0.9
+            print(f"被提及, 当前意愿: {current_willing}")
         elif is_mentioned_bot:
             current_willing += 0.05
+            print(f"被重复提及, 当前意愿: {current_willing}")
         
         if is_emoji:
-            current_willing *= 0.2
+            current_willing *= 0.15
+            print(f"表情包, 当前意愿: {current_willing}")
+        
+        if interested_rate > 0.6:
+            print(f"兴趣度: {interested_rate}, 当前意愿: {current_willing}")
+            current_willing += interested_rate-0.45
         
         self.group_reply_willing[group_id] = min(current_willing, 3.0)
         
@@ -55,15 +64,15 @@ class WillingManager:
         return reply_probability
     
     def change_reply_willing_sent(self, group_id: int):
-        """发送消息后降低群组的回复意愿"""
+        """开始思考后降低群组的回复意愿"""
         current_willing = self.group_reply_willing.get(group_id, 0)
-        self.group_reply_willing[group_id] = max(0, current_willing - 1.8)
+        self.group_reply_willing[group_id] = max(0, current_willing - 2)
         
     def change_reply_willing_after_sent(self, group_id: int):
         """发送消息后提高群组的回复意愿"""
         current_willing = self.group_reply_willing.get(group_id, 0)
         if current_willing < 1:
-            self.group_reply_willing[group_id] = min(1, current_willing + 0.4)
+            self.group_reply_willing[group_id] = min(1, current_willing + 0.3)
         
     async def ensure_started(self):
         """确保衰减任务已启动"""

@@ -62,7 +62,7 @@ class ScheduleGenerator:
 
         elif read_only == False:
             print(f"{date_str}的日程不存在，准备生成新的日程。")
-            prompt = f"""我是{global_config.BOT_NICKNAME}，一个地质学大二女大学生，喜欢刷qq，贴吧，知乎和小红书，请为我生成{date_str}（{weekday}）的日程安排，包括：
+            prompt = f"""我是{global_config.BOT_NICKNAME}，一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书，请为我生成{date_str}（{weekday}）的日程安排，包括：
             1. 早上的学习和工作安排
             2. 下午的活动和任务
             3. 晚上的计划和休息时间

@@ -7,6 +7,8 @@ import numpy as np
 from .config import llm_config, global_config
 import re
 from typing import Dict
+from collections import Counter
+import math
 
 
 def combine_messages(messages: List[Message]) -> str:
@@ -80,6 +82,39 @@ def cosine_similarity(v1, v2):
     norm1 = np.linalg.norm(v1)
     norm2 = np.linalg.norm(v2)
     return dot_product / (norm1 * norm2)
+
+def calculate_information_content(text):   
+    """计算文本的信息量（熵）"""
+    # 统计字符频率
+    char_count = Counter(text)
+    total_chars = len(text)
+    
+    # 计算熵
+    entropy = 0
+    for count in char_count.values():
+        probability = count / total_chars
+        entropy -= probability * math.log2(probability)
+    
+    return entropy
+
+def get_cloest_chat_from_db(db, length: int, timestamp: str):
+    # 从数据库中根据时间戳获取离其最近的聊天记录
+    chat_text = ''
+    closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])  # 调试输出
+    # print(f"距离time最近的消息时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(closest_record['time'])))}")
+    
+    if closest_record:
+        closest_time = closest_record['time']
+        group_id = closest_record['group_id']  # 获取groupid
+        # 获取该时间戳之后的length条消息，且groupid相同
+        chat_record = list(db.db.messages.find({"time": {"$gt": closest_time}, "group_id": group_id}).sort('time', 1).limit(length))
+        for record in chat_record:
+            time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(record['time'])))
+            chat_text += f'[{time_str}] {record["user_nickname"] or "用户" + str(record["user_id"])}: {record["processed_plain_text"]}\n'  # 添加发送者和时间信息
+        return chat_text
+    
+    return []  # 如果没有找到记录，返回空列表
+
 
 def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
     """从数据库获取群组最近的消息记录
