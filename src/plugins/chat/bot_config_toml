@@ -30,7 +30,7 @@ model_v3_probability = 0.1
 model_r1_distill_probability = 0.1
 
 [others]
-enable_advance_output = false
+enable_advance_output = false #开启后输出更多日志
 
 
 [groups]
