@@ -5,6 +5,7 @@ from nonebot.log import logger, default_format
 import logging
 import configparser
 import tomli
+import sys
 
 
 
@@ -131,10 +132,9 @@ llm_config.DEEP_SEEK_BASE_URL = os.getenv('DEEP_SEEK_BASE_URL')
 
 
 if not global_config.enable_advance_output:
+    # 只降低日志级别而不是完全移除
     logger.remove()
+    logger.add(sys.stderr, level="WARNING")  # 添加一个只输出 WARNING 及以上级别的处理器
     
-    # logging.getLogger('nonebot').handlers.clear()
-    # console_handler = logging.StreamHandler()
-    # console_handler.setLevel(logging.WARNING)  # 只输出 WARNING 及以上级别
-    # logging.getLogger('nonebot').addHandler(console_handler)
-    # logging.getLogger('nonebot').setLevel(logging.WARNING)
+    # 设置 nonebot 的日志级别
+    logging.getLogger('nonebot').setLevel(logging.WARNING)
