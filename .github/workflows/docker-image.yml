@@ -6,6 +6,7 @@ on:
       - main       # 推送到main分支时触发
     tags:
       - 'v*'       # 推送v开头的tag时触发（例如v1.0.0）
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   build-and-push:
