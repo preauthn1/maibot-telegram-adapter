@@ -17,7 +17,7 @@ from .utils_user import get_user_nickname
 import urllib3
 from urllib3.util import create_urllib3_context
 
-
+# TLS1.3特殊处理 https://github.com/psf/requests/issues/6616
 ctx = create_urllib3_context()
 ctx.load_default_certs()
 ctx.set_ciphers("AES128-GCM-SHA256")
