@@ -31,7 +31,7 @@ if env_file == ".env.dev" and os.path.exists(env_file):
     load_dotenv(env_file, override=True)  # override=True 允许覆盖已存在的环境变量
 elif os.path.exists(".env.prod"):
     logger.success("加载环境变量配置")
-    load_dotenv(env_file, override=True)  # override=True 允许覆盖已存在的环境变量
+    load_dotenv(".env.prod", override=True)  # override=True 允许覆盖已存在的环境变量
 else:
     logger.error(f"{env}对应的环境配置文件{env_file}不存在,请修改.env文件中的ENVIRONMENT变量为 prod.")
     exit(1)
