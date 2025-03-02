@@ -47,6 +47,7 @@ class BotConfig:
     MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
     
     enable_advance_output: bool = False  # 是否启用高级输出
+    enable_kuuki_read: bool = True # 是否启用读空气功能
     
     @staticmethod
     def get_default_config_path() -> str:
