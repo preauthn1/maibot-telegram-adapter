@@ -4,6 +4,7 @@ NapCat.Framework.Windows.Once/
 log/
 src/plugins/memory
 /test
+config/bot_config.toml
 message_queue_content.txt
 message_queue_content.bat
 message_queue_window.bat
