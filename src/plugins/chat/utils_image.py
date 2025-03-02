@@ -37,12 +37,12 @@ def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
         
         # 连接数据库
         db = Database(
-            host=global_config.MONGODB_HOST,
-            port=global_config.MONGODB_PORT,
-            db_name=global_config.DATABASE_NAME,
-            username=global_config.MONGODB_USERNAME,
-            password=global_config.MONGODB_PASSWORD,
-            auth_source=global_config.MONGODB_AUTH_SOURCE
+            host= os.getenv("MONGODB_HOST"),
+            port= int(os.getenv("MONGODB_PORT")),
+            db_name=  os.getenv("DATABASE_NAME"),
+            username= os.getenv("MONGODB_USERNAME"),
+            password= os.getenv("MONGODB_PASSWORD"),
+            auth_source=os.getenv("MONGODB_AUTH_SOURCE")
         )
         
         # 检查是否已存在相同哈希值的图片
