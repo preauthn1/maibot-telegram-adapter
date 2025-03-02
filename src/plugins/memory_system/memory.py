@@ -193,7 +193,25 @@ class Hippocampus:
             chat_text.append(chat_)
         return chat_text
     
-    def build_memory(self,chat_size=12):
+    async def memory_compress(self, input_text, rate=1):
+        information_content = calculate_information_content(input_text)
+        print(f"文本的信息量（熵）: {information_content:.4f} bits")
+        topic_num = max(1, min(5, int(information_content * rate / 4)))
+        topic_prompt = find_topic(input_text, topic_num)
+        topic_response = await self.llm_model.generate_response(topic_prompt)
+        # 检查 topic_response 是否为元组
+        if isinstance(topic_response, tuple):
+            topics = topic_response[0].split(",")  # 假设第一个元素是我们需要的字符串
+        else:
+            topics = topic_response.split(",")
+        compressed_memory = set()
+        for topic in topics:
+            topic_what_prompt = topic_what(input_text,topic)
+            topic_what_response = await self.llm_model_small.generate_response(topic_what_prompt)
+            compressed_memory.add((topic.strip(), topic_what_response[0]))  # 将话题和记忆作为元组存储
+        return compressed_memory
+    
+    async def build_memory(self,chat_size=12):
         #最近消息获取频率
         time_frequency = {'near':1,'mid':2,'far':2}
         memory_sample = self.get_memory_sample(chat_size,time_frequency)
@@ -208,9 +226,7 @@ class Hippocampus:
             if input_text:
                 # 生成压缩后记忆
                 first_memory = set()
-                first_memory = self.memory_compress(input_text, 2.5)
-                # 延时防止访问超频
-                # time.sleep(5)
+                first_memory = await self.memory_compress(input_text, 2.5)
                 #将记忆加入到图谱中
                 for topic, memory in first_memory:
                     topics = segment_text(topic)
@@ -224,26 +240,6 @@ class Hippocampus:
             else:
                 print(f"空消息 跳过")
         self.memory_graph.save_graph_to_db()
-    
-    def memory_compress(self, input_text, rate=1):
-        information_content = calculate_information_content(input_text)
-        print(f"文本的信息量（熵）: {information_content:.4f} bits")
-        topic_num = max(1, min(5, int(information_content * rate / 4)))
-        # print(topic_num)
-        topic_prompt = find_topic(input_text, topic_num)
-        topic_response = self.llm_model.generate_response(topic_prompt)
-        # 检查 topic_response 是否为元组
-        if isinstance(topic_response, tuple):
-            topics = topic_response[0].split(",")  # 假设第一个元素是我们需要的字符串
-        else:
-            topics = topic_response.split(",")
-        # print(topics)
-        compressed_memory = set()
-        for topic in topics:
-            topic_what_prompt = topic_what(input_text,topic)
-            topic_what_response = self.llm_model_small.generate_response(topic_what_prompt)
-            compressed_memory.add((topic.strip(), topic_what_response[0]))  # 将话题和记忆作为元组存储
-        return compressed_memory
 
 
 def segment_text(text):

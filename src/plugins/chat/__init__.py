@@ -90,7 +90,7 @@ async def monitor_relationships():
 async def build_memory_task():
     """每30秒执行一次记忆构建"""
     print("\033[1;32m[记忆构建]\033[0m 开始构建记忆...")
-    hippocampus.build_memory(chat_size=12)
+    await hippocampus.build_memory(chat_size=30)
     print("\033[1;32m[记忆构建]\033[0m 记忆构建完成")
 
   
