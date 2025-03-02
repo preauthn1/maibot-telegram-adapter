@@ -33,6 +33,7 @@ class BotConfig:
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     
     API_USING: str = "siliconflow"  # 使用的API
+    API_PAID: bool = False  # 是否使用付费API
     DEEPSEEK_MODEL_R1: str = "deepseek-reasoner"  # deepseek-R1模型
     DEEPSEEK_MODEL_V3: str = "deepseek-chat"  # deepseek-V3模型
     SILICONFLOW_MODEL_R1: str = "deepseek-ai/DeepSeek-R1"  # siliconflow-R1模型
