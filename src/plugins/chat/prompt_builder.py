@@ -1,6 +1,5 @@
 import time
 import random
-from dotenv import load_dotenv
 from ..schedule.schedule_generator import bot_schedule
 import os
 from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text
@@ -9,11 +8,6 @@ from .config import global_config
 from .topic_identifier import topic_identifier
 from ..memory_system.memory import memory_graph
 from random import choice
-
-# 获取当前文件的绝对路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-load_dotenv(os.path.join(root_dir, '.env'))
 
 
 class PromptBuilder:

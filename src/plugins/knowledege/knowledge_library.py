@@ -13,9 +13,12 @@ from src.plugins.chat.config import llm_config
 
 # 直接配置数据库连接信息
 Database.initialize(
-    "127.0.0.1",  # MongoDB 主机
-    27017,       # MongoDB 端口
-    "MegBot" # 数据库名称
+    host= os.getenv("MONGODB_HOST"),
+    port= int(os.getenv("MONGODB_PORT")),
+    db_name=  os.getenv("DATABASE_NAME"),
+    username= os.getenv("MONGODB_USERNAME"),
+    password= os.getenv("MONGODB_PASSWORD"),
+    auth_source=os.getenv("MONGODB_AUTH_SOURCE")
 )
 
 class KnowledgeLibrary:

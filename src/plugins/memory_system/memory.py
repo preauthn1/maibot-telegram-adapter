@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import jieba
 from .llm_module import LLMModel
 import networkx as nx
@@ -263,9 +264,12 @@ def topic_what(text, topic):
 start_time = time.time()
 
 Database.initialize(
-    global_config.MONGODB_HOST,
-    global_config.MONGODB_PORT,
-    global_config.DATABASE_NAME
+    host= os.getenv("MONGODB_HOST"),
+    port= int(os.getenv("MONGODB_PORT")),
+    db_name=  os.getenv("DATABASE_NAME"),
+    username= os.getenv("MONGODB_USERNAME"),
+    password= os.getenv("MONGODB_PASSWORD"),
+    auth_source=os.getenv("MONGODB_AUTH_SOURCE")
 )
 #创建记忆图
 memory_graph = Memory_graph()

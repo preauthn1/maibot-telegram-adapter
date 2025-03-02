@@ -10,18 +10,12 @@ import random
 import time
 import os
 import numpy as np
-from dotenv import load_dotenv
 from .relationship_manager import relationship_manager
 from ..schedule.schedule_generator import bot_schedule
 from .prompt_builder import prompt_builder
 from .config import llm_config, global_config
 from .utils import process_llm_response
 
-
-# 获取当前文件的绝对路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-load_dotenv(os.path.join(root_dir, '.env'))
 
 class LLMResponseGenerator:
     def __init__(self, config: BotConfig):

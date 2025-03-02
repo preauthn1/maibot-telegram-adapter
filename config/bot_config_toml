@@ -1,11 +1,3 @@
-[database]
-host = "127.0.0.1"
-port = 27017
-name = "MegBot"
-username = ""  # 默认空值
-password = ""  # 默认空值
-auth_source = ""  # 默认空值
-
 [bot]
 qq = 123456  #填入你的机器人QQ
 nickname = "麦麦"  #你希望bot被称呼的名字

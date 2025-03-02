@@ -1,22 +1,8 @@
 import os
 import requests
-from dotenv import load_dotenv
 from typing import Tuple, Union
 import time
 from ..chat.config import BotConfig
-
-# 获取当前文件的绝对路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-env_path = os.path.join(root_dir, 'config', '.env')
-
-# 加载环境变量
-print(f"尝试从 {env_path} 加载环境变量配置")
-if os.path.exists(env_path):
-    load_dotenv(env_path)
-    print("成功加载环境变量配置")
-else:
-    print(f"环境变量配置文件不存在: {env_path}")
 
 class LLMModel:
     # def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", **kwargs):
