@@ -48,6 +48,13 @@ class BotConfig:
     
     enable_advance_output: bool = False  # 是否启用高级输出
     enable_kuuki_read: bool = True # 是否启用读空气功能
+
+    # 默认人设
+    PROMPT_PERSONALITY=[
+        "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群",
+        "是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群"
+    ]
+    PROMPT_SCHEDULE_GEN="一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
     
     @staticmethod
     def get_default_config_path() -> str:
@@ -123,6 +130,14 @@ class BotConfig:
             if "others" in toml_dict:
                 others_config = toml_dict["others"]
                 config.enable_advance_output = others_config.get("enable_advance_output", config.enable_advance_output)
+
+            # 自定义人设覆盖
+            config.PROMPT_PERSONALITY=[
+                "是一个计算机系大三女大学生，平时比较文静，喜欢打舞萌dx，你会刷贴吧，偶尔也会像贴吧老哥一样阴阳怪气，你正在浏览qq群",
+                "是一个计算机系大三女大学生，平时比较文静，喜欢打舞萌dx，你有黑色头发，你会刷小红书, 你正在浏览qq群"
+            ]
+            config.PROMPT_SCHEDULE_GEN="一个计算机系大三女大学生，喜欢刷qq，贴吧，知乎和小红书，还喜欢打舞萌dx，经常下午或者晚上去江二打舞萌，睡得比较晚，有时会熬夜"
+
             
             logger.success(f"成功加载配置文件: {config_path}")
                 

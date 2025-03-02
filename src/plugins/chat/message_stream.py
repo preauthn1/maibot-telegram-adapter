@@ -130,6 +130,7 @@ class MessageStream:
                     "time": 1,
                     "user_id": 1,
                     "user_nickname": 1,
+                    "user_cardname": 1,
                     "message_id": 1,
                     "raw_message": 1,
                     "processed_text": 1
@@ -147,6 +148,7 @@ class MessageStream:
                     time=msg_data["time"],
                     user_id=msg_data["user_id"],
                     user_nickname=msg_data.get("user_nickname", ""),
+                    user_cardname=msg_data.get("user_cardname", ""),
                     message_id=msg_data["message_id"],
                     raw_message=msg_data["raw_message"],
                     processed_plain_text=msg_data.get("processed_text", ""),

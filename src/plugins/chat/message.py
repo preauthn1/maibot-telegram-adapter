@@ -8,7 +8,7 @@ from ...common.database import Database
 from PIL import Image
 from .config import global_config
 import urllib3
-from .utils_user import get_user_nickname
+from .utils_user import get_user_nickname,get_user_cardname
 from .utils_cq import parse_cq_code
 from .cq_code import cq_code_tool,CQCode
 
@@ -27,6 +27,7 @@ class Message:
     group_id: int = None
     user_id: int = None
     user_nickname: str = None  # 用户昵称
+    user_cardname: str=None # 用户群昵称
     group_name: str = None  # 群名称    
     
     message_id: int = None
@@ -58,6 +59,8 @@ class Message:
         
         if not self.user_nickname:
             self.user_nickname = get_user_nickname(self.user_id)
+        if not self.user_cardname:
+            self.user_cardname=get_user_cardname(self.user_id)
         
         if not self.group_name:
             self.group_name = self.get_groupname(self.group_id)
@@ -71,7 +74,10 @@ class Message:
                 )
         #将详细翻译为详细可读文本
         time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.time))
-        name = self.user_nickname or f"用户{self.user_id}"
+        try:
+            name = f"[({self.user_id}){self.user_nickname}]{self.user_cardname}"
+        except:
+            name = self.user_nickname or f"用户{self.user_id}"
         content = self.processed_plain_text
         self.detailed_plain_text = f"[{time_str}] {name}: {content}\n"
                 
@@ -159,6 +165,7 @@ class Message_Thinking:
         self.group_id = message.group_id
         self.user_id = message.user_id
         self.user_nickname = message.user_nickname
+        self.user_cardname = message.user_cardname
         self.group_name = message.group_name
         
         self.message_id = message_id
@@ -167,6 +174,7 @@ class Message_Thinking:
         self.thinking_text = "正在思考..."
         self.time = int(time.time())
         self.thinking_time = 0
+        self.interupt=False
     
     def update_thinking_time(self):
         self.thinking_time = round(time.time(), 2) - self.time

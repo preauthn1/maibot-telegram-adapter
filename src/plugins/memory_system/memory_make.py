@@ -112,7 +112,11 @@ class Memory_graph:
             chat_record = list(self.db.db.messages.find({"time": {"$gt": closest_time}, "group_id": group_id}).sort('time', 1).limit(length))
             for record in chat_record:
                 time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(record['time'])))
-                chat_text += f'[{time_str}] {record["user_nickname"] or "用户" + str(record["user_id"])}: {record["processed_plain_text"]}\n'  # 添加发送者和时间信息
+                try:
+                    displayname="[(%s)%s]%s" % (record["user_id"],record["user_nickname"],record["user_cardname"])
+                except:
+                    displayname=record["user_nickname"] or "用户" + str(record["user_id"])
+                chat_text += f'[{time_str}] {displayname}: {record["processed_plain_text"]}\n'  # 添加发送者和时间信息
             return chat_text
         
         return []  # 如果没有找到记录，返回空列表

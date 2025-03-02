@@ -90,6 +90,7 @@ class ChatBot:
             group_id=event.group_id,
             user_id=event.user_id,
             message_id=event.message_id,
+            user_cardname=sender_info['card'],
             raw_message=str(event.original_message), 
             plain_text=event.get_plaintext(),
             reply_message=event.reply,
@@ -141,6 +142,9 @@ class ChatBot:
             willing_manager.change_reply_willing_sent(thinking_message.group_id)
             
             response, emotion = await self.gpt.generate_response(message)
+
+            if response is None:
+                thinking_message.interupt=True
             
             # 如果生成了回复，发送并记录
             
