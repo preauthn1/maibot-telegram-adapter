@@ -2,14 +2,18 @@ import os
 import requests
 from typing import Tuple, Union
 import time
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config
 
 class LLMModel:
     # def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", **kwargs):
     def __init__(self, model_name="Pro/deepseek-ai/DeepSeek-V3", **kwargs):
         self.model_name = model_name
         self.params = kwargs
-        self.api_key = os.getenv("SILICONFLOW_KEY")
-        self.base_url = os.getenv("SILICONFLOW_BASE_URL")
+        self.api_key = config.siliconflow_key
+        self.base_url = config.siliconflow_base_url
 
     def generate_response(self, prompt: str) -> Tuple[str, str]:
         """根据输入的提示生成模型的响应"""

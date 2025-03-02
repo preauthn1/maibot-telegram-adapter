@@ -1,20 +1,24 @@
 import os
 import requests
 from typing import Tuple, Union
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config
 
 class LLMModel:
     # def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", **kwargs):
     def __init__(self, model_name="Pro/deepseek-ai/DeepSeek-R1",api_using=None, **kwargs):
         if api_using == "deepseek":
-            self.api_key = os.getenv("DEEP_SEEK_KEY")
-            self.base_url = os.getenv("DEEP_SEEK_BASE_URL")
+            self.api_key = config.deep_seek_key
+            self.base_url = config.deep_seek_base_url
             if model_name != "Pro/deepseek-ai/DeepSeek-R1":
                 self.model_name = model_name
             else:
                 self.model_name = "deepseek-reasoner"
         else:
-            self.api_key = os.getenv("SILICONFLOW_KEY")
-            self.base_url = os.getenv("SILICONFLOW_BASE_URL")
+            self.api_key = config.siliconflow_key
+            self.base_url = config.siliconflow_base_url
             self.model_name = model_name
         self.params = kwargs
 

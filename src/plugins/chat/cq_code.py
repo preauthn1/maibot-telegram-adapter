@@ -7,7 +7,7 @@ from PIL import Image
 import os
 from random import random
 from nonebot.adapters.onebot.v11 import Bot
-from .config import global_config, llm_config
+from .config import global_config
 import time
 import asyncio
 from .utils_image import storage_image,storage_emoji
@@ -16,6 +16,10 @@ from .utils_user import get_user_nickname
 #包含CQ码类
 import urllib3
 from urllib3.util import create_urllib3_context
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config
 
 # TLS1.3特殊处理 https://github.com/psf/requests/issues/6616
 ctx = create_urllib3_context()
@@ -179,7 +183,7 @@ class CQCode:
         """调用AI接口获取表情包描述"""
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {llm_config.SILICONFLOW_API_KEY}"
+            "Authorization": f"Bearer {config.siliconflow_key}"
         }
         
         payload = {
@@ -206,7 +210,7 @@ class CQCode:
         }
         
         response = requests.post(
-            f"{llm_config.SILICONFLOW_BASE_URL}chat/completions",
+            f"{config.siliconflow_base_url}chat/completions",
             headers=headers,
             json=payload,
             timeout=30
@@ -224,7 +228,7 @@ class CQCode:
         """调用AI接口获取普通图片描述"""
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {llm_config.SILICONFLOW_API_KEY}"
+            "Authorization": f"Bearer {config.siliconflow_key}"
         }
         
         payload = {
@@ -251,7 +255,7 @@ class CQCode:
         }
         
         response = requests.post(
-            f"{llm_config.SILICONFLOW_BASE_URL}chat/completions",
+            f"{config.siliconflow_base_url}chat/completions",
             headers=headers,
             json=payload,
             timeout=30

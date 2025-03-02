@@ -4,14 +4,19 @@ from typing import List, Dict
 from .schedule_llm_module import LLMModel
 from ...common.database import Database  # 使用正确的导入语法
 from ..chat.config import global_config
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config
+
 
 Database.initialize(
-            host= os.getenv("MONGODB_HOST"),
-            port= int(os.getenv("MONGODB_PORT")),
-            db_name=  os.getenv("DATABASE_NAME"),
-            username= os.getenv("MONGODB_USERNAME"),
-            password= os.getenv("MONGODB_PASSWORD"),
-            auth_source=os.getenv("MONGODB_AUTH_SOURCE")
+            host= config.mongodb_host,
+            port= int(config.mongodb_port),
+            db_name=  config.database_name,
+            username= config.mongodb_username,
+            password= config.mongodb_password,
+            auth_source=config.mongodb_auth_source
         )
 
 class ScheduleGenerator:

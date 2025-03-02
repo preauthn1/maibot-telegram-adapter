@@ -1,34 +1,34 @@
 from typing import Dict, Any, List, Optional, Union, Tuple
 from openai import OpenAI
 import asyncio
-import requests
 from functools import partial
 from .message import Message
-from .config import BotConfig, global_config
+from .config import global_config
 from ...common.database import Database
 import random
 import time
-import os
 import numpy as np
 from .relationship_manager import relationship_manager
-from ..schedule.schedule_generator import bot_schedule
 from .prompt_builder import prompt_builder
-from .config import llm_config, global_config
+from .config import global_config
 from .utils import process_llm_response
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config
 
 
 class LLMResponseGenerator:
-    def __init__(self, config: BotConfig):
-        self.config = config
-        if self.config.API_USING == "siliconflow":
+    def __init__(self):
+        if global_config.API_USING == "siliconflow":
             self.client = OpenAI(
-                api_key=llm_config.SILICONFLOW_API_KEY,
-                base_url=llm_config.SILICONFLOW_BASE_URL
+                api_key=config.siliconflow_key,
+                base_url=config.siliconflow_base_url
             )
-        elif self.config.API_USING == "deepseek":
+        elif global_config.API_USING == "deepseek":
             self.client = OpenAI(
-                api_key=llm_config.DEEP_SEEK_API_KEY,
-                base_url=llm_config.DEEP_SEEK_BASE_URL
+                api_key=config.deep_seek_key,
+                base_url=config.deep_seek_base_url
             )
             
         self.db = Database.get_instance()
@@ -51,6 +51,7 @@ class LLMResponseGenerator:
             self.current_model_type = 'v3'
         else:
             self.current_model_type = 'r1_distill'  # 默认使用 R1-Distill
+
 
         print(f"+++++++++++++++++{global_config.BOT_NICKNAME}{self.current_model_type}思考中+++++++++++++++++")
         if self.current_model_type == 'r1':
@@ -83,14 +84,16 @@ class LLMResponseGenerator:
             print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
         else:
             relationship_value = 0.0
+        
             
-        # 构建prompt
+        ''' 构建prompt '''
         prompt,prompt_check = prompt_builder._build_prompt(
             message_txt=message.processed_plain_text,
             sender_name=sender_name,
             relationship_value=relationship_value,
             group_id=message.group_id
         )
+        
         
         # 设置默认参数
         default_params = {
@@ -113,6 +116,7 @@ class LLMResponseGenerator:
         if model_params:
             default_params.update(model_params)
         
+        
         def create_completion():
             return self.client.chat.completions.create(**default_params)
         
@@ -122,6 +126,7 @@ class LLMResponseGenerator:
         loop = asyncio.get_event_loop()
 
         # 读空气模块
+        air = 0
         reasoning_content_check=''
         content_check=''
         if global_config.enable_kuuki_read:
@@ -135,21 +140,26 @@ class LLMResponseGenerator:
                 content_check = response_check.choices[0].message.content
                 print(f"\033[1;32m[读空气]\033[0m 读空气结果为{content_check}")
                 if 'yes' not in content_check.lower():
-                    self.db.db.reasoning_logs.insert_one({
-                        'time': time.time(),
-                        'group_id': message.group_id,
-                        'user': sender_name,
-                        'message': message.processed_plain_text,
-                        'model': model_name,
-                        'reasoning_check': reasoning_content_check,
-                        'response_check': content_check,
-                        'reasoning': "",
-                        'response': "",
-                        'prompt': prompt,
-                        'prompt_check': prompt_check,
-                        'model_params': default_params
-                    })
-                    return None
+                    air = 1
+        #稀释读空气的判定
+        if air == 1 and random.random() < 0.3:
+            self.db.db.reasoning_logs.insert_one({
+                'time': time.time(),
+                'group_id': message.group_id,
+                'user': sender_name,
+                'message': message.processed_plain_text,
+                'model': model_name,
+                'reasoning_check': reasoning_content_check,
+                'response_check': content_check,
+                'reasoning': "",
+                'response': "",
+                'prompt': prompt,
+                'prompt_check': prompt_check,
+                'model_params': default_params
+            })
+            return None
+        
+        
         
             
 
@@ -193,7 +203,7 @@ class LLMResponseGenerator:
 
     async def _generate_r1_response(self, message: Message) -> Optional[str]:
         """使用 DeepSeek-R1 模型生成回复"""
-        if self.config.API_USING == "deepseek":
+        if global_config.API_USING == "deepseek":
             return await self._generate_base_response(
                 message, 
                 "deepseek-reasoner",
@@ -208,7 +218,7 @@ class LLMResponseGenerator:
 
     async def _generate_v3_response(self, message: Message) -> Optional[str]:
         """使用 DeepSeek-V3 模型生成回复"""
-        if self.config.API_USING == "deepseek":
+        if global_config.API_USING == "deepseek":
             return await self._generate_base_response(
                 message, 
                 "deepseek-chat",
@@ -259,7 +269,7 @@ class LLMResponseGenerator:
             messages = [{"role": "user", "content": prompt}]
             
             loop = asyncio.get_event_loop()
-            if self.config.API_USING == "deepseek":
+            if global_config.API_USING == "deepseek":
                 model = "deepseek-chat"
             else:
                 model = "Pro/deepseek-ai/DeepSeek-V3"
@@ -296,4 +306,4 @@ class LLMResponseGenerator:
         return processed_response, emotion_tags
 
 # 创建全局实例
-llm_response = LLMResponseGenerator(global_config)
+llm_response = LLMResponseGenerator()

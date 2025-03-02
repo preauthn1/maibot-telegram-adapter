@@ -168,10 +168,12 @@ def main():
     memory_graph.load_graph_from_db()
     # 展示两种不同的可视化方式
     print("\n按连接数量着色的图谱：")
-    visualize_graph(memory_graph, color_by_memory=False)
+    # visualize_graph(memory_graph, color_by_memory=False)
+    visualize_graph_lite(memory_graph, color_by_memory=False)   
     
     print("\n按记忆数量着色的图谱：")
-    visualize_graph(memory_graph, color_by_memory=True)
+    # visualize_graph(memory_graph, color_by_memory=True)
+    visualize_graph_lite(memory_graph, color_by_memory=True)
     
     # memory_graph.save_graph_to_db()
     
@@ -262,7 +264,89 @@ def visualize_graph(memory_graph: Memory_graph, color_by_memory: bool = False):
     plt.title(title, fontsize=16, fontfamily='SimHei')
     plt.show()
 
+
+def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = False):
+    # 设置中文字体
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+    plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+    
+    G = memory_graph.G
+    
+    # 创建一个新图用于可视化
+    H = G.copy()
+    
+    # 移除只有一条记忆的节点和连接数少于3的节点
+    nodes_to_remove = []
+    for node in H.nodes():
+        memory_items = H.nodes[node].get('memory_items', [])
+        memory_count = len(memory_items) if isinstance(memory_items, list) else (1 if memory_items else 0)
+        degree = H.degree(node)
+        if memory_count <= 2 or degree <= 2:
+            nodes_to_remove.append(node)
+    
+    H.remove_nodes_from(nodes_to_remove)
+    
+    # 如果过滤后没有节点，则返回
+    if len(H.nodes()) == 0:
+        print("过滤后没有符合条件的节点可显示")
+        return
+    
+    # 保存图到本地
+    nx.write_gml(H, "memory_graph.gml")  # 保存为 GML 格式
+
+    # 根据连接条数或记忆数量设置节点颜色
+    node_colors = []
+    nodes = list(H.nodes())  # 获取图中实际的节点列表
+    
+    if color_by_memory:
+        # 计算每个节点的记忆数量
+        memory_counts = []
+        for node in nodes:
+            memory_items = H.nodes[node].get('memory_items', [])
+            if isinstance(memory_items, list):
+                count = len(memory_items)
+            else:
+                count = 1 if memory_items else 0
+            memory_counts.append(count)
+        max_memories = max(memory_counts) if memory_counts else 1
+        
+        for count in memory_counts:
+            # 使用不同的颜色方案：红色表示记忆多，蓝色表示记忆少
+            if max_memories > 0:
+                intensity = min(1.0, count / max_memories)
+                color = (intensity, 0, 1.0 - intensity)  # 从蓝色渐变到红色
+            else:
+                color = (0, 0, 1)  # 如果没有记忆，则为蓝色
+            node_colors.append(color)
+    else:
+        # 使用原来的连接数量着色方案
+        max_degree = max(H.degree(), key=lambda x: x[1])[1] if H.degree() else 1
+        for node in nodes:
+            degree = H.degree(node)
+            if max_degree > 0:
+                red = min(1.0, degree / max_degree)
+                blue = 1.0 - red
+                color = (red, 0, blue)
+            else:
+                color = (0, 0, 1)
+            node_colors.append(color)
+    
+    # 绘制图形
+    plt.figure(figsize=(12, 8))
+    pos = nx.spring_layout(H, k=1, iterations=50)
+    nx.draw(H, pos, 
+           with_labels=True, 
+           node_color=node_colors,
+           node_size=2000,
+           font_size=10,
+           font_family='SimHei',
+           font_weight='bold')
+    
+    title = '记忆图谱可视化 - ' + ('按记忆数量着色' if color_by_memory else '按连接数量着色')
+    plt.title(title, fontsize=16, fontfamily='SimHei')
+    plt.show()
+    
+    
+    
 if __name__ == "__main__":
     main()
-
-    

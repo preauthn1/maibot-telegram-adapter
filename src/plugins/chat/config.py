@@ -7,6 +7,7 @@ import configparser
 import tomli
 import sys
 from loguru import logger
+from nonebot import get_driver
 
 
 
@@ -111,7 +112,6 @@ class BotConfig:
 # 获取配置文件路径
 bot_config_path = BotConfig.get_default_config_path()
 config_dir = os.path.dirname(bot_config_path)
-env_path = os.path.join(config_dir, '.env')
 
 logger.info(f"尝试从 {bot_config_path} 加载机器人配置")
 global_config = BotConfig.load_config(config_path=bot_config_path)
@@ -126,10 +126,11 @@ class LLMConfig:
     DEEP_SEEK_BASE_URL: str = None
 
 llm_config = LLMConfig()
-llm_config.SILICONFLOW_API_KEY = os.getenv('SILICONFLOW_KEY')
-llm_config.SILICONFLOW_BASE_URL = os.getenv('SILICONFLOW_BASE_URL')
-llm_config.DEEP_SEEK_API_KEY = os.getenv('DEEP_SEEK_KEY')
-llm_config.DEEP_SEEK_BASE_URL = os.getenv('DEEP_SEEK_BASE_URL')
+config = get_driver().config
+llm_config.SILICONFLOW_API_KEY = config.siliconflow_key
+llm_config.SILICONFLOW_BASE_URL = config.siliconflow_base_url
+llm_config.DEEP_SEEK_API_KEY = config.deep_seek_key
+llm_config.DEEP_SEEK_BASE_URL = config.deep_seek_base_url
 
 
 if not global_config.enable_advance_output:
