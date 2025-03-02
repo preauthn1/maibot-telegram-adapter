@@ -1,10 +1,6 @@
 import os
 import requests
-from dotenv import load_dotenv
 from typing import Tuple, Union
-
-# 加载环境变量
-load_dotenv()
 
 class LLMModel:
     # def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", **kwargs):

@@ -7,22 +7,12 @@ import configparser
 import tomli
 import sys
 from loguru import logger
-from dotenv import load_dotenv
 
 
 
 @dataclass
 class BotConfig:
-    """机器人配置类"""
-    
-    # 基础配置
-    MONGODB_HOST: str = "127.0.0.1"
-    MONGODB_PORT: int = 27017
-    DATABASE_NAME: str = "MegBot"
-    MONGODB_USERNAME: Optional[str] = None  # 默认空值
-    MONGODB_PASSWORD: Optional[str] = None  # 默认空值
-    MONGODB_AUTH_SOURCE: Optional[str] = None  # 默认空值
-    
+    """机器人配置类"""    
     BOT_QQ: Optional[int] = 1
     BOT_NICKNAME: Optional[str] = None
     
@@ -67,17 +57,7 @@ class BotConfig:
         if os.path.exists(config_path):
             with open(config_path, "rb") as f:
                 toml_dict = tomli.load(f)
-            
-            # 数据库配置
-            if "database" in toml_dict:
-                db_config = toml_dict["database"]
-                config.MONGODB_HOST = db_config.get("host", config.MONGODB_HOST)
-                config.MONGODB_PORT = db_config.get("port", config.MONGODB_PORT)
-                config.DATABASE_NAME = db_config.get("name", config.DATABASE_NAME)
-                config.MONGODB_USERNAME = db_config.get("username", config.MONGODB_USERNAME) or None  # 空字符串转为 None
-                config.MONGODB_PASSWORD = db_config.get("password", config.MONGODB_PASSWORD) or None  # 空字符串转为 None
-                config.MONGODB_AUTH_SOURCE = db_config.get("auth_source", config.MONGODB_AUTH_SOURCE) or None  # 空字符串转为 None
-                
+
             if "emoji" in toml_dict:
                 emoji_config = toml_dict["emoji"]
                 config.EMOJI_CHECK_INTERVAL = emoji_config.get("check_interval", config.EMOJI_CHECK_INTERVAL)
@@ -134,15 +114,6 @@ env_path = os.path.join(config_dir, '.env')
 
 logger.info(f"尝试从 {bot_config_path} 加载机器人配置")
 global_config = BotConfig.load_config(config_path=bot_config_path)
-
-# 加载环境变量
-
-logger.info(f"尝试从 {env_path} 加载环境变量配置")
-if os.path.exists(env_path):
-    load_dotenv(env_path)
-    logger.success("成功加载环境变量配置")
-else:
-    logger.error(f"环境变量配置文件不存在: {env_path}")
 
 @dataclass
 class LLMConfig:

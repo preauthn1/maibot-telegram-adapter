@@ -15,9 +15,12 @@ from .willing_manager import willing_manager
 driver = get_driver()
 
 Database.initialize(
-    global_config.MONGODB_HOST,
-    global_config.MONGODB_PORT,
-    global_config.DATABASE_NAME
+        host= os.getenv("MONGODB_HOST"),
+        port= int(os.getenv("MONGODB_PORT")),
+        db_name=  os.getenv("DATABASE_NAME"),
+        username= os.getenv("MONGODB_USERNAME"),
+        password= os.getenv("MONGODB_PASSWORD"),
+        auth_source=os.getenv("MONGODB_AUTH_SOURCE")
 )
 print("\033[1;32m[初始化数据库完成]\033[0m")
 

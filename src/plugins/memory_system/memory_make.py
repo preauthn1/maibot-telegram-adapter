@@ -9,7 +9,6 @@ import datetime
 import random
 import time
 import os
-from dotenv import load_dotenv
 # from chat.config import global_config
 sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
 from src.common.database import Database  # 使用正确的导入语法
@@ -219,24 +218,14 @@ def calculate_information_content(text):
 
 
 def main():
-    # 获取当前文件的绝对路径
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-    env_path = os.path.join(root_dir, 'config', '.env')
-
-    # 加载环境变量
-    print(f"尝试从 {env_path} 加载环境变量配置")
-    if os.path.exists(env_path):
-        load_dotenv(env_path)
-        print("成功加载环境变量配置")
-    else:
-        print(f"环境变量配置文件不存在: {env_path}")
-
     # 初始化数据库
     Database.initialize(
-        "127.0.0.1",
-        27017,
-        "MegBot"
+          host= os.getenv("MONGODB_HOST"),
+          port= int(os.getenv("MONGODB_PORT")),
+          db_name=  os.getenv("DATABASE_NAME"),
+          username= os.getenv("MONGODB_USERNAME"),
+          password= os.getenv("MONGODB_PASSWORD"),
+          auth_source=os.getenv("MONGODB_AUTH_SOURCE")
     )
     
     memory_graph = Memory_graph()

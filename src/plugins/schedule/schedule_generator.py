@@ -2,21 +2,8 @@ import datetime
 import os
 from typing import List, Dict
 from .schedule_llm_module import LLMModel
-from dotenv import load_dotenv
 from ...common.database import Database  # 使用正确的导入语法
 from ..chat.config import global_config
-
-
-# import sys
-# sys.path.append("C:/GitHub/MegMeg-bot")  # 添加项目根目录到 Python 路径
-# from src.plugins.schedule.schedule_llm_module import LLMModel
-# from src.common.database import Database  # 使用正确的导入语法
-
-# 获取当前文件的绝对路径
-#TODO: 这个好几个地方用需要封装
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-load_dotenv(os.path.join(root_dir, '.env'))
 
 Database.initialize(
             host= os.getenv("MONGODB_HOST"),

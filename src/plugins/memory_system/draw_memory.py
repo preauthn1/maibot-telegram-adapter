@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import sys
 import jieba
 from llm_module import LLMModel
@@ -153,9 +154,12 @@ class Memory_graph:
 def main():
     # 初始化数据库
     Database.initialize(
-        "127.0.0.1",
-        27017,
-        "MegBot"
+        host= os.getenv("MONGODB_HOST"),
+        port= int(os.getenv("MONGODB_PORT")),
+        db_name=  os.getenv("DATABASE_NAME"),
+        username= os.getenv("MONGODB_USERNAME"),
+        password= os.getenv("MONGODB_PASSWORD"),
+        auth_source=os.getenv("MONGODB_AUTH_SOURCE")
     )
     
     memory_graph = Memory_graph()
