@@ -14,7 +14,7 @@ reasoning_content.bat
 reasoning_window.bat
 queue_update.txt
 memory_graph.gml
-.env.dev
+.env.*
 
 
 # Byte-compiled / optimized / DLL files
@@ -147,7 +147,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
