@@ -331,9 +331,12 @@ class ReasoningGUI:
 def main():
     """主函数"""
     Database.initialize(
-        "127.0.0.1",
-        27017,
-        "MegBot"
+        host= os.getenv("MONGODB_HOST"),
+        port= int(os.getenv("MONGODB_PORT")),
+        db_name=  os.getenv("DATABASE_NAME"),
+        username= os.getenv("MONGODB_USERNAME"),
+        password= os.getenv("MONGODB_PASSWORD"),
+        auth_source=os.getenv("MONGODB_AUTH_SOURCE")
     )
     
     app = ReasoningGUI()
