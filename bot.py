@@ -29,7 +29,7 @@ env_file = f".env.{env}"
 if env_file == ".env.dev" and os.path.exists(env_file):
     logger.success("加载开发环境变量配置")
     load_dotenv(env_file, override=True)  # override=True 允许覆盖已存在的环境变量
-elif env_file == ".env.prod" and os.path.exists(env_file):
+elif os.path.exists(".env.prod"):
     logger.success("加载环境变量配置")
     load_dotenv(env_file, override=True)  # override=True 允许覆盖已存在的环境变量
 else:
