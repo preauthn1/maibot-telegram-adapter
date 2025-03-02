@@ -27,7 +27,7 @@ services:
       - mongodb:/data/db
       - mongodbCONFIG:/data/configdb
     image: mongo:latest
-    
+
   maimbot:
     container_name: maimbot
     environment:
@@ -41,8 +41,8 @@ services:
     volumes:
       - maimbotCONFIG:/MaiMBot/config
       - maimbotDATA:/MaiMBot/data
+      - ./.env.prod:/MaiMBot/.env.prod
     image: sengokucola/maimbot:latest
-  
 
 volumes:
   maimbotCONFIG:
@@ -51,4 +51,5 @@ volumes:
   napcatCONFIG:
   mongodb:
   mongodbCONFIG:
-  
+
+
