@@ -47,20 +47,59 @@ class BotConfig:
     enable_kuuki_read: bool = True # 是否启用读空气功能
     
     @staticmethod
-    def get_default_config_path() -> str:
-        """获取默认配置文件路径"""
+    def get_config_dir() -> str:
+        """获取配置文件目录"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
         config_dir = os.path.join(root_dir, 'config')
-        return os.path.join(config_dir, 'bot_config.toml')
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+        return config_dir
+
+    @staticmethod
+    def create_default_config(config_path: str) -> None:
+        """创建默认配置文件"""
+        default_config = """[bot]
+qq = 1  # 填入你的机器人QQ
+nickname = "麦麦"  # 你希望bot被称呼的名字
+
+[message]
+min_text_length = 2 # 与麦麦聊天时麦麦只会回答文本大于等于此数的消息
+max_context_size = 15 # 麦麦获得的上下文数量，超出数量后自动丢弃
+emoji_chance = 0.2 # 麦麦使用表情包的概率
+
+[emoji]
+check_interval = 120
+register_interval = 10
+
+[cq_code]
+enable_pic_translate = false
+
+[response]
+api_using = "siliconflow" # 选择大模型API，可选值为siliconflow,deepseek
+api_paid = false # 是否使用付费api
+model_r1_probability = 0.8 # 麦麦回答时选择R1模型的概率
+model_v3_probability = 0.1 # 麦麦回答时选择V3模型的概率
+model_r1_distill_probability = 0.1 # 麦麦回答时选择R1蒸馏模型的概率
+
+[memory]
+build_memory_interval = 300 # 记忆构建间隔
+
+[others]
+enable_advance_output = false # 开启后输出更多日志
+
+[groups]
+talk_allowed = [] # 可以回复消息的群
+talk_frequency_down = [] # 降低回复频率的群
+ban_user_id = [] # 禁止回复消息的QQ号
+"""
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(default_config)
+        logger.success(f"已创建默认配置文件: {config_path}")
     
     @classmethod
     def load_config(cls, config_path: str = None) -> "BotConfig":
         """从TOML配置文件加载配置"""
-        if config_path is None:
-            config_path = cls.get_default_config_path()
-            logger.info(f"使用默认配置文件路径: {config_path}")
-            
         config = cls()
         if os.path.exists(config_path):
             with open(config_path, "rb") as f:
@@ -119,11 +158,24 @@ class BotConfig:
         return config 
     
 # 获取配置文件路径
-bot_config_path = BotConfig.get_default_config_path()
-config_dir = os.path.dirname(bot_config_path)
 
-logger.info(f"尝试从 {bot_config_path} 加载机器人配置")
+bot_config_floder_path = BotConfig.get_config_dir()
+print(f"正在品鉴配置文件目录: {bot_config_floder_path}")
+bot_config_path = os.path.join(bot_config_floder_path, "bot_config_dev.toml")
+if not os.path.exists(bot_config_path):
+    # 如果开发环境配置文件不存在，则使用默认配置文件
+    bot_config_path = os.path.join(bot_config_floder_path, "bot_config.toml")
+    logger.info("使用默认配置文件")
+else:
+    logger.info("已找到开发环境配置文件")
+
 global_config = BotConfig.load_config(config_path=bot_config_path)
+
+
+# config_dir = os.path.dirname(bot_config_path)
+
+# logger.info(f"尝试从 {bot_config_path} 加载机器人配置")
+# global_config = BotConfig.load_config(config_path=bot_config_path)
 
 @dataclass
 class LLMConfig:

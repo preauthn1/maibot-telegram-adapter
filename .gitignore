@@ -15,7 +15,7 @@ reasoning_window.bat
 queue_update.txt
 memory_graph.gml
 .env.*
-
+config/bot_config_dev.toml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
