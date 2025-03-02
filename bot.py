@@ -36,28 +36,18 @@ else:
     logger.error(f"{env}对应的环境配置文件{env_file}不存在,请修改.env文件中的ENVIRONMENT变量为 prod.")
     exit(1)
 
-nonebot.init(
-    # 从环境变量中读取配置
-    websocket_port=os.getenv("PORT", 8080),
-    host=os.getenv("HOST", "127.0.0.1"),
-    log_level="INFO",
-    # 添加自定义配置
-    mongodb_host=os.getenv("MONGODB_HOST", "127.0.0.1"),
-    mongodb_port=os.getenv("MONGODB_PORT", 27017),
-    database_name=os.getenv("DATABASE_NAME", "MegBot"),
-    mongodb_username=os.getenv("MONGODB_USERNAME", ""),
-    mongodb_password=os.getenv("MONGODB_PASSWORD", ""),
-    mongodb_auth_source=os.getenv("MONGODB_AUTH_SOURCE", ""),
-    # API相关配置
-    chat_any_where_key=os.getenv("CHAT_ANY_WHERE_KEY", ""),
-    siliconflow_key=os.getenv("SILICONFLOW_KEY", ""),
-    chat_any_where_base_url=os.getenv("CHAT_ANY_WHERE_BASE_URL", "https://api.chatanywhere.tech/v1"),
-    siliconflow_base_url=os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1/"),
-    deep_seek_key=os.getenv("DEEP_SEEK_KEY", ""),
-    deep_seek_base_url=os.getenv("DEEP_SEEK_BASE_URL", "https://api.deepseek.com/v1"),
-    # 插件配置
-    plugins=os.getenv("PLUGINS", ["src2.plugins.chat"])
-)
+# 获取所有环境变量
+env_config = {key: os.getenv(key) for key in os.environ}
+
+# 设置基础配置
+base_config = {
+    "websocket_port": int(env_config.get("PORT", 8080)),
+    "host": env_config.get("HOST", "127.0.0.1"),
+    "log_level": "INFO",
+}
+
+# 合并配置
+nonebot.init(**base_config, **env_config)
 
 # 注册适配器
 driver = nonebot.get_driver()
@@ -67,4 +57,5 @@ driver.register_adapter(Adapter)
 nonebot.load_plugins("src/plugins")
 
 if __name__ == "__main__":
+    
     nonebot.run()

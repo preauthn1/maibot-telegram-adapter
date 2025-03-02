@@ -1,19 +1,16 @@
 # -*- coding: utf-8 -*-
 import os
 import jieba
-from .llm_module import LLMModel
 import networkx as nx
 import matplotlib.pyplot as plt
-import math
 from collections import Counter
 import datetime
 import random
 import time
 from ..chat.config import global_config
-import sys
 from ...common.database import Database # 使用正确的导入语法
 from ..chat.utils import calculate_information_content, get_cloest_chat_from_db
-   
+from ..models.utils_model import LLM_request
 class Memory_graph:
     def __init__(self):
         self.G = nx.Graph()  # 使用 networkx 的图结构
@@ -169,8 +166,8 @@ class Memory_graph:
 class Hippocampus:
     def __init__(self,memory_graph:Memory_graph):
         self.memory_graph = memory_graph
-        self.llm_model = LLMModel()
-        self.llm_model_small = LLMModel(model_name="deepseek-ai/DeepSeek-V2.5")
+        self.llm_model = LLM_request(model = global_config.llm_normal,temperature=0.5)
+        self.llm_model_small = LLM_request(model = global_config.llm_normal_minor,temperature=0.5)
         
     def get_memory_sample(self,chat_size=20,time_frequency:dict={'near':2,'mid':4,'far':3}):
         current_timestamp = datetime.datetime.now().timestamp()

@@ -1,11 +1,11 @@
 [bot]
-qq = 123  #填入你的机器人QQ
-nickname = "麦麦"  #你希望bot被称呼的名字
+qq = 123
+nickname = "麦麦"
 
 [message]
-min_text_length = 2 # 与麦麦聊天时麦麦只会回答文本大于等于此数的消息
-max_context_size = 15 # 麦麦获得的上下文数量，超出数量后自动丢弃
-emoji_chance = 0.2 # 麦麦使用表情包的概率
+min_text_length = 2
+max_context_size = 15
+emoji_chance = 0.2
 
 [emoji]
 check_interval = 120
@@ -14,34 +14,48 @@ register_interval = 10
 [cq_code]
 enable_pic_translate = false
 
-
 [response]
-api_using = "siliconflow" # 选择大模型API，可选值为siliconflow,deepseek，建议使用siliconflow，因为识图api目前只支持siliconflow的deepseek-vl2模型
-api_paid = true #是否使用付费api，目前此选项只影响siliconflow，其deepseek模型的api分为可用赠送余额和不可以用的，此选项为false时使用赠送余额
-model_r1_probability = 0.8 # 麦麦回答时选择R1模型的概率
-model_v3_probability = 0.1 # 麦麦回答时选择V3模型的概率
-model_r1_distill_probability = 0.1 # 麦麦回答时选择R1蒸馏模型的概率
+api_using = "siliconflow"
+api_paid = true
+model_r1_probability = 0.8
+model_v3_probability = 0.1
+model_r1_distill_probability = 0.1
 
 [memory]
-build_memory_interval = 300 # 记忆构建间隔
-
-
+build_memory_interval = 300
 
 [others]
-enable_advance_output = true # 开启后输出更多日志,false关闭true开启
-
+enable_advance_output = true
 
 [groups]
-
 talk_allowed = [
-    123, 
-    123, 
-]  #可以回复消息的群
+    123,
+    123,
+]
+talk_frequency_down = []
+ban_user_id = []
 
-talk_frequency_down = [
+[model.llm_reasoning]
+name = "Pro/deepseek-ai/DeepSeek-R1"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
 
-]  #降低回复频率的群
+[model.llm_reasoning_minor]
+name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
 
-ban_user_id = [
+[model.llm_normal]
+name = "Pro/deepseek-ai/DeepSeek-V3"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
 
-]  #禁止回复消息的QQ号
+[model.llm_normal_minor]
+name = "deepseek-ai/DeepSeek-V2.5"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
+
+[model.vlm]
+name = "deepseek-ai/deepseek-vl2"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"

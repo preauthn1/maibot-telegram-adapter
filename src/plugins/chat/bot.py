@@ -2,7 +2,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message as EventMessa
 from .message import Message,MessageSet
 from .config import BotConfig, global_config
 from .storage import MessageStorage
-from .llm_generator import LLMResponseGenerator
+from .llm_generator import ResponseGenerator
 from .message_stream import MessageStream, MessageStreamContainer
 from .topic_identifier import topic_identifier
 from random import random, choice
@@ -20,7 +20,7 @@ from ..memory_system.memory import memory_graph
 class ChatBot:
     def __init__(self):
         self.storage = MessageStorage()
-        self.gpt = LLMResponseGenerator()
+        self.gpt = ResponseGenerator()
         self.bot = None  # bot 实例引用
         self._started = False
         

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Set
 import os
 from nonebot.log import logger, default_format
@@ -32,13 +32,15 @@ class BotConfig:
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     
+    # 模型配置
+    llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
+    llm_reasoning_minor: Dict[str, str] = field(default_factory=lambda: {})
+    llm_normal: Dict[str, str] = field(default_factory=lambda: {})
+    llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
+    vlm: Dict[str, str] = field(default_factory=lambda: {})
+    
     API_USING: str = "siliconflow"  # 使用的API
     API_PAID: bool = False  # 是否使用付费API
-    DEEPSEEK_MODEL_R1: str = "deepseek-reasoner"  # deepseek-R1模型
-    DEEPSEEK_MODEL_V3: str = "deepseek-chat"  # deepseek-V3模型
-    SILICONFLOW_MODEL_R1: str = "deepseek-ai/DeepSeek-R1"  # siliconflow-R1模型
-    SILICONFLOW_MODEL_R1_DISTILL: str = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"  # siliconflow-R1蒸馏模型
-    SILICONFLOW_MODEL_V3: str = "deepseek-ai/DeepSeek-V3"  # siliconflow-V3模型
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
     MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
@@ -56,46 +58,6 @@ class BotConfig:
             os.makedirs(config_dir)
         return config_dir
 
-    @staticmethod
-    def create_default_config(config_path: str) -> None:
-        """创建默认配置文件"""
-        default_config = """[bot]
-qq = 1  # 填入你的机器人QQ
-nickname = "麦麦"  # 你希望bot被称呼的名字
-
-[message]
-min_text_length = 2 # 与麦麦聊天时麦麦只会回答文本大于等于此数的消息
-max_context_size = 15 # 麦麦获得的上下文数量，超出数量后自动丢弃
-emoji_chance = 0.2 # 麦麦使用表情包的概率
-
-[emoji]
-check_interval = 120
-register_interval = 10
-
-[cq_code]
-enable_pic_translate = false
-
-[response]
-api_using = "siliconflow" # 选择大模型API，可选值为siliconflow,deepseek
-api_paid = false # 是否使用付费api
-model_r1_probability = 0.8 # 麦麦回答时选择R1模型的概率
-model_v3_probability = 0.1 # 麦麦回答时选择V3模型的概率
-model_r1_distill_probability = 0.1 # 麦麦回答时选择R1蒸馏模型的概率
-
-[memory]
-build_memory_interval = 300 # 记忆构建间隔
-
-[others]
-enable_advance_output = false # 开启后输出更多日志
-
-[groups]
-talk_allowed = [] # 可以回复消息的群
-talk_frequency_down = [] # 降低回复频率的群
-ban_user_id = [] # 禁止回复消息的QQ号
-"""
-        with open(config_path, "w", encoding="utf-8") as f:
-            f.write(default_config)
-        logger.success(f"已创建默认配置文件: {config_path}")
     
     @classmethod
     def load_config(cls, config_path: str = None) -> "BotConfig":
@@ -127,9 +89,26 @@ ban_user_id = [] # 禁止回复消息的QQ号
                 config.MODEL_V3_PROBABILITY = response_config.get("model_v3_probability", config.MODEL_V3_PROBABILITY)
                 config.MODEL_R1_DISTILL_PROBABILITY = response_config.get("model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY)
                 config.API_USING = response_config.get("api_using", config.API_USING)
-                if response_config.get("api_using", config.API_PAID):
-                    config.SILICONFLOW_MODEL_R1 = "Pro/deepseek-ai/DeepSeek-R1"
-                    config.SILICONFLOW_MODEL_V3 = "Pro/deepseek-ai/DeepSeek-V3"
+                config.API_PAID = response_config.get("api_paid", config.API_PAID)
+                
+            # 加载模型配置
+            if "model" in toml_dict:
+                model_config = toml_dict["model"]
+                
+                if "llm_reasoning" in model_config:
+                    config.llm_reasoning = model_config["llm_reasoning"]
+                
+                if "llm_reasoning_minor" in model_config:
+                    config.llm_reasoning_minor = model_config["llm_reasoning_minor"]
+                
+                if "llm_normal" in model_config:
+                    config.llm_normal = model_config["llm_normal"]
+                
+                if "llm_normal_minor" in model_config:
+                    config.llm_normal_minor = model_config["llm_normal_minor"]
+                
+                if "vlm" in model_config:
+                    config.vlm = model_config["vlm"]
                 
             # 消息配置
             if "message" in toml_dict:
@@ -172,10 +151,6 @@ else:
 global_config = BotConfig.load_config(config_path=bot_config_path)
 
 
-# config_dir = os.path.dirname(bot_config_path)
-
-# logger.info(f"尝试从 {bot_config_path} 加载机器人配置")
-# global_config = BotConfig.load_config(config_path=bot_config_path)
 
 @dataclass
 class LLMConfig:

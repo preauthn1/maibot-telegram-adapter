@@ -52,6 +52,7 @@ async def start_background_tasks():
     """启动后台任务"""
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))
+    await bot_schedule.initialize()
     bot_schedule.print_schedule()
     
 @driver.on_startup
