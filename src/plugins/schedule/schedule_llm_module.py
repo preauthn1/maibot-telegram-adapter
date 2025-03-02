@@ -6,8 +6,8 @@ class LLMModel:
     # def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", **kwargs):
     def __init__(self, model_name="Pro/deepseek-ai/DeepSeek-R1",api_using=None, **kwargs):
         if api_using == "deepseek":
-            self.api_key = os.getenv("DEEPSEEK_API_KEY")
-            self.base_url = os.getenv("DEEPSEEK_BASE_URL")
+            self.api_key = os.getenv("DEEP_SEEK_KEY")
+            self.base_url = os.getenv("DEEP_SEEK_BASE_URL")
             if model_name != "Pro/deepseek-ai/DeepSeek-R1":
                 self.model_name = model_name
             else:
