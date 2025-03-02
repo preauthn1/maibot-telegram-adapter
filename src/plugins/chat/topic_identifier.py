@@ -3,6 +3,7 @@ from openai import OpenAI
 from .message import Message
 import jieba
 from nonebot import get_driver
+from .config import global_config
 
 driver = get_driver()
 config = driver.config  
@@ -24,7 +25,7 @@ class TopicIdentifier:
 消息内容：{text}"""
 
         response = self.client.chat.completions.create(
-            model="Pro/deepseek-ai/DeepSeek-V3",
+            model=global_config.SILICONFLOW_MODEL_V3,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.8,
             max_tokens=10

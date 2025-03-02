@@ -33,6 +33,11 @@ class BotConfig:
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     
     API_USING: str = "siliconflow"  # 使用的API
+    DEEPSEEK_MODEL_R1: str = "deepseek-reasoner"  # deepseek-R1模型
+    DEEPSEEK_MODEL_V3: str = "deepseek-chat"  # deepseek-V3模型
+    SILICONFLOW_MODEL_R1: str = "deepseek-ai/DeepSeek-R1"  # siliconflow-R1模型
+    SILICONFLOW_MODEL_R1_DISTILL: str = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"  # siliconflow-R1蒸馏模型
+    SILICONFLOW_MODEL_V3: str = "deepseek-ai/DeepSeek-V3"  # siliconflow-V3模型
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
     MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
@@ -82,6 +87,9 @@ class BotConfig:
                 config.MODEL_V3_PROBABILITY = response_config.get("model_v3_probability", config.MODEL_V3_PROBABILITY)
                 config.MODEL_R1_DISTILL_PROBABILITY = response_config.get("model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY)
                 config.API_USING = response_config.get("api_using", config.API_USING)
+                if response_config.get("api_using", config.API_PAID):
+                    config.SILICONFLOW_MODEL_R1 = "Pro/deepseek-ai/DeepSeek-R1"
+                    config.SILICONFLOW_MODEL_V3 = "Pro/deepseek-ai/DeepSeek-V3"
                 
             # 消息配置
             if "message" in toml_dict:

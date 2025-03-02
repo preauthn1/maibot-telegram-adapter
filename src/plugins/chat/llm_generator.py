@@ -206,13 +206,13 @@ class LLMResponseGenerator:
         if global_config.API_USING == "deepseek":
             return await self._generate_base_response(
                 message, 
-                "deepseek-reasoner",
+                global_config.DEEPSEEK_MODEL_R1,
                 {"temperature": 0.7, "max_tokens": 1024}
             )
         else:
             return await self._generate_base_response(
                 message, 
-                "Pro/deepseek-ai/DeepSeek-R1",
+                global_config.SILICONFLOW_MODEL_R1,
                 {"temperature": 0.7, "max_tokens": 1024}
             )
 
@@ -221,13 +221,13 @@ class LLMResponseGenerator:
         if global_config.API_USING == "deepseek":
             return await self._generate_base_response(
                 message, 
-                "deepseek-chat",
+                global_config.DEEPSEEK_MODEL_V3,
                 {"temperature": 0.8, "max_tokens": 1024}
             )
         else:
             return await self._generate_base_response(
                 message, 
-                "Pro/deepseek-ai/DeepSeek-V3",
+                global_config.SILICONFLOW_MODEL_V3,
                 {"temperature": 0.8, "max_tokens": 1024}
             )
 
@@ -235,7 +235,7 @@ class LLMResponseGenerator:
         """使用 DeepSeek-R1-Distill-Qwen-32B 模型生成回复"""
         return await self._generate_base_response(
             message, 
-            "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+            global_config.SILICONFLOW_MODEL_R1_DISTILL,
             {"temperature": 0.7, "max_tokens": 1024}
         )
 
@@ -270,9 +270,9 @@ class LLMResponseGenerator:
             
             loop = asyncio.get_event_loop()
             if global_config.API_USING == "deepseek":
-                model = "deepseek-chat"
+                model = global_config.DEEPSEEK_MODEL_V3
             else:
-                model = "Pro/deepseek-ai/DeepSeek-V3"
+                model = global_config.SILICONFLOW_MODEL_V3
             create_completion = partial(
                 self.client.chat.completions.create,
                 model=model,

@@ -3,7 +3,7 @@ import os
 from typing import List, Dict
 from .schedule_llm_module import LLMModel
 from ...common.database import Database  # 使用正确的导入语法
-from ..chat.config import global_config
+from src.plugins.chat.config import global_config
 from nonebot import get_driver
 
 driver = get_driver()
@@ -22,9 +22,9 @@ Database.initialize(
 class ScheduleGenerator:
     def __init__(self):
         if global_config.API_USING == "siliconflow":
-            self.llm_scheduler = LLMModel(model_name="Pro/deepseek-ai/DeepSeek-V3")
+            self.llm_scheduler = LLMModel(model_name=global_config.SILICONFLOW_MODEL_V3)
         elif global_config.API_USING == "deepseek":
-            self.llm_scheduler = LLMModel(model_name="deepseek-chat",api_using="deepseek")
+            self.llm_scheduler = LLMModel(model_name=global_config.DEEPSEEK_MODEL_V3)
         self.db = Database.get_instance()
         
         today = datetime.datetime.now()

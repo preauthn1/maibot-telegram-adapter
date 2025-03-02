@@ -5,13 +5,13 @@ import time
 from nonebot import get_driver
 import aiohttp
 import asyncio
-
+from src.plugins.chat.config import global_config
 driver = get_driver()
 config = driver.config
 
 class LLMModel:
     # def __init__(self, model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", **kwargs):
-    def __init__(self, model_name="Pro/deepseek-ai/DeepSeek-V3", **kwargs):
+    def __init__(self, model_name=global_config.SILICONFLOW_MODEL_V3, **kwargs):
         self.model_name = model_name
         self.params = kwargs
         self.api_key = config.siliconflow_key
