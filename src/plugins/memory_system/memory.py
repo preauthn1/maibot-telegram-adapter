@@ -192,7 +192,7 @@ class Hippocampus:
             chat_text.append(chat_)
         return chat_text
     
-    def build_memory(self,chat_size=12):
+    async def build_memory(self,chat_size=12):
         #最近消息获取频率
         time_frequency = {'near':1,'mid':2,'far':2}
         memory_sample = self.get_memory_sample(chat_size,time_frequency)
@@ -211,10 +211,12 @@ class Hippocampus:
             first_memory = set()
             first_memory = self.memory_compress(input_text, 2.5)
             # 延时防止访问超频
-            # time.sleep(5)
+            # time.sleep(60)
             #将记忆加入到图谱中
             for topic, memory in first_memory:
                 topics = segment_text(topic)
+                if '[' in topic or topic=='':
+                    continue
                 print(f"\033[1;34m话题\033[0m: {topic},节点: {topics}, 记忆: {memory}")
                 for split_topic in topics:
                     self.memory_graph.add_dot(split_topic,memory)
@@ -240,6 +242,8 @@ class Hippocampus:
         # print(topics)
         compressed_memory = set()
         for topic in topics:
+            if topic=='' or '[' in topic:
+                continue
             topic_what_prompt = topic_what(input_text,topic)
             topic_what_response = self.llm_model_small.generate_response(topic_what_prompt)
             compressed_memory.add((topic.strip(), topic_what_response[0]))  # 将话题和记忆作为元组存储

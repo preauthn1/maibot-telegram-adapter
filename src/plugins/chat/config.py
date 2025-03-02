@@ -37,7 +37,7 @@ class BotConfig:
     talk_frequency_down_groups = set()
     ban_user_id = set()
     
-    build_memory_interval: int = 60  # 记忆构建间隔（秒）
+    build_memory_interval: int = 600  # 记忆构建间隔（秒）
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     

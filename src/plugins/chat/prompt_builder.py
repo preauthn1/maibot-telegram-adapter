@@ -171,7 +171,7 @@ class PromptBuilder:
         
             
         #额外信息要求
-        extra_info = '''但是记得回复平淡一些，简短一些,记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等),只需要输出回复内容就好，不要输出其他任何内容''' 
+        extra_info = '''但是记得回复平淡一些，简短一些，尤其注意在没明确提到时不要过多提及自身的背景, 记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只需要输出回复内容就好，不要输出其他任何内容''' 
         
         
         
@@ -188,9 +188,9 @@ class PromptBuilder:
         prompt += f"{prompt_ger}\n"
         prompt += f"{extra_info}\n"     
 
-        activate_prompt_check=f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"     
+        activate_prompt_check=f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。不要太受现在做的事情影响，因为摸鱼是很正常的。"     
         prompt_personality_check = ''
-        extra_check_info=f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果是刚刚理会过的人发送消息，且还在与那个人对话中的话一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
+        extra_check_info=f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息,无论如何一定要回复，如果是刚刚理会过的人发送消息，且还在与那个人对话中的话一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
         if personality_choice < 4/6:  # 第一种人格
             prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[0]},{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
         elif personality_choice < 1:  # 第二种人格

@@ -278,6 +278,7 @@ def main():
         
         #将记忆加入到图谱中
         for topic, memory in first_memory:
+            # continue
             topics = segment_text(topic)
             print(f"\033[1;34m话题\033[0m: {topic},节点: {topics}, 记忆: {memory}")
             for split_topic in topics:

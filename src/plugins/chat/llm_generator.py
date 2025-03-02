@@ -110,7 +110,7 @@ class LLMResponseGenerator:
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
             "temperature": 0.7
         }
 
@@ -118,7 +118,7 @@ class LLMResponseGenerator:
             "model": "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
             "messages": [{"role": "user", "content": prompt_check}],
             "stream": False,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
             "temperature": 0.7
         }
         
@@ -210,13 +210,13 @@ class LLMResponseGenerator:
             return await self._generate_base_response(
                 message, 
                 "deepseek-reasoner",
-                {"temperature": 0.7, "max_tokens": 1024}
+                {"temperature": 0.7, "max_tokens": 2048}
             )
         else:
             return await self._generate_base_response(
                 message, 
                 "Pro/deepseek-ai/DeepSeek-R1",
-                {"temperature": 0.7, "max_tokens": 1024}
+                {"temperature": 0.7, "max_tokens": 2048}
             )
 
     async def _generate_v3_response(self, message: Message) -> Optional[str]:
@@ -225,13 +225,13 @@ class LLMResponseGenerator:
             return await self._generate_base_response(
                 message, 
                 "deepseek-chat",
-                {"temperature": 0.8, "max_tokens": 1024}
+                {"temperature": 0.8, "max_tokens": 2048}
             )
         else:
             return await self._generate_base_response(
                 message, 
                 "Pro/deepseek-ai/DeepSeek-V3",
-                {"temperature": 0.8, "max_tokens": 1024}
+                {"temperature": 0.8, "max_tokens": 2048}
             )
 
     async def _generate_r1_distill_response(self, message: Message) -> Optional[str]:
@@ -239,7 +239,7 @@ class LLMResponseGenerator:
         return await self._generate_base_response(
             message, 
             "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-            {"temperature": 0.7, "max_tokens": 1024}
+            {"temperature": 0.7, "max_tokens": 2048}
         )
 
     async def _get_group_chat_context(self, message: Message) -> str:

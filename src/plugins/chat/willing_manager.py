@@ -61,7 +61,7 @@ class WillingManager:
         if is_mentioned_bot and user_id == int(964959351):
             reply_probability = 1
             
-        return reply_probability
+        return reply_probability+0.5
     
     def change_reply_willing_sent(self, group_id: int):
         """开始思考后降低群组的回复意愿"""
@@ -72,7 +72,7 @@ class WillingManager:
         """发送消息后提高群组的回复意愿"""
         current_willing = self.group_reply_willing.get(group_id, 0)
         if current_willing < 1:
-            self.group_reply_willing[group_id] = min(1, current_willing + 0.3)
+            self.group_reply_willing[group_id] = min(2, current_willing + 0.8)
         
     async def ensure_started(self):
         """确保衰减任务已启动"""
