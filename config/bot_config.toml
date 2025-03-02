@@ -1,0 +1,46 @@
+[bot]
+qq = 123456  #填入你的机器人QQ
+nickname = "麦麦"  #你希望bot被称呼的名字
+
+[message]
+min_text_length = 2 # 与麦麦聊天时麦麦只会回答文本大于等于此数的消息
+max_context_size = 15 # 麦麦获得的上下文数量，超出数量后自动丢弃
+emoji_chance = 0.2 # 麦麦使用表情包的概率
+
+[emoji]
+check_interval = 120
+register_interval = 10
+
+[cq_code]
+enable_pic_translate = false
+
+
+[response]
+api_using = "siliconflow" # 选择大模型API，可选值为siliconflow,deepseek，建议使用siliconflow，因为识图api目前只支持siliconflow的deepseek-vl2模型
+api_paid = false #是否使用付费api，目前此选项只影响siliconflow，其deepseek模型的api分为可用赠送余额和不可以用的，此选项为false时使用赠送余额
+model_r1_probability = 0.8 # 麦麦回答时选择R1模型的概率
+model_v3_probability = 0.1 # 麦麦回答时选择V3模型的概率
+model_r1_distill_probability = 0.1 # 麦麦回答时选择R1蒸馏模型的概率
+
+[memory]
+build_memory_interval = 300 # 记忆构建间隔
+
+
+
+[others]
+enable_advance_output = true # 开启后输出更多日志,false关闭true开启
+
+
+[groups]
+
+talk_allowed = [
+    123456,12345678
+]  #可以回复消息的群
+
+talk_frequency_down = [
+    123456,12345678
+]  #降低回复频率的群
+
+ban_user_id = [
+     123456,12345678
+]  #禁止回复消息的QQ号
