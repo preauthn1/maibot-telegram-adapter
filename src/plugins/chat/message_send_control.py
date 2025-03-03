@@ -183,7 +183,11 @@ class MessageSendControl:
             if isinstance(message, Message_Thinking):
                 message.update_thinking_time()
                 thinking_time = message.thinking_time
-                if thinking_time < 90:  # 最少思考2秒
+                if message.interupt:
+                    print(f"\033[1;34m[调试]\033[0m 思考不打算回复，移除")
+                    queue.get_earliest_message()
+                    return
+                elif thinking_time < 90:  # 最少思考2秒
                     if int(thinking_time) % 15 == 0:
                         print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{thinking_time:.1f}秒")
                     return

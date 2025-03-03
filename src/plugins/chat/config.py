@@ -47,6 +47,13 @@ class BotConfig:
     
     enable_advance_output: bool = False  # 是否启用高级输出
     enable_kuuki_read: bool = True # 是否启用读空气功能
+
+    # 默认人设
+    PROMPT_PERSONALITY=[
+        "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群",
+        "是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群"
+    ]
+    PROMPT_SCHEDULE_GEN="一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
     
     @staticmethod
     def get_config_dir() -> str:

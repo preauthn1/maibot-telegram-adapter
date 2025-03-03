@@ -147,14 +147,15 @@ class PromptBuilder:
             is_bot_prompt = ''
         
         #人格选择
+        personality=global_config.PROMPT_PERSONALITY
         prompt_personality = ''
         personality_choice = random.random()
         if personality_choice < 4/6:  # 第一种人格
-            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群,{promt_info_prompt},
+            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[0]},{promt_info_prompt},
             现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{is_bot_prompt}
             请注意把握群里的聊天内容，不要刻意突出自身学科背景，不要回复的太有条理，可以有个性。'''
         elif personality_choice < 1:  # 第二种人格
-            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群,{promt_info_prompt},
+            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}，{promt_info_prompt},
             
             现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
             请你表达自己的见解和观点。可以有个性。'''
@@ -170,7 +171,7 @@ class PromptBuilder:
         
             
         #额外信息要求
-        extra_info = '''但是记得回复平淡一些，简短一些,记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等),只需要输出回复内容就好，不要输出其他任何内容''' 
+        extra_info = '''但是记得回复平淡一些，简短一些，尤其注意在没明确提到时不要过多提及自身的背景, 记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只需要输出回复内容就好，不要输出其他任何内容''' 
         
         
         
@@ -195,9 +196,9 @@ class PromptBuilder:
         prompt_personality_check = ''
         extra_check_info=f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
         if personality_choice < 4/6:  # 第一种人格
-            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群,{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
         elif personality_choice < 1:  # 第二种人格
-            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群,{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
 
         prompt_check_if_response=f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
         

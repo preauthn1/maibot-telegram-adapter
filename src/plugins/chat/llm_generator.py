@@ -50,12 +50,19 @@ class ResponseGenerator:
             model_response, emotion = await self._process_response(model_response)
             if model_response:
                 print(f"为 '{model_response}' 获取到的情感标签为：{emotion}")
+                valuedict={
+                'happy':0.5,'angry':-1,'sad':-0.5,'surprised':0.5,'disgusted':-1.5,'fearful':-0.25,'neutral':0.25
+                }
+                await relationship_manager.update_relationship_value(message.user_id, relationship_value=valuedict[emotion[0]])
+
             return model_response, emotion
         return None, []
 
     async def _generate_response_with_model(self, message: Message, model: LLM_request) -> Optional[str]:
         """使用指定的模型生成回复"""
         sender_name = message.user_nickname or f"用户{message.user_id}"
+        if message.user_cardname:
+            sender_name=f"[({message.user_id}){message.user_nickname}]{message.user_cardname}"
         
         # 获取关系值
         relationship_value = relationship_manager.get_relationship(message.user_id).relationship_value if relationship_manager.get_relationship(message.user_id) else 0.0
