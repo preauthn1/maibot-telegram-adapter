@@ -131,6 +131,7 @@ class BotConfig:
             if "others" in toml_dict:
                 others_config = toml_dict["others"]
                 config.enable_advance_output = others_config.get("enable_advance_output", config.enable_advance_output)
+                config.enable_kuuki_read = others_config.get("enable_kuuki_read", config.enable_kuuki_read)
             
             logger.success(f"成功加载配置文件: {config_path}")
                 
