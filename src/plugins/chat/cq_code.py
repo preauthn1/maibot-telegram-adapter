@@ -12,6 +12,7 @@ import time
 import asyncio
 from .utils_image import storage_image,storage_emoji
 from .utils_user import get_user_nickname
+from ..models.utils_model import LLM_request
 #解析各种CQ码
 #包含CQ码类
 import urllib3
@@ -57,6 +58,11 @@ class CQCode:
     translated_plain_text: Optional[str] = None
     reply_message: Dict = None  # 存储回复消息
     image_base64: Optional[str] = None
+    _llm: Optional[LLM_request] = None
+
+    def __post_init__(self):
+        """初始化LLM实例"""
+        self._llm = LLM_request(model=global_config.vlm, temperature=0.4, max_tokens=300)
 
     def translate(self):
         """根据CQ码类型进行相应的翻译处理"""
@@ -161,7 +167,7 @@ class CQCode:
             # 将 base64 字符串转换为字节类型
             image_bytes = base64.b64decode(base64_str)
             storage_emoji(image_bytes)
-            return self.get_image_description(base64_str)
+            return self.get_emoji_description(base64_str)
         else:
             return '[表情包]'
     
@@ -181,93 +187,23 @@ class CQCode:
 
     def get_emoji_description(self, image_base64: str) -> str:
         """调用AI接口获取表情包描述"""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config.siliconflow_key}"
-        }
-        
-        payload = {
-            "model": "deepseek-ai/deepseek-vl2",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "这是一个表情包，请用简短的中文描述这个表情包传达的情感和含义。最多20个字。"
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            "max_tokens": 50,
-            "temperature": 0.4
-        }
-        
-        response = requests.post(
-            f"{config.siliconflow_base_url}chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            result_json = response.json()
-            if "choices" in result_json and len(result_json["choices"]) > 0:
-                description = result_json["choices"][0]["message"]["content"]
-                return f"[表情包：{description}]"
-        
-        raise ValueError(f"AI接口调用失败: {response.text}")
+        try:
+            prompt = "这是一个表情包，请用简短的中文描述这个表情包传达的情感和含义。最多20个字。"
+            description, _ = self._llm.generate_response_for_image_sync(prompt, image_base64)
+            return f"[表情包：{description}]"
+        except Exception as e:
+            print(f"\033[1;31m[错误]\033[0m AI接口调用失败: {str(e)}")
+            return "[表情包]"
 
     def get_image_description(self, image_base64: str) -> str:
         """调用AI接口获取普通图片描述"""
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config.siliconflow_key}"
-        }
-        
-        payload = {
-            "model": "deepseek-ai/deepseek-vl2",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "请用中文描述这张图片的内容。如果有文字，请把文字都描述出来。并尝试猜测这个图片的含义。最多200个字。"
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            "max_tokens": 300,
-            "temperature": 0.6
-        }
-        
-        response = requests.post(
-            f"{config.siliconflow_base_url}chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
-        
-        if response.status_code == 200:
-            result_json = response.json()
-            if "choices" in result_json and len(result_json["choices"]) > 0:
-                description = result_json["choices"][0]["message"]["content"]
-                return f"[图片：{description}]"
-        
-        raise ValueError(f"AI接口调用失败: {response.text}")
+        try:
+            prompt = "请用中文描述这张图片的内容。如果有文字，请把文字都描述出来。并尝试猜测这个图片的含义。最多200个字。"
+            description, _ = self._llm.generate_response_for_image_sync(prompt, image_base64)
+            return f"[图片：{description}]"
+        except Exception as e:
+            print(f"\033[1;31m[错误]\033[0m AI接口调用失败: {str(e)}")
+            return "[图片]"
     
     def translate_forward(self) -> str:
         """处理转发消息"""
@@ -349,7 +285,7 @@ class CQCode:
         # 创建Message对象
         from .message import Message
         if self.reply_message == None:
-            print(f"\033[1;31m[错误]\033[0m 回复消息为空")
+            # print(f"\033[1;31m[错误]\033[0m 回复消息为空")
             return '[回复某人消息]'
         
         if self.reply_message.sender.user_id:

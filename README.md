@@ -75,8 +75,9 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
    - 在Napcat的网络设置中添加ws反向代理:ws://localhost:8080/onebot/v11/ws
 
 4. **配置文件设置**
-   - 将.env文件打开，填上你的apikey（硅基流动或deepseekapi）
-   - 将bot_config.toml文件打开，并填写相关内容，不然无法正常运行
+   - 修改.env的 变量值为 prod
+   - 将.env.prod文件打开，填上你的apikey（硅基流动或deepseekapi）
+   - 将bot_config_toml改名为bot_config.toml，打开并填写相关内容，不然无法正常运行
 
    #### .env 文件配置说明
    ```ini

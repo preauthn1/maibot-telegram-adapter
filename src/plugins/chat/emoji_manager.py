@@ -14,6 +14,8 @@ import asyncio
 import time
 
 from nonebot import get_driver
+from ..chat.config import global_config
+from ..models.utils_model import LLM_request
 
 driver = get_driver()
 config = driver.config
@@ -43,6 +45,7 @@ class EmojiManager:
     def __init__(self):
         self.db = Database.get_instance()
         self._scan_task = None
+        self.llm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=50)
         
     def _ensure_emoji_dir(self):
         """确保表情存储目录存在"""
@@ -87,55 +90,23 @@ class EmojiManager:
             print(f"\033[1;31m[错误]\033[0m 记录表情使用失败: {str(e)}")
             
     async def _get_emotion_from_text(self, text: str) -> List[str]:
-        """从文本中识别情感关键词，使用DeepSeek API进行分析
+        """从文本中识别情感关键词
         Args:
             text: 输入文本
         Returns:
             List[str]: 匹配到的情感标签列表
         """
         try:
-            # 准备请求数据
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {config.siliconflow_key}"
-            }
+            prompt = f'分析这段文本："{text}"，从"happy,angry,sad,surprised,disgusted,fearful,neutral"中选出最匹配的1个情感标签。只需要返回标签，不要输出其他任何内容。'
             
-            payload = {
-                "model": "deepseek-ai/DeepSeek-V3",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": f'分析这段文本："{text}"，从"happy,angry,sad,surprised,disgusted,fearful,neutral"中选出最匹配的1个情感标签。只需要返回标签，不要输出其他任何内容。'
-                            }
-                        ]
-                    }
-                ],
-                "max_tokens": 50,
-                "temperature": 0.3
-            }
+            content, _ = await self.llm.generate_response(prompt)
+            emotion = content.strip().lower()
             
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{config.siliconflow_base_url}chat/completions",
-                    headers=headers,
-                    json=payload
-                ) as response:
-                    if response.status != 200:
-                        print(f"\033[1;31m[错误]\033[0m API请求失败: {await response.text()}")
-                        return ['neutral']
-                    
-                    result = json.loads(await response.text())
-                    if "choices" in result and len(result["choices"]) > 0:
-                        emotion = result["choices"][0]["message"]["content"].strip().lower()
-                        # 确保返回的标签是有效的
-                        if emotion in self.EMOTION_KEYWORDS:
-                            print(f"\033[1;32m[成功]\033[0m 识别到的情感: {emotion}")
-                            return [emotion]  # 返回单个情感标签的列表
+            if emotion in self.EMOTION_KEYWORDS:
+                print(f"\033[1;32m[成功]\033[0m 识别到的情感: {emotion}")
+                return [emotion]
             
-            return ['neutral']  # 如果无法识别情感，返回neutral
+            return ['neutral']
             
         except Exception as e:
             print(f"\033[1;31m[错误]\033[0m 情感分析失败: {str(e)}")
@@ -250,52 +221,20 @@ class EmojiManager:
 
     async def _get_emoji_tag(self, image_base64: str) -> str:
         """获取表情包的标签"""
-        async with aiohttp.ClientSession() as session:
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {config.siliconflow_key}"
-            }
+        try:
+            prompt = '这是一个表情包，请从"happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"中选出1个情感标签。只输出标签，不要输出其他任何内容，只输出情感标签就好'
             
-            payload = {
-                "model": "deepseek-ai/deepseek-vl2",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": '这是一个表情包，请从"happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"中选出1个情感标签。只输出标签，不要输出其他任何内容，只输出情感标签就好'
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_base64}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                "max_tokens": 60,
-                "temperature": 0.3
-            }
+            content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
+            tag_result = content.strip().lower()
             
-            async with session.post(
-                f"{config.siliconflow_base_url}chat/completions",
-                headers=headers,
-                json=payload
-            ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    if "choices" in result and len(result["choices"]) > 0:
-                        tag_result = result["choices"][0]["message"]["content"].strip().lower()
-
-                        valid_tags = ["happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"]
-                        for tag_match in valid_tags:
-                            if tag_match in tag_result or tag_match == tag_result:
-                                return tag_match
-                        print(f"\033[1;33m[警告]\033[0m 无效的标签: {tag_match}, 跳过")
-                else:
-                    print(f"\033[1;31m[错误]\033[0m 获取标签失败, 状态码: {response.status}")
+            valid_tags = ["happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"]
+            for tag_match in valid_tags:
+                if tag_match in tag_result or tag_match == tag_result:
+                    return tag_match
+            print(f"\033[1;33m[警告]\033[0m 无效的标签: {tag_result}, 跳过")
+            
+        except Exception as e:
+            print(f"\033[1;31m[错误]\033[0m 获取标签失败: {str(e)}")
         
         print(f"\033[1;32m[调试信息]\033[0m 使用默认标签: neutral")
         return "skip"  # 默认标签

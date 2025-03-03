@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Set
 import os
 from nonebot.log import logger, default_format
@@ -32,7 +32,15 @@ class BotConfig:
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     
+    # 模型配置
+    llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
+    llm_reasoning_minor: Dict[str, str] = field(default_factory=lambda: {})
+    llm_normal: Dict[str, str] = field(default_factory=lambda: {})
+    llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
+    vlm: Dict[str, str] = field(default_factory=lambda: {})
+    
     API_USING: str = "siliconflow"  # 使用的API
+    API_PAID: bool = False  # 是否使用付费API
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
     MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
@@ -48,20 +56,19 @@ class BotConfig:
     PROMPT_SCHEDULE_GEN="一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
     
     @staticmethod
-    def get_default_config_path() -> str:
-        """获取默认配置文件路径"""
+    def get_config_dir() -> str:
+        """获取配置文件目录"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
         config_dir = os.path.join(root_dir, 'config')
-        return os.path.join(config_dir, 'bot_config.toml')
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+        return config_dir
+
     
     @classmethod
     def load_config(cls, config_path: str = None) -> "BotConfig":
         """从TOML配置文件加载配置"""
-        if config_path is None:
-            config_path = cls.get_default_config_path()
-            logger.info(f"使用默认配置文件路径: {config_path}")
-            
         config = cls()
         if os.path.exists(config_path):
             with open(config_path, "rb") as f:
@@ -89,6 +96,26 @@ class BotConfig:
                 config.MODEL_V3_PROBABILITY = response_config.get("model_v3_probability", config.MODEL_V3_PROBABILITY)
                 config.MODEL_R1_DISTILL_PROBABILITY = response_config.get("model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY)
                 config.API_USING = response_config.get("api_using", config.API_USING)
+                config.API_PAID = response_config.get("api_paid", config.API_PAID)
+                
+            # 加载模型配置
+            if "model" in toml_dict:
+                model_config = toml_dict["model"]
+                
+                if "llm_reasoning" in model_config:
+                    config.llm_reasoning = model_config["llm_reasoning"]
+                
+                if "llm_reasoning_minor" in model_config:
+                    config.llm_reasoning_minor = model_config["llm_reasoning_minor"]
+                
+                if "llm_normal" in model_config:
+                    config.llm_normal = model_config["llm_normal"]
+                
+                if "llm_normal_minor" in model_config:
+                    config.llm_normal_minor = model_config["llm_normal_minor"]
+                
+                if "vlm" in model_config:
+                    config.vlm = model_config["vlm"]
                 
             # 消息配置
             if "message" in toml_dict:
@@ -125,11 +152,20 @@ class BotConfig:
         return config 
     
 # 获取配置文件路径
-bot_config_path = BotConfig.get_default_config_path()
-config_dir = os.path.dirname(bot_config_path)
 
-logger.info(f"尝试从 {bot_config_path} 加载机器人配置")
+bot_config_floder_path = BotConfig.get_config_dir()
+print(f"正在品鉴配置文件目录: {bot_config_floder_path}")
+bot_config_path = os.path.join(bot_config_floder_path, "bot_config_dev.toml")
+if not os.path.exists(bot_config_path):
+    # 如果开发环境配置文件不存在，则使用默认配置文件
+    bot_config_path = os.path.join(bot_config_floder_path, "bot_config.toml")
+    logger.info("使用默认配置文件")
+else:
+    logger.info("已找到开发环境配置文件")
+
 global_config = BotConfig.load_config(config_path=bot_config_path)
+
+
 
 @dataclass
 class LLMConfig:
@@ -151,3 +187,4 @@ llm_config.DEEP_SEEK_BASE_URL = config.deep_seek_base_url
 if not global_config.enable_advance_output:
     # logger.remove()
     pass
+

@@ -72,12 +72,15 @@ class PromptBuilder:
                 # print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆2: {list(overlapping_second_layer)}")
             
             # 使用集合去重
-            all_memories = list(set(all_first_layer_items) | set(overlapping_second_layer))
+            # 从每个来源随机选择2条记忆（如果有的话）
+            selected_first_layer = random.sample(all_first_layer_items, min(2, len(all_first_layer_items))) if all_first_layer_items else []
+            selected_second_layer = random.sample(list(overlapping_second_layer), min(2, len(overlapping_second_layer))) if overlapping_second_layer else []
+            
+            # 合并并去重
+            all_memories = list(set(selected_first_layer + selected_second_layer))
             if all_memories:
                 print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆: {all_memories}")
-            
-            if all_memories:  # 只在列表非空时选择随机项
-                random_item = choice(all_memories)
+                random_item = " ".join(all_memories)
                 memory_prompt = f"看到这些聊天，你想起来{random_item}\n"
             else:
                 memory_prompt = ""  # 如果没有记忆，则返回空字符串
@@ -150,7 +153,7 @@ class PromptBuilder:
         if personality_choice < 4/6:  # 第一种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[0]},{promt_info_prompt},
             现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{is_bot_prompt}
-            请注意把握群里的聊天内容，不要回复的太有条理，可以有个性。'''
+            请注意把握群里的聊天内容，不要刻意突出自身学科背景，不要回复的太有条理，可以有个性。'''
         elif personality_choice < 1:  # 第二种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}，{promt_info_prompt},
             
