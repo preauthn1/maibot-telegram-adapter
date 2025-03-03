@@ -10,6 +10,7 @@ from typing import Dict
 from collections import Counter
 import math
 from nonebot import get_driver
+from ..models.utils_model import LLM_request
 
 driver = get_driver()
 config = driver.config
@@ -64,25 +65,9 @@ def is_mentioned_bot_in_txt(message: str) -> bool:
     return False
 
 def get_embedding(text):
-    url = "https://api.siliconflow.cn/v1/embeddings"
-    payload = {
-        "model": "BAAI/bge-m3",
-        "input": text,
-        "encoding_format": "float"
-    }
-    headers = {
-        "Authorization": f"Bearer {config.siliconflow_key}",
-        "Content-Type": "application/json"
-    }
-    
-    response = requests.request("POST", url, json=payload, headers=headers)
-    
-    if response.status_code != 200:
-        print(f"API请求失败: {response.status_code}")
-        print(f"错误信息: {response.text}")
-        return None
-        
-    return response.json()['data'][0]['embedding']
+    """获取文本的embedding向量"""
+    llm = LLM_request(model=global_config.embedding)
+    return llm.get_embedding_sync(text)
 
 def cosine_similarity(v1, v2):
     dot_product = np.dot(v1, v2)

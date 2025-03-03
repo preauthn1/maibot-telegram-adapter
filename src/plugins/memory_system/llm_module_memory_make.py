@@ -66,7 +66,7 @@ class LLMModel:
             except Exception as e:
                 if retry < max_retries - 1:  # 如果还有重试机会
                     wait_time = base_wait_time * (2 ** retry)
-                    print(f"请求失败，等待{wait_time}秒后重试... 错误: {str(e)}")
+                    print(f"[回复]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}")
                     await asyncio.sleep(wait_time)
                 else:
                     return f"请求失败: {str(e)}", ""

@@ -259,12 +259,12 @@ config = driver.config
 start_time = time.time()
 
 Database.initialize(
-    host= config.mongodb_host,
-    port= int(config.mongodb_port),
-    db_name=  config.database_name,
-    username= config.mongodb_username,
-    password= config.mongodb_password,
-    auth_source=config.mongodb_auth_source
+    host= config.MONGODB_HOST,
+    port= config.MONGODB_PORT,
+    db_name=  config.DATABASE_NAME,
+    username= config.MONGODB_USERNAME,
+    password= config.MONGODB_PASSWORD,
+    auth_source=config.MONGODB_AUTH_SOURCE
 )
 #创建记忆图
 memory_graph = Memory_graph()

@@ -116,6 +116,9 @@ class BotConfig:
                 
                 if "vlm" in model_config:
                     config.vlm = model_config["vlm"]
+                    
+                if "embedding" in model_config:
+                    config.embedding = model_config["embedding"]
                 
             # 消息配置
             if "message" in toml_dict:
@@ -152,29 +155,11 @@ bot_config_path = os.path.join(bot_config_floder_path, "bot_config_dev.toml")
 if not os.path.exists(bot_config_path):
     # 如果开发环境配置文件不存在，则使用默认配置文件
     bot_config_path = os.path.join(bot_config_floder_path, "bot_config.toml")
-    logger.info("使用默认配置文件")
+    logger.info("使用bot配置文件")
 else:
-    logger.info("已找到开发环境配置文件")
+    logger.info("已找到开发bot配置文件")
 
 global_config = BotConfig.load_config(config_path=bot_config_path)
-
-
-
-@dataclass
-class LLMConfig:
-    """机器人配置类"""
-    # 基础配置
-    SILICONFLOW_API_KEY: str = None
-    SILICONFLOW_BASE_URL: str = None
-    DEEP_SEEK_API_KEY: str = None
-    DEEP_SEEK_BASE_URL: str = None
-
-llm_config = LLMConfig()
-config = get_driver().config
-llm_config.SILICONFLOW_API_KEY = config.siliconflow_key
-llm_config.SILICONFLOW_BASE_URL = config.siliconflow_base_url
-llm_config.DEEP_SEEK_API_KEY = config.deep_seek_key
-llm_config.DEEP_SEEK_BASE_URL = config.deep_seek_base_url
 
 
 if not global_config.enable_advance_output:
