@@ -96,8 +96,13 @@ class ChatBot:
         
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.time))
 
-        topic = topic_identifier.identify_topic_jieba(message.processed_plain_text)
-        print(f"\033[1;32m[主题识别]\033[0m 主题: {topic}")
+        topic1 = topic_identifier.identify_topic_jieba(message.processed_plain_text)
+        topic2 = await topic_identifier.identify_topic_llm(message.processed_plain_text)
+        topic3 = topic_identifier.identify_topic_snownlp(message.processed_plain_text)
+        print(f"\033[1;32m[主题识别]\033[0m 使用jieba主题: {topic1}")
+        print(f"\033[1;32m[主题识别]\033[0m 使用llm主题: {topic2}")
+        print(f"\033[1;32m[主题识别]\033[0m 使用snownlp主题: {topic3}")
+        topic = topic3
         
         all_num = 0
         interested_num = 0
