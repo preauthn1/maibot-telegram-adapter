@@ -32,7 +32,6 @@ if not os.path.exists(".env"):
     # 检测.env.prod文件是否存在
     if not os.path.exists(".env.prod"):
         logger.error("检测到.env.prod文件不存在")
-        logger.info("请在.env.prod文件中至少填写SILICONFLOW_KEY变量后重新启动")
         shutil.copy("template.env", "./.env.prod")
 
 # 首先加载基础环境变量.env
