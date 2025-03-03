@@ -1,37 +1,47 @@
 import datetime
 import os
 from typing import List, Dict
-from .schedule_llm_module import LLMModel
 from ...common.database import Database  # 使用正确的导入语法
-from ..chat.config import global_config
+from src.plugins.chat.config import global_config
+from nonebot import get_driver
+from ..models.utils_model import LLM_request
+
+driver = get_driver()
+config = driver.config
+
 
 Database.initialize(
-            host= os.getenv("MONGODB_HOST"),
-            port= int(os.getenv("MONGODB_PORT")),
-            db_name=  os.getenv("DATABASE_NAME"),
-            username= os.getenv("MONGODB_USERNAME"),
-            password= os.getenv("MONGODB_PASSWORD"),
-            auth_source=os.getenv("MONGODB_AUTH_SOURCE")
+            host= config.mongodb_host,
+            port= int(config.mongodb_port),
+            db_name=  config.database_name,
+            username= config.mongodb_username,
+            password= config.mongodb_password,
+            auth_source=config.mongodb_auth_source
         )
 
 class ScheduleGenerator:
     def __init__(self):
-        if global_config.API_USING == "siliconflow":
-            self.llm_scheduler = LLMModel(model_name="Pro/deepseek-ai/DeepSeek-V3")
-        elif global_config.API_USING == "deepseek":
-            self.llm_scheduler = LLMModel(model_name="deepseek-chat",api_using="deepseek")
+        #根据global_config.llm_normal这一字典配置指定模型
+        # self.llm_scheduler = LLMModel(model = global_config.llm_normal,temperature=0.9)
+        self.llm_scheduler = LLM_request(model = global_config.llm_normal,temperature=0.9)
         self.db = Database.get_instance()
-        
+        self.today_schedule_text = ""
+        self.today_schedule = {}
+        self.tomorrow_schedule_text = ""
+        self.tomorrow_schedule = {}
+        self.yesterday_schedule_text = ""
+        self.yesterday_schedule = {}
+    
+    async def initialize(self):
         today = datetime.datetime.now()
         tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
         yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
         
-        self.today_schedule_text, self.today_schedule = self.generate_daily_schedule(target_date=today)
-        
-        self.tomorrow_schedule_text, self.tomorrow_schedule = self.generate_daily_schedule(target_date=tomorrow,read_only=True)
-        self.yesterday_schedule_text, self.yesterday_schedule = self.generate_daily_schedule(target_date=yesterday,read_only=True)
+        self.today_schedule_text, self.today_schedule = await self.generate_daily_schedule(target_date=today)
+        self.tomorrow_schedule_text, self.tomorrow_schedule = await self.generate_daily_schedule(target_date=tomorrow,read_only=True)
+        self.yesterday_schedule_text, self.yesterday_schedule = await self.generate_daily_schedule(target_date=yesterday,read_only=True)
             
-    def generate_daily_schedule(self, target_date: datetime.datetime = None,read_only:bool = False) -> Dict[str, str]:
+    async def generate_daily_schedule(self, target_date: datetime.datetime = None,read_only:bool = False) -> Dict[str, str]:
         if target_date is None:
             target_date = datetime.datetime.now()
             
@@ -55,7 +65,7 @@ class ScheduleGenerator:
             3. 晚上的计划和休息时间
             请按照时间顺序列出具体时间点和对应的活动，用一个时间点而不是时间段来表示时间，用逗号,隔开时间与活动，格式为"时间,活动"，例如"08:00,起床"。"""
             
-            schedule_text, _ = self.llm_scheduler.generate_response(prompt)
+            schedule_text, _ = await self.llm_scheduler.generate_response(prompt)
             # print(self.schedule_text)
             self.db.db.schedule.insert_one({"date": date_str, "schedule": schedule_text})
         else:

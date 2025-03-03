@@ -7,6 +7,23 @@ import threading
 import queue
 import sys
 import os
+from dotenv import load_dotenv
+
+# 获取当前文件的目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 获取项目根目录
+root_dir = os.path.abspath(os.path.join(current_dir, '..', '..'))
+
+# 加载环境变量
+if os.path.exists(os.path.join(root_dir, '.env.dev')):
+    load_dotenv(os.path.join(root_dir, '.env.dev'))
+    print("成功加载开发环境配置")
+elif os.path.exists(os.path.join(root_dir, '.env.prod')):
+    load_dotenv(os.path.join(root_dir, '.env.prod'))
+    print("成功加载生产环境配置")
+else:
+    print("未找到环境配置文件")
+    sys.exit(1)
 
 from pymongo import MongoClient
 from typing import Optional
@@ -14,14 +31,23 @@ from typing import Optional
 class Database:
     _instance: Optional["Database"] = None
     
-    def __init__(self, host: str, port: int, db_name: str):
-        self.client = MongoClient(host, port)
+    def __init__(self, host: str, port: int, db_name: str, username: str = None, password: str = None, auth_source: str = None):
+        if username and password:
+            self.client = MongoClient(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                authSource=auth_source or 'admin'
+            )
+        else:
+            self.client = MongoClient(host, port)
         self.db = self.client[db_name]
         
     @classmethod
-    def initialize(cls, host: str, port: int, db_name: str) -> "Database":
+    def initialize(cls, host: str, port: int, db_name: str, username: str = None, password: str = None, auth_source: str = None) -> "Database":
         if cls._instance is None:
-            cls._instance = cls(host, port, db_name)
+            cls._instance = cls(host, port, db_name, username, password, auth_source)
         return cls._instance
         
     @classmethod

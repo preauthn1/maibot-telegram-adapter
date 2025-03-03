@@ -66,15 +66,21 @@ class PromptBuilder:
                             overlapping_second_layer.update(overlap)
             
             # 合并所有需要的记忆
-            if all_first_layer_items:   
-                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆1: {all_first_layer_items}")
-            if overlapping_second_layer:
-                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆2: {list(overlapping_second_layer)}")
+            # if all_first_layer_items:   
+                # print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆1: {all_first_layer_items}")
+            # if overlapping_second_layer:
+                # print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆2: {list(overlapping_second_layer)}")
             
-            all_memories = all_first_layer_items + list(overlapping_second_layer)
+            # 使用集合去重
+            # 从每个来源随机选择2条记忆（如果有的话）
+            selected_first_layer = random.sample(all_first_layer_items, min(2, len(all_first_layer_items))) if all_first_layer_items else []
+            selected_second_layer = random.sample(list(overlapping_second_layer), min(2, len(overlapping_second_layer))) if overlapping_second_layer else []
             
-            if all_memories:  # 只在列表非空时选择随机项
-                random_item = choice(all_memories)
+            # 合并并去重
+            all_memories = list(set(selected_first_layer + selected_second_layer))
+            if all_memories:
+                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆: {all_memories}")
+                random_item = " ".join(all_memories)
                 memory_prompt = f"看到这些聊天，你想起来{random_item}\n"
             else:
                 memory_prompt = ""  # 如果没有记忆，则返回空字符串
@@ -112,7 +118,7 @@ class PromptBuilder:
         prompt_info = self.get_prompt_info(message_txt,threshold=0.5)
         if prompt_info:
             prompt_info = f'''\n----------------------------------------------------\n你有以下这些[知识]：\n{prompt_info}\n请你记住上面的[知识]，之后可能会用到\n----------------------------------------------------\n'''
-            promt_info_prompt = '你有一些[知识]，在上面可以参考。'
+            # promt_info_prompt = '你有一些[知识]，在上面可以参考。'
             
         end_time = time.time()
         print(f"\033[1;32m[知识检索]\033[0m 耗时: {(end_time - start_time):.3f}秒")
@@ -144,9 +150,9 @@ class PromptBuilder:
         prompt_personality = ''
         personality_choice = random.random()
         if personality_choice < 4/6:  # 第一种人格
-            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群,{promt_info_prompt},
+            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群,{promt_info_prompt},
             现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{is_bot_prompt}
-            请注意把握群里的聊天内容，不要回复的太有条理，可以有个性。'''
+            请注意把握群里的聊天内容，不要刻意突出自身学科背景，不要回复的太有条理，可以有个性。'''
         elif personality_choice < 1:  # 第二种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群,{promt_info_prompt},
             
@@ -179,9 +185,23 @@ class PromptBuilder:
         # prompt += f"{activate_prompt}\n"
         prompt += f"{prompt_personality}\n"
         prompt += f"{prompt_ger}\n"
-        prompt += f"{extra_info}\n"     
+        prompt += f"{extra_info}\n"    
         
-        return prompt
+        
+        
+        '''读空气prompt处理''' 
+
+        activate_prompt_check=f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"     
+        prompt_personality_check = ''
+        extra_check_info=f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
+        if personality_choice < 4/6:  # 第一种人格
+            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群,{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+        elif personality_choice < 1:  # 第二种人格
+            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群,{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+
+        prompt_check_if_response=f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
+        
+        return prompt,prompt_check_if_response
 
     def get_prompt_info(self,message:str,threshold:float):
         related_info = ''

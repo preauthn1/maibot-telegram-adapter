@@ -4,11 +4,15 @@ from typing import List
 from .message import Message
 import requests
 import numpy as np
-from .config import llm_config, global_config
+from .config import global_config
 import re
 from typing import Dict
 from collections import Counter
 import math
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config
 
 
 def combine_messages(messages: List[Message]) -> str:
@@ -64,7 +68,7 @@ def get_embedding(text):
         "encoding_format": "float"
     }
     headers = {
-        "Authorization": f"Bearer {llm_config.SILICONFLOW_API_KEY}",
+        "Authorization": f"Bearer {config.siliconflow_key}",
         "Content-Type": "application/json"
     }
     
@@ -181,6 +185,8 @@ def get_recent_group_detailed_plain_text(db, group_id: int, limit: int = 12,comb
     message_detailed_plain_text = ''
     message_detailed_plain_text_list = []
     
+    # 反转消息列表，使最新的消息在最后
+    recent_messages.reverse()
     
     if combine:
         for msg_db_data in recent_messages:

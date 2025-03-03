@@ -3,6 +3,10 @@ import sys
 import numpy as np
 import requests
 import time
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config  
 
 # 添加项目根目录到 Python 路径
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -13,12 +17,12 @@ from src.plugins.chat.config import llm_config
 
 # 直接配置数据库连接信息
 Database.initialize(
-    host= os.getenv("MONGODB_HOST"),
-    port= int(os.getenv("MONGODB_PORT")),
-    db_name=  os.getenv("DATABASE_NAME"),
-    username= os.getenv("MONGODB_USERNAME"),
-    password= os.getenv("MONGODB_PASSWORD"),
-    auth_source=os.getenv("MONGODB_AUTH_SOURCE")
+    host= config.mongodb_host,
+    port= int(config.mongodb_port),
+    db_name=  config.database_name,
+    username= config.mongodb_username,
+    password= config.mongodb_password,
+    auth_source=config.mongodb_auth_source
 )
 
 class KnowledgeLibrary:

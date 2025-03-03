@@ -11,16 +11,18 @@ from .relationship_manager import relationship_manager
 from ..schedule.schedule_generator import bot_schedule
 from .willing_manager import willing_manager
 
+
 # 获取驱动器
 driver = get_driver()
+config = driver.config
 
 Database.initialize(
-        host= os.getenv("MONGODB_HOST"),
-        port= int(os.getenv("MONGODB_PORT")),
-        db_name=  os.getenv("DATABASE_NAME"),
-        username= os.getenv("MONGODB_USERNAME"),
-        password= os.getenv("MONGODB_PASSWORD"),
-        auth_source=os.getenv("MONGODB_AUTH_SOURCE")
+        host= config.mongodb_host,
+        port= int(config.mongodb_port),
+        db_name= config.database_name,
+        username= config.mongodb_username,
+        password= config.mongodb_password,
+        auth_source= config.mongodb_auth_source
 )
 print("\033[1;32m[初始化数据库完成]\033[0m")
 
@@ -37,7 +39,7 @@ emoji_manager.initialize()
 
 print(f"\033[1;32m正在唤醒{global_config.BOT_NICKNAME}......\033[0m")
 # 创建机器人实例
-chat_bot = ChatBot(global_config)
+chat_bot = ChatBot()
 # 注册消息处理器
 group_msg = on_message()
 # 创建定时任务
@@ -50,6 +52,7 @@ async def start_background_tasks():
     """启动后台任务"""
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))
+    await bot_schedule.initialize()
     bot_schedule.print_schedule()
     
 @driver.on_startup
@@ -88,7 +91,7 @@ async def monitor_relationships():
 async def build_memory_task():
     """每30秒执行一次记忆构建"""
     print("\033[1;32m[记忆构建]\033[0m 开始构建记忆...")
-    hippocampus.build_memory(chat_size=12)
+    await hippocampus.build_memory(chat_size=30)
     print("\033[1;32m[记忆构建]\033[0m 记忆构建完成")
 
   

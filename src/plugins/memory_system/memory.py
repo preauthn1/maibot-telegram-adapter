@@ -1,19 +1,16 @@
 # -*- coding: utf-8 -*-
 import os
 import jieba
-from .llm_module import LLMModel
 import networkx as nx
 import matplotlib.pyplot as plt
-import math
 from collections import Counter
 import datetime
 import random
 import time
 from ..chat.config import global_config
-import sys
 from ...common.database import Database # 使用正确的导入语法
 from ..chat.utils import calculate_information_content, get_cloest_chat_from_db
-   
+from ..models.utils_model import LLM_request
 class Memory_graph:
     def __init__(self):
         self.G = nx.Graph()  # 使用 networkx 的图结构
@@ -169,8 +166,8 @@ class Memory_graph:
 class Hippocampus:
     def __init__(self,memory_graph:Memory_graph):
         self.memory_graph = memory_graph
-        self.llm_model = LLMModel()
-        self.llm_model_small = LLMModel(model_name="deepseek-ai/DeepSeek-V2.5")
+        self.llm_model = LLM_request(model = global_config.llm_normal,temperature=0.5)
+        self.llm_model_small = LLM_request(model = global_config.llm_normal_minor,temperature=0.5)
         
     def get_memory_sample(self,chat_size=20,time_frequency:dict={'near':2,'mid':4,'far':3}):
         current_timestamp = datetime.datetime.now().timestamp()
@@ -193,13 +190,29 @@ class Hippocampus:
             chat_text.append(chat_)
         return chat_text
     
-    def build_memory(self,chat_size=12):
+    async def memory_compress(self, input_text, rate=1):
+        information_content = calculate_information_content(input_text)
+        print(f"文本的信息量（熵）: {information_content:.4f} bits")
+        topic_num = max(1, min(5, int(information_content * rate / 4)))
+        topic_prompt = find_topic(input_text, topic_num)
+        topic_response = await self.llm_model.generate_response(topic_prompt)
+        # 检查 topic_response 是否为元组
+        if isinstance(topic_response, tuple):
+            topics = topic_response[0].split(",")  # 假设第一个元素是我们需要的字符串
+        else:
+            topics = topic_response.split(",")
+        compressed_memory = set()
+        for topic in topics:
+            topic_what_prompt = topic_what(input_text,topic)
+            topic_what_response = await self.llm_model_small.generate_response(topic_what_prompt)
+            compressed_memory.add((topic.strip(), topic_what_response[0]))  # 将话题和记忆作为元组存储
+        return compressed_memory
+    
+    async def build_memory(self,chat_size=12):
         #最近消息获取频率
         time_frequency = {'near':1,'mid':2,'far':2}
         memory_sample = self.get_memory_sample(chat_size,time_frequency)
         # print(f"\033[1;32m[记忆构建]\033[0m 获取记忆样本: {memory_sample}")   
-
-
         for i, input_text in enumerate(memory_sample, 1):
             #加载进度可视化
             progress = (i / len(memory_sample)) * 100
@@ -207,44 +220,23 @@ class Hippocampus:
             filled_length = int(bar_length * i // len(memory_sample))
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
             print(f"\n进度: [{bar}] {progress:.1f}% ({i}/{len(memory_sample)})")
-            
-            # 生成压缩后记忆
-            first_memory = set()
-            first_memory = self.memory_compress(input_text, 2.5)
-            # 延时防止访问超频
-            # time.sleep(5)
-            #将记忆加入到图谱中
-            for topic, memory in first_memory:
-                topics = segment_text(topic)
-                print(f"\033[1;34m话题\033[0m: {topic},节点: {topics}, 记忆: {memory}")
-                for split_topic in topics:
-                    self.memory_graph.add_dot(split_topic,memory)
-                for split_topic in topics:
-                    for other_split_topic in topics:
-                        if split_topic != other_split_topic:
-                            self.memory_graph.connect_dot(split_topic, other_split_topic)
-            
-            self.memory_graph.save_graph_to_db()
-    
-    def memory_compress(self, input_text, rate=1):
-        information_content = calculate_information_content(input_text)
-        print(f"文本的信息量（熵）: {information_content:.4f} bits")
-        topic_num = max(1, min(5, int(information_content * rate / 4)))
-        # print(topic_num)
-        topic_prompt = find_topic(input_text, topic_num)
-        topic_response = self.llm_model.generate_response(topic_prompt)
-        # 检查 topic_response 是否为元组
-        if isinstance(topic_response, tuple):
-            topics = topic_response[0].split(",")  # 假设第一个元素是我们需要的字符串
-        else:
-            topics = topic_response.split(",")
-        # print(topics)
-        compressed_memory = set()
-        for topic in topics:
-            topic_what_prompt = topic_what(input_text,topic)
-            topic_what_response = self.llm_model_small.generate_response(topic_what_prompt)
-            compressed_memory.add((topic.strip(), topic_what_response[0]))  # 将话题和记忆作为元组存储
-        return compressed_memory
+            if input_text:
+                # 生成压缩后记忆
+                first_memory = set()
+                first_memory = await self.memory_compress(input_text, 2.5)
+                #将记忆加入到图谱中
+                for topic, memory in first_memory:
+                    topics = segment_text(topic)
+                    print(f"\033[1;34m话题\033[0m: {topic},节点: {topics}, 记忆: {memory}")
+                    for split_topic in topics:
+                        self.memory_graph.add_dot(split_topic,memory)
+                    for split_topic in topics:
+                        for other_split_topic in topics:
+                            if split_topic != other_split_topic:
+                                self.memory_graph.connect_dot(split_topic, other_split_topic)
+            else:
+                print(f"空消息 跳过")
+        self.memory_graph.save_graph_to_db()
 
 
 def segment_text(text):
@@ -260,16 +252,19 @@ def topic_what(text, topic):
     return prompt
 
 
-    
+from nonebot import get_driver
+driver = get_driver()
+config = driver.config
+
 start_time = time.time()
 
 Database.initialize(
-    host= os.getenv("MONGODB_HOST"),
-    port= int(os.getenv("MONGODB_PORT")),
-    db_name=  os.getenv("DATABASE_NAME"),
-    username= os.getenv("MONGODB_USERNAME"),
-    password= os.getenv("MONGODB_PASSWORD"),
-    auth_source=os.getenv("MONGODB_AUTH_SOURCE")
+    host= config.mongodb_host,
+    port= int(config.mongodb_port),
+    db_name=  config.database_name,
+    username= config.mongodb_username,
+    password= config.mongodb_password,
+    auth_source=config.mongodb_auth_source
 )
 #创建记忆图
 memory_graph = Memory_graph()
