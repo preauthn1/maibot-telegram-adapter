@@ -28,7 +28,7 @@ class BotConfig:
     talk_frequency_down_groups = set()
     ban_user_id = set()
     
-    build_memory_interval: int = 600  # 记忆构建间隔（秒）
+    build_memory_interval: int = 60  # 记忆构建间隔（秒）
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     
@@ -138,13 +138,6 @@ class BotConfig:
             if "others" in toml_dict:
                 others_config = toml_dict["others"]
                 config.enable_advance_output = others_config.get("enable_advance_output", config.enable_advance_output)
-
-            # 自定义人设覆盖
-            config.PROMPT_PERSONALITY=[
-                "是一个计算机系大三女大学生，平时比较文静，喜欢打舞萌dx，你会刷贴吧，偶尔也会像贴吧老哥一样阴阳怪气，你正在浏览qq群",
-                "是一个计算机系大三女大学生，平时比较文静，喜欢打舞萌dx，你有黑色头发，你会刷小红书, 你正在浏览qq群"
-            ]
-            config.PROMPT_SCHEDULE_GEN="一个计算机系大三女大学生，喜欢刷qq，贴吧，知乎和小红书，还喜欢打舞萌dx，经常下午或者晚上去江二打舞萌，睡得比较晚，有时会熬夜"
 
             
             logger.success(f"成功加载配置文件: {config_path}")
