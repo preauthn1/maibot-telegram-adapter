@@ -11,13 +11,18 @@ from .relationship_manager import relationship_manager
 from ..schedule.schedule_generator import bot_schedule
 from .willing_manager import willing_manager
 
+
 # 获取驱动器
 driver = get_driver()
+config = driver.config
 
 Database.initialize(
-    global_config.MONGODB_HOST,
-    global_config.MONGODB_PORT,
-    global_config.DATABASE_NAME
+        host= config.mongodb_host,
+        port= int(config.mongodb_port),
+        db_name= config.database_name,
+        username= config.mongodb_username,
+        password= config.mongodb_password,
+        auth_source= config.mongodb_auth_source
 )
 print("\033[1;32m[初始化数据库完成]\033[0m")
 
@@ -34,7 +39,7 @@ emoji_manager.initialize()
 
 print(f"\033[1;32m正在唤醒{global_config.BOT_NICKNAME}......\033[0m")
 # 创建机器人实例
-chat_bot = ChatBot(global_config)
+chat_bot = ChatBot()
 # 注册消息处理器
 group_msg = on_message()
 # 创建定时任务

@@ -2,29 +2,21 @@ import datetime
 import os
 from typing import List, Dict
 from .schedule_llm_module import LLMModel
-from dotenv import load_dotenv
 from ...common.database import Database  # 使用正确的导入语法
 from ..chat.config import global_config
+from nonebot import get_driver
 
+driver = get_driver()
+config = driver.config
 
-# import sys
-# sys.path.append("C:/GitHub/MegMeg-bot")  # 添加项目根目录到 Python 路径
-# from src.plugins.schedule.schedule_llm_module import LLMModel
-# from src.common.database import Database  # 使用正确的导入语法
-
-# 获取当前文件的绝对路径
-#TODO: 这个好几个地方用需要封装
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-load_dotenv(os.path.join(root_dir, '.env'))
 
 Database.initialize(
-            host= os.getenv("MONGODB_HOST"),
-            port= int(os.getenv("MONGODB_PORT")),
-            db_name=  os.getenv("DATABASE_NAME"),
-            username= os.getenv("MONGODB_USERNAME"),
-            password= os.getenv("MONGODB_PASSWORD"),
-            auth_source=os.getenv("MONGODB_AUTH_SOURCE")
+            host= config.mongodb_host,
+            port= int(config.mongodb_port),
+            db_name=  config.database_name,
+            username= config.mongodb_username,
+            password= config.mongodb_password,
+            auth_source=config.mongodb_auth_source
         )
 
 class ScheduleGenerator:

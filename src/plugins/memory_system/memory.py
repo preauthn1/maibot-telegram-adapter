@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import jieba
 from .llm_module import LLMModel
 import networkx as nx
@@ -197,8 +198,6 @@ class Hippocampus:
         time_frequency = {'near':1,'mid':2,'far':2}
         memory_sample = self.get_memory_sample(chat_size,time_frequency)
         # print(f"\033[1;32m[记忆构建]\033[0m 获取记忆样本: {memory_sample}")   
-
-
         for i, input_text in enumerate(memory_sample, 1):
             #加载进度可视化
             progress = (i / len(memory_sample)) * 100
@@ -206,26 +205,25 @@ class Hippocampus:
             filled_length = int(bar_length * i // len(memory_sample))
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
             print(f"\n进度: [{bar}] {progress:.1f}% ({i}/{len(memory_sample)})")
-            
-            # 生成压缩后记忆
-            first_memory = set()
-            first_memory = self.memory_compress(input_text, 2.5)
-            # 延时防止访问超频
-            # time.sleep(60)
-            #将记忆加入到图谱中
-            for topic, memory in first_memory:
-                topics = segment_text(topic)
-                if '[' in topic or topic=='':
-                    continue
-                print(f"\033[1;34m话题\033[0m: {topic},节点: {topics}, 记忆: {memory}")
-                for split_topic in topics:
-                    self.memory_graph.add_dot(split_topic,memory)
-                for split_topic in topics:
-                    for other_split_topic in topics:
-                        if split_topic != other_split_topic:
-                            self.memory_graph.connect_dot(split_topic, other_split_topic)
-            
-            self.memory_graph.save_graph_to_db()
+            if input_text:
+                # 生成压缩后记忆
+                first_memory = set()
+                first_memory = self.memory_compress(input_text, 2.5)
+                # 延时防止访问超频
+                # time.sleep(5)
+                #将记忆加入到图谱中
+                for topic, memory in first_memory:
+                    topics = segment_text(topic)
+                    print(f"\033[1;34m话题\033[0m: {topic},节点: {topics}, 记忆: {memory}")
+                    for split_topic in topics:
+                        self.memory_graph.add_dot(split_topic,memory)
+                    for split_topic in topics:
+                        for other_split_topic in topics:
+                            if split_topic != other_split_topic:
+                                self.memory_graph.connect_dot(split_topic, other_split_topic)
+            else:
+                print(f"空消息 跳过")
+        self.memory_graph.save_graph_to_db()
     
     def memory_compress(self, input_text, rate=1):
         information_content = calculate_information_content(input_text)
@@ -263,13 +261,19 @@ def topic_what(text, topic):
     return prompt
 
 
-    
+from nonebot import get_driver
+driver = get_driver()
+config = driver.config
+
 start_time = time.time()
 
 Database.initialize(
-    global_config.MONGODB_HOST,
-    global_config.MONGODB_PORT,
-    global_config.DATABASE_NAME
+    host= config.mongodb_host,
+    port= int(config.mongodb_port),
+    db_name=  config.database_name,
+    username= config.mongodb_username,
+    password= config.mongodb_password,
+    auth_source=config.mongodb_auth_source
 )
 #创建记忆图
 memory_graph = Memory_graph()

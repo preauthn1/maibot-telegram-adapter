@@ -18,10 +18,9 @@ from .utils import is_mentioned_bot_in_txt, calculate_typing_time
 from ..memory_system.memory import memory_graph
 
 class ChatBot:
-    def __init__(self, config: BotConfig):
-        self.config = config
+    def __init__(self):
         self.storage = MessageStorage()
-        self.gpt = LLMResponseGenerator(config)
+        self.gpt = LLMResponseGenerator()
         self.bot = None  # bot 实例引用
         self._started = False
         
@@ -39,11 +38,11 @@ class ChatBot:
     async def handle_message(self, event: GroupMessageEvent, bot: Bot) -> None:
         """处理收到的群消息"""
         
-        if event.group_id not in self.config.talk_allowed_groups:
+        if event.group_id not in global_config.talk_allowed_groups:
             return
         self.bot = bot  # 更新 bot 实例
         
-        if event.user_id in self.config.ban_user_id:
+        if event.user_id in global_config.ban_user_id:
             return
         
         # 打印原始消息内容
@@ -121,7 +120,7 @@ class ChatBot:
             event.group_id, 
             topic[0] if topic else None,
             is_mentioned,
-            self.config,
+            global_config,
             event.user_id,
             message.is_emoji,
             interested_rate
@@ -147,10 +146,14 @@ class ChatBot:
                 thinking_message.interupt=True
             
             # 如果生成了回复，发送并记录
-            
+        
+        '''
+        生成回复后的内容
+        
+        '''    
             
         if response:
-            message_set = MessageSet(event.group_id, self.config.BOT_QQ, think_id)
+            message_set = MessageSet(event.group_id, global_config.BOT_QQ, think_id)
             accu_typing_time = 0
             for msg in response:
                 print(f"当前消息: {msg}")
@@ -161,7 +164,7 @@ class ChatBot:
                 
                 bot_message = Message(
                     group_id=event.group_id,
-                    user_id=self.config.BOT_QQ,
+                    user_id=global_config.BOT_QQ,
                     message_id=think_id,
                     message_based_id=event.message_id,
                     raw_message=msg,
@@ -178,7 +181,7 @@ class ChatBot:
     
             
             bot_response_time = tinking_time_point
-            if random() < self.config.emoji_chance:
+            if random() < global_config.emoji_chance:
                 emoji_path = await emoji_manager.get_emoji_for_emotion(emotion)
                 if emoji_path:
                     emoji_cq = CQCode.create_emoji_cq(emoji_path)
@@ -190,7 +193,7 @@ class ChatBot:
                         
                     bot_message = Message(
                             group_id=event.group_id,
-                            user_id=self.config.BOT_QQ,
+                            user_id=global_config.BOT_QQ,
                             message_id=0,
                             raw_message=emoji_cq,
                             plain_text=emoji_cq,

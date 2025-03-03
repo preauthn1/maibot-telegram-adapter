@@ -1,14 +1,17 @@
 from typing import Optional, Dict, List
 from openai import OpenAI
 from .message import Message
-from .config import global_config, llm_config
 import jieba
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config  
 
 class TopicIdentifier:
     def __init__(self):
         self.client = OpenAI(
-            api_key=llm_config.SILICONFLOW_API_KEY,
-            base_url=llm_config.SILICONFLOW_BASE_URL
+            api_key=config.siliconflow_key,
+            base_url=config.siliconflow_base_url
         )
         
     def identify_topic_llm(self, text: str) -> Optional[str]:

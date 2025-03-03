@@ -10,9 +10,13 @@ import hashlib
 from datetime import datetime
 import base64
 import shutil
-from .config import global_config, llm_config
 import asyncio
 import time
+
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config
 
 
 class EmojiManager:
@@ -93,7 +97,7 @@ class EmojiManager:
             # 准备请求数据
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {llm_config.SILICONFLOW_API_KEY}"
+                "Authorization": f"Bearer {config.siliconflow_key}"
             }
             
             payload = {
@@ -115,7 +119,7 @@ class EmojiManager:
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{llm_config.SILICONFLOW_BASE_URL}chat/completions",
+                    f"{config.siliconflow_base_url}chat/completions",
                     headers=headers,
                     json=payload
                 ) as response:
@@ -249,7 +253,7 @@ class EmojiManager:
         async with aiohttp.ClientSession() as session:
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {llm_config.SILICONFLOW_API_KEY}"
+                "Authorization": f"Bearer {config.siliconflow_key}"
             }
             
             payload = {
@@ -276,7 +280,7 @@ class EmojiManager:
             }
             
             async with session.post(
-                f"{llm_config.SILICONFLOW_BASE_URL}chat/completions",
+                f"{config.siliconflow_base_url}chat/completions",
                 headers=headers,
                 json=payload
             ) as response:

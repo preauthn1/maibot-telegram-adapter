@@ -7,6 +7,10 @@ from ...common.database import Database
 import zlib  # 用于 CRC32
 import base64
 from .config import global_config
+from nonebot import get_driver
+
+driver = get_driver()
+config = driver.config
 
 
 def storage_image(image_data: bytes,type: str, max_size: int = 200) -> bytes:
@@ -37,12 +41,12 @@ def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
         
         # 连接数据库
         db = Database(
-            host=global_config.MONGODB_HOST,
-            port=global_config.MONGODB_PORT,
-            db_name=global_config.DATABASE_NAME,
-            username=global_config.MONGODB_USERNAME,
-            password=global_config.MONGODB_PASSWORD,
-            auth_source=global_config.MONGODB_AUTH_SOURCE
+            host= config.mongodb_host,
+            port= int(config.mongodb_port),
+            db_name=  config.database_name,
+            username= config.mongodb_username,
+            password= config.mongodb_password,
+            auth_source=config.mongodb_auth_source
         )
         
         # 检查是否已存在相同哈希值的图片

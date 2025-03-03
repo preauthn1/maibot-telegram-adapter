@@ -1,6 +1,5 @@
 import time
 import random
-from dotenv import load_dotenv
 from ..schedule.schedule_generator import bot_schedule
 import os
 from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text
@@ -9,11 +8,6 @@ from .config import global_config
 from .topic_identifier import topic_identifier
 from ..memory_system.memory import memory_graph
 from random import choice
-
-# 获取当前文件的绝对路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))
-load_dotenv(os.path.join(root_dir, '.env'))
 
 
 class PromptBuilder:
@@ -72,12 +66,15 @@ class PromptBuilder:
                             overlapping_second_layer.update(overlap)
             
             # 合并所有需要的记忆
-            if all_first_layer_items:   
-                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆1: {all_first_layer_items}")
-            if overlapping_second_layer:
-                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆2: {list(overlapping_second_layer)}")
+            # if all_first_layer_items:   
+                # print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆1: {all_first_layer_items}")
+            # if overlapping_second_layer:
+                # print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆2: {list(overlapping_second_layer)}")
             
-            all_memories = all_first_layer_items + list(overlapping_second_layer)
+            # 使用集合去重
+            all_memories = list(set(all_first_layer_items) | set(overlapping_second_layer))
+            if all_memories:
+                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆: {all_memories}")
             
             if all_memories:  # 只在列表非空时选择随机项
                 random_item = choice(all_memories)
@@ -186,15 +183,19 @@ class PromptBuilder:
         # prompt += f"{activate_prompt}\n"
         prompt += f"{prompt_personality}\n"
         prompt += f"{prompt_ger}\n"
-        prompt += f"{extra_info}\n"     
+        prompt += f"{extra_info}\n"    
+        
+        
+        
+        '''读空气prompt处理''' 
 
-        activate_prompt_check=f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。不要太受现在做的事情影响，因为摸鱼是很正常的。"     
+        activate_prompt_check=f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"     
         prompt_personality_check = ''
-        extra_check_info=f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息,无论如何一定要回复，如果是刚刚理会过的人发送消息，且还在与那个人对话中的话一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
+        extra_check_info=f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
         if personality_choice < 4/6:  # 第一种人格
-            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[0]},{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群,{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
         elif personality_choice < 1:  # 第二种人格
-            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[1]},{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群,{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
 
         prompt_check_if_response=f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
         

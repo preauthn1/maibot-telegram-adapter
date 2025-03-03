@@ -14,6 +14,7 @@ reasoning_content.bat
 reasoning_window.bat
 queue_update.txt
 memory_graph.gml
+.env.dev
 
 
 # Byte-compiled / optimized / DLL files
