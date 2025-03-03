@@ -37,7 +37,10 @@ def combine_messages(messages: List[Message]) -> str:
 def db_message_to_str (message_dict: Dict) -> str:
     print(f"message_dict: {message_dict}")
     time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(message_dict["time"]))
-    name = message_dict.get("user_nickname", "") or f"用户{message_dict['user_id']}"
+    try:
+        name="[(%s)%s]%s" % (message_dict['user_id'],message_dict.get("user_nickname", ""),message_dict.get("user_cardname", ""))
+    except:
+        name = message_dict.get("user_nickname", "") or f"用户{message_dict['user_id']}"
     content = message_dict.get("processed_plain_text", "")
     result = f"[{time_str}] {name}: {content}\n"
     print(f"result: {result}")

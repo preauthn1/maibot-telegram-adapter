@@ -274,8 +274,8 @@ class LLMResponseGenerator:
         for msg_dict in messages_list:
             time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(msg_dict['time']))
             display_name = msg_dict.get('user_nickname', f"用户{msg_dict['user_id']}")
-            cardname = msg_dict.get('user_cardname', f"用户{msg_dict['user_id']}")
-            display_name = f"[({msg_dict['user_id']}){display_name}]{cardname}"
+            cardname = msg_dict.get('user_cardname', '')
+            display_name = f"[({msg_dict['user_id']}){display_name}]{cardname}" if cardname!='' else display_name
             content = msg_dict.get('processed_plain_text', msg_dict['plain_text'])
             
             group_chat += f"[{time_str}] {display_name}: {content}\n"

@@ -56,6 +56,7 @@ class MessageStream:
                     "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(msg.time)),
                     "user_id": msg.user_id,
                     "user_nickname": msg.user_nickname,
+                    "user_cardname": msg.user_cardname,
                     "message_id": msg.message_id,
                     "raw_message": msg.raw_message,
                     "processed_text": msg.processed_plain_text
@@ -130,7 +131,7 @@ class MessageStream:
                     "time": 1,
                     "user_id": 1,
                     "user_nickname": 1,
-                    "user_cardname": 1,
+                    # "user_cardname": 1,
                     "message_id": 1,
                     "raw_message": 1,
                     "processed_text": 1
