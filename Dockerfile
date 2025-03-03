@@ -13,5 +13,6 @@ RUN pip install --upgrade -r requirements.txt
 COPY . .
 
 VOLUME [ "/MaiMBot/config" ]
+VOLUME [ "/MaiMBot/data" ]
 EXPOSE 8080
 ENTRYPOINT [ "nb","run" ]
