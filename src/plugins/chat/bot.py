@@ -171,7 +171,6 @@ class ChatBot:
                     group_id=event.group_id,
                     user_id=global_config.BOT_QQ,
                     message_id=think_id,
-                    message_based_id=event.message_id,
                     raw_message=msg,
                     plain_text=msg,
                     processed_plain_text=msg,

@@ -100,3 +100,7 @@
 感谢各位大佬！
 
 [![Contributors](https://contributors-img.web.app/image?repo=SengokuCola/MaiMBot)](https://github.com/SengokuCola/MaiMBot/graphs/contributors)
+
+
+## Stargazers over time
+[![Stargazers over time](https://starchart.cc/SengokuCola/MaiMBot.svg?variant=adaptive)](https://starchart.cc/SengokuCola/MaiMBot)
