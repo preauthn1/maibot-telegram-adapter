@@ -166,8 +166,8 @@ class LLM_request:
         # 发送请求到完整的chat/completions端点
         api_url = f"{self.base_url.rstrip('/')}/chat/completions"
         
-        max_retries = 3
-        base_wait_time = 15
+        max_retries = 2
+        base_wait_time = 6
         
         for retry in range(max_retries):
             try:

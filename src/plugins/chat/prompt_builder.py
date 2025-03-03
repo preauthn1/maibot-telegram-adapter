@@ -118,7 +118,7 @@ class PromptBuilder:
         prompt_info = self.get_prompt_info(message_txt,threshold=0.5)
         if prompt_info:
             prompt_info = f'''\n----------------------------------------------------\n你有以下这些[知识]：\n{prompt_info}\n请你记住上面的[知识]，之后可能会用到\n----------------------------------------------------\n'''
-            promt_info_prompt = '你有一些[知识]，在上面可以参考。'
+            # promt_info_prompt = '你有一些[知识]，在上面可以参考。'
             
         end_time = time.time()
         print(f"\033[1;32m[知识检索]\033[0m 耗时: {(end_time - start_time):.3f}秒")
