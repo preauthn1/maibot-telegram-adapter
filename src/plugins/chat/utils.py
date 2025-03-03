@@ -196,6 +196,8 @@ def get_recent_group_detailed_plain_text(db, group_id: int, limit: int = 12,comb
     message_detailed_plain_text = ''
     message_detailed_plain_text_list = []
     
+    # 反转消息列表，使最新的消息在最后
+    recent_messages.reverse()
     
     if combine:
         for msg_db_data in recent_messages:

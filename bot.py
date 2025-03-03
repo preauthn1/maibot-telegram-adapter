@@ -25,7 +25,7 @@ else:
 # 根据 ENVIRONMENT 加载对应的环境配置
 env = os.getenv("ENVIRONMENT")
 env_file = f".env.{env}"
-    
+
 if env_file == ".env.dev" and os.path.exists(env_file):
     logger.success("加载开发环境变量配置")
     load_dotenv(env_file, override=True)  # override=True 允许覆盖已存在的环境变量
