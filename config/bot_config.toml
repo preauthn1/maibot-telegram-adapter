@@ -1,11 +1,11 @@
 [bot]
-qq = 123
-nickname = "麦麦"
+qq = 3488737411
+nickname = "小千"
 
 [message]
 min_text_length = 2
 max_context_size = 15
-emoji_chance = 0.2
+emoji_chance = 0.0
 
 [emoji]
 check_interval = 120
@@ -29,8 +29,7 @@ enable_advance_output = true
 
 [groups]
 talk_allowed = [
-    123,
-    123,
+    583449463
 ]
 talk_frequency_down = []
 ban_user_id = []

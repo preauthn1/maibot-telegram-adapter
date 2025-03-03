@@ -61,7 +61,7 @@ class WillingManager:
         if is_mentioned_bot and user_id == int(964959351):
             reply_probability = 1
             
-        return reply_probability+0.5
+        return reply_probability
     
     def change_reply_willing_sent(self, group_id: int):
         """开始思考后降低群组的回复意愿"""
