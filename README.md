@@ -11,12 +11,12 @@
 
 ## 📝 项目简介
 
-**麦麦是一个基于大语言模型的智能QQ群聊机器人**
+**🍔麦麦是一个基于大语言模型的智能QQ群聊机器人**
 
 - 🤖 基于 nonebot2 框架开发
 - 🧠 LLM 提供对话能力
 - 💾 MongoDB 提供数据持久化支持
-- 🌐 NapCat 作为QQ协议端支持
+- 🐧 NapCat 作为QQ协议端支持
 
 <div align="center">
 <a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
