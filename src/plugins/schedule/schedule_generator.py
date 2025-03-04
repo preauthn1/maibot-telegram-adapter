@@ -5,6 +5,7 @@ from ...common.database import Database  # 使用正确的导入语法
 from src.plugins.chat.config import global_config
 from nonebot import get_driver
 from ..models.utils_model import LLM_request
+from loguru import logger
 
 driver = get_driver()
 config = driver.config
@@ -42,8 +43,6 @@ class ScheduleGenerator:
         self.yesterday_schedule_text, self.yesterday_schedule = await self.generate_daily_schedule(target_date=yesterday,read_only=True)
             
     async def generate_daily_schedule(self, target_date: datetime.datetime = None,read_only:bool = False) -> Dict[str, str]:
-        if target_date is None:
-            target_date = datetime.datetime.now()
             
         date_str = target_date.strftime("%Y-%m-%d")
         weekday = target_date.strftime("%A")
@@ -65,7 +64,11 @@ class ScheduleGenerator:
             3. 晚上的计划和休息时间
             请按照时间顺序列出具体时间点和对应的活动，用一个时间点而不是时间段来表示时间，用逗号,隔开时间与活动，格式为"时间,活动"，例如"08:00,起床"。"""
             
-            schedule_text, _ = await self.llm_scheduler.generate_response(prompt)
+            try:
+                schedule_text, _ = await self.llm_scheduler.generate_response(prompt)
+            except Exception as e:
+                logger.error(f"生成日程失败: {str(e)}")
+                schedule_text = "生成日程时出错了"
             # print(self.schedule_text)
             self.db.db.schedule.insert_one({"date": date_str, "schedule": schedule_text})
         else:

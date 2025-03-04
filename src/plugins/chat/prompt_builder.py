@@ -255,15 +255,9 @@ class PromptBuilder:
 
     def get_prompt_info(self,message:str,threshold:float):
         related_info = ''
-        if len(message) > 10:
-            message_segments = [message[i:i+10] for i in range(0, len(message), 10)]
-            for segment in message_segments:
-                embedding = get_embedding(segment)
-                related_info += self.get_info_from_db(embedding,threshold=threshold)
-                
-        else:
-            embedding = get_embedding(message)
-            related_info += self.get_info_from_db(embedding,threshold=threshold)
+        print(f"\033[1;34m[调试]\033[0m 获取知识库内容，元消息：{message[:30]}...，消息长度: {len(message)}")
+        embedding = get_embedding(message)
+        related_info += self.get_info_from_db(embedding,threshold=threshold)
             
         return related_info
 

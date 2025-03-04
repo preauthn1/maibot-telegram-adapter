@@ -69,10 +69,10 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}", exc_info=True)
-                    return f"请求失败: {str(e)}", ""
+                    raise RuntimeError(f"API请求失败: {str(e)}")
         
         logger.error("达到最大重试次数，请求仍然失败")
-        return "达到最大重试次数，请求仍然失败", ""
+        raise RuntimeError("达到最大重试次数，API请求仍然失败")
 
     async def generate_response_for_image(self, prompt: str, image_base64: str) -> Tuple[str, str]:
         """根据输入的提示和图片生成模型的异步响应"""
@@ -137,10 +137,10 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}", exc_info=True)
-                    return f"请求失败: {str(e)}", ""
+                    raise RuntimeError(f"API请求失败: {str(e)}")
         
         logger.error("达到最大重试次数，请求仍然失败")
-        return "达到最大重试次数，请求仍然失败", ""
+        raise RuntimeError("达到最大重试次数，API请求仍然失败")
 
     def generate_response_for_image_sync(self, prompt: str, image_base64: str) -> Tuple[str, str]:
         """同步方法：根据输入的提示和图片生成模型的响应"""
@@ -205,10 +205,10 @@ class LLM_request:
                     time.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}", exc_info=True)
-                    return f"请求失败: {str(e)}", ""
+                    raise RuntimeError(f"API请求失败: {str(e)}")
         
         logger.error("达到最大重试次数，请求仍然失败")
-        return "达到最大重试次数，请求仍然失败", ""
+        raise RuntimeError("达到最大重试次数，API请求仍然失败")
 
     def get_embedding_sync(self, text: str, model: str = "BAAI/bge-m3") -> Union[list, None]:
         """同步方法：获取文本的embedding向量

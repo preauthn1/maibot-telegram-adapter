@@ -77,21 +77,6 @@ class Message:
             name = self.user_nickname or f"用户{self.user_id}"
         content = self.processed_plain_text
         self.detailed_plain_text = f"[{time_str}] {name}: {content}\n"
-                
-        
-    def get_groupname(self, group_id: int) -> str:
-        if not group_id:
-            return "未知群"
-        group_id = int(group_id)    
-        # 使用数据库单例
-        db = Database.get_instance()
-        # 查找用户，打印查询条件和结果
-        query = {'group_id': group_id}
-        group = db.db.group_info.find_one(query)
-        if group:
-            return group.get('group_name')
-        else:
-            return f"群{group_id}"
     
     def parse_message_segments(self, message: str) -> List[CQCode]:
         """
@@ -168,45 +153,52 @@ class Message_Thinking:
         self.message_id = message_id
         
         # 思考状态相关属性
-        self.thinking_text = "正在思考..."
-        self.time = int(time.time())
+        self.thinking_start_time = int(time.time())
         self.thinking_time = 0
         self.interupt=False
     
     def update_thinking_time(self):
-        self.thinking_time = round(time.time(), 2) - self.time
+        self.thinking_time = round(time.time(), 2) - self.thinking_start_time
     
-    @property
-    def processed_plain_text(self) -> str:
-        """获取处理后的文本"""
-        return self.thinking_text
+
+@dataclass
+class Message_Sending(Message):
+    """发送中的消息类"""
+    thinking_start_time: float = None  # 思考开始时间
+    thinking_time: float = None  # 思考时间
     
-    def __str__(self) -> str:
-        return f"[思考中] 群:{self.group_id} 用户:{self.user_nickname} 时间:{self.time} 消息ID:{self.message_id}"
-        
-        
+    reply_message_id: int = None  # 存储 回复的 源消息ID
+    
+    def update_thinking_time(self):
+        self.thinking_time = round(time.time(), 2) - self.thinking_start_time
+        return self.thinking_time
+
+
+       
 class MessageSet:
-    """消息集合类，可以存储多个相关的消息"""
+    """消息集合类，可以存储多个发送消息"""
     def __init__(self, group_id: int, user_id: int, message_id: str):
         self.group_id = group_id
         self.user_id = user_id
         self.message_id = message_id
-        self.messages: List[Message] = []
+        self.messages: List[Message_Sending] = []  # 修改类型标注
         self.time = round(time.time(), 2)
         
-    def add_message(self, message: Message) -> None:
-        """添加消息到集合"""
+    def add_message(self, message: Message_Sending) -> None:
+        """添加消息到集合，只接受Message_Sending类型"""
+        if not isinstance(message, Message_Sending):
+            raise TypeError("MessageSet只能添加Message_Sending类型的消息")
         self.messages.append(message)
         # 按时间排序
         self.messages.sort(key=lambda x: x.time)
         
-    def get_message_by_index(self, index: int) -> Optional[Message]:
+    def get_message_by_index(self, index: int) -> Optional[Message_Sending]:
         """通过索引获取消息"""
         if 0 <= index < len(self.messages):
             return self.messages[index]
         return None
         
-    def get_message_by_time(self, target_time: float) -> Optional[Message]:
+    def get_message_by_time(self, target_time: float) -> Optional[Message_Sending]:
         """获取最接近指定时间的消息"""
         if not self.messages:
             return None
@@ -227,7 +219,7 @@ class MessageSet:
         """清空所有消息"""
         self.messages.clear()
         
-    def remove_message(self, message: Message) -> bool:
+    def remove_message(self, message: Message_Sending) -> bool:
         """移除指定消息"""
         if message in self.messages:
             self.messages.remove(message)
@@ -241,40 +233,4 @@ class MessageSet:
         return len(self.messages)
         
 
-@dataclass
-class Message_Sending(Message):
-    """发送消息数据类，继承自Message类"""
-    
-    priority: int = 0  # 发送优先级，数字越大优先级越高
-    wait_until: float = None  # 等待发送的时间戳
-    continue_thinking: bool = False  # 是否继续思考
-    
-    def __post_init__(self):
-        super().__post_init__()
-        if self.wait_until is None:
-            self.wait_until = self.time
-            
-    @property
-    def can_send(self) -> bool:
-        """检查是否可以发送消息"""
-        return time.time() >= self.wait_until
-        
-    def set_wait_time(self, seconds: float) -> None:
-        """设置等待发送时间"""
-        self.wait_until = time.time() + seconds
-        
-    def set_priority(self, priority: int) -> None:
-        """设置发送优先级"""
-        self.priority = priority
-        
-    def __lt__(self, other):
-        """重写小于比较，用于优先级排序"""
-        if not isinstance(other, Message_Sending):
-            return NotImplemented
-        return (self.priority, -self.wait_until) < (other.priority, -other.wait_until)
-
-        
-        
-        
-        
     
