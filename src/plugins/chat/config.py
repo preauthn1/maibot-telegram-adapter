@@ -31,12 +31,15 @@ class BotConfig:
     build_memory_interval: int = 60  # 记忆构建间隔（秒）
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
+
+    ban_words = set()
     
     # 模型配置
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
     llm_reasoning_minor: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
+    embedding: Dict[str, str] = field(default_factory=lambda: {})
     vlm: Dict[str, str] = field(default_factory=lambda: {})
     
     API_USING: str = "siliconflow"  # 使用的API
@@ -50,8 +53,8 @@ class BotConfig:
 
     # 默认人设
     PROMPT_PERSONALITY=[
-        "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧，你正在浏览qq群",
-        "是一个女大学生，你有黑色头发，你会刷小红书, 你正在浏览qq群"
+        "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧",
+        "是一个女大学生，你有黑色头发，你会刷小红书"
     ]
     PROMPT_SCHEDULE_GEN="一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
     
@@ -126,7 +129,8 @@ class BotConfig:
                 config.MIN_TEXT_LENGTH = msg_config.get("min_text_length", config.MIN_TEXT_LENGTH)
                 config.MAX_CONTEXT_SIZE = msg_config.get("max_context_size", config.MAX_CONTEXT_SIZE)
                 config.emoji_chance = msg_config.get("emoji_chance", config.emoji_chance)
-            
+                config.ban_words=msg_config.get("ban_words",config.ban_words)
+
             if "memory" in toml_dict:
                 memory_config = toml_dict["memory"]
                 config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)

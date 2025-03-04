@@ -6,6 +6,9 @@ nickname = "麦麦"
 min_text_length = 2 # 与麦麦聊天时麦麦只会回答文本大于等于此数的消息
 max_context_size = 15 # 麦麦获得的上下文数量，超出数量后自动丢弃
 emoji_chance = 0.2 # 麦麦使用表情包的概率
+ban_words = [
+    # "403","张三"
+    ]
 
 [emoji]
 check_interval = 120 # 检查表情包的时间间隔
@@ -67,5 +70,10 @@ key = "SILICONFLOW_KEY"
 
 [model.vlm] #图像识别
 name = "deepseek-ai/deepseek-vl2"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
+
+[model.embedding] #嵌入
+name = "BAAI/bge-m3"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"

@@ -153,3 +153,41 @@ class ResponseGenerator:
         processed_response = process_llm_response(content)
         
         return processed_response, emotion_tags
+
+
+class InitiativeMessageGenerate:
+    def __init__(self):
+        self.db = Database.get_instance()
+        self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7)
+        self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7)
+        self.model_r1_distill = LLM_request(
+            model=global_config.llm_reasoning_minor, temperature=0.7
+        )
+
+    def gen_response(self, message: Message):
+        topic_select_prompt, dots_for_select, prompt_template = (
+            prompt_builder._build_initiative_prompt_select(message.group_id)
+        )
+        content_select, reasoning = self.model_v3.generate_response(topic_select_prompt)
+        print(f"[DEBUG] {content_select} {reasoning}")
+        topics_list = [dot[0] for dot in dots_for_select]
+        if content_select:
+            if content_select in topics_list:
+                select_dot = dots_for_select[topics_list.index(content_select)]
+            else:
+                return None
+        else:
+            return None
+        prompt_check, memory = prompt_builder._build_initiative_prompt_check(
+            select_dot[1], prompt_template
+        )
+        content_check, reasoning_check = self.model_v3.generate_response(prompt_check)
+        print(f"[DEBUG] {content_check} {reasoning_check}")
+        if "yes" not in content_check.lower():
+            return None
+        prompt = prompt_builder._build_initiative_prompt(
+            select_dot, prompt_template, memory
+        )
+        content, reasoning = self.model_r1.generate_response(prompt)
+        print(f"[DEBUG] {content} {reasoning}")
+        return content
