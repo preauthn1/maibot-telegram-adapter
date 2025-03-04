@@ -32,7 +32,7 @@ class BotConfig:
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
 
-    ban_words: list[str] = [] #违禁词
+    ban_words = set()
     
     # 模型配置
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
