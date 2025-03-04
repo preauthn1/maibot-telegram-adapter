@@ -54,9 +54,9 @@ else:
     exit(1)
 
 # 检测Key是否存在
-if not os.getenv("DEEP_SEEK_KEY") and not os.getenv("SILICONFLOW_KEY") and not os.getenv("CHAT_ANY_WHERE_KEY"):
+if not os.getenv("SILICONFLOW_KEY"):
     logger.error("缺失必要的API KEY")
-    logger.info(f"请至少在.env.{os.getenv('ENVIRONMENT')}文件中填写SILICONFLOW_KEY后重新启动")
+    logger.error(f"请至少在.env.{os.getenv('ENVIRONMENT')}文件中填写SILICONFLOW_KEY后重新启动")
     exit(1)
 
 # 获取所有环境变量
