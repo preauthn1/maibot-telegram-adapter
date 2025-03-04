@@ -37,9 +37,9 @@ class WillingManager:
             current_willing *= 0.15
             print(f"表情包, 当前意愿: {current_willing}")
         
-        if interested_rate > 0.6:
+        if interested_rate > 0.65:
             print(f"兴趣度: {interested_rate}, 当前意愿: {current_willing}")
-            current_willing += interested_rate-0.45
+            current_willing += interested_rate-0.5
         
         self.group_reply_willing[group_id] = min(current_willing, 3.0)
         
