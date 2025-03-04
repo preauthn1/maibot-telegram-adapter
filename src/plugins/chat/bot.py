@@ -94,6 +94,13 @@ class ChatBot:
             plain_text=event.get_plaintext(),
             reply_message=event.reply,
         )
+
+        # 过滤词
+        for word in global_config.ban_words:
+            if word in message.detailed_plain_text:
+                print(f"\033[1;32m[{current_time}][{message.group_name}]{message.user_nickname}:\033[0m {message.processed_plain_text}")
+                print(f"\033[1;32m[过滤词识别]\033[0m 消息中含有{word}，filtered")
+                return
         
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.time))
 

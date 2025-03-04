@@ -31,12 +31,15 @@ class BotConfig:
     build_memory_interval: int = 60  # 记忆构建间隔（秒）
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
+
+    ban_words: list[str] = [] #违禁词
     
     # 模型配置
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
     llm_reasoning_minor: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
+    embedding: Dict[str, str] = field(default_factory=lambda: {})
     vlm: Dict[str, str] = field(default_factory=lambda: {})
     
     API_USING: str = "siliconflow"  # 使用的API
@@ -126,7 +129,8 @@ class BotConfig:
                 config.MIN_TEXT_LENGTH = msg_config.get("min_text_length", config.MIN_TEXT_LENGTH)
                 config.MAX_CONTEXT_SIZE = msg_config.get("max_context_size", config.MAX_CONTEXT_SIZE)
                 config.emoji_chance = msg_config.get("emoji_chance", config.emoji_chance)
-            
+                config.ban_words=msg_config.get("banwords",config.ban_words)
+
             if "memory" in toml_dict:
                 memory_config = toml_dict["memory"]
                 config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
