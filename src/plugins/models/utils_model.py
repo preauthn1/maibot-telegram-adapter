@@ -6,6 +6,7 @@ from typing import Tuple, Union
 from nonebot import get_driver
 from loguru import logger
 from ..chat.config import global_config
+from ..chat.utils_image import compress_base64_image_by_scale
 
 driver = get_driver()
 config = driver.config
@@ -82,27 +83,28 @@ class LLM_request:
         }
         
         # 构建请求体
-        data = {
-            "model": self.model_name,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
+        def build_request_data(img_base64: str):
+            return {
+                "model": self.model_name,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{img_base64}"
+                                }
                             }
-                        }
-                    ]
-                }
-            ],
-            **self.params
-        }
+                        ]
+                    }
+                ],
+                **self.params
+            }
         
         # 发送请求到完整的chat/completions端点
         api_url = f"{self.base_url.rstrip('/')}/chat/completions"
@@ -110,15 +112,21 @@ class LLM_request:
         
         max_retries = 3
         base_wait_time = 15
+        current_image_base64 = image_base64
         
         for retry in range(max_retries):
             try:
+                data = build_request_data(current_image_base64)
                 async with aiohttp.ClientSession() as session:
                     async with session.post(api_url, headers=headers, json=data) as response:
                         if response.status == 429:
                             wait_time = base_wait_time * (2 ** retry)  # 指数退避
                             logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
                             await asyncio.sleep(wait_time)
+                            continue
+                        elif response.status == 413:
+                            logger.warning("图片太大(413)，尝试压缩...")
+                            current_image_base64 = compress_base64_image_by_scale(current_image_base64)
                             continue
                             
                         response.raise_for_status()  # 检查其他响应状态
