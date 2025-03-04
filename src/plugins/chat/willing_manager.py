@@ -50,7 +50,7 @@ class WillingManager:
         
         self.group_reply_willing[group_id] = min(current_willing, 3.0)
         
-        reply_probability = (current_willing - 0.5) * 2
+        reply_probability = max((current_willing - 0.5) * 2, 0)
         if group_id not in config.talk_allowed_groups:
             current_willing = 0
             reply_probability = 0
@@ -60,7 +60,8 @@ class WillingManager:
             
         # if is_mentioned_bot and user_id == int(123456784):
         #     reply_probability = 1
-            
+
+        reply_probability = min(reply_probability, 1)
         return reply_probability
     
     def change_reply_willing_sent(self, group_id: int):
