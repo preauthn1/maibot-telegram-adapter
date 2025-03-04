@@ -12,7 +12,19 @@ config = driver.config
 
 class TopicIdentifier:
     def __init__(self):
-        self.llm_client = LLM_request(model=global_config.llm_normal)
+        self.llm_client = LLM_request(model=global_config.llm_topic_extract)
+        self.select=global_config.topic_extract
+
+    def identify_topic(self):
+        if self.select=='jieba':
+            return self.identify_topic_jieba
+        elif self.select=='snownlp':
+            return self.identify_topic_snownlp
+        elif self.select=='llm':
+            return self.identify_topic_llm
+        else:
+            return self.identify_topic_snownlp
+
         
     async def identify_topic_llm(self, text: str) -> Optional[List[str]]:
         """识别消息主题，返回主题列表"""

@@ -55,6 +55,8 @@ ban_user_id = []  #禁止回复消息的QQ号
 #base_url = "DEEP_SEEK_BASE_URL"
 #key = "DEEP_SEEK_KEY"
 
+#下面的模型若使用硅基流动则不需要更改，使用ds官方则改成.env.prod自定义的宏，使用自定义模型则选择定位相似的模型自己填写
+
 [model.llm_reasoning] #R1
 name = "Pro/deepseek-ai/DeepSeek-R1"
 base_url = "SILICONFLOW_BASE_URL"
@@ -82,5 +84,14 @@ key = "SILICONFLOW_KEY"
 
 [model.embedding] #嵌入
 name = "BAAI/bge-m3"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
+
+# 主题提取，jieba和snownlp不用api，llm需要api
+[topic]
+topic='llm' # 只支持jieba,snownlp,llm三种选项
+
+[topic.llm_topic]
+name = "Pro/deepseek-ai/DeepSeek-V3"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
