@@ -89,7 +89,7 @@ key = "SILICONFLOW_KEY"
 
 # 主题提取，jieba和snownlp不用api，llm需要api
 [topic]
-topic='llm' # 只支持jieba,snownlp,llm三种选项
+topic_extract='snownlp' # 只支持jieba,snownlp,llm三种选项
 
 [topic.llm_topic]
 name = "Pro/deepseek-ai/DeepSeek-V3"
