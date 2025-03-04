@@ -171,10 +171,6 @@ class MessageSendControl:
         except(NameError):
             pass
         
-    def set_bot(self, bot: Bot):
-        """设置当前bot实例"""
-        self._current_bot = bot
-        
     async def process_group_messages(self, group_id: int):
         queue = self.send_temp_container.get_queue(group_id)
         if queue.has_messages():
@@ -252,4 +248,4 @@ class MessageSendControl:
         self.typing_speed = (min_speed, max_speed)
 
 # 创建全局实例
-message_sender = MessageSendControl()
+message_sender_control = MessageSendControl()

@@ -66,25 +66,27 @@
 - 针对每个用户创建"关系"，可以对不同用户进行个性化回复，目前只有极其简单的好感度（WIP）
 - 针对每个群创建"群印象"，可以对不同群进行个性化回复（WIP）
 
-## 🚧 开发中功能
+
+
+## 开发计划TODO：LIST
 - 人格功能：WIP
 - 群氛围功能：WIP
 - 图片发送，转发功能：WIP
 - 幽默和meme功能：WIP的WIP
 - 让麦麦玩mc：WIP的WIP的WIP
-
-## 开发计划TODO：LIST
-
 - 兼容gif的解析和保存
 - 小程序转发链接解析
 - 对思考链长度限制
 - 修复已知bug
-- 完善文档
+- ~~完善文档~~
 - 修复转发
-- config自动生成和检测
-- log别用print
-- 给发送消息写专门的类
+- ~~config自动生成和检测~~
+- ~~log别用print~~
+- ~~给发送消息写专门的类~~
 - 改进表情包发送逻辑
+- 自动生成的回复逻辑，例如自生成的回复方向，回复风格
+- 采用截断生成加快麦麦的反应速度
+- 改进发送消息的触发：
 
 ## 📌 注意事项
 纯编程外行，面向cursor编程，很多代码史一样多多包涵
@@ -99,7 +101,9 @@
 
 感谢各位大佬！
 
-[![Contributors](https://contributors-img.web.app/image?repo=SengokuCola/MaiMBot)](https://github.com/SengokuCola/MaiMBot/graphs/contributors)
+<a href="https://github.com/SengokuCola/MaiMBot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=SengokuCola/MaiMBot&time=true" />
+</a>
 
 
 ## Stargazers over time

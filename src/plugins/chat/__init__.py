@@ -10,6 +10,9 @@ import random
 from .relationship_manager import relationship_manager
 from ..schedule.schedule_generator import bot_schedule
 from .willing_manager import willing_manager
+from nonebot.rule import to_me
+from .bot import chat_bot
+from .emoji_manager import emoji_manager
 
 
 # 获取驱动器
@@ -30,8 +33,9 @@ print("\033[1;32m[初始化数据库完成]\033[0m")
 # 导入其他模块
 from .bot import ChatBot
 from .emoji_manager import emoji_manager
-from .message_send_control import message_sender
+# from .message_send_control import message_sender
 from .relationship_manager import relationship_manager
+from .message_sender import message_manager,message_sender
 from ..memory_system.memory import memory_graph,hippocampus
 
 # 初始化表情管理器
@@ -40,8 +44,8 @@ emoji_manager.initialize()
 print(f"\033[1;32m正在唤醒{global_config.BOT_NICKNAME}......\033[0m")
 # 创建机器人实例
 chat_bot = ChatBot()
-# 注册消息处理器
-group_msg = on_message()
+# 注册群消息处理器
+group_msg = on_message(priority=5)
 # 创建定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
@@ -66,10 +70,13 @@ async def init_relationships():
 async def _(bot: Bot):
     """Bot连接成功时的处理"""
     print(f"\033[1;38;5;208m-----------{global_config.BOT_NICKNAME}成功连接！-----------\033[0m")
-    message_sender.set_bot(bot)
-    asyncio.create_task(message_sender.start_processor(bot))
     await willing_manager.ensure_started()
+    
+    
+    message_sender.set_bot(bot)
     print("\033[1;38;5;208m-----------消息发送器已启动！-----------\033[0m")
+    asyncio.create_task(message_manager.start_processor())
+    print("\033[1;38;5;208m-----------消息处理器已启动！-----------\033[0m")
     
     asyncio.create_task(emoji_manager._periodic_scan(interval_MINS=global_config.EMOJI_REGISTER_INTERVAL))
     print("\033[1;38;5;208m-----------开始偷表情包！-----------\033[0m")
