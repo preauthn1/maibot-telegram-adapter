@@ -244,14 +244,12 @@ class PromptBuilder:
     
     def _build_initiative_prompt_check(self,selected_node,prompt_regular):
         memory=random.sample(selected_node['memory_items'],3)
-        prompt_for_check=f"{prompt_regular}你现在想在群里发言，回忆了一下，想到一个话题,是\"{selected_node['concept']}\"，关于这个话题的记忆有\n{'\n'.join(memory)}\n，以这个作为主题发言合适吗？\
-            请在把握群里的聊天内容的基础上，综合群内的氛围，如果认为应该发言请输出yes，否则输出no，请注意是决定是否需要发言，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
+        memory='\n'.join(memory)
+        prompt_for_check=f"{prompt_regular}你现在想在群里发言，回忆了一下，想到一个话题,是{selected_node['concept']}，关于这个话题的记忆有\n{memory}\n，以这个作为主题发言合适吗？请在把握群里的聊天内容的基础上，综合群内的氛围，如果认为应该发言请输出yes，否则输出no，请注意是决定是否需要发言，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
         return prompt_for_check,memory
     
     def _build_initiative_prompt(self,selected_node,prompt_regular,memory):
-        prompt_for_initiative=f"{prompt_regular}你现在想在群里发言，回忆了一下，想到一个话题,是\"{selected_node['concept']}\"，关于这个话题的记忆有\n{'\n'.join(memory)}\n，\
-        请在把握群里的聊天内容的基础上，综合群内的氛围，以日常且口语化的口吻，简短且随意一点进行发言，不要说的太有条理，可以有个性。记住不要输出多余内容(包括前后缀，冒号和引号，\
-            括号，表情等)"
+        prompt_for_initiative=f"{prompt_regular}你现在想在群里发言，回忆了一下，想到一个话题,是{selected_node['concept']}，关于这个话题的记忆有\n{memory}\n，请在把握群里的聊天内容的基础上，综合群内的氛围，以日常且口语化的口吻，简短且随意一点进行发言，不要说的太有条理，可以有个性。记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)"
         return prompt_for_initiative
         
 

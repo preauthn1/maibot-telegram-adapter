@@ -76,6 +76,13 @@ class BotConfig:
         if os.path.exists(config_path):
             with open(config_path, "rb") as f:
                 toml_dict = tomli.load(f)
+            
+            if 'personality' in toml_dict:
+                personality_config=toml_dict['personality']
+                personality=personality_config.get('prompt_personality')
+                if len(personality) >= 2:
+                    config.PROMPT_PERSONALITY=personality_config.get('prompt_personality')
+                config.PROMPT_SCHEDULE_GEN=personality_config.get('prompt_schedule')
 
             if "emoji" in toml_dict:
                 emoji_config = toml_dict["emoji"]
