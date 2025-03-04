@@ -50,7 +50,7 @@ class WillingManager:
         
         self.group_reply_willing[group_id] = min(current_willing, 3.0)
         
-        reply_probability = (current_willing - 0.5) * 2
+        reply_probability = max((current_willing - 0.5) * 2, 0)
         if group_id not in config.talk_allowed_groups:
             current_willing = 0
             reply_probability = 0
