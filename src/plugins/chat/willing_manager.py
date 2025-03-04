@@ -60,7 +60,8 @@ class WillingManager:
             
         # if is_mentioned_bot and user_id == int(123456784):
         #     reply_probability = 1
-            
+
+        reply_probability = min(reply_probability, 1)
         return reply_probability
     
     def change_reply_willing_sent(self, group_id: int):
