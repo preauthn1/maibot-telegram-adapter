@@ -1,3 +1,4 @@
+chcp 65001
 call conda activate niuniu
 cd .
 

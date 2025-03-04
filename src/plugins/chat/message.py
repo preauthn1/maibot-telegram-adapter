@@ -8,7 +8,7 @@ from ...common.database import Database
 from PIL import Image
 from .config import global_config
 import urllib3
-from .utils_user import get_user_nickname,get_user_cardname
+from .utils_user import get_user_nickname,get_user_cardname,get_groupname
 from .utils_cq import parse_cq_code
 from .cq_code import cq_code_tool,CQCode
 
@@ -21,49 +21,46 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 #它还定义了两个辅助属性：keywords用于提取消息的关键词，is_plain_text用于判断消息是否为纯文本。
 
 
+
 @dataclass
 class Message:
     """消息数据类"""
+    message_id: int = None
+    time: float = None
+    
     group_id: int = None
+    group_name: str = None  # 群名称 
+    
     user_id: int = None
     user_nickname: str = None  # 用户昵称
     user_cardname: str=None # 用户群昵称
-    group_name: str = None  # 群名称    
     
-    message_id: int = None
-    raw_message: str = None
-    plain_text: str = None
-    
-    message_based_id: int = None
-    reply_message: Dict = None  # 存储回复消息
+    raw_message: str = None # 原始消息，包含未解析的cq码
+    plain_text: str = None # 纯文本
     
     message_segments: List[Dict] = None  # 存储解析后的消息片段
     processed_plain_text: str = None  # 用于存储处理后的plain_text
     detailed_plain_text: str = None  # 用于存储详细可读文本
     
-    time: float = None
+    reply_message: Dict = None  # 存储 回复的 源消息
     
     is_emoji: bool = False # 是否是表情包
     has_emoji: bool = False # 是否包含表情包
     
     translate_cq: bool = True # 是否翻译cq码
-
-    
-    reply_benefits: float = 0.0
-    
-    type: str = 'received' # 消息类型，可以是received或者send
     
     def __post_init__(self):
         if self.time is None:
             self.time = int(time.time())
+            
+        if not self.group_name:
+            self.group_name = get_groupname(self.group_id)
         
         if not self.user_nickname:
             self.user_nickname = get_user_nickname(self.user_id)
+            
         if not self.user_cardname:
             self.user_cardname=get_user_cardname(self.user_id)
-        
-        if not self.group_name:
-            self.group_name = self.get_groupname(self.group_id)
         
         if not self.processed_plain_text:
             if self.raw_message:
@@ -243,6 +240,38 @@ class MessageSet:
     def __len__(self) -> int:
         return len(self.messages)
         
+
+@dataclass
+class Message_Sending(Message):
+    """发送消息数据类，继承自Message类"""
+    
+    priority: int = 0  # 发送优先级，数字越大优先级越高
+    wait_until: float = None  # 等待发送的时间戳
+    continue_thinking: bool = False  # 是否继续思考
+    
+    def __post_init__(self):
+        super().__post_init__()
+        if self.wait_until is None:
+            self.wait_until = self.time
+            
+    @property
+    def can_send(self) -> bool:
+        """检查是否可以发送消息"""
+        return time.time() >= self.wait_until
+        
+    def set_wait_time(self, seconds: float) -> None:
+        """设置等待发送时间"""
+        self.wait_until = time.time() + seconds
+        
+    def set_priority(self, priority: int) -> None:
+        """设置发送优先级"""
+        self.priority = priority
+        
+    def __lt__(self, other):
+        """重写小于比较，用于优先级排序"""
+        if not isinstance(other, Message_Sending):
+            return NotImplemented
+        return (self.priority, -self.wait_until) < (other.priority, -other.wait_until)
 
         
         

@@ -201,7 +201,7 @@ class MessageSendControl:
                     print(f"- 群组: {group_id} - 内容: {message.processed_plain_text}")
                     cost_time = round(time.time(), 2) - message.time
                     if cost_time > 40:
-                        message.processed_plain_text = cq_code_tool.create_reply_cq(message.message_based_id) + message.processed_plain_text
+                        message.processed_plain_text = cq_code_tool.create_reply_cq(message.message_id) + message.processed_plain_text
                     cur_time = time.time()
                     await self._current_bot.send_group_msg(
                         group_id=group_id,

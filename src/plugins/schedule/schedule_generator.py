@@ -11,12 +11,12 @@ config = driver.config
 
 
 Database.initialize(
-            host= config.mongodb_host,
-            port= int(config.mongodb_port),
-            db_name=  config.database_name,
-            username= config.mongodb_username,
-            password= config.mongodb_password,
-            auth_source=config.mongodb_auth_source
+            host= config.MONGODB_HOST,
+            port= int(config.MONGODB_PORT),
+            db_name=  config.DATABASE_NAME,
+            username= config.MONGODB_USERNAME,
+            password= config.MONGODB_PASSWORD,
+            auth_source=config.MONGODB_AUTH_SOURCE
         )
 
 class ScheduleGenerator:
@@ -128,6 +128,10 @@ class ScheduleGenerator:
     
     def _time_diff(self, time1: str, time2: str) -> int:
         """计算两个时间字符串之间的分钟差"""
+        if time1=="24:00":
+            time1="23:59"
+        if time2=="24:00":
+            time2="23:59"
         t1 = datetime.datetime.strptime(time1, "%H:%M")
         t2 = datetime.datetime.strptime(time2, "%H:%M")
         diff = int((t2 - t1).total_seconds() / 60)

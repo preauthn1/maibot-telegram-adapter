@@ -3,7 +3,6 @@
 
 <div align="center">
 
-
 ![Python Version](https://img.shields.io/badge/Python-3.x-blue)
 ![License](https://img.shields.io/github/license/SengokuCola/MaiMBot)
 ![Status](https://img.shields.io/badge/状态-开发中-yellow)
@@ -12,163 +11,33 @@
 
 ## 📝 项目简介
 
-**麦麦qq机器人的源代码仓库**
+**🍔麦麦是一个基于大语言模型的智能QQ群聊机器人**
 
-基于llm、napcat、nonebot和mongodb的专注于群聊天的qqbot
+- 🤖 基于 nonebot2 框架开发
+- 🧠 LLM 提供对话能力
+- 💾 MongoDB 提供数据持久化支持
+- 🐧 NapCat 作为QQ协议端支持
 
 <div align="center">
 <a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
-    <img src="https://i0.hdslb.com/bfs/archive/7d9fa0a88e8a1aa01b92b8a5a743a2671c0e1798.jpg" width="500" alt="麦麦演示视频">
+    <img src="docs/video.png" width="300" alt="麦麦演示视频">
     <br>
     👆 点击观看麦麦演示视频 👆
 </a>
 </div>
 
-> ⚠️ **警告**：代码可能随时更改，目前版本不一定是稳定版本
-> ⚠️ **警告**：请自行了解qqbot的风险，麦麦有时候一天被腾讯肘七八次
-> ⚠️ **警告**：由于麦麦一直在迭代，所以可能存在一些bug，请自行测试，包括胡言乱语（
+> ⚠️ **注意事项**
+> - 项目处于活跃开发阶段，代码可能随时更改
+> - 文档未完善，有问题可以提交 Issue 或者 Discussion
+> - QQ机器人存在被限制风险，请自行了解，谨慎使用
+> - 由于持续迭代，可能存在一些已知或未知的bug
 
-关于麦麦的开发和建议相关的讨论群:123456780（不建议发布无关消息）这里不会有麦麦发言！
+**交流群**: 123456780（仅用于开发和建议相关讨论）不建议在群内询问部署问题，我不一定有空回复，会优先写文档和代码
 
-## 开发计划TODO：LIST
+## 📚 文档
 
-- 兼容gif的解析和保存
-- 小程序转发链接解析
-- 对思考链长度限制
-- 修复已知bug
-- 完善文档
-- 修复转发
-- config自动生成和检测
-- log别用print
-- 给发送消息写专门的类
-- 改进表情包发送逻辑l
-
-
-## 📚 详细文档
-- [项目详细介绍和架构说明](docs/doc1.md) - 包含完整的项目结构、文件说明和核心功能实现细节(由claude-3.5-sonnet生成)
-
-### 安装方法（还没测试好，随时outdated ,现在部署可能遇到未知问题！！！！）
-
-#### Linux 使用 Docker Compose 部署
-获取项目根目录中的```docker-compose.yml```文件，运行以下命令
-```bash
-NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose up -d
-```
-配置文件修改完成后，运行以下命令
-```bash
-NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
-```
-
-#### 手动运行
-1. **创建Python环境**
-   推荐使用conda或其他虚拟环境进行依赖安装，防止出现依赖版本冲突问题
-   ```bash
-   # 安装requirements
-   pip install -r requirements.txt
-   ```
-2. **MongoDB设置**
-   - 安装并运行mongodb
-   - 麦麦bot会自动连接默认的mongodb，端口和数据库名可配置
-
-3. **Napcat配置**
-   - 安装并运行Napcat，登录
-   - 在Napcat的网络设置中添加ws反向代理:ws://localhost:8080/onebot/v11/ws
-
-4. **配置文件设置**
-   - 修改.env的 变量值为 prod
-   - 将.env.prod文件打开，填上你的apikey（硅基流动或deepseekapi）
-   - 将bot_config_toml改名为bot_config.toml，打开并填写相关内容，不然无法正常运行
-
-   #### .env 文件配置说明
-   ```ini
-   # 环境配置
-   ENVIRONMENT=dev          # 开发环境设置
-   HOST=127.0.0.1          # 主机地址
-   PORT=8080               # 端口号
-
-   # 命令前缀设置
-   COMMAND_START=["/"]     # 命令起始符
-
-   # 插件配置
-   PLUGINS=["src2.plugins.chat"]  # 启用的插件列表
-
-   # MongoDB配置
-   MONGODB_HOST=127.0.0.1        # MongoDB主机地址
-   MONGODB_PORT=27017            # MongoDB端口
-   DATABASE_NAME=MegBot          # 数据库名称
-   MONGODB_USERNAME=""           # MongoDB用户名（可选）
-   MONGODB_PASSWORD=""           # MongoDB密码（可选）
-   MONGODB_AUTH_SOURCE=""        # MongoDB认证源（可选）
-
-   #api配置项，建议siliconflow必填，识图需要这个
-   SILICONFLOW_KEY=
-   SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1/
-   DEEP_SEEK_KEY=
-   DEEP_SEEK_BASE_URL=https://api.deepseek.com/v1
-   ```
-
-   #### bot_config.toml 文件配置说明
-   ```toml
-   # 数据库设置
-   [database]
-   host = "127.0.0.1"      # MongoDB主机地址
-   port = 27017            # MongoDB端口
-   name = "MegBot"         # 数据库名称
-
-   # 机器人基本设置
-   [bot]
-   qq =                    # 你的机器人QQ号（必填）
-   nickname = "麦麦"       # 机器人昵称
-
-   # 消息处理设置
-   [message]
-   min_text_length = 2     # 最小响应文本长度
-   max_context_size = 15   # 上下文最大保存数量
-   emoji_chance = 0.2      # 表情包使用概率
-
-   # 表情包功能设置
-   [emoji]
-   check_interval = 120    # 表情检查间隔（秒）
-   register_interval = 10  # 表情注册间隔（秒）
-
-   # CQ码设置
-   [cq_code]
-   enable_pic_translate = false  # 是否启用图片转换（无效）
-
-   # 响应设置
-   [response]
-   api_using = "siliconflow"     # 回复使用的API（siliconflow/deepseek）
-   model_r1_probability = 0.8    # R1模型使用概率
-   model_v3_probability = 0.1    # V3模型使用概率
-   model_r1_distill_probability = 0.1  # R1蒸馏模型使用概率（对deepseek api 无效）
-
-   # 其他设置
-   [others]
-   enable_advance_output = false  # 是否启用详细日志输出
-
-   # 群组设置
-   [groups]
-   talk_allowed = [              # 允许回复的群号列表
-       # 在这里添加群号,逗号隔开
-   ]
-   
-   talk_frequency_down = [       # 降低回复频率的群号列表
-       # 在这里添加群号,逗号隔开
-   ]
-   
-   ban_user_id = [              # 禁止回复的用户QQ号列表
-       # 在这里添加QQ号,逗号隔开
-   ]
-   ```
-
-5. **运行麦麦**
-   在含有bot.py程序的目录下运行（如果使用了虚拟环境需要先进入虚拟环境）
-   ```bash
-   nb run
-   ```
-6. **运行其他组件**
-   run_thingking.bat 可以启动可视化的推理界面（未完善）和消息队列及其他信息预览（WIP）
-   knowledge.bat可以将/data/raw_info下的文本文档载入到数据库（未启动）
+- [安装与配置指南](docs/installation.md) - 详细的部署和配置说明
+- [项目架构说明](docs/doc1.md) - 项目结构和核心功能实现细节
 
 ## 🎯 功能介绍
 
@@ -204,6 +73,19 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
 - 幽默和meme功能：WIP的WIP
 - 让麦麦玩mc：WIP的WIP的WIP
 
+## 开发计划TODO：LIST
+
+- 兼容gif的解析和保存
+- 小程序转发链接解析
+- 对思考链长度限制
+- 修复已知bug
+- 完善文档
+- 修复转发
+- config自动生成和检测
+- log别用print
+- 给发送消息写专门的类
+- 改进表情包发送逻辑
+
 ## 📌 注意事项
 纯编程外行，面向cursor编程，很多代码史一样多多包涵
 
@@ -218,3 +100,7 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
 感谢各位大佬！
 
 [![Contributors](https://contributors-img.web.app/image?repo=SengokuCola/MaiMBot)](https://github.com/SengokuCola/MaiMBot/graphs/contributors)
+
+
+## Stargazers over time
+[![Stargazers over time](https://starchart.cc/SengokuCola/MaiMBot.svg?variant=adaptive)](https://starchart.cc/SengokuCola/MaiMBot)

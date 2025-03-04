@@ -17,12 +17,12 @@ driver = get_driver()
 config = driver.config
 
 Database.initialize(
-        host= config.mongodb_host,
-        port= int(config.mongodb_port),
-        db_name= config.database_name,
-        username= config.mongodb_username,
-        password= config.mongodb_password,
-        auth_source= config.mongodb_auth_source
+        host= config.MONGODB_HOST,
+        port= int(config.MONGODB_PORT),
+        db_name= config.DATABASE_NAME,
+        username= config.MONGODB_USERNAME,
+        password= config.MONGODB_PASSWORD,
+        auth_source= config.MONGODB_AUTH_SOURCE
 )
 print("\033[1;32m[初始化数据库完成]\033[0m")
 

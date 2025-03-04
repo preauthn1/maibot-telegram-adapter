@@ -10,6 +10,7 @@ from typing import Dict
 from collections import Counter
 import math
 from nonebot import get_driver
+from ..models.utils_model import LLM_request
 
 driver = get_driver()
 config = driver.config
@@ -64,25 +65,9 @@ def is_mentioned_bot_in_txt(message: str) -> bool:
     return False
 
 def get_embedding(text):
-    url = "https://api.siliconflow.cn/v1/embeddings"
-    payload = {
-        "model": "BAAI/bge-m3",
-        "input": text,
-        "encoding_format": "float"
-    }
-    headers = {
-        "Authorization": f"Bearer {config.siliconflow_key}",
-        "Content-Type": "application/json"
-    }
-    
-    response = requests.request("POST", url, json=payload, headers=headers)
-    
-    if response.status_code != 200:
-        print(f"API请求失败: {response.status_code}")
-        print(f"错误信息: {response.text}")
-        return None
-        
-    return response.json()['data'][0]['embedding']
+    """获取文本的embedding向量"""
+    llm = LLM_request(model=global_config.embedding)
+    return llm.get_embedding_sync(text)
 
 def cosine_similarity(v1, v2):
     dot_product = np.dot(v1, v2)
@@ -142,14 +127,14 @@ def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
         # 从数据库获取最近消息
     recent_messages = list(db.db.messages.find(
         {"group_id": group_id},
-        {
-            "time": 1,
-            "user_id": 1,
-            "user_nickname": 1,
-            "message_id": 1,
-            "raw_message": 1,
-            "processed_text": 1
-        }
+        # {
+        #     "time": 1,
+        #     "user_id": 1,
+        #     "user_nickname": 1,
+        #     "message_id": 1,
+        #     "raw_message": 1,
+        #     "processed_text": 1
+        # }
     ).sort("time", -1).limit(limit))
 
     if not recent_messages:
@@ -159,16 +144,20 @@ def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
     from .message import Message
     message_objects = []
     for msg_data in recent_messages:
-        msg = Message(
-            time=msg_data["time"],
-            user_id=msg_data["user_id"],
-            user_nickname=msg_data.get("user_nickname", ""),
-            message_id=msg_data["message_id"],
-            raw_message=msg_data["raw_message"],
-            processed_plain_text=msg_data.get("processed_text", ""),
-            group_id=group_id
-        )
-        message_objects.append(msg)
+        try:
+            msg = Message(
+                time=msg_data["time"],
+                user_id=msg_data["user_id"],
+                user_nickname=msg_data.get("user_nickname", ""),
+                message_id=msg_data["message_id"],
+                raw_message=msg_data["raw_message"],
+                processed_plain_text=msg_data.get("processed_text", ""),
+                group_id=group_id
+            )
+            message_objects.append(msg)
+        except KeyError:
+            print("[WARNING] 数据库中存在无效的消息")
+            continue
     
     # 按时间正序排列
     message_objects.reverse()
@@ -181,7 +170,6 @@ def get_recent_group_detailed_plain_text(db, group_id: int, limit: int = 12,comb
             "time": 1,  # 返回时间字段
             "user_id": 1,  # 返回用户ID字段
             "user_nickname": 1,  # 返回用户昵称字段
-            "user_cardname": 1, #返回用户群昵称
             "message_id": 1,  # 返回消息ID字段
             "detailed_plain_text": 1  # 返回处理后的文本字段
         }
@@ -193,6 +181,8 @@ def get_recent_group_detailed_plain_text(db, group_id: int, limit: int = 12,comb
     message_detailed_plain_text = ''
     message_detailed_plain_text_list = []
     
+    # 反转消息列表，使最新的消息在最后
+    recent_messages.reverse()
     
     if combine:
         for msg_db_data in recent_messages:

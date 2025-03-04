@@ -127,15 +127,15 @@ class MessageStream:
             # 从数据库中查询最近的消息
             recent_messages = list(db.db.messages.find(
                 {"group_id": self.group_id},
-                {
-                    "time": 1,
-                    "user_id": 1,
-                    "user_nickname": 1,
-                    # "user_cardname": 1,
-                    "message_id": 1,
-                    "raw_message": 1,
-                    "processed_text": 1
-                }
+                # {
+                #     "time": 1,
+                #     "user_id": 1,
+                #     "user_nickname": 1,
+                #     # "user_cardname": 1,
+                #     "message_id": 1,
+                #     "raw_message": 1,
+                #     "processed_text": 1
+                # }
             ).sort("time", -1).limit(count))
             
             if not recent_messages:
@@ -145,17 +145,21 @@ class MessageStream:
             from .message import Message
             messages = []
             for msg_data in recent_messages:
-                msg = Message(
-                    time=msg_data["time"],
-                    user_id=msg_data["user_id"],
-                    user_nickname=msg_data.get("user_nickname", ""),
-                    user_cardname=msg_data.get("user_cardname", ""),
-                    message_id=msg_data["message_id"],
-                    raw_message=msg_data["raw_message"],
-                    processed_plain_text=msg_data.get("processed_text", ""),
-                    group_id=self.group_id
-                )
-                messages.append(msg)
+                try:
+                    msg = Message(
+                        time=msg_data["time"],
+                        user_id=msg_data["user_id"],
+                        user_nickname=msg_data.get("user_nickname", ""),
+                        user_cardname=msg_data.get("user_cardname", ""),
+                        message_id=msg_data["message_id"],
+                        raw_message=msg_data["raw_message"],
+                        processed_plain_text=msg_data.get("processed_text", ""),
+                        group_id=self.group_id
+                    )
+                    messages.append(msg)
+                except KeyError:
+                    print("[WARNING] 数据库中存在无效的消息")
+                    continue
             
             return list(reversed(messages))  # 返回按时间正序的消息
             
