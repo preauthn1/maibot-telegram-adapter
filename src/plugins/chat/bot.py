@@ -16,6 +16,7 @@ from .relationship_manager import relationship_manager
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .utils import is_mentioned_bot_in_txt, calculate_typing_time
 from ..memory_system.memory import memory_graph
+from loguru import logger
 
 class ChatBot:
     def __init__(self):
@@ -98,8 +99,8 @@ class ChatBot:
         # 过滤词
         for word in global_config.ban_words:
             if word in message.detailed_plain_text:
-                print(f"\033[1;32m[{message.group_name}]{message.user_nickname}:\033[0m {message.processed_plain_text}")
-                print(f"\033[1;32m[过滤词识别]\033[0m 消息中含有{word}，filtered")
+                logger.info(f"\033[1;32m[{message.group_name}]{message.user_nickname}:\033[0m {message.processed_plain_text}")
+                logger.info(f"\033[1;32m[过滤词识别]\033[0m 消息中含有{word}，filtered")
                 return
         
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.time))
@@ -113,7 +114,7 @@ class ChatBot:
         # topic1 = topic_identifier.identify_topic_jieba(message.processed_plain_text)
         # topic2 = await topic_identifier.identify_topic_llm(message.processed_plain_text)
         # topic3 = topic_identifier.identify_topic_snownlp(message.processed_plain_text)
-        print(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
+        logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
         
         all_num = 0
         interested_num = 0
