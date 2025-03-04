@@ -129,7 +129,7 @@ class BotConfig:
                 config.MIN_TEXT_LENGTH = msg_config.get("min_text_length", config.MIN_TEXT_LENGTH)
                 config.MAX_CONTEXT_SIZE = msg_config.get("max_context_size", config.MAX_CONTEXT_SIZE)
                 config.emoji_chance = msg_config.get("emoji_chance", config.emoji_chance)
-                config.ban_words=msg_config.get("banwords",config.ban_words)
+                config.ban_words=msg_config.get("ban_words",config.ban_words)
 
             if "memory" in toml_dict:
                 memory_config = toml_dict["memory"]
