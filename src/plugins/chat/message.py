@@ -72,7 +72,7 @@ class Message:
         #将详细翻译为详细可读文本
         time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.time))
         try:
-            name = f"[({self.user_id}){self.user_nickname}]{self.user_cardname}"
+            name = f"{self.user_nickname}(ta的昵称:{self.user_cardname},ta的id:{self.user_id})"
         except:
             name = self.user_nickname or f"用户{self.user_id}"
         content = self.processed_plain_text
