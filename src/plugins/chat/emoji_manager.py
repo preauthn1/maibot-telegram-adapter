@@ -235,6 +235,7 @@ class EmojiManager:
             
         except Exception as e:
             print(f"\033[1;31m[错误]\033[0m 获取标签失败: {str(e)}")
+            return "skip"
         
         print(f"\033[1;32m[调试信息]\033[0m 使用默认标签: neutral")
         return "skip"  # 默认标签
@@ -249,12 +250,20 @@ class EmojiManager:
             files_to_process = [f for f in os.listdir(emoji_dir) if f.endswith('.jpg')]
             
             for filename in files_to_process:
+                image_path = os.path.join(emoji_dir, filename)
+                
+                # 检查文件大小
+                file_size = os.path.getsize(image_path)
+                if file_size > 5 * 1024 * 1024:  # 5MB
+                    print(f"\033[1;33m[警告]\033[0m 表情包文件过大 ({file_size/1024/1024:.2f}MB)，删除: {filename}")
+                    os.remove(image_path)
+                    continue
+                
                 # 检查是否已经注册过
                 existing_emoji = self.db.db['emoji'].find_one({'filename': filename})
                 if existing_emoji:
                     continue
                     
-                image_path = os.path.join(emoji_dir, filename)
                 # 读取图片数据
                 with open(image_path, 'rb') as f:
                     image_data = f.read()

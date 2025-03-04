@@ -145,7 +145,8 @@ class MessageManager:
         
     async def process_group_messages(self, group_id: int):
         """处理群消息"""
-        print(f"\033[1;34m[调试]\033[0m 开始处理群{group_id}的消息")
+        # if int(time.time() / 3) == time.time() / 3:
+            # print(f"\033[1;34m[调试]\033[0m 开始处理群{group_id}的消息")
         container = self.get_container(group_id)
         if container.has_messages():
             #最早的对象，可能是思考消息，也可能是发送消息

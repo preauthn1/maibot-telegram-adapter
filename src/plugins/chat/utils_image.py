@@ -6,32 +6,26 @@ import os
 from ...common.database import Database
 import zlib  # 用于 CRC32
 import base64
-from .config import global_config
 from nonebot import get_driver
 
 driver = get_driver()
 config = driver.config
 
 
-def storage_image(image_data: bytes,type: str, max_size: int = 200) -> bytes:
-    if type == 'image':
-        return storage_compress_image(image_data, max_size)
-    elif type == 'emoji':
-        return storage_emoji(image_data)
-    else:
-        raise ValueError(f"不支持的图片类型: {type}")
 
-
-def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
+def storage_compress_image(base64_data: str, max_size: int = 200) -> str:
     """
-    压缩图片到指定大小（单位：KB）并在数据库中记录图片信息
+    压缩base64格式的图片到指定大小（单位：KB）并在数据库中记录图片信息
     Args:
-        image_data: 图片字节数据
-        group_id: 群组ID
-        user_id: 用户ID
+        base64_data: base64编码的图片数据
         max_size: 最大文件大小（KB）
+    Returns:
+        str: 压缩后的base64图片数据
     """
     try:
+        # 将base64转换为字节数据
+        image_data = base64.b64decode(base64_data)
+        
         # 使用 CRC32 计算哈希值
         hash_value = format(zlib.crc32(image_data) & 0xFFFFFFFF, 'x')
         
@@ -41,11 +35,11 @@ def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
         
         # 连接数据库
         db = Database(
-            host= config.mongodb_host,
-            port= int(config.mongodb_port),
-            db_name=  config.database_name,
-            username= config.mongodb_username,
-            password= config.mongodb_password,
+            host=config.mongodb_host,
+            port=int(config.mongodb_port),
+            db_name=config.database_name,
+            username=config.mongodb_username,
+            password=config.mongodb_password,
             auth_source=config.mongodb_auth_source
         )
         
@@ -55,14 +49,14 @@ def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
         
         if existing_image:
             print(f"\033[1;33m[提示]\033[0m 发现重复图片，使用已存在的文件: {existing_image['path']}")
-            return image_data
+            return base64_data
 
         # 将字节数据转换为图片对象
         img = Image.open(io.BytesIO(image_data))
         
         # 如果是动图，直接返回原图
         if getattr(img, 'is_animated', False):
-            return image_data
+            return base64_data
             
         # 计算当前大小（KB）
         current_size = len(image_data) / 1024
@@ -127,14 +121,16 @@ def storage_compress_image(image_data: bytes, max_size: int = 200) -> bytes:
             
         except Exception as db_error:
             print(f"\033[1;31m[错误]\033[0m 数据库操作失败: {str(db_error)}")
-            
-        return compressed_data
+        
+        # 将压缩后的数据转换为base64
+        compressed_base64 = base64.b64encode(compressed_data).decode('utf-8')
+        return compressed_base64
         
     except Exception as e:
         print(f"\033[1;31m[错误]\033[0m 压缩图片失败: {str(e)}")
         import traceback
         print(traceback.format_exc())
-        return image_data 
+        return base64_data
 
 def storage_emoji(image_data: bytes) -> bytes:
     """
@@ -216,3 +212,47 @@ def storage_image(image_data: bytes) -> bytes:
     except Exception as e:
         print(f"\033[1;31m[错误]\033[0m 保存图片失败: {str(e)}")
         return image_data 
+
+def compress_base64_image_by_scale(base64_data: str, scale: float = 0.5) -> str:
+    """按比例压缩base64格式的图片
+    Args:
+        base64_data: base64编码的图片数据
+        scale: 压缩比例（0-1之间的浮点数）
+    Returns:
+        str: 压缩后的base64图片数据
+    """
+    try:
+        # 将base64转换为字节数据
+        image_data = base64.b64decode(base64_data)
+        
+        # 将字节数据转换为图片对象
+        img = Image.open(io.BytesIO(image_data))
+        
+        # 如果是动图，直接返回原图
+        if getattr(img, 'is_animated', False):
+            return base64_data
+            
+        # 计算新的尺寸
+        new_width = int(img.width * scale)
+        new_height = int(img.height * scale)
+        
+        # 缩放图片
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # 转换为RGB模式（去除透明通道）
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+        
+        # 保存压缩后的图片
+        output = io.BytesIO()
+        img.save(output, format='JPEG', quality=85, optimize=True)
+        compressed_data = output.getvalue()
+        
+        # 转换回base64
+        return base64.b64encode(compressed_data).decode('utf-8')
+        
+    except Exception as e:
+        print(f"\033[1;31m[错误]\033[0m 压缩图片失败: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return base64_data 
