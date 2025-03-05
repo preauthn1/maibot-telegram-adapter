@@ -95,7 +95,11 @@ class ResponseGenerator:
         #         return None
 
         # 生成回复
-        content, reasoning_content = await model.generate_response(prompt)
+        try:
+            content, reasoning_content = await model.generate_response(prompt)
+        except Exception as e:
+            print(f"生成回复时出错: {e}")
+            return None
         
         # 保存到数据库
         self._save_to_db(
@@ -138,9 +142,12 @@ class ResponseGenerator:
             内容：{content}
             输出：
             '''
-            
             content, _ = await self.model_v3.generate_response(prompt)
-            return [content.strip()] if content else ["neutral"]
+            content=content.strip()
+            if content in ['happy','angry','sad','surprised','disgusted','fearful','neutral']:
+                return [content]
+            else:
+                return ["neutral"]
             
         except Exception as e:
             print(f"获取情感标签时出错: {e}")

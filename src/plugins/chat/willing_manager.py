@@ -9,7 +9,7 @@ class WillingManager:
     async def _decay_reply_willing(self):
         """定期衰减回复意愿"""
         while True:
-            await asyncio.sleep(3)
+            await asyncio.sleep(5)
             for group_id in self.group_reply_willing:
                 self.group_reply_willing[group_id] = max(0, self.group_reply_willing[group_id] * 0.6)
                 
@@ -39,11 +39,11 @@ class WillingManager:
         
         if interested_rate > 0.65:
             print(f"兴趣度: {interested_rate}, 当前意愿: {current_willing}")
-            current_willing += interested_rate-0.5
+            current_willing += interested_rate-0.6
         
         self.group_reply_willing[group_id] = min(current_willing, 3.0)
         
-        reply_probability = max((current_willing - 0.5) * 2, 0)
+        reply_probability = max((current_willing - 0.55) * 1.9, 0)
         if group_id not in config.talk_allowed_groups:
             current_willing = 0
             reply_probability = 0
@@ -52,8 +52,8 @@ class WillingManager:
             reply_probability = reply_probability / 3.5
 
         reply_probability = min(reply_probability, 1)
-        if reply_probability < 0.1:
-            reply_probability = 0.1
+        if reply_probability < 0:
+            reply_probability = 0
         return reply_probability
     
     def change_reply_willing_sent(self, group_id: int):
@@ -65,7 +65,7 @@ class WillingManager:
         """发送消息后提高群组的回复意愿"""
         current_willing = self.group_reply_willing.get(group_id, 0)
         if current_willing < 1:
-            self.group_reply_willing[group_id] = min(1, current_willing + 0.3)
+            self.group_reply_willing[group_id] = min(1, current_willing + 0.2)
         
     async def ensure_started(self):
         """确保衰减任务已启动"""
