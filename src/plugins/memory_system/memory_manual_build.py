@@ -73,8 +73,6 @@ class Database:
             logger.error(f"初始化MongoDB失败: {str(e)}")
             raise
 
-
-
 def calculate_information_content(text):
     """计算文本的信息量（熵）"""
     char_count = Counter(text)
@@ -88,19 +86,36 @@ def calculate_information_content(text):
     return entropy
 
 def get_cloest_chat_from_db(db, length: int, timestamp: str):
-    """从数据库中获取最接近指定时间戳的聊天记录"""
+    """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数"""
     chat_text = ''
     closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
     
-    if closest_record:
+    if closest_record and closest_record.get('memorized', 0) < 4:            
         closest_time = closest_record['time']
         group_id = closest_record['group_id']  # 获取groupid
         # 获取该时间戳之后的length条消息，且groupid相同
-        chat_record = list(db.db.messages.find({"time": {"$gt": closest_time}, "group_id": group_id}).sort('time', 1).limit(length))
-        for record in chat_record:
+        chat_records = list(db.db.messages.find(
+            {"time": {"$gt": closest_time}, "group_id": group_id}
+        ).sort('time', 1).limit(length))
+        
+        # 更新每条消息的memorized属性
+        for record in chat_records:
+            # 检查当前记录的memorized值
+            current_memorized = record.get('memorized', 0)
+            if current_memorized  > 3:
+                print(f"消息已读取3次，跳过")
+                return ''
+                
+            # 更新memorized值
+            db.db.messages.update_one(
+                {"_id": record["_id"]},
+                {"$set": {"memorized": current_memorized + 1}}
+            )
+            
             chat_text += record["detailed_plain_text"]
+            
         return chat_text
-    
+    print(f"消息已读取3次，跳过")
     return ''
 
 class Memory_graph:
@@ -186,24 +201,26 @@ class Hippocampus:
         self.memory_graph = memory_graph
         self.llm_model = LLMModel()
         self.llm_model_small = LLMModel(model_name="deepseek-ai/DeepSeek-V2.5")
+        self.llm_model_get_topic = LLMModel(model_name="Pro/Qwen/Qwen2.5-7B-Instruct")
+        self.llm_model_summary = LLMModel(model_name="Qwen/Qwen2.5-32B-Instruct")
         
     def get_memory_sample(self, chat_size=20, time_frequency:dict={'near':2,'mid':4,'far':3}):
         current_timestamp = datetime.datetime.now().timestamp()
         chat_text = []
         #短期：1h   中期：4h   长期：24h
         for _ in range(time_frequency.get('near')):  # 循环10次
-            random_time = current_timestamp - random.randint(1, 3600)  # 随机时间
+            random_time = current_timestamp - random.randint(1, 3600*4)  # 随机时间
             chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
             chat_text.append(chat_)  
         for _ in range(time_frequency.get('mid')):  # 循环10次
-            random_time = current_timestamp - random.randint(3600, 3600*4)  # 随机时间
+            random_time = current_timestamp - random.randint(3600*4, 3600*24)  # 随机时间
             chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
             chat_text.append(chat_)  
         for _ in range(time_frequency.get('far')):  # 循环10次
-            random_time = current_timestamp - random.randint(3600*4, 3600*24)  # 随机时间
+            random_time = current_timestamp - random.randint(3600*24, 3600*24*7)  # 随机时间
             chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
             chat_text.append(chat_)
-        return chat_text
+        return [chat for chat in chat_text if chat]
     
     def calculate_topic_num(self,text, compress_rate):
         """计算文本的话题数量"""
@@ -219,8 +236,9 @@ class Hippocampus:
         
         #获取topics
         topic_num = self.calculate_topic_num(input_text, compress_rate)
-        topics_response = await self.llm_model_small.generate_response_async(self.find_topic_llm(input_text, topic_num))
-        topics = topics_response[0].split(",")
+        topics_response = await self.llm_model_get_topic.generate_response_async(self.find_topic_llm(input_text, topic_num))
+        # 修改话题处理逻辑
+        topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
         print(f"话题: {topics}")
         
         # 创建所有话题的请求任务
@@ -241,57 +259,41 @@ class Hippocampus:
         return compressed_memory
     
     async def operation_build_memory(self, chat_size=12):
-        #最近消息获取频率
-        time_frequency = {'near':1,'mid':2,'far':2}
-        memory_sample = self.get_memory_sample(chat_size,time_frequency)
+        # 最近消息获取频率
+        time_frequency = {'near': 3, 'mid': 8, 'far': 5}
+        memory_sample = self.get_memory_sample(chat_size, time_frequency)
         
+        all_topics = []  # 用于存储所有话题
+
         for i, input_text in enumerate(memory_sample, 1):
-            #加载进度可视化
+            # 加载进度可视化
+            all_topics = []
             progress = (i / len(memory_sample)) * 100
             bar_length = 30
             filled_length = int(bar_length * i // len(memory_sample))
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
             print(f"\n进度: [{bar}] {progress:.1f}% ({i}/{len(memory_sample)})")
+
+            # 生成压缩后记忆 ,表现为 (话题,记忆) 的元组
+            compressed_memory = set()
+            compress_rate = 0.1
+            compressed_memory = await self.memory_compress(input_text, compress_rate)
+            print(f"\033[1;33m压缩后记忆数量\033[0m: {len(compressed_memory)}")
             
-            if input_text:
-                # 生成压缩后记忆 ,表现为 (话题,记忆) 的元组
-                compressed_memory = set()
-                compress_rate = 0.15
-                compressed_memory = await self.memory_compress(input_text,compress_rate)
-                print(f"\033[1;33m压缩后记忆数量\033[0m: {len(compressed_memory)}")
+            # 将记忆加入到图谱中
+            for topic, memory in compressed_memory:
+                print(f"\033[1;32m添加节点\033[0m: {topic}")
+                self.memory_graph.add_dot(topic, memory)
+                all_topics.append(topic)  # 收集所有话题
+            for i in range(len(all_topics)):
+                for j in range(i + 1, len(all_topics)):
+                    print(f"\033[1;32m连接节点\033[0m: {all_topics[i]} 和 {all_topics[j]}")
+                    self.memory_graph.connect_dot(all_topics[i], all_topics[j])
+
                 
-                #将记忆加入到图谱中
-                for topic, memory in compressed_memory:
-                    # 将jieba分词结果转换为列表以便多次使用
-                    topics = list(jieba.cut(topic))
-                    print(f"\033[1;34m话题\033[0m: {topic}")
-                    print(f"\033[1;34m分词结果\033[0m: {topics}")
-                    print(f"\033[1;34m记忆\033[0m: {memory}")
-                    
-                    # 如果分词结果少于2个词，跳过连接
-                    if len(topics) < 2:
-                        print(f"\033[1;31m分词结果少于2个词，跳过连接\033[0m")
-                        # 仍然添加单个节点
-                        for split_topic in topics:
-                            self.memory_graph.add_dot(split_topic, memory)
-                        continue
-                        
-                    # 先添加所有节点
-                    for split_topic in topics:
-                        print(f"\033[1;32m添加节点\033[0m: {split_topic}")
-                        self.memory_graph.add_dot(split_topic, memory)
-                    
-                    # 再添加节点之间的连接
-                    for i, split_topic in enumerate(topics):
-                        for j, other_split_topic in enumerate(topics):
-                            if i < j:  # 只连接一次，避免重复连接
-                                print(f"\033[1;32m连接节点\033[0m: {split_topic} 和 {other_split_topic}")
-                                self.memory_graph.connect_dot(split_topic, other_split_topic)
-            else:
-                print(f"空消息 跳过")
             
-            # 每处理完一条消息就同步一次到数据库
-            self.sync_memory_to_db_2()
+                    
+        self.sync_memory_to_db()
 
     def sync_memory_from_db(self):
         """
@@ -344,7 +346,7 @@ class Hippocampus:
         nodes = sorted([source, target])
         return hash(f"{nodes[0]}:{nodes[1]}")
 
-    def sync_memory_to_db_2(self):
+    def sync_memory_to_db(self):
         """
         检查并同步内存中的图结构与数据库
         使用特征值(哈希值)快速判断是否需要更新
@@ -448,11 +450,13 @@ class Hippocampus:
         logger.success("完成记忆图谱与数据库的差异同步")
 
     def find_topic_llm(self,text, topic_num):
-        prompt = f'这是一段文字：{text}。请你从这段话中总结出{topic_num}个话题，帮我列出来，用逗号隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要告诉我其他内容。'
+        # prompt = f'这是一段文字：{text}。请你从这段话中总结出{topic_num}个话题，帮我列出来，用逗号隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要告诉我其他内容。'
+        prompt = f'这是一段文字：{text}。请你从这段话中总结出{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，用逗号,隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要有序号，不要告诉我其他内容。'
         return prompt
 
     def topic_what(self,text, topic):
-        prompt = f'这是一段文字：{text}。我想知道这记忆里有什么关于{topic}的话题，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
+        # prompt = f'这是一段文字：{text}。我想知道这段文字里有什么关于{topic}的话题，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
+        prompt = f'这是一段文字：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
         return prompt
     
     def remove_node_from_db(self, topic):
@@ -557,7 +561,7 @@ class Hippocampus:
         
         # 同步到数据库
         if forgotten_nodes:
-            self.sync_memory_to_db_2()
+            self.sync_memory_to_db()
             logger.info(f"完成遗忘操作，共遗忘 {len(forgotten_nodes)} 个节点的记忆")
         else:
             logger.info("本次检查没有节点满足遗忘条件")
@@ -632,7 +636,7 @@ class Hippocampus:
         
         # 同步到数据库
         if merged_nodes:
-            self.sync_memory_to_db_2()
+            self.sync_memory_to_db()
             print(f"\n完成记忆合并操作，共处理 {len(merged_nodes)} 个节点")
         else:
             print("\n本次检查没有需要合并的节点")
@@ -667,7 +671,7 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
         memory_count = len(memory_items) if isinstance(memory_items, list) else (1 if memory_items else 0)
         # 使用指数函数使变化更明显
         ratio = memory_count / max_memories
-        size = 500 + 5000 * (ratio ** 2)  # 使用平方函数使差异更明显
+        size = 400 + 2000 * (ratio ** 2)  # 增大节点大小
         node_sizes.append(size)
         
         # 计算节点颜色（基于连接数）
@@ -682,45 +686,22 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
             blue = max(0.0, 1.0 - color_ratio)
             node_colors.append((red, 0, blue))
     
-    # 获取边的权重和透明度
-    edge_colors = []
-    max_strength = 1
-    
-    # 找出最大强度值
-    for (u, v) in H.edges():
-        strength = H[u][v].get('strength', 1)
-        max_strength = max(max_strength, strength)
-    
-    # 创建边权重字典用于布局
-    edge_weights = {}
-    
-    # 计算每条边的透明度和权重
-    for (u, v) in H.edges():
-        strength = H[u][v].get('strength', 1)
-        # 将强度映射到透明度范围 [0.05, 0.8]
-        alpha = 0.02 + 0.55 * (strength / max_strength)
-        # 使用统一的蓝色，但透明度不同
-        edge_colors.append((0, 0, 1, alpha))
-        # 设置边的权重（强度越大，权重越大，节点间距离越小）
-        edge_weights[(u, v)] = strength
-    
     # 绘制图形
-    plt.figure(figsize=(20, 16))  # 增加图形尺寸
-    # 调整弹簧布局参数，使用边权重影响布局
+    plt.figure(figsize=(16, 12))  # 减小图形尺寸
     pos = nx.spring_layout(H, 
-                          k=2.0,        # 增加节点间斥力
+                          k=1,        # 调整节点间斥力
                           iterations=100,  # 增加迭代次数
-                          scale=2.0,    # 增加布局尺寸
+                          scale=1.5,    # 减小布局尺寸
                           weight='strength')  # 使用边的strength属性作为权重
     
     nx.draw(H, pos, 
            with_labels=True, 
            node_color=node_colors,
            node_size=node_sizes,
-           font_size=8,  # 稍微减小字体大小
+           font_size=12,  # 保持增大的字体大小
            font_family='SimHei',
            font_weight='bold',
-           edge_color=edge_colors,
+           edge_color='gray',
            width=1.5)  # 统一的边宽度
     
     title = '记忆图谱可视化 - 节点大小表示记忆数量\n节点颜色：蓝(弱连接)到红(强连接)渐变，边的透明度表示连接强度\n连接强度越大的节点距离越近'
@@ -733,7 +714,7 @@ async def main():
     db = Database.get_instance()
     start_time = time.time()
     
-    test_pare = {'do_build_memory':False,'do_forget_topic':True,'do_visualize_graph':True,'do_query':False,'do_merge_memory':True}
+    test_pare = {'do_build_memory':True,'do_forget_topic':False,'do_visualize_graph':True,'do_query':False,'do_merge_memory':False}
     
     # 创建记忆图
     memory_graph = Memory_graph()
@@ -750,11 +731,11 @@ async def main():
     # 构建记忆
     if test_pare['do_build_memory']:
         logger.info("开始构建记忆...")
-        chat_size = 25
+        chat_size = 20
         await hippocampus.operation_build_memory(chat_size=chat_size)
         
         end_time = time.time()
-        logger.info(f"\033[32m[构建记忆耗时: {end_time - start_time:.2f} 秒,chat_size={chat_size},chat_count = {chat_size}]\033[0m")
+        logger.info(f"\033[32m[构建记忆耗时: {end_time - start_time:.2f} 秒,chat_size={chat_size},chat_count = 16]\033[0m")
         
     if test_pare['do_forget_topic']:
         logger.info("开始遗忘记忆...")
