@@ -104,7 +104,7 @@ class ScheduleGenerator:
         min_diff = float('inf')
         
         # 检查今天的日程
-        if not self.today_schedule.keys():
+        if not self.today_schedule:
             return "摸鱼"
         for time_str in self.today_schedule.keys():
             diff = abs(self._time_diff(current_time, time_str))
