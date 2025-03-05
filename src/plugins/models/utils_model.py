@@ -128,6 +128,7 @@ class LLM_request:
         base_wait_time = 15
         
         current_image_base64 = image_base64
+        current_image_base64 = compress_base64_image_by_scale(current_image_base64)
         
 
         for retry in range(max_retries):
@@ -235,6 +236,8 @@ class LLM_request:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
+
+        image_base64=compress_base64_image_by_scale(image_base64)
 
         # 构建请求体
         data = {
