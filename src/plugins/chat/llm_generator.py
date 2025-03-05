@@ -138,9 +138,12 @@ class ResponseGenerator:
             内容：{content}
             输出：
             '''
-            
             content, _ = await self.model_v3.generate_response(prompt)
-            return [content.strip()] if content else ["neutral"]
+            content=content.strip()
+            if content in ['happy','angry','sad','surprised','disgusted','fearful','neutral']:
+                return [content]
+            else:
+                return ["neutral"]
             
         except Exception as e:
             print(f"获取情感标签时出错: {e}")
