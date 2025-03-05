@@ -29,6 +29,16 @@ config = driver.config
 class EmojiManager:
     _instance = None
     EMOJI_DIR = "data/emoji"  # 表情包存储目录
+
+    EMOTION_KEYWORDS = {
+        'happy': ['开心', '快乐', '高兴', '欢喜', '笑', '喜悦', '兴奋', '愉快', '乐', '好'],
+        'angry': ['生气', '愤怒', '恼火', '不爽', '火大', '怒', '气愤', '恼怒', '发火', '不满'],
+        'sad': ['伤心', '难过', '悲伤', '痛苦', '哭', '忧伤', '悲痛', '哀伤', '委屈', '失落'],
+        'surprised': ['惊讶', '震惊', '吃惊', '意外', '惊', '诧异', '惊奇', '惊喜', '不敢相信', '目瞪口呆'],
+        'disgusted': ['恶心', '讨厌', '厌恶', '反感', '嫌弃', '恶', '嫌恶', '憎恶', '不喜欢', '烦'],
+        'fearful': ['害怕', '恐惧', '惊恐', '担心', '怕', '惊吓', '惊慌', '畏惧', '胆怯', '惧'],
+        'neutral': ['普通', '一般', '还行', '正常', '平静', '平淡', '一般般', '凑合', '还好', '就这样']
+    }
     
     def __new__(cls):
         if cls._instance is None:
@@ -71,6 +81,7 @@ class EmojiManager:
         if 'emoji' not in self.db.db.list_collection_names():
             self.db.db.create_collection('emoji')
             self.db.db.emoji.create_index([('embedding', '2dsphere')])
+            self.db.db.emoji.create_index([('tags', 1)])
             self.db.db.emoji.create_index([('filename', 1)], unique=True)
             
     def record_usage(self, emoji_id: str):
@@ -160,7 +171,28 @@ class EmojiManager:
     async def _get_emoji_tag(self, image_base64: str) -> str:
         """获取表情包的标签"""
         try:
-            prompt = '这是一个表情包，请为其生成简洁的描述，同时生成表情包所蕴含的情绪的描述。'
+            prompt = '这是一个表情包，请从"happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"中选出1个情感标签。只输出标签，不要输出其他任何内容，只输出情感标签就好'
+            
+            content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
+            tag_result = content.strip().lower()
+            
+            valid_tags = ["happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"]
+            for tag_match in valid_tags:
+                if tag_match in tag_result or tag_match == tag_result:
+                    return tag_match
+            print(f"\033[1;33m[警告]\033[0m 无效的标签: {tag_result}, 跳过")
+            
+        except Exception as e:
+            print(f"\033[1;31m[错误]\033[0m 获取标签失败: {str(e)}")
+            return "neutral"
+        
+        print(f"\033[1;32m[调试信息]\033[0m 使用默认标签: neutral")
+        return "neutral"  # 默认标签
+
+    async def _get_emoji_discription(self, image_base64: str) -> str:
+        """获取表情包的标签"""
+        try:
+            prompt = '这是一个表情包，简洁的描述一下表情包的内容和表情包所表达的情感'
             
             content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
             logger.debug(f"输出描述: {content}")
@@ -263,7 +295,8 @@ class EmojiManager:
                     continue
                 
                 # 获取表情包的描述
-                discription = await self._get_emoji_tag(image_base64)
+                discription = await self._get_emoji_discription(image_base64)
+                tag = await self._get_emoji_tag(image_base64)
                 embedding = get_embedding(discription)
                 if discription is not None:
                     # 准备数据库记录
@@ -272,6 +305,7 @@ class EmojiManager:
                         'path': image_path,
                         'embedding':embedding,
                         'discription': discription,
+                        'tag':tag,
                         'timestamp': int(time.time())
                     }
                     
