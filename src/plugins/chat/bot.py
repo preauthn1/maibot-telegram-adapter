@@ -69,11 +69,9 @@ class ChatBot:
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.time))
 
 
-        identifier=topic_identifier.identify_topic()
-        if global_config.topic_extract=='llm':
-            topic=await identifier(message.processed_plain_text)
-        else:
-            topic=identifier(message.detailed_plain_text)
+
+        topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
+
 
         # topic1 = topic_identifier.identify_topic_jieba(message.processed_plain_text)
         # topic2 = await topic_identifier.identify_topic_llm(message.processed_plain_text)

@@ -52,8 +52,8 @@ class WillingManager:
             reply_probability = reply_probability / 3.5
 
         reply_probability = min(reply_probability, 1)
-        if reply_probability < 0.1:
-            reply_probability = 0.1
+        if reply_probability < 0:
+            reply_probability = 0
         return reply_probability
     
     def change_reply_willing_sent(self, group_id: int):

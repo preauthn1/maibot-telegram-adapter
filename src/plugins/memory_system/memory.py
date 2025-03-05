@@ -9,8 +9,14 @@ import random
 import time
 from ..chat.config import global_config
 from ...common.database import Database # 使用正确的导入语法
-from ..chat.utils import calculate_information_content, get_cloest_chat_from_db
 from ..models.utils_model import LLM_request
+import math
+from ..chat.utils import calculate_information_content, get_cloest_chat_from_db
+
+
+
+
+
 class Memory_graph:
     def __init__(self):
         self.G = nx.Graph()  # 使用 networkx 的图结构
@@ -126,8 +132,8 @@ class Memory_graph:
 class Hippocampus:
     def __init__(self,memory_graph:Memory_graph):
         self.memory_graph = memory_graph
-        self.llm_model = LLM_request(model = global_config.llm_normal,temperature=0.5)
-        self.llm_model_small = LLM_request(model = global_config.llm_normal_minor,temperature=0.5)
+        self.llm_model_get_topic = LLM_request(model = global_config.llm_normal_minor,temperature=0.5)
+        self.llm_model_summary = LLM_request(model = global_config.llm_normal,temperature=0.5)
         
     def calculate_node_hash(self, concept, memory_items):
         """计算节点的特征值"""
@@ -158,54 +164,75 @@ class Hippocampus:
             random_time = current_timestamp - random.randint(3600*4, 3600*24)  # 随机时间
             chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
             chat_text.append(chat_)
-        return chat_text
+        return [text for text in chat_text if text]
     
-    async def memory_compress(self, input_text, rate=1):
-        information_content = calculate_information_content(input_text)
-        print(f"文本的信息量（熵）: {information_content:.4f} bits")
-        topic_num = max(1, min(5, int(information_content * rate / 4)))
-        topic_prompt = find_topic(input_text, topic_num)
-        topic_response = await self.llm_model.generate_response(topic_prompt)
-        # 检查 topic_response 是否为元组
-        if isinstance(topic_response, tuple):
-            topics = topic_response[0].split(",")  # 假设第一个元素是我们需要的字符串
-        else:
-            topics = topic_response.split(",")
-        compressed_memory = set()
+    async def memory_compress(self, input_text, compress_rate=0.1):
+        print(input_text)
+        
+        #获取topics
+        topic_num = self.calculate_topic_num(input_text, compress_rate)
+        topics_response = await self.llm_model_get_topic.generate_response(self.find_topic_llm(input_text, topic_num))
+        # 修改话题处理逻辑
+        print(f"话题: {topics_response[0]}")
+        topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
+        print(f"话题: {topics}")
+        
+        # 创建所有话题的请求任务
+        tasks = []
         for topic in topics:
-            topic_what_prompt = topic_what(input_text,topic)
-            topic_what_response = await self.llm_model_small.generate_response(topic_what_prompt)
-            compressed_memory.add((topic.strip(), topic_what_response[0]))  # 将话题和记忆作为元组存储
+            topic_what_prompt = self.topic_what(input_text, topic)
+            # 创建异步任务
+            task = self.llm_model_summary.generate_response_async(topic_what_prompt)
+            tasks.append((topic.strip(), task))
+            
+        # 等待所有任务完成
+        compressed_memory = set()
+        for topic, task in tasks:
+            response = await task
+            if response:
+                compressed_memory.add((topic, response[0]))
+                
         return compressed_memory
 
-    async def operation_build_memory(self,chat_size=12):
-        #最近消息获取频率
-        time_frequency = {'near':1,'mid':2,'far':2}
+    def calculate_topic_num(self,text, compress_rate):
+        """计算文本的话题数量"""
+        information_content = calculate_information_content(text)
+        topic_by_length = text.count('\n')*compress_rate
+        topic_by_information_content = max(1, min(5, int((information_content-3) * 2)))
+        topic_num = int((topic_by_length + topic_by_information_content)/2)
+        print(f"topic_by_length: {topic_by_length}, topic_by_information_content: {topic_by_information_content}, topic_num: {topic_num}")
+        return topic_num
+
+    async def operation_build_memory(self,chat_size=20):
+        # 最近消息获取频率
+        time_frequency = {'near':2,'mid':4,'far':2}
         memory_sample = self.get_memory_sample(chat_size,time_frequency)
-        # print(f"\033[1;32m[记忆构建]\033[0m 获取记忆样本: {memory_sample}")   
+        
         for i, input_text in enumerate(memory_sample, 1):
-            #加载进度可视化
+            # 加载进度可视化
+            all_topics = []
             progress = (i / len(memory_sample)) * 100
             bar_length = 30
             filled_length = int(bar_length * i // len(memory_sample))
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
             print(f"\n进度: [{bar}] {progress:.1f}% ({i}/{len(memory_sample)})")
-            if input_text:
-                # 生成压缩后记忆
-                first_memory = set()
-                first_memory = await self.memory_compress(input_text, 2.5)
-                #将记忆加入到图谱中
-                for topic, memory in first_memory:
-                    topics = segment_text(topic)
-                    print(f"\033[1;34m话题\033[0m: {topic},节点: {topics}, 记忆: {memory}")
-                    for split_topic in topics:
-                        self.memory_graph.add_dot(split_topic,memory)
-                    for split_topic in topics:
-                        for other_split_topic in topics:
-                            if split_topic != other_split_topic:
-                                self.memory_graph.connect_dot(split_topic, other_split_topic)
-            else:
-                print(f"空消息 跳过")
+
+            # 生成压缩后记忆 ,表现为 (话题,记忆) 的元组
+            compressed_memory = set()
+            compress_rate = 0.1
+            compressed_memory = await self.memory_compress(input_text, compress_rate)
+            print(f"\033[1;33m压缩后记忆数量\033[0m: {len(compressed_memory)}")
+            
+            # 将记忆加入到图谱中
+            for topic, memory in compressed_memory:
+                print(f"\033[1;32m添加节点\033[0m: {topic}")
+                self.memory_graph.add_dot(topic, memory)
+                all_topics.append(topic)  # 收集所有话题
+            for i in range(len(all_topics)):
+                for j in range(i + 1, len(all_topics)):
+                    print(f"\033[1;32m连接节点\033[0m: {all_topics[i]} 和 {all_topics[j]}")
+                    self.memory_graph.connect_dot(all_topics[i], all_topics[j])
+                
         self.sync_memory_to_db()
 
     def sync_memory_to_db(self):
@@ -448,18 +475,18 @@ class Hippocampus:
         else:
             print("\n本次检查没有需要合并的节点")
 
+    def find_topic_llm(self,text, topic_num):
+        prompt = f'这是一段文字：{text}。请你从这段话中总结出{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，用逗号,隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要有序号，不要告诉我其他内容。'
+        return prompt
+
+    def topic_what(self,text, topic):
+        prompt = f'这是一段文字：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
+        return prompt
+
 
 def segment_text(text):
     seg_text = list(jieba.cut(text))
     return seg_text    
-
-def find_topic(text, topic_num):
-    prompt = f'这是一段文字：{text}。请你从这段话中总结出{topic_num}个话题，帮我列出来，用逗号隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要告诉我其他内容。'
-    return prompt
-
-def topic_what(text, topic):
-    prompt = f'这是一段文字：{text}。我想知道这记忆里有什么关于{topic}的话题，帮我总结成一句自然的话，可以包含时间和人物。只输出这句话就好'
-    return prompt
 
 
 from nonebot import get_driver

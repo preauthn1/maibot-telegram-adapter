@@ -36,7 +36,9 @@ class PromptBuilder:
         
         memory_prompt = ''
         start_time = time.time()  # 记录开始时间
-        topic = topic_identifier.identify_topic_jieba(message_txt)
+        # topic = await topic_identifier.identify_topic_llm(message_txt)
+        topic = topic_identifier.identify_topic_snownlp(message_txt)
+        
         # print(f"\033[1;32m[pb主题识别]\033[0m 主题: {topic}")
         
         all_first_layer_items = []  # 存储所有第一层记忆
@@ -64,15 +66,7 @@ class PromptBuilder:
                         if overlap:
                             # print(f"\033[1;32m[前额叶]\033[0m 发现主题 '{current_topic}' 和 '{other_topic}' 有共同的第二层记忆: {overlap}")
                             overlapping_second_layer.update(overlap)
-            
-            # 合并所有需要的记忆
-            # if all_first_layer_items:   
-                # print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆1: {all_first_layer_items}")
-            # if overlapping_second_layer:
-                # print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆2: {list(overlapping_second_layer)}")
-            
-            # 使用集合去重
-            # 从每个来源随机选择2条记忆（如果有的话）
+
             selected_first_layer = random.sample(all_first_layer_items, min(2, len(all_first_layer_items))) if all_first_layer_items else []
             selected_second_layer = random.sample(list(overlapping_second_layer), min(2, len(overlapping_second_layer))) if overlapping_second_layer else []
             

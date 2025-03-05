@@ -95,7 +95,11 @@ class ResponseGenerator:
         #         return None
 
         # 生成回复
-        content, reasoning_content = await model.generate_response(prompt)
+        try:
+            content, reasoning_content = await model.generate_response(prompt)
+        except Exception as e:
+            print(f"生成回复时出错: {e}")
+            return None
         
         # 保存到数据库
         self._save_to_db(

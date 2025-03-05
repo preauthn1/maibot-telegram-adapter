@@ -36,7 +36,6 @@ class LLM_request:
         data = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 8000,
             **self.params
         }
 
@@ -56,6 +55,10 @@ class LLM_request:
                             logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
                             await asyncio.sleep(wait_time)
                             continue
+
+                        if response.status in [500, 503]:
+                            logger.error(f"服务器错误: {response.status}")
+                            raise RuntimeError("服务器负载过高，模型恢复失败QAQ")
 
                         response.raise_for_status()  # 检查其他响应状态
 
@@ -113,7 +116,6 @@ class LLM_request:
                         ]
                     }
                 ],
-                "max_tokens": 8000,
                 **self.params
             }
 
@@ -126,7 +128,7 @@ class LLM_request:
         base_wait_time = 15
 
         current_image_base64 = image_base64
-
+        current_image_base64 = compress_base64_image_by_scale(current_image_base64)
 
         for retry in range(max_retries):
             try:
@@ -172,12 +174,76 @@ class LLM_request:
         logger.error("达到最大重试次数，请求仍然失败")
         raise RuntimeError("达到最大重试次数，API请求仍然失败")
 
+    async def generate_response_async(self, prompt: str) -> Union[str, Tuple[str, str]]:
+        """异步方式根据输入的提示生成模型的响应"""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        # 构建请求体
+        data = {
+            "model": self.model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.5,
+            **self.params
+        }
+
+        # 发送请求到完整的 chat/completions 端点
+        api_url = f"{self.base_url.rstrip('/')}/chat/completions"
+        logger.info(f"Request URL: {api_url}")  # 记录请求的 URL
+
+        max_retries = 3
+        base_wait_time = 15
+
+        async with aiohttp.ClientSession() as session:
+            for retry in range(max_retries):
+                try:
+                    async with session.post(api_url, headers=headers, json=data) as response:
+                        if response.status == 429:
+                            wait_time = base_wait_time * (2 ** retry)  # 指数退避
+                            logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
+                            await asyncio.sleep(wait_time)
+                            continue
+
+                        response.raise_for_status()  # 检查其他响应状态
+
+                        result = await response.json()
+                        if "choices" in result and len(result["choices"]) > 0:
+                            message = result["choices"][0]["message"]
+                            content = message.get("content", "")
+                            think_match = None
+                            reasoning_content = message.get("reasoning_content", "")
+                            if not reasoning_content:
+                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
+                            if think_match:
+                                reasoning_content = think_match.group(1).strip()
+                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
+                            return content, reasoning_content
+                        return "没有返回结果", ""
+
+                except Exception as e:
+                    if retry < max_retries - 1:  # 如果还有重试机会
+                        wait_time = base_wait_time * (2 ** retry)
+                        logger.error(f"[回复]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"请求失败: {str(e)}")
+                        return f"请求失败: {str(e)}", ""
+
+            logger.error("达到最大重试次数，请求仍然失败")
+            return "达到最大重试次数，请求仍然失败", ""
+
+
+
     def generate_response_for_image_sync(self, prompt: str, image_base64: str) -> Tuple[str, str]:
         """同步方法：根据输入的提示和图片生成模型的响应"""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
+
+        image_base64=compress_base64_image_by_scale(image_base64)
 
         # 构建请求体
         data = {
@@ -199,7 +265,6 @@ class LLM_request:
                     ]
                 }
             ],
-            "max_tokens": 8000,
             **self.params
         }
 
