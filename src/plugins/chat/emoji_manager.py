@@ -246,7 +246,7 @@ class EmojiManager:
         """压缩图片并返回base64编码
         Args:
             image_path: 图片文件路径
-            target_size: 目标文件大小（字节），默认4MB
+            target_size: 目标文件大小（字节），默认0.8MB
         Returns:
             Optional[str]: 成功返回base64编码的图片数据，失败返回None
         """
