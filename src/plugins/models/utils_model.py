@@ -36,6 +36,7 @@ class LLM_request:
         data = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 8000,
             **self.params
         }
 
@@ -65,10 +66,10 @@ class LLM_request:
                             think_match = None
                             reasoning_content = message.get("reasoning_content", "")
                             if not reasoning_content:
-                                think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
+                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
                             if think_match:
                                 reasoning_content = think_match.group(1).strip()
-                            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
                             return content, reasoning_content
                         return "没有返回结果", ""
 
@@ -112,9 +113,10 @@ class LLM_request:
                         ]
                     }
                 ],
+                "max_tokens": 8000,
                 **self.params
             }
-        
+
 
         # 发送请求到完整的chat/completions端点
         api_url = f"{self.base_url.rstrip('/')}/chat/completions"
@@ -122,9 +124,9 @@ class LLM_request:
 
         max_retries = 3
         base_wait_time = 15
-        
+
         current_image_base64 = image_base64
-        
+
 
         for retry in range(max_retries):
             try:
@@ -141,7 +143,7 @@ class LLM_request:
                             logger.warning("图片太大(413)，尝试压缩...")
                             current_image_base64 = compress_base64_image_by_scale(current_image_base64)
                             continue
-                            
+
                         response.raise_for_status()  # 检查其他响应状态
 
                         result = await response.json()
@@ -151,10 +153,10 @@ class LLM_request:
                             think_match = None
                             reasoning_content = message.get("reasoning_content", "")
                             if not reasoning_content:
-                                think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
+                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
                             if think_match:
                                 reasoning_content = think_match.group(1).strip()
-                            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
                             return content, reasoning_content
                         return "没有返回结果", ""
 
@@ -197,6 +199,7 @@ class LLM_request:
                     ]
                 }
             ],
+            "max_tokens": 8000,
             **self.params
         }
 
@@ -226,10 +229,10 @@ class LLM_request:
                     think_match = None
                     reasoning_content = message.get("reasoning_content", "")
                     if not reasoning_content:
-                        think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
+                        think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
                     if think_match:
                         reasoning_content = think_match.group(1).strip()
-                    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                    content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
                     return content, reasoning_content
                 return "没有返回结果", ""
 
