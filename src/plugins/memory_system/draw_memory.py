@@ -2,7 +2,6 @@
 import os
 import sys
 import jieba
-from llm_module import LLMModel
 import networkx as nx
 import matplotlib.pyplot as plt
 import math
@@ -10,10 +9,19 @@ from collections import Counter
 import datetime
 import random
 import time
-# from chat.config import global_config
+from dotenv import load_dotenv
 import sys
+import asyncio
+import aiohttp
+from typing import Tuple
+
 sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
 from src.common.database import Database  # 使用正确的导入语法
+
+# 加载.env.dev文件
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), '.env.dev')
+load_dotenv(env_path)
+
    
 class Memory_graph:
     def __init__(self):
@@ -112,7 +120,11 @@ class Memory_graph:
             chat_record = list(self.db.db.messages.find({"time": {"$gt": closest_time}, "group_id": group_id}).sort('time', 1).limit(length))
             for record in chat_record:
                 time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(record['time'])))
-                chat_text += f'[{time_str}] {record["user_nickname"] or "用户" + str(record["user_id"])}: {record["processed_plain_text"]}\n'  # 添加发送者和时间信息
+                try:
+                    displayname="[(%s)%s]%s" % (record["user_id"],record["user_nickname"],record["user_cardname"])
+                except:
+                    displayname=record["user_nickname"] or "用户" + str(record["user_id"])
+                chat_text += f'[{time_str}] {displayname}: {record["processed_plain_text"]}\n'  # 添加发送者和时间信息
             return chat_text
         
         return []  # 如果没有找到记录，返回空列表
@@ -154,38 +166,32 @@ class Memory_graph:
 def main():
     # 初始化数据库
     Database.initialize(
-        host= os.getenv("MONGODB_HOST"),
-        port= int(os.getenv("MONGODB_PORT")),
-        db_name=  os.getenv("DATABASE_NAME"),
-        username= os.getenv("MONGODB_USERNAME"),
-        password= os.getenv("MONGODB_PASSWORD"),
-        auth_source=os.getenv("MONGODB_AUTH_SOURCE")
+        host=os.getenv("MONGODB_HOST", "127.0.0.1"),
+        port=int(os.getenv("MONGODB_PORT", "27017")),
+        db_name=os.getenv("DATABASE_NAME", "MegBot"),
+        username=os.getenv("MONGODB_USERNAME", ""),
+        password=os.getenv("MONGODB_PASSWORD", ""),
+        auth_source=os.getenv("MONGODB_AUTH_SOURCE", "")
     )
     
     memory_graph = Memory_graph()
-    # 创建LLM模型实例
-
     memory_graph.load_graph_from_db()
-    # 展示两种不同的可视化方式
-    print("\n按连接数量着色的图谱：")
-    # visualize_graph(memory_graph, color_by_memory=False)
-    visualize_graph_lite(memory_graph, color_by_memory=False)   
     
-    print("\n按记忆数量着色的图谱：")
-    # visualize_graph(memory_graph, color_by_memory=True)
-    visualize_graph_lite(memory_graph, color_by_memory=True)
-    
-    # memory_graph.save_graph_to_db()
+    # 只显示一次优化后的图形
+    visualize_graph_lite(memory_graph)
     
     while True:
         query = input("请输入新的查询概念（输入'退出'以结束）：")
         if query.lower() == '退出':
             break
-        items_list = memory_graph.get_related_item(query)
-        if items_list:
-            # print(items_list)
-            for memory_item in items_list:
-                print(memory_item)
+        first_layer_items, second_layer_items = memory_graph.get_related_item(query)
+        if first_layer_items or second_layer_items:
+            print("\n第一层记忆：")
+            for item in first_layer_items:
+                print(item)
+            print("\n第二层记忆：")
+            for item in second_layer_items:
+                print(item)
         else:
             print("未找到相关记忆。")
             
@@ -255,7 +261,7 @@ def visualize_graph(memory_graph: Memory_graph, color_by_memory: bool = False):
     nx.draw(G, pos, 
            with_labels=True, 
            node_color=node_colors,
-           node_size=2000,
+           node_size=200,
            font_size=10,
            font_family='SimHei',
            font_weight='bold')
@@ -281,7 +287,7 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
         memory_items = H.nodes[node].get('memory_items', [])
         memory_count = len(memory_items) if isinstance(memory_items, list) else (1 if memory_items else 0)
         degree = H.degree(node)
-        if memory_count <= 2 or degree <= 2:
+        if memory_count < 5 or degree < 2:  # 改为小于2而不是小于等于2
             nodes_to_remove.append(node)
     
     H.remove_nodes_from(nodes_to_remove)
@@ -294,55 +300,55 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
     # 保存图到本地
     nx.write_gml(H, "memory_graph.gml")  # 保存为 GML 格式
 
-    # 根据连接条数或记忆数量设置节点颜色
+    # 计算节点大小和颜色
     node_colors = []
-    nodes = list(H.nodes())  # 获取图中实际的节点列表
+    node_sizes = []
+    nodes = list(H.nodes())
     
-    if color_by_memory:
-        # 计算每个节点的记忆数量
-        memory_counts = []
-        for node in nodes:
-            memory_items = H.nodes[node].get('memory_items', [])
-            if isinstance(memory_items, list):
-                count = len(memory_items)
-            else:
-                count = 1 if memory_items else 0
-            memory_counts.append(count)
-        max_memories = max(memory_counts) if memory_counts else 1
+    # 获取最大记忆数和最大度数用于归一化
+    max_memories = 1
+    max_degree = 1
+    for node in nodes:
+        memory_items = H.nodes[node].get('memory_items', [])
+        memory_count = len(memory_items) if isinstance(memory_items, list) else (1 if memory_items else 0)
+        degree = H.degree(node)
+        max_memories = max(max_memories, memory_count)
+        max_degree = max(max_degree, degree)
+    
+    # 计算每个节点的大小和颜色
+    for node in nodes:
+        # 计算节点大小（基于记忆数量）
+        memory_items = H.nodes[node].get('memory_items', [])
+        memory_count = len(memory_items) if isinstance(memory_items, list) else (1 if memory_items else 0)
+        # 使用指数函数使变化更明显
+        ratio = memory_count / max_memories
+        size = 500 + 5000 * (ratio ** 2)  # 使用平方函数使差异更明显
+        node_sizes.append(size)
         
-        for count in memory_counts:
-            # 使用不同的颜色方案：红色表示记忆多，蓝色表示记忆少
-            if max_memories > 0:
-                intensity = min(1.0, count / max_memories)
-                color = (intensity, 0, 1.0 - intensity)  # 从蓝色渐变到红色
-            else:
-                color = (0, 0, 1)  # 如果没有记忆，则为蓝色
-            node_colors.append(color)
-    else:
-        # 使用原来的连接数量着色方案
-        max_degree = max(H.degree(), key=lambda x: x[1])[1] if H.degree() else 1
-        for node in nodes:
-            degree = H.degree(node)
-            if max_degree > 0:
-                red = min(1.0, degree / max_degree)
-                blue = 1.0 - red
-                color = (red, 0, blue)
-            else:
-                color = (0, 0, 1)
-            node_colors.append(color)
+        # 计算节点颜色（基于连接数）
+        degree = H.degree(node)
+        # 红色分量随着度数增加而增加
+        red = min(1.0, degree / max_degree)
+        # 蓝色分量随着度数减少而增加
+        blue = 1.0 - red
+        color = (red, 0, blue)
+        node_colors.append(color)
     
     # 绘制图形
     plt.figure(figsize=(12, 8))
-    pos = nx.spring_layout(H, k=1, iterations=50)
+    pos = nx.spring_layout(H, k=1.5, iterations=50)  # 增加k值使节点分布更开
     nx.draw(H, pos, 
            with_labels=True, 
            node_color=node_colors,
-           node_size=2000,
+           node_size=node_sizes,
            font_size=10,
            font_family='SimHei',
-           font_weight='bold')
+           font_weight='bold',
+           edge_color='gray',
+           width=0.5,
+           alpha=0.7)
     
-    title = '记忆图谱可视化 - ' + ('按记忆数量着色' if color_by_memory else '按连接数量着色')
+    title = '记忆图谱可视化 - 节点大小表示记忆数量，颜色表示连接数'
     plt.title(title, fontsize=16, fontfamily='SimHei')
     plt.show()
     

@@ -9,9 +9,8 @@ class WillingManager:
     async def _decay_reply_willing(self):
         """定期衰减回复意愿"""
         while True:
-            await asyncio.sleep(3)
+            await asyncio.sleep(5)
             for group_id in self.group_reply_willing:
-                # 每分钟衰减10%的回复意愿
                 self.group_reply_willing[group_id] = max(0, self.group_reply_willing[group_id] * 0.6)
                 
     def get_willing(self, group_id: int) -> float:
@@ -26,13 +25,7 @@ class WillingManager:
         """改变指定群组的回复意愿并返回回复概率"""
         current_willing = self.group_reply_willing.get(group_id, 0)
         
-        print(f"初始意愿: {current_willing}")
-        
-        # if topic and current_willing < 1:
-        #     current_willing += 0.2
-        # elif topic:
-        #     current_willing += 0.05
-            
+        # print(f"初始意愿: {current_willing}")
         if is_mentioned_bot and current_willing < 1.0:
             current_willing += 0.9
             print(f"被提及, 当前意愿: {current_willing}")
@@ -44,23 +37,23 @@ class WillingManager:
             current_willing *= 0.15
             print(f"表情包, 当前意愿: {current_willing}")
         
-        if interested_rate > 0.6:
+        if interested_rate > 0.65:
             print(f"兴趣度: {interested_rate}, 当前意愿: {current_willing}")
-            current_willing += interested_rate-0.45
+            current_willing += interested_rate-0.6
         
         self.group_reply_willing[group_id] = min(current_willing, 3.0)
         
-        reply_probability = (current_willing - 0.5) * 2
+        reply_probability = max((current_willing - 0.55) * 1.9, 0)
         if group_id not in config.talk_allowed_groups:
             current_willing = 0
             reply_probability = 0
             
         if group_id in config.talk_frequency_down_groups:
             reply_probability = reply_probability / 3.5
-            
-        # if is_mentioned_bot and user_id == int(123456784):
-        #     reply_probability = 1
-            
+
+        reply_probability = min(reply_probability, 1)
+        if reply_probability < 0:
+            reply_probability = 0
         return reply_probability
     
     def change_reply_willing_sent(self, group_id: int):
@@ -72,7 +65,7 @@ class WillingManager:
         """发送消息后提高群组的回复意愿"""
         current_willing = self.group_reply_willing.get(group_id, 0)
         if current_willing < 1:
-            self.group_reply_willing[group_id] = min(1, current_willing + 0.3)
+            self.group_reply_willing[group_id] = min(1, current_willing + 0.2)
         
     async def ensure_started(self):
         """确保衰减任务已启动"""

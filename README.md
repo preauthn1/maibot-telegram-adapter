@@ -32,7 +32,7 @@
 > - QQ机器人存在被限制风险，请自行了解，谨慎使用
 > - 由于持续迭代，可能存在一些已知或未知的bug
 
-**交流群**: 123456780（仅用于开发和建议相关讨论）
+**交流群**: 123456780（仅用于开发和建议相关讨论）不建议在群内询问部署问题，我不一定有空回复，会优先写文档和代码
 
 ## 📚 文档
 
@@ -42,22 +42,22 @@
 ## 🎯 功能介绍
 
 ### 💬 聊天功能
-- 支持关键词检索主动发言：对消息的话题topic进行识别，如果检测到麦麦存储过的话题就会主动进行发言，目前有bug,所以现在只会检测主题，不会进行存储
+- 支持关键词检索主动发言：对消息的话题topic进行识别，如果检测到麦麦存储过的话题就会主动进行发言
 - 支持bot名字呼唤发言：检测到"麦麦"会主动发言，可配置
-- 使用硅基流动的api进行回复生成，可随机使用R1，V3，R1-distill等模型，未来将加入官网api支持
+- 支持多模型，多厂商自定义配置
 - 动态的prompt构建器，更拟人
 - 支持图片，转发消息，回复消息的识别
 - 错别字和多条回复功能：麦麦可以随机生成错别字，会多条发送回复以及对消息进行reply
 
 ### 😊 表情包功能
-- 支持根据发言内容发送对应情绪的表情包：未完善，可以用
-- 会自动偷群友的表情包（未完善，暂时禁用）目前有bug
+- 支持根据发言内容发送对应情绪的表情包
+- 会自动偷群友的表情包
 
 ### 📅 日程功能
 - 麦麦会自动生成一天的日程，实现更拟人的回复
 
 ### 🧠 记忆功能
-- 对聊天记录进行概括存储，在需要时调用，没写完
+- 对聊天记录进行概括存储，在需要时调用，待完善
 
 ### 📚 知识库功能
 - 基于embedding模型的知识库，手动放入txt会自动识别，写完了，暂时禁用
@@ -66,25 +66,27 @@
 - 针对每个用户创建"关系"，可以对不同用户进行个性化回复，目前只有极其简单的好感度（WIP）
 - 针对每个群创建"群印象"，可以对不同群进行个性化回复（WIP）
 
-## 🚧 开发中功能
+
+
+## 开发计划TODO：LIST
 - 人格功能：WIP
 - 群氛围功能：WIP
 - 图片发送，转发功能：WIP
 - 幽默和meme功能：WIP的WIP
 - 让麦麦玩mc：WIP的WIP的WIP
-
-## 开发计划TODO：LIST
-
 - 兼容gif的解析和保存
 - 小程序转发链接解析
 - 对思考链长度限制
 - 修复已知bug
-- 完善文档
+- ~~完善文档~~
 - 修复转发
-- config自动生成和检测
-- log别用print
-- 给发送消息写专门的类
+- ~~config自动生成和检测~~
+- ~~log别用print~~
+- ~~给发送消息写专门的类~~
 - 改进表情包发送逻辑
+- 自动生成的回复逻辑，例如自生成的回复方向，回复风格
+- 采用截断生成加快麦麦的反应速度
+- 改进发送消息的触发：
 
 ## 📌 注意事项
 纯编程外行，面向cursor编程，很多代码史一样多多包涵
@@ -99,4 +101,10 @@
 
 感谢各位大佬！
 
-[![Contributors](https://contributors-img.web.app/image?repo=SengokuCola/MaiMBot)](https://github.com/SengokuCola/MaiMBot/graphs/contributors)
+<a href="https://github.com/SengokuCola/MaiMBot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=SengokuCola/MaiMBot&time=true" />
+</a>
+
+
+## Stargazers over time
+[![Stargazers over time](https://starchart.cc/SengokuCola/MaiMBot.svg?variant=adaptive)](https://starchart.cc/SengokuCola/MaiMBot)

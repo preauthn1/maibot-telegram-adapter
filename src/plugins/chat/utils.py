@@ -10,6 +10,7 @@ from typing import Dict
 from collections import Counter
 import math
 from nonebot import get_driver
+from ..models.utils_model import LLM_request
 
 driver = get_driver()
 config = driver.config
@@ -37,7 +38,10 @@ def combine_messages(messages: List[Message]) -> str:
 def db_message_to_str (message_dict: Dict) -> str:
     print(f"message_dict: {message_dict}")
     time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(message_dict["time"]))
-    name = message_dict.get("user_nickname", "") or f"用户{message_dict['user_id']}"
+    try:
+        name="[(%s)%s]%s" % (message_dict['user_id'],message_dict.get("user_nickname", ""),message_dict.get("user_cardname", ""))
+    except:
+        name = message_dict.get("user_nickname", "") or f"用户{message_dict['user_id']}"
     content = message_dict.get("processed_plain_text", "")
     result = f"[{time_str}] {name}: {content}\n"
     print(f"result: {result}")
@@ -61,25 +65,9 @@ def is_mentioned_bot_in_txt(message: str) -> bool:
     return False
 
 def get_embedding(text):
-    url = "https://api.siliconflow.cn/v1/embeddings"
-    payload = {
-        "model": "BAAI/bge-m3",
-        "input": text,
-        "encoding_format": "float"
-    }
-    headers = {
-        "Authorization": f"Bearer {config.siliconflow_key}",
-        "Content-Type": "application/json"
-    }
-    
-    response = requests.request("POST", url, json=payload, headers=headers)
-    
-    if response.status_code != 200:
-        print(f"API请求失败: {response.status_code}")
-        print(f"错误信息: {response.text}")
-        return None
-        
-    return response.json()['data'][0]['embedding']
+    """获取文本的embedding向量"""
+    llm = LLM_request(model=global_config.embedding)
+    return llm.get_embedding_sync(text)
 
 def cosine_similarity(v1, v2):
     dot_product = np.dot(v1, v2)
@@ -87,13 +75,11 @@ def cosine_similarity(v1, v2):
     norm2 = np.linalg.norm(v2)
     return dot_product / (norm1 * norm2)
 
-def calculate_information_content(text):   
+def calculate_information_content(text):
     """计算文本的信息量（熵）"""
-    # 统计字符频率
     char_count = Counter(text)
     total_chars = len(text)
     
-    # 计算熵
     entropy = 0
     for count in char_count.values():
         probability = count / total_chars
@@ -102,23 +88,37 @@ def calculate_information_content(text):
     return entropy
 
 def get_cloest_chat_from_db(db, length: int, timestamp: str):
-    # 从数据库中根据时间戳获取离其最近的聊天记录
+    """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数"""
     chat_text = ''
-    closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])  # 调试输出
-    # print(f"距离time最近的消息时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(closest_record['time'])))}")
+    closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
     
-    if closest_record:
+    if closest_record and closest_record.get('memorized', 0) < 4:            
         closest_time = closest_record['time']
         group_id = closest_record['group_id']  # 获取groupid
         # 获取该时间戳之后的length条消息，且groupid相同
-        chat_record = list(db.db.messages.find({"time": {"$gt": closest_time}, "group_id": group_id}).sort('time', 1).limit(length))
-        for record in chat_record:
-            time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(int(record['time'])))
-            chat_text += f'[{time_str}] {record["user_nickname"] or "用户" + str(record["user_id"])}: {record["processed_plain_text"]}\n'  # 添加发送者和时间信息
+        chat_records = list(db.db.messages.find(
+            {"time": {"$gt": closest_time}, "group_id": group_id}
+        ).sort('time', 1).limit(length))
+        
+        # 更新每条消息的memorized属性
+        for record in chat_records:
+            # 检查当前记录的memorized值
+            current_memorized = record.get('memorized', 0)
+            if current_memorized  > 3:
+                # print(f"消息已读取3次，跳过")
+                return ''
+                
+            # 更新memorized值
+            db.db.messages.update_one(
+                {"_id": record["_id"]},
+                {"$set": {"memorized": current_memorized + 1}}
+            )
+            
+            chat_text += record["detailed_plain_text"]
+            
         return chat_text
-    
-    return []  # 如果没有找到记录，返回空列表
-
+    print(f"消息已读取3次，跳过")
+    return ''
 
 def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
     """从数据库获取群组最近的消息记录
@@ -135,14 +135,14 @@ def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
         # 从数据库获取最近消息
     recent_messages = list(db.db.messages.find(
         {"group_id": group_id},
-        {
-            "time": 1,
-            "user_id": 1,
-            "user_nickname": 1,
-            "message_id": 1,
-            "raw_message": 1,
-            "processed_text": 1
-        }
+        # {
+        #     "time": 1,
+        #     "user_id": 1,
+        #     "user_nickname": 1,
+        #     "message_id": 1,
+        #     "raw_message": 1,
+        #     "processed_text": 1
+        # }
     ).sort("time", -1).limit(limit))
 
     if not recent_messages:
@@ -152,16 +152,20 @@ def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
     from .message import Message
     message_objects = []
     for msg_data in recent_messages:
-        msg = Message(
-            time=msg_data["time"],
-            user_id=msg_data["user_id"],
-            user_nickname=msg_data.get("user_nickname", ""),
-            message_id=msg_data["message_id"],
-            raw_message=msg_data["raw_message"],
-            processed_plain_text=msg_data.get("processed_text", ""),
-            group_id=group_id
-        )
-        message_objects.append(msg)
+        try:
+            msg = Message(
+                time=msg_data["time"],
+                user_id=msg_data["user_id"],
+                user_nickname=msg_data.get("user_nickname", ""),
+                message_id=msg_data["message_id"],
+                raw_message=msg_data["raw_message"],
+                processed_plain_text=msg_data.get("processed_text", ""),
+                group_id=group_id
+            )
+            message_objects.append(msg)
+        except KeyError:
+            print("[WARNING] 数据库中存在无效的消息")
+            continue
     
     # 按时间正序排列
     message_objects.reverse()

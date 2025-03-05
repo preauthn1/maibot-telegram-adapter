@@ -3,26 +3,28 @@ import sys
 import numpy as np
 import requests
 import time
-from nonebot import get_driver
-
-driver = get_driver()
-config = driver.config  
+from dotenv import load_dotenv
 
 # 添加项目根目录到 Python 路径
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(root_path)
 
-from src.common.database import Database
-from src.plugins.chat.config import llm_config
+# 加载根目录下的env.edv文件
+env_path = os.path.join(root_path, ".env.dev")
+if not os.path.exists(env_path):
+    raise FileNotFoundError(f"配置文件不存在: {env_path}")
+load_dotenv(env_path)
 
-# 直接配置数据库连接信息
+from src.common.database import Database
+
+# 从环境变量获取配置
 Database.initialize(
-    host= config.mongodb_host,
-    port= int(config.mongodb_port),
-    db_name=  config.database_name,
-    username= config.mongodb_username,
-    password= config.mongodb_password,
-    auth_source=config.mongodb_auth_source
+    host=os.getenv("MONGODB_HOST", "localhost"),
+    port=int(os.getenv("MONGODB_PORT", "27017")),
+    db_name=os.getenv("DATABASE_NAME", "maimai"),
+    username=os.getenv("MONGODB_USERNAME"),
+    password=os.getenv("MONGODB_PASSWORD"),
+    auth_source=os.getenv("MONGODB_AUTH_SOURCE", "admin")
 )
 
 class KnowledgeLibrary:
@@ -30,6 +32,9 @@ class KnowledgeLibrary:
         self.db = Database.get_instance()
         self.raw_info_dir = "data/raw_info"
         self._ensure_dirs()
+        self.api_key = os.getenv("SILICONFLOW_KEY")
+        if not self.api_key:
+            raise ValueError("SILICONFLOW_API_KEY 环境变量未设置")
         
     def _ensure_dirs(self):
         """确保必要的目录存在"""
@@ -44,7 +49,7 @@ class KnowledgeLibrary:
             "encoding_format": "float"
         }
         headers = {
-            "Authorization": f"Bearer {llm_config.SILICONFLOW_API_KEY}",
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
         
@@ -74,7 +79,7 @@ class KnowledgeLibrary:
                 content = f.read()
                 
             # 按1024字符分段
-            segments = [content[i:i+300] for i in range(0, len(content), 300)]
+            segments = [content[i:i+600] for i in range(0, len(content), 600)]
             
             # 处理每个分段
             for segment in segments:

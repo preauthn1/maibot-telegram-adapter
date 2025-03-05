@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Set
 import os
-from nonebot.log import logger, default_format
-import logging
 import configparser
 import tomli
 import sys
@@ -28,16 +26,24 @@ class BotConfig:
     talk_frequency_down_groups = set()
     ban_user_id = set()
     
-    build_memory_interval: int = 60  # 记忆构建间隔（秒）
+    build_memory_interval: int = 30  # 记忆构建间隔（秒）
+    forget_memory_interval: int = 300  # 记忆遗忘间隔（秒）
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
+
+    ban_words = set()
     
     # 模型配置
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
     llm_reasoning_minor: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
+    embedding: Dict[str, str] = field(default_factory=lambda: {})
     vlm: Dict[str, str] = field(default_factory=lambda: {})
+
+    # 主题提取配置
+    topic_extract: str = 'snownlp' # 只支持jieba,snownlp,llm
+    llm_topic_extract: Dict[str, str] = field(default_factory=lambda: {})
     
     API_USING: str = "siliconflow"  # 使用的API
     API_PAID: bool = False  # 是否使用付费API
@@ -47,6 +53,13 @@ class BotConfig:
     
     enable_advance_output: bool = False  # 是否启用高级输出
     enable_kuuki_read: bool = True # 是否启用读空气功能
+
+    # 默认人设
+    PROMPT_PERSONALITY=[
+        "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧",
+        "是一个女大学生，你有黑色头发，你会刷小红书"
+    ]
+    PROMPT_SCHEDULE_GEN="一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
     
     @staticmethod
     def get_config_dir() -> str:
@@ -66,6 +79,15 @@ class BotConfig:
         if os.path.exists(config_path):
             with open(config_path, "rb") as f:
                 toml_dict = tomli.load(f)
+            
+            if 'personality' in toml_dict:
+                personality_config=toml_dict['personality']
+                personality=personality_config.get('prompt_personality')
+                if len(personality) >= 2:
+                    logger.info(f"载入自定义人格:{personality}")
+                    config.PROMPT_PERSONALITY=personality_config.get('prompt_personality',config.PROMPT_PERSONALITY)
+                logger.info(f"载入自定义日程prompt:{personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)}")
+                config.PROMPT_SCHEDULE_GEN=personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)
 
             if "emoji" in toml_dict:
                 emoji_config = toml_dict["emoji"]
@@ -103,12 +125,25 @@ class BotConfig:
                 
                 if "llm_normal" in model_config:
                     config.llm_normal = model_config["llm_normal"]
+                    config.llm_topic_extract = config.llm_normal
                 
                 if "llm_normal_minor" in model_config:
                     config.llm_normal_minor = model_config["llm_normal_minor"]
                 
                 if "vlm" in model_config:
                     config.vlm = model_config["vlm"]
+                    
+                if "embedding" in model_config:
+                    config.embedding = model_config["embedding"]
+                
+            if 'topic' in toml_dict:
+                topic_config=toml_dict['topic']
+                if 'topic_extract' in topic_config:
+                    config.topic_extract=topic_config.get('topic_extract',config.topic_extract)
+                    logger.info(f"载入自定义主题提取为{config.topic_extract}")
+                if config.topic_extract=='llm' and 'llm_topic' in topic_config:
+                    config.llm_topic_extract=topic_config['llm_topic']
+                    logger.info(f"载入自定义主题提取模型为{config.llm_topic_extract['name']}")
                 
             # 消息配置
             if "message" in toml_dict:
@@ -116,10 +151,12 @@ class BotConfig:
                 config.MIN_TEXT_LENGTH = msg_config.get("min_text_length", config.MIN_TEXT_LENGTH)
                 config.MAX_CONTEXT_SIZE = msg_config.get("max_context_size", config.MAX_CONTEXT_SIZE)
                 config.emoji_chance = msg_config.get("emoji_chance", config.emoji_chance)
-            
+                config.ban_words=msg_config.get("ban_words",config.ban_words)
+
             if "memory" in toml_dict:
                 memory_config = toml_dict["memory"]
                 config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
+                config.forget_memory_interval = memory_config.get("forget_memory_interval", config.forget_memory_interval)
             
             # 群组配置
             if "groups" in toml_dict:
@@ -131,6 +168,7 @@ class BotConfig:
             if "others" in toml_dict:
                 others_config = toml_dict["others"]
                 config.enable_advance_output = others_config.get("enable_advance_output", config.enable_advance_output)
+                config.enable_kuuki_read = others_config.get("enable_kuuki_read", config.enable_kuuki_read)
             
             logger.success(f"成功加载配置文件: {config_path}")
                 
@@ -144,32 +182,14 @@ bot_config_path = os.path.join(bot_config_floder_path, "bot_config_dev.toml")
 if not os.path.exists(bot_config_path):
     # 如果开发环境配置文件不存在，则使用默认配置文件
     bot_config_path = os.path.join(bot_config_floder_path, "bot_config.toml")
-    logger.info("使用默认配置文件")
+    logger.info("使用bot配置文件")
 else:
-    logger.info("已找到开发环境配置文件")
+    logger.info("已找到开发bot配置文件")
 
 global_config = BotConfig.load_config(config_path=bot_config_path)
 
 
-
-@dataclass
-class LLMConfig:
-    """机器人配置类"""
-    # 基础配置
-    SILICONFLOW_API_KEY: str = None
-    SILICONFLOW_BASE_URL: str = None
-    DEEP_SEEK_API_KEY: str = None
-    DEEP_SEEK_BASE_URL: str = None
-
-llm_config = LLMConfig()
-config = get_driver().config
-llm_config.SILICONFLOW_API_KEY = config.siliconflow_key
-llm_config.SILICONFLOW_BASE_URL = config.siliconflow_base_url
-llm_config.DEEP_SEEK_API_KEY = config.deep_seek_key
-llm_config.DEEP_SEEK_BASE_URL = config.deep_seek_base_url
-
-
 if not global_config.enable_advance_output:
-    # logger.remove()
+    logger.remove()
     pass
 

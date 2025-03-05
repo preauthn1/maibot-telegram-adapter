@@ -21,9 +21,9 @@ config = driver.config
 
 class ResponseGenerator:
     def __init__(self):
-        self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7)
-        self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7)
-        self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7)
+        self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7,max_tokens=1000)
+        self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7,max_tokens=1000)
+        self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7,max_tokens=1000)
         self.db = Database.get_instance()
         self.current_model_type = 'r1'  # 默认使用 R1
 
@@ -50,12 +50,19 @@ class ResponseGenerator:
             model_response, emotion = await self._process_response(model_response)
             if model_response:
                 print(f"为 '{model_response}' 获取到的情感标签为：{emotion}")
+                valuedict={
+                'happy':0.5,'angry':-1,'sad':-0.5,'surprised':0.5,'disgusted':-1.5,'fearful':-0.25,'neutral':0.25
+                }
+                await relationship_manager.update_relationship_value(message.user_id, relationship_value=valuedict[emotion[0]])
+
             return model_response, emotion
         return None, []
 
     async def _generate_response_with_model(self, message: Message, model: LLM_request) -> Optional[str]:
         """使用指定的模型生成回复"""
         sender_name = message.user_nickname or f"用户{message.user_id}"
+        if message.user_cardname:
+            sender_name=f"[({message.user_id}){message.user_nickname}]{message.user_cardname}"
         
         # 获取关系值
         relationship_value = relationship_manager.get_relationship(message.user_id).relationship_value if relationship_manager.get_relationship(message.user_id) else 0.0
@@ -70,25 +77,29 @@ class ResponseGenerator:
             group_id=message.group_id
         )
 
-        # 读空气模块
-        if global_config.enable_kuuki_read:
-            content_check, reasoning_content_check = await self.model_v3.generate_response(prompt_check)
-            print(f"\033[1;32m[读空气]\033[0m 读空气结果为{content_check}")
-            if 'yes' not in content_check.lower() and random.random() < 0.3:
-                self._save_to_db(
-                    message=message,
-                    sender_name=sender_name,
-                    prompt=prompt,
-                    prompt_check=prompt_check,
-                    content="",
-                    content_check=content_check,
-                    reasoning_content="",
-                    reasoning_content_check=reasoning_content_check
-                )
-                return None
+        # 读空气模块 简化逻辑，先停用
+        # if global_config.enable_kuuki_read:
+        #     content_check, reasoning_content_check = await self.model_v3.generate_response(prompt_check)
+        #     print(f"\033[1;32m[读空气]\033[0m 读空气结果为{content_check}")
+        #     if 'yes' not in content_check.lower() and random.random() < 0.3:
+        #         self._save_to_db(
+        #             message=message,
+        #             sender_name=sender_name,
+        #             prompt=prompt,
+        #             prompt_check=prompt_check,
+        #             content="",
+        #             content_check=content_check,
+        #             reasoning_content="",
+        #             reasoning_content_check=reasoning_content_check
+        #         )
+        #         return None
 
         # 生成回复
-        content, reasoning_content = await model.generate_response(prompt)
+        try:
+            content, reasoning_content = await model.generate_response(prompt)
+        except Exception as e:
+            print(f"生成回复时出错: {e}")
+            return None
         
         # 保存到数据库
         self._save_to_db(
@@ -97,15 +108,17 @@ class ResponseGenerator:
             prompt=prompt,
             prompt_check=prompt_check,
             content=content,
-            content_check=content_check if global_config.enable_kuuki_read else "",
+            # content_check=content_check if global_config.enable_kuuki_read else "",
             reasoning_content=reasoning_content,
-            reasoning_content_check=reasoning_content_check if global_config.enable_kuuki_read else ""
+            # reasoning_content_check=reasoning_content_check if global_config.enable_kuuki_read else ""
         )
         
         return content
 
+    # def _save_to_db(self, message: Message, sender_name: str, prompt: str, prompt_check: str,
+    #                 content: str, content_check: str, reasoning_content: str, reasoning_content_check: str):
     def _save_to_db(self, message: Message, sender_name: str, prompt: str, prompt_check: str,
-                    content: str, content_check: str, reasoning_content: str, reasoning_content_check: str):
+                content: str, reasoning_content: str,):
         """保存对话记录到数据库"""
         self.db.db.reasoning_logs.insert_one({
             'time': time.time(),
@@ -113,8 +126,8 @@ class ResponseGenerator:
             'user': sender_name,
             'message': message.processed_plain_text,
             'model': self.current_model_type,
-            'reasoning_check': reasoning_content_check,
-            'response_check': content_check,
+            # 'reasoning_check': reasoning_content_check,
+            # 'response_check': content_check,
             'reasoning': reasoning_content,
             'response': content,
             'prompt': prompt,
@@ -129,9 +142,12 @@ class ResponseGenerator:
             内容：{content}
             输出：
             '''
-            
             content, _ = await self.model_v3.generate_response(prompt)
-            return [content.strip()] if content else ["neutral"]
+            content=content.strip()
+            if content in ['happy','angry','sad','surprised','disgusted','fearful','neutral']:
+                return [content]
+            else:
+                return ["neutral"]
             
         except Exception as e:
             print(f"获取情感标签时出错: {e}")
@@ -146,3 +162,41 @@ class ResponseGenerator:
         processed_response = process_llm_response(content)
         
         return processed_response, emotion_tags
+
+
+class InitiativeMessageGenerate:
+    def __init__(self):
+        self.db = Database.get_instance()
+        self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7)
+        self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7)
+        self.model_r1_distill = LLM_request(
+            model=global_config.llm_reasoning_minor, temperature=0.7
+        )
+
+    def gen_response(self, message: Message):
+        topic_select_prompt, dots_for_select, prompt_template = (
+            prompt_builder._build_initiative_prompt_select(message.group_id)
+        )
+        content_select, reasoning = self.model_v3.generate_response(topic_select_prompt)
+        print(f"[DEBUG] {content_select} {reasoning}")
+        topics_list = [dot[0] for dot in dots_for_select]
+        if content_select:
+            if content_select in topics_list:
+                select_dot = dots_for_select[topics_list.index(content_select)]
+            else:
+                return None
+        else:
+            return None
+        prompt_check, memory = prompt_builder._build_initiative_prompt_check(
+            select_dot[1], prompt_template
+        )
+        content_check, reasoning_check = self.model_v3.generate_response(prompt_check)
+        print(f"[DEBUG] {content_check} {reasoning_check}")
+        if "yes" not in content_check.lower():
+            return None
+        prompt = prompt_builder._build_initiative_prompt(
+            select_dot, prompt_template, memory
+        )
+        content, reasoning = self.model_r1.generate_response(prompt)
+        print(f"[DEBUG] {content} {reasoning}")
+        return content

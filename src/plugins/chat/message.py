@@ -8,7 +8,7 @@ from ...common.database import Database
 from PIL import Image
 from .config import global_config
 import urllib3
-from .utils_user import get_user_nickname
+from .utils_user import get_user_nickname,get_user_cardname,get_groupname
 from .utils_cq import parse_cq_code
 from .cq_code import cq_code_tool,CQCode
 
@@ -21,46 +21,46 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 #它还定义了两个辅助属性：keywords用于提取消息的关键词，is_plain_text用于判断消息是否为纯文本。
 
 
+
 @dataclass
 class Message:
     """消息数据类"""
+    message_id: int = None
+    time: float = None
+    
     group_id: int = None
+    group_name: str = None  # 群名称 
+    
     user_id: int = None
     user_nickname: str = None  # 用户昵称
-    group_name: str = None  # 群名称    
+    user_cardname: str=None # 用户群昵称
     
-    message_id: int = None
-    raw_message: str = None
-    plain_text: str = None
-    
-    message_based_id: int = None
-    reply_message: Dict = None  # 存储回复消息
+    raw_message: str = None # 原始消息，包含未解析的cq码
+    plain_text: str = None # 纯文本
     
     message_segments: List[Dict] = None  # 存储解析后的消息片段
     processed_plain_text: str = None  # 用于存储处理后的plain_text
     detailed_plain_text: str = None  # 用于存储详细可读文本
     
-    time: float = None
+    reply_message: Dict = None  # 存储 回复的 源消息
     
     is_emoji: bool = False # 是否是表情包
     has_emoji: bool = False # 是否包含表情包
     
     translate_cq: bool = True # 是否翻译cq码
-
-    
-    reply_benefits: float = 0.0
-    
-    type: str = 'received' # 消息类型，可以是received或者send
     
     def __post_init__(self):
         if self.time is None:
             self.time = int(time.time())
+            
+        if not self.group_name:
+            self.group_name = get_groupname(self.group_id)
         
         if not self.user_nickname:
             self.user_nickname = get_user_nickname(self.user_id)
-        
-        if not self.group_name:
-            self.group_name = self.get_groupname(self.group_id)
+            
+        if not self.user_cardname:
+            self.user_cardname=get_user_cardname(self.user_id)
         
         if not self.processed_plain_text:
             if self.raw_message:
@@ -71,24 +71,12 @@ class Message:
                 )
         #将详细翻译为详细可读文本
         time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.time))
-        name = self.user_nickname or f"用户{self.user_id}"
+        try:
+            name = f"{self.user_nickname}(ta的昵称:{self.user_cardname},ta的id:{self.user_id})"
+        except:
+            name = self.user_nickname or f"用户{self.user_id}"
         content = self.processed_plain_text
         self.detailed_plain_text = f"[{time_str}] {name}: {content}\n"
-                
-        
-    def get_groupname(self, group_id: int) -> str:
-        if not group_id:
-            return "未知群"
-        group_id = int(group_id)    
-        # 使用数据库单例
-        db = Database.get_instance()
-        # 查找用户，打印查询条件和结果
-        query = {'group_id': group_id}
-        group = db.db.group_info.find_one(query)
-        if group:
-            return group.get('group_name')
-        else:
-            return f"群{group_id}"
     
     def parse_message_segments(self, message: str) -> List[CQCode]:
         """
@@ -159,49 +147,58 @@ class Message_Thinking:
         self.group_id = message.group_id
         self.user_id = message.user_id
         self.user_nickname = message.user_nickname
+        self.user_cardname = message.user_cardname
         self.group_name = message.group_name
         
         self.message_id = message_id
         
         # 思考状态相关属性
-        self.thinking_text = "正在思考..."
-        self.time = int(time.time())
+        self.thinking_start_time = int(time.time())
         self.thinking_time = 0
+        self.interupt=False
     
     def update_thinking_time(self):
-        self.thinking_time = round(time.time(), 2) - self.time
+        self.thinking_time = round(time.time(), 2) - self.thinking_start_time
     
-    @property
-    def processed_plain_text(self) -> str:
-        """获取处理后的文本"""
-        return self.thinking_text
+
+@dataclass
+class Message_Sending(Message):
+    """发送中的消息类"""
+    thinking_start_time: float = None  # 思考开始时间
+    thinking_time: float = None  # 思考时间
     
-    def __str__(self) -> str:
-        return f"[思考中] 群:{self.group_id} 用户:{self.user_nickname} 时间:{self.time} 消息ID:{self.message_id}"
-        
-        
+    reply_message_id: int = None  # 存储 回复的 源消息ID
+    
+    def update_thinking_time(self):
+        self.thinking_time = round(time.time(), 2) - self.thinking_start_time
+        return self.thinking_time
+
+
+       
 class MessageSet:
-    """消息集合类，可以存储多个相关的消息"""
+    """消息集合类，可以存储多个发送消息"""
     def __init__(self, group_id: int, user_id: int, message_id: str):
         self.group_id = group_id
         self.user_id = user_id
         self.message_id = message_id
-        self.messages: List[Message] = []
+        self.messages: List[Message_Sending] = []  # 修改类型标注
         self.time = round(time.time(), 2)
         
-    def add_message(self, message: Message) -> None:
-        """添加消息到集合"""
+    def add_message(self, message: Message_Sending) -> None:
+        """添加消息到集合，只接受Message_Sending类型"""
+        if not isinstance(message, Message_Sending):
+            raise TypeError("MessageSet只能添加Message_Sending类型的消息")
         self.messages.append(message)
         # 按时间排序
         self.messages.sort(key=lambda x: x.time)
         
-    def get_message_by_index(self, index: int) -> Optional[Message]:
+    def get_message_by_index(self, index: int) -> Optional[Message_Sending]:
         """通过索引获取消息"""
         if 0 <= index < len(self.messages):
             return self.messages[index]
         return None
         
-    def get_message_by_time(self, target_time: float) -> Optional[Message]:
+    def get_message_by_time(self, target_time: float) -> Optional[Message_Sending]:
         """获取最接近指定时间的消息"""
         if not self.messages:
             return None
@@ -222,7 +219,7 @@ class MessageSet:
         """清空所有消息"""
         self.messages.clear()
         
-    def remove_message(self, message: Message) -> bool:
+    def remove_message(self, message: Message_Sending) -> bool:
         """移除指定消息"""
         if message in self.messages:
             self.messages.remove(message)
@@ -236,8 +233,4 @@ class MessageSet:
         return len(self.messages)
         
 
-        
-        
-        
-        
     
