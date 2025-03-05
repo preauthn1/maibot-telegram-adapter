@@ -27,6 +27,7 @@ class BotConfig:
     ban_user_id = set()
     
     build_memory_interval: int = 60  # 记忆构建间隔（秒）
+    forget_memory_interval: int = 300  # 记忆遗忘间隔（秒）
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
 
@@ -155,6 +156,7 @@ class BotConfig:
             if "memory" in toml_dict:
                 memory_config = toml_dict["memory"]
                 config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
+                config.forget_memory_interval = memory_config.get("forget_memory_interval", config.forget_memory_interval)
             
             # 群组配置
             if "groups" in toml_dict:
@@ -188,6 +190,6 @@ global_config = BotConfig.load_config(config_path=bot_config_path)
 
 
 if not global_config.enable_advance_output:
-    # logger.remove()
+    logger.remove()
     pass
 
