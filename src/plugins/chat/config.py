@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Set
 import os
-from nonebot.log import logger, default_format
-import logging
 import configparser
 import tomli
 import sys
@@ -85,9 +83,9 @@ class BotConfig:
                 personality_config=toml_dict['personality']
                 personality=personality_config.get('prompt_personality')
                 if len(personality) >= 2:
-                    print(f"载入自定义人格:{personality}")
+                    logger.info(f"载入自定义人格:{personality}")
                     config.PROMPT_PERSONALITY=personality_config.get('prompt_personality',config.PROMPT_PERSONALITY)
-                print(f"载入自定义日程prompt:{personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)}")
+                logger.info(f"载入自定义日程prompt:{personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)}")
                 config.PROMPT_SCHEDULE_GEN=personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)
 
             if "emoji" in toml_dict:
@@ -141,10 +139,10 @@ class BotConfig:
                 topic_config=toml_dict['topic']
                 if 'topic_extract' in topic_config:
                     config.topic_extract=topic_config.get('topic_extract',config.topic_extract)
-                    print(f"载入自定义主题提取为{config.topic_extract}")
+                    logger.info(f"载入自定义主题提取为{config.topic_extract}")
                 if config.topic_extract=='llm' and 'llm_topic' in topic_config:
                     config.llm_topic_extract=topic_config['llm_topic']
-                    print(f"载入自定义主题提取模型为{config.llm_topic_extract['name']}")
+                    logger.info(f"载入自定义主题提取模型为{config.llm_topic_extract['name']}")
                 
             # 消息配置
             if "message" in toml_dict:
