@@ -79,7 +79,7 @@ class KnowledgeLibrary:
                 content = f.read()
                 
             # 按1024字符分段
-            segments = [content[i:i+400] for i in range(0, len(content), 400)]
+            segments = [content[i:i+600] for i in range(0, len(content), 600)]
             
             # 处理每个分段
             for segment in segments:
