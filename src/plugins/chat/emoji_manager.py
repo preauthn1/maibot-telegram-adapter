@@ -242,7 +242,7 @@ class EmojiManager:
         print(f"\033[1;32m[调试信息]\033[0m 使用默认标签: neutral")
         return "skip"  # 默认标签
 
-    async def _compress_image(self, image_path: str, target_size: int = 4 * 1024 * 1024) -> Optional[str]:
+    async def _compress_image(self, image_path: str, target_size: int = 0.8 * 1024 * 1024) -> Optional[str]:
         """压缩图片并返回base64编码
         Args:
             image_path: 图片文件路径
