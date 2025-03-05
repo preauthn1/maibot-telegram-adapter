@@ -256,4 +256,3 @@ def compress_base64_image_by_scale(base64_data: str, scale: float = 0.5) -> str:
         import traceback
         print(traceback.format_exc())
         return base64_data 
-    

@@ -7,7 +7,7 @@ from typing import Tuple, Union
 from nonebot import get_driver
 from loguru import logger
 from ..chat.config import global_config
-from ..chat.utils_image import compress_base64_image_by_scale,compress_image
+from ..chat.utils_image import compress_base64_image_by_scale
 
 driver = get_driver()
 config = driver.config
