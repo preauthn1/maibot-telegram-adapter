@@ -194,7 +194,19 @@ class EmojiManager:
     async def _get_emoji_discription(self, image_base64: str) -> str:
         """获取表情包的标签"""
         try:
-            prompt = '这是一个表情包，简洁的描述一下表情包的内容和表情包所表达的情感'
+            prompt = '这是一个表情包，使用中文简洁的描述一下表情包的内容和表情包所表达的情感'
+            
+            content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
+            logger.debug(f"输出描述: {content}")
+            return content
+            
+        except Exception as e:
+            logger.error(f"获取标签失败: {str(e)}")
+            return None
+    
+    async def _check_emoji(self, image_base64: str) -> str:
+        try:
+            prompt = '这是一个表情包，请回答这个表情包是否满足\"动漫风格，画风可爱\"的要求，是则回答是，否则回答否，不要出现任何其他内容'
             
             content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
             logger.debug(f"输出描述: {content}")
@@ -208,7 +220,7 @@ class EmojiManager:
         try:
             prompt = f'这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，注意不要输出任何对内容的分析内容，只输出\"一种什么样的感觉\"中间的形容词部分。'
             
-            content, _ = await self.llm.generate_response_async(prompt)
+            content, _ = await self.lm.generate_response_async(prompt)
             logger.info(f"输出描述: {content}")
             return content
             
@@ -310,6 +322,13 @@ class EmojiManager:
                 
                 # 获取表情包的描述
                 discription = await self._get_emoji_discription(image_base64)
+                check = await self._check_emoji(image_base64)
+                if '是' not in check:
+                    os.remove(image_path)
+                    logger.info(f"描述: {discription}")
+                    logger.info(f"其不满足过滤规则，被剔除 {check}")
+                    continue
+                logger.info(f"check通过 {check}")
                 tag = await self._get_emoji_tag(image_base64)
                 embedding = get_embedding(discription)
                 if discription is not None:

@@ -24,6 +24,7 @@ class ResponseGenerator:
         self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7,max_tokens=1000)
         self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7,max_tokens=1000)
         self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7,max_tokens=1000)
+        self.model_v25 = LLM_request(model=global_config.llm_normal_minor, temperature=0.7,max_tokens=1000)
         self.db = Database.get_instance()
         self.current_model_type = 'r1'  # 默认使用 R1
 
@@ -138,7 +139,7 @@ class ResponseGenerator:
             内容：{content}
             输出：
             '''
-            content, _ = await self.model_v3.generate_response(prompt)
+            content, _ = await self.model_v25.generate_response(prompt)
             content=content.strip()
             if content in ['happy','angry','sad','surprised','disgusted','fearful','neutral']:
                 return [content]
