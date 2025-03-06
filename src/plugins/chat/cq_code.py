@@ -64,15 +64,15 @@ class CQCode:
         """初始化LLM实例"""
         self._llm = LLM_request(model=global_config.vlm, temperature=0.4, max_tokens=300)
 
-    def translate(self):
+    async def translate(self):
         """根据CQ码类型进行相应的翻译处理"""
         if self.type == 'text':
             self.translated_plain_text = self.params.get('text', '')
         elif self.type == 'image':
             if self.params.get('sub_type') == '0':
-                self.translated_plain_text = self.translate_image()
+                self.translated_plain_text = await self.translate_image()
             else:
-                self.translated_plain_text = self.translate_emoji()
+                self.translated_plain_text = await self.translate_emoji()
         elif self.type == 'at':
             user_nickname = get_user_nickname(self.params.get('qq', ''))
             if user_nickname:
@@ -158,7 +158,7 @@ class CQCode:
 
         return None
     
-    def translate_emoji(self) -> str:
+    async def translate_emoji(self) -> str:
         """处理表情包类型的CQ码"""
         if 'url' not in self.params:
             return '[表情包]'
@@ -167,12 +167,12 @@ class CQCode:
             # 将 base64 字符串转换为字节类型
             image_bytes = base64.b64decode(base64_str)
             storage_emoji(image_bytes)
-            return self.get_emoji_description(base64_str)
+            return await self.get_emoji_description(base64_str)
         else:
             return '[表情包]'
     
     
-    def translate_image(self) -> str:
+    async def translate_image(self) -> str:
         """处理图片类型的CQ码，区分普通图片和表情包"""
         #没有url，直接返回默认文本
         if 'url' not in self.params:
@@ -181,25 +181,27 @@ class CQCode:
         if base64_str:
             image_bytes = base64.b64decode(base64_str)
             storage_image(image_bytes)
-            return self.get_image_description(base64_str)
+            return await self.get_image_description(base64_str)
         else:
             return '[图片]'
 
-    def get_emoji_description(self, image_base64: str) -> str:
+    async def get_emoji_description(self, image_base64: str) -> str:
         """调用AI接口获取表情包描述"""
         try:
             prompt = "这是一个表情包，请用简短的中文描述这个表情包传达的情感和含义。最多20个字。"
-            description, _ = self._llm.generate_response_for_image_sync(prompt, image_base64)
+            # description, _ = self._llm.generate_response_for_image_sync(prompt, image_base64)
+            description, _ = await self._llm.generate_response_for_image(prompt, image_base64)
             return f"[表情包：{description}]"
         except Exception as e:
             print(f"\033[1;31m[错误]\033[0m AI接口调用失败: {str(e)}")
             return "[表情包]"
 
-    def get_image_description(self, image_base64: str) -> str:
+    async def get_image_description(self, image_base64: str) -> str:
         """调用AI接口获取普通图片描述"""
         try:
             prompt = "请用中文描述这张图片的内容。如果有文字，请把文字都描述出来。并尝试猜测这个图片的含义。最多200个字。"
-            description, _ = self._llm.generate_response_for_image_sync(prompt, image_base64)
+            # description, _ = self._llm.generate_response_for_image_sync(prompt, image_base64)
+            description, _ = await self._llm.generate_response_for_image(prompt, image_base64)
             return f"[图片：{description}]"
         except Exception as e:
             print(f"\033[1;31m[错误]\033[0m AI接口调用失败: {str(e)}")

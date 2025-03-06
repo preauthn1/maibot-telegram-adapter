@@ -32,6 +32,8 @@ class BotConfig:
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
 
     ban_words = set()
+
+    max_response_length: int = 1024  # 最大回复长度
     
     # 模型配置
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
@@ -113,6 +115,7 @@ class BotConfig:
                 config.MODEL_R1_DISTILL_PROBABILITY = response_config.get("model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY)
                 config.API_USING = response_config.get("api_using", config.API_USING)
                 config.API_PAID = response_config.get("api_paid", config.API_PAID)
+                config.max_response_length = response_config.get("max_response_length", config.max_response_length)
                 
             # 加载模型配置
             if "model" in toml_dict:
