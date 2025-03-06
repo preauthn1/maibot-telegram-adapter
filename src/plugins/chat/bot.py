@@ -119,7 +119,7 @@ class ChatBot:
 
             willing_manager.change_reply_willing_sent(thinking_message.group_id)
             
-            response, emotion = await self.gpt.generate_response(message)
+            response,raw_content = await self.gpt.generate_response(message)
 
             # if response is None:
                 # thinking_message.interupt=True
@@ -171,6 +171,13 @@ class ChatBot:
             message_manager.add_message(message_set)
             
             bot_response_time = tinking_time_point
+            emotion = await self.gpt._get_emotion_tags(raw_content)
+            print(f"为 '{response}' 获取到的情感标签为：{emotion}")
+            valuedict={
+            'happy':0.5,'angry':-1,'sad':-0.5,'surprised':0.5,'disgusted':-1.5,'fearful':-0.25,'neutral':0.25
+            }
+            await relationship_manager.update_relationship_value(message.user_id, relationship_value=valuedict[emotion[0]])
+
             if random() < global_config.emoji_chance:
                 emoji_path = await emoji_manager.get_emoji_for_emotion(emotion)
                 if emoji_path:
