@@ -4,6 +4,7 @@ import hashlib
 import time
 import os
 from ...common.database import Database
+from ..chat.config import global_config
 import zlib  # 用于 CRC32
 import base64
 from nonebot import get_driver
@@ -143,6 +144,8 @@ def storage_emoji(image_data: bytes) -> bytes:
     Returns:
         bytes: 原始图片数据
     """
+    if not global_config.EMOJI_SAVE:
+        return image_data
     try:
         # 使用 CRC32 计算哈希值
         hash_value = format(zlib.crc32(image_data) & 0xFFFFFFFF, 'x')
