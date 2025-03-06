@@ -55,7 +55,7 @@ class LLM_request:
                             logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
                             await asyncio.sleep(wait_time)
                             continue
-                            
+
                         if response.status in [500, 503]:
                             logger.error(f"服务器错误: {response.status}")
                             raise RuntimeError("服务器负载过高，模型恢复失败QAQ")
@@ -69,10 +69,10 @@ class LLM_request:
                             think_match = None
                             reasoning_content = message.get("reasoning_content", "")
                             if not reasoning_content:
-                                think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
+                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
                             if think_match:
                                 reasoning_content = think_match.group(1).strip()
-                            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
                             return content, reasoning_content
                         return "没有返回结果", ""
 
@@ -118,7 +118,7 @@ class LLM_request:
                 ],
                 **self.params
             }
-        
+
 
         # 发送请求到完整的chat/completions端点
         api_url = f"{self.base_url.rstrip('/')}/chat/completions"
@@ -126,10 +126,9 @@ class LLM_request:
 
         max_retries = 3
         base_wait_time = 15
-        
+
         current_image_base64 = image_base64
         current_image_base64 = compress_base64_image_by_scale(current_image_base64)
-        
 
         for retry in range(max_retries):
             try:
@@ -146,7 +145,7 @@ class LLM_request:
                             logger.warning("图片太大(413)，尝试压缩...")
                             current_image_base64 = compress_base64_image_by_scale(current_image_base64)
                             continue
-                            
+
                         response.raise_for_status()  # 检查其他响应状态
 
                         result = await response.json()
@@ -156,10 +155,10 @@ class LLM_request:
                             think_match = None
                             reasoning_content = message.get("reasoning_content", "")
                             if not reasoning_content:
-                                think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
+                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
                             if think_match:
                                 reasoning_content = think_match.group(1).strip()
-                            content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
                             return content, reasoning_content
                         return "没有返回结果", ""
 
@@ -181,7 +180,7 @@ class LLM_request:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
-        
+
         # 构建请求体
         data = {
             "model": self.model_name,
@@ -189,14 +188,14 @@ class LLM_request:
             "temperature": 0.5,
             **self.params
         }
-        
+
         # 发送请求到完整的 chat/completions 端点
         api_url = f"{self.base_url.rstrip('/')}/chat/completions"
         logger.info(f"Request URL: {api_url}")  # 记录请求的 URL
-        
+
         max_retries = 3
         base_wait_time = 15
-        
+
         async with aiohttp.ClientSession() as session:
             for retry in range(max_retries):
                 try:
@@ -206,16 +205,23 @@ class LLM_request:
                             logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
                             await asyncio.sleep(wait_time)
                             continue
-                            
+
                         response.raise_for_status()  # 检查其他响应状态
-                        
+
                         result = await response.json()
                         if "choices" in result and len(result["choices"]) > 0:
-                            content = result["choices"][0]["message"]["content"]
-                            reasoning_content = result["choices"][0]["message"].get("reasoning_content", "")
+                            message = result["choices"][0]["message"]
+                            content = message.get("content", "")
+                            think_match = None
+                            reasoning_content = message.get("reasoning_content", "")
+                            if not reasoning_content:
+                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
+                            if think_match:
+                                reasoning_content = think_match.group(1).strip()
+                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
                             return content, reasoning_content
                         return "没有返回结果", ""
-                        
+
                 except Exception as e:
                     if retry < max_retries - 1:  # 如果还有重试机会
                         wait_time = base_wait_time * (2 ** retry)
@@ -224,7 +230,7 @@ class LLM_request:
                     else:
                         logger.error(f"请求失败: {str(e)}")
                         return f"请求失败: {str(e)}", ""
-            
+
             logger.error("达到最大重试次数，请求仍然失败")
             return "达到最大重试次数，请求仍然失败", ""
 
@@ -288,10 +294,10 @@ class LLM_request:
                     think_match = None
                     reasoning_content = message.get("reasoning_content", "")
                     if not reasoning_content:
-                        think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
+                        think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
                     if think_match:
                         reasoning_content = think_match.group(1).strip()
-                    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                    content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
                     return content, reasoning_content
                 return "没有返回结果", ""
 
