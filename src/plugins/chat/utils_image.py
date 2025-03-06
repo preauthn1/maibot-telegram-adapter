@@ -290,3 +290,18 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
         import traceback
         logger.error(traceback.format_exc())
         return base64_data 
+
+def image_path_to_base64(image_path: str) -> str:
+    """将图片路径转换为base64编码
+    Args:
+        image_path: 图片文件路径
+    Returns:
+        str: base64编码的图片数据
+    """
+    try:
+        with open(image_path, 'rb') as f:
+            image_data = f.read()
+            return base64.b64encode(image_data).decode('utf-8')
+    except Exception as e:
+        logger.error(f"读取图片失败: {image_path}, 错误: {str(e)}")
+        return None 
