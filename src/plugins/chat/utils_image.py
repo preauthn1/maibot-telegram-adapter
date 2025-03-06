@@ -230,7 +230,7 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
         image_data = base64.b64decode(base64_data)
         
         # 如果已经小于目标大小，直接返回原图
-        if len(image_data) <= target_size:
+        if len(image_data) <= 2*1024*1024:
             return base64_data
             
         # 将字节数据转换为图片对象
@@ -255,7 +255,7 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
             for frame_idx in range(img.n_frames):
                 img.seek(frame_idx)
                 new_frame = img.copy()
-                new_frame = new_frame.resize((new_width//4, new_height//4), Image.Resampling.LANCZOS) # 动图折上折
+                new_frame = new_frame.resize((new_width//2, new_height//2), Image.Resampling.LANCZOS) # 动图折上折
                 frames.append(new_frame)
             
             # 保存到缓冲区
