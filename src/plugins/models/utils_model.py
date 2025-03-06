@@ -153,7 +153,9 @@ class LLM_request:
             content, reasoning = self._extract_reasoning(content)
             reasoning_content = message.get("model_extra", {}).get("reasoning_content", "")
             if not reasoning_content:
-                reasoning_content = reasoning
+                reasoning_content = message.get("reasoning_content", "")
+                if not reasoning_content:
+                    reasoning_content = reasoning
 
             return content, reasoning_content
 
