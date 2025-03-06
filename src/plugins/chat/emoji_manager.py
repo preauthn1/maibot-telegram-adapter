@@ -206,7 +206,7 @@ class EmojiManager:
     
     async def _check_emoji(self, image_base64: str) -> str:
         try:
-            prompt = '这是一个表情包，请回答这个表情包是否满足\"动漫风格，画风可爱\"的要求，是则回答是，否则回答否，不要出现任何其他内容'
+            prompt = f'这是一个表情包，请回答这个表情包是否满足\"{global_config.EMOJI_CHECK_PROMPT}\"的要求，是则回答是，否则回答否，不要出现任何其他内容'
             
             content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
             logger.debug(f"输出描述: {content}")
