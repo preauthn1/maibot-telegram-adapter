@@ -11,7 +11,7 @@ from ..chat.config import global_config
 from ...common.database import Database # 使用正确的导入语法
 from ..models.utils_model import LLM_request
 import math
-from ..chat.utils import calculate_information_content, get_cloest_chat_from_db ,find_similar_topics,text_to_vector,cosine_similarity
+from ..chat.utils import calculate_information_content, get_cloest_chat_from_db ,text_to_vector,cosine_similarity
 
 
 
