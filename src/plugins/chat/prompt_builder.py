@@ -2,13 +2,15 @@ import time
 import random
 from ..schedule.schedule_generator import bot_schedule
 import os
-from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text
+from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text,find_similar_topics
 from ...common.database import Database
 from .config import global_config
 from .topic_identifier import topic_identifier
-from ..memory_system.memory import memory_graph
+from ..memory_system.memory import memory_graph,hippocampus
 from random import choice
-
+import numpy as np
+import jieba
+from collections import Counter
 
 class PromptBuilder:
     def __init__(self):
@@ -16,7 +18,9 @@ class PromptBuilder:
         self.activate_messages = ''
         self.db = Database.get_instance()
 
-    def _build_prompt(self, 
+
+
+    async def _build_prompt(self, 
                     message_txt: str, 
                     sender_name: str = "某人",
                     relationship_value: float = 0.0,
@@ -31,60 +35,7 @@ class PromptBuilder:
             
         Returns:
             str: 构建好的prompt
-        """
-        
-        
-        memory_prompt = ''
-        start_time = time.time()  # 记录开始时间
-        # topic = await topic_identifier.identify_topic_llm(message_txt)
-        topic = topic_identifier.identify_topic_snownlp(message_txt)
-        
-        # print(f"\033[1;32m[pb主题识别]\033[0m 主题: {topic}")
-        
-        all_first_layer_items = []  # 存储所有第一层记忆
-        all_second_layer_items = {}  # 用字典存储每个topic的第二层记忆
-        overlapping_second_layer = set()  # 存储重叠的第二层记忆
-        
-        if topic:
-            # 遍历所有topic
-            for current_topic in topic:
-                first_layer_items, second_layer_items = memory_graph.get_related_item(current_topic, depth=2)
-                # if first_layer_items:
-                    # print(f"\033[1;32m[前额叶]\033[0m 主题 '{current_topic}' 的第一层记忆: {first_layer_items}")
-                
-                # 记录第一层数据
-                all_first_layer_items.extend(first_layer_items)
-                
-                # 记录第二层数据
-                all_second_layer_items[current_topic] = second_layer_items
-                
-                # 检查是否有重叠的第二层数据
-                for other_topic, other_second_layer in all_second_layer_items.items():
-                    if other_topic != current_topic:
-                        # 找到重叠的记忆
-                        overlap = set(second_layer_items) & set(other_second_layer)
-                        if overlap:
-                            # print(f"\033[1;32m[前额叶]\033[0m 发现主题 '{current_topic}' 和 '{other_topic}' 有共同的第二层记忆: {overlap}")
-                            overlapping_second_layer.update(overlap)
-
-            selected_first_layer = random.sample(all_first_layer_items, min(2, len(all_first_layer_items))) if all_first_layer_items else []
-            selected_second_layer = random.sample(list(overlapping_second_layer), min(2, len(overlapping_second_layer))) if overlapping_second_layer else []
-            
-            # 合并并去重
-            all_memories = list(set(selected_first_layer + selected_second_layer))
-            if all_memories:
-                print(f"\033[1;32m[前额叶]\033[0m 合并所有需要的记忆: {all_memories}")
-                random_item = " ".join(all_memories)
-                memory_prompt = f"看到这些聊天，你想起来{random_item}\n"
-            else:
-                memory_prompt = ""  # 如果没有记忆，则返回空字符串
-        
-        end_time = time.time()  # 记录结束时间
-        print(f"\033[1;32m[回忆耗时]\033[0m 耗时: {(end_time - start_time):.3f}秒")  # 输出耗时
-        
-        
-        
-        
+        """        
         #先禁用关系
         if 0 > 30:
             relation_prompt = "关系特别特别好，你很喜欢喜欢他"
@@ -112,22 +63,48 @@ class PromptBuilder:
         prompt_info = self.get_prompt_info(message_txt,threshold=0.5)
         if prompt_info:
             prompt_info = f'''\n----------------------------------------------------\n你有以下这些[知识]：\n{prompt_info}\n请你记住上面的[知识]，之后可能会用到\n----------------------------------------------------\n'''
-            # promt_info_prompt = '你有一些[知识]，在上面可以参考。'
             
         end_time = time.time()
         print(f"\033[1;32m[知识检索]\033[0m 耗时: {(end_time - start_time):.3f}秒")
-        # print(f"\033[1;34m[调试]\033[0m 获取知识库内容结果: {prompt_info}")
             
-        
-        # print(f"\033[1;34m[调试信息]\033[0m 正在构建聊天上下文")
-        
+        # 获取聊天上下文
         chat_talking_prompt = ''
         if group_id:
             chat_talking_prompt = get_recent_group_detailed_plain_text(self.db, group_id, limit=global_config.MAX_CONTEXT_SIZE,combine = True)
         
         chat_talking_prompt = f"以下是群里正在聊天的内容：\n{chat_talking_prompt}"
-            # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
         
+        
+        
+        # 使用新的记忆获取方法
+        memory_prompt = ''
+        start_time = time.time()
+        
+        # 调用 hippocampus 的 get_relevant_memories 方法
+        relevant_memories = await hippocampus.get_relevant_memories(
+            text=message_txt,
+            max_topics=5,
+            similarity_threshold=0.4
+        )
+        
+        if relevant_memories:
+            # 格式化记忆内容
+            memory_items = []
+            for memory in relevant_memories:
+                memory_items.append(f"关于「{memory['topic']}」的记忆：{memory['content']}")
+            
+            memory_prompt = f"看到这些聊天，你想起来：\n" + "\n".join(memory_items) + "\n"
+            
+            # 打印调试信息
+            print("\n\033[1;32m[记忆检索]\033[0m 找到以下相关记忆：")
+            for memory in relevant_memories:
+                print(f"- 主题「{memory['topic']}」[相似度: {memory['similarity']:.2f}]: {memory['content']}")
+        
+        end_time = time.time()
+        print(f"\033[1;32m[回忆耗时]\033[0m 耗时: {(end_time - start_time):.3f}秒")
+        
+        
+            
         #激活prompt构建
         activate_prompt = ''
         activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}。"          
@@ -162,29 +139,19 @@ class PromptBuilder:
         if random.random() < 0.01:
             prompt_ger += '你喜欢用文言文'
         
-            
         #额外信息要求
         extra_info = '''但是记得回复平淡一些，简短一些，尤其注意在没明确提到时不要过多提及自身的背景, 记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只需要输出回复内容就好，不要输出其他任何内容''' 
-        
-        
         
         #合并prompt
         prompt = ""
         prompt += f"{prompt_info}\n"
         prompt += f"{prompt_date}\n"
         prompt += f"{chat_talking_prompt}\n"  
-            
-        # prompt += f"{memory_prompt}\n"
-        
-        # prompt += f"{activate_prompt}\n"
         prompt += f"{prompt_personality}\n"
         prompt += f"{prompt_ger}\n"
         prompt += f"{extra_info}\n"    
         
-        
-        
         '''读空气prompt处理''' 
-
         activate_prompt_check=f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"     
         prompt_personality_check = ''
         extra_check_info=f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"

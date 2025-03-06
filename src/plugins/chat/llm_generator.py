@@ -63,10 +63,11 @@ class ResponseGenerator:
         # 获取关系值
         relationship_value = relationship_manager.get_relationship(message.user_id).relationship_value if relationship_manager.get_relationship(message.user_id) else 0.0
         if relationship_value != 0.0:
-            print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
+            # print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
+            pass
         
         # 构建prompt
-        prompt, prompt_check = prompt_builder._build_prompt(
+        prompt, prompt_check = await prompt_builder._build_prompt(
             message_txt=message.processed_plain_text,
             sender_name=sender_name,
             relationship_value=relationship_value,

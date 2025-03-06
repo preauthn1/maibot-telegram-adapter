@@ -424,3 +424,199 @@ class LLM_request:
 
         logger.error("达到最大重试次数，embedding请求仍然失败")
         return None
+
+    def rerank_sync(self, query: str, documents: list, top_k: int = 5) -> list:
+        """同步方法：使用重排序API对文档进行排序
+        
+        Args:
+            query: 查询文本
+            documents: 待排序的文档列表
+            top_k: 返回前k个结果
+            
+        Returns:
+            list: [(document, score), ...] 格式的结果列表
+        """
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "model": self.model_name,
+            "query": query,
+            "documents": documents,
+            "top_n": top_k,
+            "return_documents": True,
+        }
+
+        api_url = f"{self.base_url.rstrip('/')}/rerank"
+        logger.info(f"发送请求到URL: {api_url}")
+
+        max_retries = 2
+        base_wait_time = 6
+
+        for retry in range(max_retries):
+            try:
+                response = requests.post(api_url, headers=headers, json=data, timeout=30)
+
+                if response.status_code == 429:
+                    wait_time = base_wait_time * (2 ** retry)
+                    logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
+                    time.sleep(wait_time)
+                    continue
+                
+                if response.status_code in [500, 503]:
+                    wait_time = base_wait_time * (2 ** retry)
+                    logger.error(f"服务器错误({response.status_code})，等待{wait_time}秒后重试...")
+                    if retry < max_retries - 1:
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        # 如果是最后一次重试，尝试使用chat/completions作为备选方案
+                        return self._fallback_rerank_with_chat(query, documents, top_k)
+
+                response.raise_for_status()
+
+                result = response.json()
+                if 'results' in result:
+                    return [(item["document"], item["score"]) for item in result["results"]]
+                return []
+
+            except Exception as e:
+                if retry < max_retries - 1:
+                    wait_time = base_wait_time * (2 ** retry)
+                    logger.error(f"[rerank_sync]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
+                    time.sleep(wait_time)
+                else:
+                    logger.critical(f"重排序请求失败: {str(e)}", exc_info=True)
+
+        logger.error("达到最大重试次数，重排序请求仍然失败")
+        return []
+
+    async def rerank(self, query: str, documents: list, top_k: int = 5) -> list:
+        """异步方法：使用重排序API对文档进行排序
+        
+        Args:
+            query: 查询文本
+            documents: 待排序的文档列表
+            top_k: 返回前k个结果
+            
+        Returns:
+            list: [(document, score), ...] 格式的结果列表
+        """
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "model": self.model_name,
+            "query": query,
+            "documents": documents,
+            "top_n": top_k,
+            "return_documents": True,
+        }
+
+        api_url = f"{self.base_url.rstrip('/')}/v1/rerank"
+        logger.info(f"发送请求到URL: {api_url}")
+
+        max_retries = 3
+        base_wait_time = 15
+
+        for retry in range(max_retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(api_url, headers=headers, json=data) as response:
+                        if response.status == 429:
+                            wait_time = base_wait_time * (2 ** retry)
+                            logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
+                            await asyncio.sleep(wait_time)
+                            continue
+
+                        if response.status in [500, 503]:
+                            wait_time = base_wait_time * (2 ** retry)
+                            logger.error(f"服务器错误({response.status})，等待{wait_time}秒后重试...")
+                            if retry < max_retries - 1:
+                                await asyncio.sleep(wait_time)
+                                continue
+                            else:
+                                # 如果是最后一次重试，尝试使用chat/completions作为备选方案
+                                return await self._fallback_rerank_with_chat_async(query, documents, top_k)
+
+                        response.raise_for_status()
+
+                        result = await response.json()
+                        if 'results' in result:
+                            return [(item["document"], item["score"]) for item in result["results"]]
+                        return []
+
+            except Exception as e:
+                if retry < max_retries - 1:
+                    wait_time = base_wait_time * (2 ** retry)
+                    logger.error(f"[rerank]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.critical(f"重排序请求失败: {str(e)}", exc_info=True)
+                    # 作为最后的备选方案，尝试使用chat/completions
+                    return await self._fallback_rerank_with_chat_async(query, documents, top_k)
+
+        logger.error("达到最大重试次数，重排序请求仍然失败")
+        return []
+
+    async def _fallback_rerank_with_chat_async(self, query: str, documents: list, top_k: int = 5) -> list:
+        """当rerank API失败时的备选方案，使用chat/completions异步实现重排序
+        
+        Args:
+            query: 查询文本
+            documents: 待排序的文档列表
+            top_k: 返回前k个结果
+            
+        Returns:
+            list: [(document, score), ...] 格式的结果列表
+        """
+        try:
+            logger.info("使用chat/completions作为重排序的备选方案")
+            
+            # 构建提示词
+            prompt = f"""请对以下文档列表进行重排序，按照与查询的相关性从高到低排序。
+查询: {query}
+
+文档列表:
+{documents}
+
+请以JSON格式返回排序结果，格式为：
+[{{"document": "文档内容", "score": 相关性分数}}, ...]
+只返回JSON，不要其他任何文字。"""
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+
+            data = {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                **self.params
+            }
+
+            api_url = f"{self.base_url.rstrip('/')}/v1/chat/completions"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(api_url, headers=headers, json=data) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+                    
+                    if "choices" in result and len(result["choices"]) > 0:
+                        message = result["choices"][0]["message"]
+                        content = message.get("content", "")
+                        try:
+                            import json
+                            parsed_content = json.loads(content)
+                            if isinstance(parsed_content, list):
+                                return [(item["document"], item["score"]) for item in parsed_content]
+                        except:
+                            pass
+            return []
+        except Exception as e:
+            logger.error(f"备选方案也失败了: {str(e)}")
+            return []
