@@ -213,12 +213,11 @@ class LLM_request:
         )
         return content, reasoning_content
 
-    async def get_embedding(self, text: str, model: str = "BAAI/bge-m3") -> Union[list, None]:
+    async def get_embedding(self, text: str) -> Union[list, None]:
         """异步方法：获取文本的embedding向量
         
         Args:
             text: 需要获取embedding的文本
-            model: 使用的模型名称，默认为"BAAI/bge-m3"
             
         Returns:
             list: embedding向量，如果失败则返回None
@@ -233,7 +232,7 @@ class LLM_request:
             endpoint="/embeddings",
             prompt=text,
             payload={
-                "model": model,
+                "model": self.model_name,
                 "input": text,
                 "encoding_format": "float"
             },
