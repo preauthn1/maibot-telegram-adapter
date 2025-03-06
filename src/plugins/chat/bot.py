@@ -154,6 +154,7 @@ class ChatBot:
                     thinking_start_time=thinking_start_time, #记录了思考开始的时间
                     reply_message_id=message.message_id
                 )
+                await bot_message.initialize()
                 if not mark_head:
                     bot_message.is_head = True
                     mark_head = True
@@ -190,6 +191,7 @@ class ChatBot:
                         thinking_start_time=thinking_start_time,
                         # reply_message_id=message.message_id
                     )
+                    await bot_message.initialize()
                     message_manager.add_message(bot_message)
             emotion = await self.gpt._get_emotion_tags(raw_content)
             print(f"为 '{response}' 获取到的情感标签为：{emotion}")
