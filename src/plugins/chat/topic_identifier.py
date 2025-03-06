@@ -42,7 +42,7 @@ class TopicIdentifier:
         print(f"\033[1;32m[主题识别]\033[0m 主题: {topic_list}")
         return topic_list if topic_list else None
 
-    def identify_topic_snownlp(self, text: str) -> Optional[List[str]]:
+    def identify_topic_snownlp(self, text: str,num:int=5) -> Optional[List[str]]:
         """使用 SnowNLP 进行主题识别
         
         Args:
@@ -57,7 +57,7 @@ class TopicIdentifier:
         try:
             s = SnowNLP(text)
             # 提取前3个关键词作为主题
-            keywords = s.keywords(5)
+            keywords = s.keywords(num)
             return keywords if keywords else None
         except Exception as e:
             print(f"\033[1;31m[错误]\033[0m SnowNLP 处理失败: {str(e)}")

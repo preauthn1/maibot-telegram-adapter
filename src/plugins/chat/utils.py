@@ -11,6 +11,8 @@ from collections import Counter
 import math
 from nonebot import get_driver
 from ..models.utils_model import LLM_request
+import aiohttp
+import jieba
 
 driver = get_driver()
 config = driver.config
@@ -117,7 +119,7 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
             chat_text += record["detailed_plain_text"]
             
         return chat_text
-    print(f"消息已读取3次，跳过")
+    # print(f"消息已读取3次，跳过")
     return ''
 
 def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
@@ -421,3 +423,62 @@ def calculate_typing_time(input_string: str, chinese_time: float = 0.2, english_
     return total_time
 
 
+def find_similar_topics(message_txt: str, all_memory_topic: list, top_k: int = 5) -> list:
+    """使用重排序API找出与输入文本最相似的话题
+    
+    Args:
+        message_txt: 输入文本
+        all_memory_topic: 所有记忆主题列表
+        top_k: 返回最相似的话题数量
+        
+    Returns:
+        list: 最相似话题列表及其相似度分数
+    """
+    
+    if not all_memory_topic:
+        return []
+    
+    try:
+        llm = LLM_request(model=global_config.rerank)
+        return llm.rerank_sync(message_txt, all_memory_topic, top_k)
+    except Exception as e:
+        print(f"重排序API调用出错: {str(e)}")
+        return []
+    
+def cosine_similarity(v1, v2):
+    """计算余弦相似度"""
+    dot_product = np.dot(v1, v2)
+    norm1 = np.linalg.norm(v1)
+    norm2 = np.linalg.norm(v2)
+    if norm1 == 0 or norm2 == 0:
+        return 0
+    return dot_product / (norm1 * norm2)
+
+def text_to_vector(text):
+    """将文本转换为词频向量"""
+    # 分词
+    words = jieba.lcut(text)
+    # 统计词频
+    word_freq = Counter(words)
+    return word_freq
+
+def find_similar_topics_simple(text: str, topics: list, top_k: int = 5) -> list:
+    """使用简单的余弦相似度计算文本相似度"""
+    # 将输入文本转换为词频向量
+    text_vector = text_to_vector(text)
+    
+    # 计算每个主题的相似度
+    similarities = []
+    for topic in topics:
+        topic_vector = text_to_vector(topic)
+        # 获取所有唯一词
+        all_words = set(text_vector.keys()) | set(topic_vector.keys())
+        # 构建向量
+        v1 = [text_vector.get(word, 0) for word in all_words]
+        v2 = [topic_vector.get(word, 0) for word in all_words]
+        # 计算相似度
+        similarity = cosine_similarity(v1, v2)
+        similarities.append((topic, similarity))
+    
+    # 按相似度降序排序并返回前k个
+    return sorted(similarities, key=lambda x: x[1], reverse=True)[:top_k]

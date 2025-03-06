@@ -40,6 +40,7 @@ class BotConfig:
     llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
     embedding: Dict[str, str] = field(default_factory=lambda: {})
     vlm: Dict[str, str] = field(default_factory=lambda: {})
+    rerank: Dict[str, str] = field(default_factory=lambda: {})
 
     # 主题提取配置
     topic_extract: str = 'snownlp' # 只支持jieba,snownlp,llm
@@ -135,6 +136,9 @@ class BotConfig:
                     
                 if "embedding" in model_config:
                     config.embedding = model_config["embedding"]
+                
+                if "rerank" in model_config:
+                    config.rerank = model_config["rerank"]
                 
             if 'topic' in toml_dict:
                 topic_config=toml_dict['topic']
