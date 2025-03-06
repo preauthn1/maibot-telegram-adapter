@@ -291,13 +291,14 @@ class EmojiManager:
                 
                 # 获取表情包的描述
                 discription = await self._get_emoji_discription(image_base64)
-                check = await self._check_emoji(image_base64)
-                if '是' not in check:
-                    os.remove(image_path)
-                    logger.info(f"描述: {discription}")
-                    logger.info(f"其不满足过滤规则，被剔除 {check}")
-                    continue
-                logger.info(f"check通过 {check}")
+                if global_config.EMOJI_CHECK:
+                    check = await self._check_emoji(image_base64)
+                    if '是' not in check:
+                        os.remove(image_path)
+                        logger.info(f"描述: {discription}")
+                        logger.info(f"其不满足过滤规则，被剔除 {check}")
+                        continue
+                    logger.info(f"check通过 {check}")
                 embedding = get_embedding(discription)
                 if discription is not None:
                     # 准备数据库记录

@@ -31,6 +31,7 @@ class BotConfig:
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     EMOJI_SAVE: bool = True  # 偷表情包
+    EMOJI_CHECK: bool = False #是否开启过滤
     EMOJI_CHECK_PROMPT: str = "不要包含违反公序良俗的内容" # 表情包过滤要求
 
     ban_words = set()
@@ -100,6 +101,7 @@ class BotConfig:
                 config.EMOJI_REGISTER_INTERVAL = emoji_config.get("register_interval", config.EMOJI_REGISTER_INTERVAL)
                 config.EMOJI_CHECK_PROMPT = emoji_config.get('check_prompt',config.EMOJI_CHECK_PROMPT)
                 config.EMOJI_SAVE = emoji_config.get('auto_save',config.EMOJI_SAVE)
+                config.EMOJI_CHECK = emoji_config.get('enable_check',config.EMOJI_CHECK)
             
             if "cq_code" in toml_dict:
                 cq_code_config = toml_dict["cq_code"]
