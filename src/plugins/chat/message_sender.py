@@ -103,7 +103,7 @@ class MessageContainer:
         
     def add_message(self, message: Union[Message_Thinking, Message_Sending]) -> None:
         """添加消息到队列"""
-        print(f"\033[1;32m[添加消息]\033[0m 添加消息到对应群")
+        # print(f"\033[1;32m[添加消息]\033[0m 添加消息到对应群")
         if isinstance(message, MessageSet):
             for single_message in message.messages:
                 self.messages.append(single_message)
@@ -156,17 +156,13 @@ class MessageManager:
             #最早的对象，可能是思考消息，也可能是发送消息
             message_earliest = container.get_earliest_message() #一个message_thinking or message_sending
             
-            #一个月后删了
-            if not message_earliest:
-                print(f"\033[1;34m[BUG，如果出现这个，说明有BUG，3月4日留]\033[0m ")
-                return
-            
             #如果是思考消息
             if isinstance(message_earliest, Message_Thinking):
                 #优先等待这条消息
                 message_earliest.update_thinking_time()
                 thinking_time = message_earliest.thinking_time
-                print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒")
+                if thinking_time % 10 == 0:
+                    print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒")
             else:# 如果不是message_thinking就只能是message_sending    
                 print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
                 #直接发，等什么呢

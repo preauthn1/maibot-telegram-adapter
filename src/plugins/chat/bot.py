@@ -15,7 +15,7 @@ from .message import Message_Thinking  # 导入 Message_Thinking 类
 from .relationship_manager import relationship_manager
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .utils import is_mentioned_bot_in_txt, calculate_typing_time
-from ..memory_system.memory import memory_graph
+from ..memory_system.memory import memory_graph,hippocampus
 from loguru import logger
 
 class ChatBot:
@@ -70,24 +70,12 @@ class ChatBot:
 
 
 
-        topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
-
-
-        # topic1 = topic_identifier.identify_topic_jieba(message.processed_plain_text)
-        # topic2 = await topic_identifier.identify_topic_llm(message.processed_plain_text)
-        # topic3 = topic_identifier.identify_topic_snownlp(message.processed_plain_text)
-        logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
-        
-        all_num = 0
-        interested_num = 0
-        if topic:
-            for current_topic in topic:
-                all_num += 1
-                first_layer_items, second_layer_items = memory_graph.get_related_item(current_topic, depth=2)
-                if first_layer_items:
-                    interested_num += 1
-                    print(f"\033[1;32m[前额叶]\033[0m 对|{current_topic}|有印象")
-        interested_rate = interested_num / all_num if all_num > 0 else 0
+        # topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
+        topic = ''
+        interested_rate = 0
+        interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text)/100
+        print(f"\033[1;32m[记忆激活]\033[0m 对{message.processed_plain_text}的激活度:---------------------------------------{interested_rate}\n")
+        # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
         
         await self.storage.store_message(message, topic[0] if topic else None)
 
@@ -134,7 +122,7 @@ class ChatBot:
                 if isinstance(msg, Message_Thinking) and msg.message_id == think_id:
                     thinking_message = msg
                     container.messages.remove(msg)
-                    print(f"\033[1;32m[思考消息删除]\033[0m 已找到思考消息对象，开始删除")
+                    # print(f"\033[1;32m[思考消息删除]\033[0m 已找到思考消息对象，开始删除")
                     break
             
             #记录开始思考的时间，避免从思考到回复的时间太久
@@ -167,7 +155,7 @@ class ChatBot:
                 message_set.add_message(bot_message)
                 
             #message_set 可以直接加入 message_manager
-            print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
+            # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
             message_manager.add_message(message_set)
             
             bot_response_time = tinking_time_point
@@ -205,7 +193,7 @@ class ChatBot:
                     )
                     message_manager.add_message(bot_message)
         
-        willing_manager.change_reply_willing_after_sent(event.group_id)
+        # willing_manager.change_reply_willing_after_sent(event.group_id)
 
 # 创建全局ChatBot实例
 chat_bot = ChatBot()
