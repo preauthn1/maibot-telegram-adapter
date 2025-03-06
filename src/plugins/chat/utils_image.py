@@ -252,7 +252,7 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
             for frame_idx in range(img.n_frames):
                 img.seek(frame_idx)
                 new_frame = img.copy()
-                new_frame = new_frame.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                new_frame = new_frame.resize((new_width//4, new_height//4), Image.Resampling.LANCZOS) # 动图折上折
                 frames.append(new_frame)
             
             # 保存到缓冲区
