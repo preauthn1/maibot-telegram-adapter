@@ -160,27 +160,6 @@ class EmojiManager:
             logger.error(f"获取表情包失败: {str(e)}")
             return None
 
-    async def _get_emoji_tag(self, image_base64: str) -> str:
-        """获取表情包的标签"""
-        try:
-            prompt = '这是一个表情包，请从"happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"中选出1个情感标签。只输出标签，不要输出其他任何内容，只输出情感标签就好'
-            
-            content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
-            tag_result = content.strip().lower()
-            
-            valid_tags = ["happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"]
-            for tag_match in valid_tags:
-                if tag_match in tag_result or tag_match == tag_result:
-                    return tag_match
-            print(f"\033[1;33m[警告]\033[0m 无效的标签: {tag_result}, 跳过")
-            
-        except Exception as e:
-            print(f"\033[1;31m[错误]\033[0m 获取标签失败: {str(e)}")
-            return "neutral"
-        
-        print(f"\033[1;32m[调试信息]\033[0m 使用默认标签: neutral")
-        return "neutral"  # 默认标签
-
     async def _get_emoji_discription(self, image_base64: str) -> str:
         """获取表情包的标签"""
         try:
@@ -208,7 +187,7 @@ class EmojiManager:
         
     async def _get_kimoji_for_text(self, text:str):
         try:
-            prompt = f'这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，注意不要输出任何对内容的分析内容，只输出\"一种什么样的感觉\"中间的形容词部分。'
+            prompt = f'这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，注意不要输出任何对消息内容的分析内容，只输出\"一种什么样的感觉\"中间的形容词部分。'
             
             content, _ = await self.lm.generate_response_async(prompt)
             logger.info(f"输出描述: {content}")
@@ -319,7 +298,6 @@ class EmojiManager:
                     logger.info(f"其不满足过滤规则，被剔除 {check}")
                     continue
                 logger.info(f"check通过 {check}")
-                tag = await self._get_emoji_tag(image_base64)
                 embedding = get_embedding(discription)
                 if discription is not None:
                     # 准备数据库记录
@@ -328,7 +306,6 @@ class EmojiManager:
                         'path': image_path,
                         'embedding':embedding,
                         'discription': discription,
-                        'tag':tag,
                         'timestamp': int(time.time())
                     }
                     
