@@ -317,12 +317,11 @@ class LLM_request:
         logger.error("达到最大重试次数，请求仍然失败")
         raise RuntimeError("达到最大重试次数，API请求仍然失败")
 
-    def get_embedding_sync(self, text: str, model: str = "BAAI/bge-m3") -> Union[list, None]:
+    def get_embedding_sync(self, text: str) -> Union[list, None]:
         """同步方法：获取文本的embedding向量
         
         Args:
             text: 需要获取embedding的文本
-            model: 使用的模型名称，默认为"BAAI/bge-m3"
             
         Returns:
             list: embedding向量，如果失败则返回None
@@ -333,7 +332,7 @@ class LLM_request:
         }
 
         data = {
-            "model": model,
+            "model": self.model_name,
             "input": text,
             "encoding_format": "float"
         }
