@@ -188,3 +188,7 @@ cython_debug/
 
 # jieba
 jieba.cache
+
+
+# vscode
+/.vscode
