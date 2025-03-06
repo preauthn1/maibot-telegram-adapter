@@ -98,7 +98,7 @@ class EmojiManager:
             
             # 获取文本的embedding
             text_for_search= await self._get_kimoji_for_text(text)
-            text_embedding = get_embedding(text_for_search)
+            text_embedding = await get_embedding(text_for_search)
             if not text_embedding:
                 logger.error("无法获取文本的embedding")
                 return None
@@ -299,7 +299,7 @@ class EmojiManager:
                         logger.info(f"其不满足过滤规则，被剔除 {check}")
                         continue
                     logger.info(f"check通过 {check}")
-                embedding = get_embedding(discription)
+                embedding = await get_embedding(discription)
                 if discription is not None:
                     # 准备数据库记录
                     emoji_record = {

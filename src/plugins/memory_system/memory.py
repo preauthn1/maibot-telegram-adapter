@@ -673,7 +673,7 @@ class Hippocampus:
             if first_layer:
                 # 如果记忆条数超过限制，随机选择指定数量的记忆
                 if len(first_layer) > max_memory_num/2:
-                    first_layer = random.sample(first_layer, max_memory_num)
+                    first_layer = random.sample(first_layer, max_memory_num//2)
                 # 为每条记忆添加来源主题和相似度信息
                 for memory in first_layer:
                     relevant_memories.append({

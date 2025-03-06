@@ -22,7 +22,7 @@ check_interval = 120 # 检查表情包的时间间隔
 register_interval = 10 # 注册表情包的时间间隔
 auto_save = true  # 自动偷表情包
 enable_check = false  # 是否启用表情包过滤
-check_prompt = "不要包含违反公序良俗的内容" # 表情包过滤要求
+check_prompt = "符合公序良俗" # 表情包过滤要求
 
 [cq_code]
 enable_pic_translate = false

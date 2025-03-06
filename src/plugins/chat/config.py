@@ -32,7 +32,7 @@ class BotConfig:
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
     EMOJI_SAVE: bool = True  # 偷表情包
     EMOJI_CHECK: bool = False #是否开启过滤
-    EMOJI_CHECK_PROMPT: str = "不要包含违反公序良俗的内容" # 表情包过滤要求
+    EMOJI_CHECK_PROMPT: str = "符合公序良俗" # 表情包过滤要求
 
     ban_words = set()
 
