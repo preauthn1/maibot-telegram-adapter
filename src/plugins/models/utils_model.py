@@ -41,7 +41,7 @@ class LLM_request:
 
         # 发送请求到完整的chat/completions端点
         api_url = f"{self.base_url.rstrip('/')}/chat/completions"
-        logger.info(f"发送请求到URL: {api_url}+{self.model_name}")  # 记录请求的URL
+        logger.info(f"发送请求到URL: {api_url}{self.model_name}")  # 记录请求的URL
 
         max_retries = 3
         base_wait_time = 15
@@ -122,7 +122,7 @@ class LLM_request:
 
         # 发送请求到完整的chat/completions端点
         api_url = f"{self.base_url.rstrip('/')}/chat/completions"
-        logger.info(f"发送请求到URL: {api_url}+{self.model_name}")  # 记录请求的URL
+        logger.info(f"发送请求到URL: {api_url}{self.model_name}")  # 记录请求的URL
 
         max_retries = 3
         base_wait_time = 15
@@ -264,7 +264,7 @@ class LLM_request:
 
         # 发送请求到完整的chat/completions端点
         api_url = f"{self.base_url.rstrip('/')}/chat/completions"
-        logger.info(f"发送请求到URL: {api_url}+{self.model_name}")  # 记录请求的URL
+        logger.info(f"发送请求到URL: {api_url}{self.model_name}")  # 记录请求的URL
 
         max_retries = 2
         base_wait_time = 6
@@ -329,7 +329,7 @@ class LLM_request:
         }
 
         api_url = f"{self.base_url.rstrip('/')}/embeddings"
-        logger.info(f"发送请求到URL: {api_url}+{self.model_name}")  # 记录请求的URL
+        logger.info(f"发送请求到URL: {api_url}{self.model_name}")  # 记录请求的URL
 
         max_retries = 2
         base_wait_time = 6
@@ -385,7 +385,7 @@ class LLM_request:
         }
 
         api_url = f"{self.base_url.rstrip('/')}/embeddings"
-        logger.info(f"发送请求到URL: {api_url}+{self.model_name}")  # 记录请求的URL
+        logger.info(f"发送请求到URL: {api_url}{self.model_name}")  # 记录请求的URL
 
         max_retries = 3
         base_wait_time = 15
