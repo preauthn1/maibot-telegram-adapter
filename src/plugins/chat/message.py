@@ -49,7 +49,7 @@ class Message:
     
     translate_cq: bool = True # 是否翻译cq码
     
-    def __post_init__(self):
+    async def __post_init__(self):
         if self.time is None:
             self.time = int(time.time())
             
@@ -64,7 +64,7 @@ class Message:
         
         if not self.processed_plain_text:
             if self.raw_message:
-                self.message_segments = self.parse_message_segments(str(self.raw_message))
+                self.message_segments = await self.parse_message_segments(str(self.raw_message))
                 self.processed_plain_text = ' '.join(
                     seg.translated_plain_text
                     for seg in self.message_segments
@@ -78,7 +78,7 @@ class Message:
         content = self.processed_plain_text
         self.detailed_plain_text = f"[{time_str}] {name}: {content}\n"
     
-    def parse_message_segments(self, message: str) -> List[CQCode]:
+    async def parse_message_segments(self, message: str) -> List[CQCode]:
         """
         将消息解析为片段列表，包括纯文本和CQ码
         返回的列表中每个元素都是字典，包含：
@@ -136,7 +136,7 @@ class Message:
         
         #翻译作为字典的CQ码  
         for _code_item in cq_code_dict_list:
-            message_obj = cq_code_tool.cq_from_dict_to_class(_code_item,reply = self.reply_message)
+            message_obj = await cq_code_tool.cq_from_dict_to_class(_code_item,reply = self.reply_message)
             trans_list.append(message_obj)       
         return trans_list
 

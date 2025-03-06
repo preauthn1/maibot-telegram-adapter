@@ -335,7 +335,7 @@ class CQCode:
     
 class CQCode_tool:
     @staticmethod
-    def cq_from_dict_to_class(cq_code: Dict, reply: Optional[Dict] = None) -> CQCode:
+    async def cq_from_dict_to_class(cq_code: Dict, reply: Optional[Dict] = None) -> CQCode:
         """
         将CQ码字典转换为CQCode对象
         
@@ -364,7 +364,7 @@ class CQCode_tool:
         )
         
         # 进行翻译处理
-        instance.translate()
+        await instance.translate()
         return instance
     
     @staticmethod
