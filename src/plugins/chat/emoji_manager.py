@@ -20,6 +20,7 @@ import traceback
 from nonebot import get_driver
 from ..chat.config import global_config
 from ..models.utils_model import LLM_request
+from ..chat.utils_image import image_path_to_base64
 from ..chat.utils import get_embedding
 
 driver = get_driver()
@@ -98,7 +99,7 @@ class EmojiManager:
             
             # 获取文本的embedding
             text_for_search= await self._get_kimoji_for_text(text)
-            text_embedding = get_embedding(text_for_search)
+            text_embedding = await get_embedding(text_for_search)
             if not text_embedding:
                 logger.error("无法获取文本的embedding")
                 return None
@@ -160,27 +161,6 @@ class EmojiManager:
             logger.error(f"获取表情包失败: {str(e)}")
             return None
 
-    async def _get_emoji_tag(self, image_base64: str) -> str:
-        """获取表情包的标签"""
-        try:
-            prompt = '这是一个表情包，请从"happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"中选出1个情感标签。只输出标签，不要输出其他任何内容，只输出情感标签就好'
-            
-            content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
-            tag_result = content.strip().lower()
-            
-            valid_tags = ["happy", "angry", "sad", "surprised", "disgusted", "fearful", "neutral"]
-            for tag_match in valid_tags:
-                if tag_match in tag_result or tag_match == tag_result:
-                    return tag_match
-            print(f"\033[1;33m[警告]\033[0m 无效的标签: {tag_result}, 跳过")
-            
-        except Exception as e:
-            print(f"\033[1;31m[错误]\033[0m 获取标签失败: {str(e)}")
-            return "neutral"
-        
-        print(f"\033[1;32m[调试信息]\033[0m 使用默认标签: neutral")
-        return "neutral"  # 默认标签
-
     async def _get_emoji_discription(self, image_base64: str) -> str:
         """获取表情包的标签"""
         try:
@@ -208,7 +188,7 @@ class EmojiManager:
         
     async def _get_kimoji_for_text(self, text:str):
         try:
-            prompt = f'这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，注意不要输出任何对内容的分析内容，只输出\"一种什么样的感觉\"中间的形容词部分。'
+            prompt = f'这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，注意不要输出任何对消息内容的分析内容，只输出\"一种什么样的感觉\"中间的形容词部分。'
             
             content, _ = await self.lm.generate_response_async(prompt)
             logger.info(f"输出描述: {content}")
@@ -217,76 +197,7 @@ class EmojiManager:
         except Exception as e:
             logger.error(f"获取标签失败: {str(e)}")
             return None
-        
-    async def _compress_image(self, image_path: str, target_size: int = 0.8 * 1024 * 1024) -> Optional[str]:
-        """压缩图片并返回base64编码
-        Args:
-            image_path: 图片文件路径
-            target_size: 目标文件大小（字节），默认0.8MB
-        Returns:
-            Optional[str]: 成功返回base64编码的图片数据，失败返回None
-        """
-        try:
-            file_size = os.path.getsize(image_path)
-            if file_size <= target_size:
-                # 如果文件已经小于目标大小，直接读取并返回base64
-                with open(image_path, 'rb') as f:
-                    return base64.b64encode(f.read()).decode('utf-8')
-            
-            # 打开图片
-            with Image.open(image_path) as img:
-                # 获取原始尺寸
-                original_width, original_height = img.size
-                
-                # 计算缩放比例
-                scale = min(1.0, (target_size / file_size) ** 0.5)
-                
-                # 计算新的尺寸
-                new_width = int(original_width * scale)
-                new_height = int(original_height * scale)
-                
-                # 创建内存缓冲区
-                output_buffer = io.BytesIO()
-                
-                # 如果是GIF，处理所有帧
-                if getattr(img, "is_animated", False):
-                    frames = []
-                    for frame_idx in range(img.n_frames):
-                        img.seek(frame_idx)
-                        new_frame = img.copy()
-                        new_frame = new_frame.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                        frames.append(new_frame)
                     
-                    # 保存到缓冲区
-                    frames[0].save(
-                        output_buffer,
-                        format='GIF',
-                        save_all=True,
-                        append_images=frames[1:],
-                        optimize=True,
-                        duration=img.info.get('duration', 100),
-                        loop=img.info.get('loop', 0)
-                    )
-                else:
-                    # 处理静态图片
-                    resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                    
-                    # 保存到缓冲区，保持原始格式
-                    if img.format == 'PNG' and img.mode in ('RGBA', 'LA'):
-                        resized_img.save(output_buffer, format='PNG', optimize=True)
-                    else:
-                        resized_img.save(output_buffer, format='JPEG', quality=95, optimize=True)
-                
-                # 获取压缩后的数据并转换为base64
-                compressed_data = output_buffer.getvalue()
-                logger.success(f"压缩图片: {os.path.basename(image_path)} ({original_width}x{original_height} -> {new_width}x{new_height})")
-                
-                return base64.b64encode(compressed_data).decode('utf-8')
-                
-        except Exception as e:
-            logger.error(f"压缩图片失败: {os.path.basename(image_path)}, 错误: {str(e)}")
-            return None
-            
     async def scan_new_emojis(self):
         """扫描新的表情包"""
         try:
@@ -305,22 +216,22 @@ class EmojiManager:
                     continue
                 
                 # 压缩图片并获取base64编码
-                image_base64 = await self._compress_image(image_path)
+                image_base64 = image_path_to_base64(image_path)
                 if image_base64 is None:
                     os.remove(image_path)
                     continue
                 
                 # 获取表情包的描述
                 discription = await self._get_emoji_discription(image_base64)
-                check = await self._check_emoji(image_base64)
-                if '是' not in check:
-                    os.remove(image_path)
-                    logger.info(f"描述: {discription}")
-                    logger.info(f"其不满足过滤规则，被剔除 {check}")
-                    continue
-                logger.info(f"check通过 {check}")
-                tag = await self._get_emoji_tag(image_base64)
-                embedding = get_embedding(discription)
+                if global_config.EMOJI_CHECK:
+                    check = await self._check_emoji(image_base64)
+                    if '是' not in check:
+                        os.remove(image_path)
+                        logger.info(f"描述: {discription}")
+                        logger.info(f"其不满足过滤规则，被剔除 {check}")
+                        continue
+                    logger.info(f"check通过 {check}")
+                embedding = await get_embedding(discription)
                 if discription is not None:
                     # 准备数据库记录
                     emoji_record = {
@@ -328,7 +239,6 @@ class EmojiManager:
                         'path': image_path,
                         'embedding':embedding,
                         'discription': discription,
-                        'tag':tag,
                         'timestamp': int(time.time())
                     }
                     

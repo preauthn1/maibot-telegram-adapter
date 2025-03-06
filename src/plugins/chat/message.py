@@ -27,58 +27,60 @@ class Message:
     """消息数据类"""
     message_id: int = None
     time: float = None
-    
+
     group_id: int = None
-    group_name: str = None  # 群名称 
-    
+    group_name: str = None  # 群名称
+
     user_id: int = None
     user_nickname: str = None  # 用户昵称
-    user_cardname: str=None # 用户群昵称
-    
-    raw_message: str = None # 原始消息，包含未解析的cq码
-    plain_text: str = None # 纯文本
-    
+    user_cardname: str = None  # 用户群昵称
+
+    raw_message: str = None  # 原始消息，包含未解析的cq码
+    plain_text: str = None  # 纯文本
+
+    reply_message: Dict = None  # 存储 回复的 源消息
+
+    # 延迟初始化字段
+    _initialized: bool = False
     message_segments: List[Dict] = None  # 存储解析后的消息片段
     processed_plain_text: str = None  # 用于存储处理后的plain_text
     detailed_plain_text: str = None  # 用于存储详细可读文本
-    
-    reply_message: Dict = None  # 存储 回复的 源消息
-    
-    is_emoji: bool = False # 是否是表情包
-    has_emoji: bool = False # 是否包含表情包
-    
-    translate_cq: bool = True # 是否翻译cq码
-    
-    def __post_init__(self):
-        if self.time is None:
-            self.time = int(time.time())
-            
-        if not self.group_name:
-            self.group_name = get_groupname(self.group_id)
-        
-        if not self.user_nickname:
-            self.user_nickname = get_user_nickname(self.user_id)
-            
-        if not self.user_cardname:
-            self.user_cardname=get_user_cardname(self.user_id)
-        
-        if not self.processed_plain_text:
-            if self.raw_message:
-                self.message_segments = self.parse_message_segments(str(self.raw_message))
-                self.processed_plain_text = ' '.join(
-                    seg.translated_plain_text
-                    for seg in self.message_segments
-                )
-        #将详细翻译为详细可读文本
+
+    # 状态标志
+    is_emoji: bool = False
+    has_emoji: bool = False
+    translate_cq: bool = True
+
+    async def initialize(self):
+        """显式异步初始化方法（必须调用）"""
+        if self._initialized:
+            return
+
+        # 异步获取补充信息
+        self.group_name = self.group_name or get_groupname(self.group_id)
+        self.user_nickname = self.user_nickname or get_user_nickname(self.user_id)
+        self.user_cardname = self.user_cardname or get_user_cardname(self.user_id)
+
+        # 消息解析
+        if self.raw_message:
+            self.message_segments = await self.parse_message_segments(self.raw_message)
+            self.processed_plain_text = ' '.join(
+                seg.translated_plain_text
+                for seg in self.message_segments
+            )
+
+        # 构建详细文本
         time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.time))
-        try:
-            name = f"{self.user_nickname}(ta的昵称:{self.user_cardname},ta的id:{self.user_id})"
-        except:
-            name = self.user_nickname or f"用户{self.user_id}"
-        content = self.processed_plain_text
-        self.detailed_plain_text = f"[{time_str}] {name}: {content}\n"
+        name = (
+            f"{self.user_nickname}(ta的昵称:{self.user_cardname},ta的id:{self.user_id})"
+            if self.user_cardname
+            else f"{self.user_nickname or f'用户{self.user_id}'}"
+        )
+        self.detailed_plain_text = f"[{time_str}] {name}: {self.processed_plain_text}\n"
+
+        self._initialized = True
     
-    def parse_message_segments(self, message: str) -> List[CQCode]:
+    async def parse_message_segments(self, message: str) -> List[CQCode]:
         """
         将消息解析为片段列表，包括纯文本和CQ码
         返回的列表中每个元素都是字典，包含：
@@ -136,7 +138,7 @@ class Message:
         
         #翻译作为字典的CQ码  
         for _code_item in cq_code_dict_list:
-            message_obj = cq_code_tool.cq_from_dict_to_class(_code_item,reply = self.reply_message)
+            message_obj = await cq_code_tool.cq_from_dict_to_class(_code_item,reply = self.reply_message)
             trans_list.append(message_obj)       
         return trans_list
 

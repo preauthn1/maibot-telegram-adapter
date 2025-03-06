@@ -25,603 +25,221 @@ class LLM_request:
         self.model_name = model["name"]
         self.params = kwargs
 
-    async def generate_response(self, prompt: str) -> Tuple[str, str]:
-        """根据输入的提示生成模型的异步响应"""
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
+    async def _execute_request(
+            self,
+            endpoint: str,
+            prompt: str = None,
+            image_base64: str = None,
+            payload: dict = None,
+            retry_policy: dict = None,
+            response_handler: callable = None,
+    ):
+        """统一请求执行入口
+        Args:
+            endpoint: API端点路径 (如 "chat/completions")
+            prompt: prompt文本
+            image_base64: 图片的base64编码
+            payload: 请求体数据
+            is_async: 是否异步
+            retry_policy: 自定义重试策略
+                (示例: {"max_retries":3, "base_wait":15, "retry_codes":[429,500]})
+            response_handler: 自定义响应处理器
+        """
+        # 合并重试策略
+        default_retry = {
+            "max_retries": 3, "base_wait": 15,
+            "retry_codes": [429, 413, 500, 503],
+            "abort_codes": [400, 401, 402, 403]}
+        policy = {**default_retry, **(retry_policy or {})}
+
+        # 常见Error Code Mapping
+        error_code_mapping = {
+            400: "参数不正确",
+            401: "API key 错误，认证失败",
+            402: "账号余额不足",
+            403: "需要实名,或余额不足",
+            404: "Not Found",
+            429: "请求过于频繁，请稍后再试",
+            500: "服务器内部故障",
+            503: "服务器负载过高"
         }
+
+        api_url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+        logger.info(f"发送请求到URL: {api_url}")
+        logger.info(f"使用模型: {self.model_name}")
 
         # 构建请求体
-        data = {
-            "model": self.model_name,
-            "messages": [{"role": "user", "content": prompt}],
-            **self.params
-        }
+        if image_base64:
+            payload = await self._build_payload(prompt, image_base64)
+        elif payload is None:
+            payload = await self._build_payload(prompt)
 
-        # 发送请求到完整的chat/completions端点
-        api_url = f"{self.base_url.rstrip('/')}/chat/completions"
-        logger.info(f"发送请求到URL: {api_url}/{self.model_name}")  # 记录请求的URL
-
-        max_retries = 3
-        base_wait_time = 15
-
-        for retry in range(max_retries):
+        for retry in range(policy["max_retries"]):
             try:
+                # 使用上下文管理器处理会话
+                headers = await self._build_headers()
+
                 async with aiohttp.ClientSession() as session:
-                    async with session.post(api_url, headers=headers, json=data) as response:
-                        if response.status == 429:
-                            wait_time = base_wait_time * (2 ** retry)  # 指数退避
-                            logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
+                    async with session.post(api_url, headers=headers, json=payload) as response:
+                        # 处理需要重试的状态码
+                        if response.status in policy["retry_codes"]:
+                            wait_time = policy["base_wait"] * (2 ** retry)
+                            logger.warning(f"错误码: {response.status}, 等待 {wait_time}秒后重试")
+                            if response.status == 413:
+                                logger.warning("请求体过大，尝试压缩...")
+                                image_base64 = compress_base64_image_by_scale(image_base64)
+                                payload = await self._build_payload(prompt, image_base64)
+                            elif response.status in [500, 503]:
+                                logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
+                                raise RuntimeError("服务器负载过高，模型恢复失败QAQ")
+                            else:
+                                logger.warning(f"请求限制(429)，等待{wait_time}秒后重试...")
+
                             await asyncio.sleep(wait_time)
                             continue
+                        elif response.status in policy["abort_codes"]:
+                            logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
+                            raise RuntimeError(f"请求被拒绝: {error_code_mapping.get(response.status)}")
 
-                        if response.status in [500, 503]:
-                            logger.error(f"服务器错误: {response.status}")
-                            raise RuntimeError("服务器负载过高，模型恢复失败QAQ")
-
-                        response.raise_for_status()  # 检查其他响应状态
-
+                        response.raise_for_status()
                         result = await response.json()
-                        if "choices" in result and len(result["choices"]) > 0:
-                            message = result["choices"][0]["message"]
-                            content = message.get("content", "")
-                            think_match = None
-                            reasoning_content = message.get("reasoning_content", "")
-                            if not reasoning_content:
-                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
-                            if think_match:
-                                reasoning_content = think_match.group(1).strip()
-                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
-                            return content, reasoning_content
-                        return "没有返回结果", ""
+
+                        # 使用自定义处理器或默认处理
+                        return response_handler(result) if response_handler else self._default_response_handler(result)
 
             except Exception as e:
-                if retry < max_retries - 1:  # 如果还有重试机会
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.error(f"[回复]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
+                if retry < policy["max_retries"] - 1:
+                    wait_time = policy["base_wait"] * (2 ** retry)
+                    logger.error(f"请求失败，等待{wait_time}秒后重试... 错误: {str(e)}")
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.critical(f"请求失败: {str(e)}", exc_info=True)
-                    logger.critical(f"请求头: {headers} 请求体: {data}")
+                    logger.critical(f"请求失败: {str(e)}")
+                    logger.critical(f"请求头: {await self._build_headers()} 请求体: {payload}")
                     raise RuntimeError(f"API请求失败: {str(e)}")
 
         logger.error("达到最大重试次数，请求仍然失败")
         raise RuntimeError("达到最大重试次数，API请求仍然失败")
 
-    async def generate_response_for_image(self, prompt: str, image_base64: str) -> Tuple[str, str]:
-        """根据输入的提示和图片生成模型的异步响应"""
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        # 构建请求体
-        def build_request_data(img_base64: str):
+    async def _build_payload(self, prompt: str, image_base64: str = None) -> dict:
+        """构建请求体"""
+        if image_base64:
             return {
                 "model": self.model_name,
                 "messages": [
                     {
                         "role": "user",
                         "content": [
-                            {
-                                "type": "text",
-                                "text": prompt
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{img_base64}"
-                                }
-                            }
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
                         ]
                     }
                 ],
+                "max_tokens": global_config.max_response_length,
+                **self.params
+            }
+        else:
+            return {
+                "model": self.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": global_config.max_response_length,
                 **self.params
             }
 
+    def _default_response_handler(self, result: dict) -> Tuple:
+        """默认响应解析"""
+        if "choices" in result and result["choices"]:
+            message = result["choices"][0]["message"]
+            content = message.get("content", "")
+            content, reasoning = self._extract_reasoning(content)
+            reasoning_content = message.get("model_extra", {}).get("reasoning_content", "")
+            if not reasoning_content:
+                reasoning_content = reasoning
 
-        # 发送请求到完整的chat/completions端点
-        api_url = f"{self.base_url.rstrip('/')}/chat/completions"
-        logger.info(f"发送请求到URL: {api_url}/{self.model_name}")  # 记录请求的URL
+            return content, reasoning_content
 
-        max_retries = 3
-        base_wait_time = 15
+        return "没有返回结果", ""
 
-        current_image_base64 = image_base64
-        current_image_base64 = compress_base64_image_by_scale(current_image_base64)
+    def _extract_reasoning(self, content: str) -> tuple[str, str]:
+        """CoT思维链提取"""
+        match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
+        content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
+        if match:
+            reasoning = match.group(1).strip()
+        else:
+            reasoning = ""
+        return content, reasoning
 
-        for retry in range(max_retries):
-            try:
-                data = build_request_data(current_image_base64)
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(api_url, headers=headers, json=data) as response:
-                        if response.status == 429:
-                            wait_time = base_wait_time * (2 ** retry)  # 指数退避
-                            logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
-                            await asyncio.sleep(wait_time)
-                            continue
-
-                        elif response.status == 413:
-                            logger.warning("图片太大(413)，尝试压缩...")
-                            current_image_base64 = compress_base64_image_by_scale(current_image_base64)
-                            continue
-
-                        response.raise_for_status()  # 检查其他响应状态
-
-                        result = await response.json()
-                        if "choices" in result and len(result["choices"]) > 0:
-                            message = result["choices"][0]["message"]
-                            content = message.get("content", "")
-                            think_match = None
-                            reasoning_content = message.get("reasoning_content", "")
-                            if not reasoning_content:
-                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
-                            if think_match:
-                                reasoning_content = think_match.group(1).strip()
-                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
-                            return content, reasoning_content
-                        return "没有返回结果", ""
-
-            except Exception as e:
-                if retry < max_retries - 1:  # 如果还有重试机会
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.error(f"[image回复]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.critical(f"请求失败: {str(e)}", exc_info=True)
-                    logger.critical(f"请求头: {headers} 请求体: {data}")
-                    raise RuntimeError(f"API请求失败: {str(e)}")
-
-        logger.error("达到最大重试次数，请求仍然失败")
-        raise RuntimeError("达到最大重试次数，API请求仍然失败")
-
-    async def generate_response_async(self, prompt: str) -> Union[str, Tuple[str, str]]:
-        """异步方式根据输入的提示生成模型的响应"""
-        headers = {
+    async def _build_headers(self) -> dict:
+        """构建请求头"""
+        return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
 
+    async def generate_response(self, prompt: str) -> Tuple[str, str]:
+        """根据输入的提示生成模型的异步响应"""
+
+        content, reasoning_content = await self._execute_request(
+            endpoint="/chat/completions",
+            prompt=prompt
+        )
+        return content, reasoning_content
+
+    async def generate_response_for_image(self, prompt: str, image_base64: str) -> Tuple[str, str]:
+        """根据输入的提示和图片生成模型的异步响应"""
+
+        content, reasoning_content = await self._execute_request(
+            endpoint="/chat/completions",
+            prompt=prompt,
+            image_base64=image_base64
+        )
+        return content, reasoning_content
+
+    async def generate_response_async(self, prompt: str) -> Union[str, Tuple[str, str]]:
+        """异步方式根据输入的提示生成模型的响应"""
         # 构建请求体
         data = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.5,
+            "max_tokens": global_config.max_response_length,
             **self.params
         }
 
-        # 发送请求到完整的 chat/completions 端点
-        api_url = f"{self.base_url.rstrip('/')}/chat/completions"
-        logger.info(f"Request URL: {api_url}")  # 记录请求的 URL
+        content, reasoning_content = await self._execute_request(
+            endpoint="/chat/completions",
+            payload=data,
+            prompt=prompt
+        )
+        return content, reasoning_content
 
-        max_retries = 3
-        base_wait_time = 15
-
-        async with aiohttp.ClientSession() as session:
-            for retry in range(max_retries):
-                try:
-                    async with session.post(api_url, headers=headers, json=data) as response:
-                        if response.status == 429:
-                            wait_time = base_wait_time * (2 ** retry)  # 指数退避
-                            logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
-                            await asyncio.sleep(wait_time)
-                            continue
-
-                        response.raise_for_status()  # 检查其他响应状态
-
-                        result = await response.json()
-                        if "choices" in result and len(result["choices"]) > 0:
-                            message = result["choices"][0]["message"]
-                            content = message.get("content", "")
-                            think_match = None
-                            reasoning_content = message.get("reasoning_content", "")
-                            if not reasoning_content:
-                                think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
-                            if think_match:
-                                reasoning_content = think_match.group(1).strip()
-                            content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
-                            return content, reasoning_content
-                        return "没有返回结果", ""
-
-                except Exception as e:
-                    if retry < max_retries - 1:  # 如果还有重试机会
-                        wait_time = base_wait_time * (2 ** retry)
-                        logger.error(f"[回复]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}")
-                        await asyncio.sleep(wait_time)
-                    else:
-                        logger.error(f"请求失败: {str(e)}")
-                        logger.critical(f"请求头: {headers} 请求体: {data}")
-                        return f"请求失败: {str(e)}", ""
-
-            logger.error("达到最大重试次数，请求仍然失败")
-            return "达到最大重试次数，请求仍然失败", ""
-
-
-
-    def generate_response_for_image_sync(self, prompt: str, image_base64: str) -> Tuple[str, str]:
-        """同步方法：根据输入的提示和图片生成模型的响应"""
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        image_base64=compress_base64_image_by_scale(image_base64)
-
-        # 构建请求体
-        data = {
-            "model": self.model_name,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            **self.params
-        }
-
-        # 发送请求到完整的chat/completions端点
-        api_url = f"{self.base_url.rstrip('/')}/chat/completions"
-        logger.info(f"发送请求到URL: {api_url}/{self.model_name}")  # 记录请求的URL
-
-        max_retries = 2
-        base_wait_time = 6
-
-        for retry in range(max_retries):
-            try:
-                response = requests.post(api_url, headers=headers, json=data, timeout=30)
-
-                if response.status_code == 429:
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
-                    time.sleep(wait_time)
-                    continue
-
-                response.raise_for_status()  # 检查其他响应状态
-
-                result = response.json()
-                if "choices" in result and len(result["choices"]) > 0:
-                    message = result["choices"][0]["message"]
-                    content = message.get("content", "")
-                    think_match = None
-                    reasoning_content = message.get("reasoning_content", "")
-                    if not reasoning_content:
-                        think_match = re.search(r'(?:<think>)?(.*?)</think>', content, re.DOTALL)
-                    if think_match:
-                        reasoning_content = think_match.group(1).strip()
-                    content = re.sub(r'(?:<think>)?.*?</think>', '', content, flags=re.DOTALL, count=1).strip()
-                    return content, reasoning_content
-                return "没有返回结果", ""
-
-            except Exception as e:
-                if retry < max_retries - 1:  # 如果还有重试机会
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.error(f"[image_sync回复]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
-                    time.sleep(wait_time)
-                else:
-                    logger.critical(f"请求失败: {str(e)}", exc_info=True)
-                    logger.critical(f"请求头: {headers} 请求体: {data}")
-                    raise RuntimeError(f"API请求失败: {str(e)}")
-
-        logger.error("达到最大重试次数，请求仍然失败")
-        raise RuntimeError("达到最大重试次数，API请求仍然失败")
-
-    def get_embedding_sync(self, text: str) -> Union[list, None]:
-        """同步方法：获取文本的embedding向量
-        
-        Args:
-            text: 需要获取embedding的文本
-            
-        Returns:
-            list: embedding向量，如果失败则返回None
-        """
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": self.model_name,
-            "input": text,
-            "encoding_format": "float"
-        }
-
-        api_url = f"{self.base_url.rstrip('/')}/embeddings"
-        logger.info(f"发送请求到URL: {api_url}/{self.model_name}")  # 记录请求的URL
-
-        max_retries = 2
-        base_wait_time = 6
-
-        for retry in range(max_retries):
-            try:
-                response = requests.post(api_url, headers=headers, json=data, timeout=30)
-
-                if response.status_code == 429:
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
-                    time.sleep(wait_time)
-                    continue
-
-                response.raise_for_status()
-
-                result = response.json()
-                if 'data' in result and len(result['data']) > 0:
-                    return result['data'][0]['embedding']
-                return None
-
-            except Exception as e:
-                if retry < max_retries - 1:
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.error(f"[embedding_sync]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
-                    time.sleep(wait_time)
-                else:
-                    logger.critical(f"embedding请求失败: {str(e)}", exc_info=True)
-                    logger.critical(f"请求头: {headers} 请求体: {data}")
-                    return None
-
-        logger.error("达到最大重试次数，embedding请求仍然失败")
-        return None
-
-    async def get_embedding(self, text: str, model: str = "BAAI/bge-m3") -> Union[list, None]:
+    async def get_embedding(self, text: str) -> Union[list, None]:
         """异步方法：获取文本的embedding向量
         
         Args:
             text: 需要获取embedding的文本
-            model: 使用的模型名称，默认为"BAAI/bge-m3"
             
         Returns:
             list: embedding向量，如果失败则返回None
         """
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        def embedding_handler(result):
+            """处理响应"""
+            if "data" in result and len(result["data"]) > 0:
+                return result["data"][0].get("embedding", None)
+            return None
 
-        data = {
-            "model": model,
-            "input": text,
-            "encoding_format": "float"
-        }
-
-        api_url = f"{self.base_url.rstrip('/')}/embeddings"
-        logger.info(f"发送请求到URL: {api_url}/{self.model_name}")  # 记录请求的URL
-
-        max_retries = 3
-        base_wait_time = 15
-
-        for retry in range(max_retries):
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(api_url, headers=headers, json=data) as response:
-                        if response.status == 429:
-                            wait_time = base_wait_time * (2 ** retry)
-                            logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
-                            await asyncio.sleep(wait_time)
-                            continue
-
-                        response.raise_for_status()
-
-                        result = await response.json()
-                        if 'data' in result and len(result['data']) > 0:
-                            return result['data'][0]['embedding']
-                        return None
-
-            except Exception as e:
-                if retry < max_retries - 1:
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.error(f"[embedding]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.critical(f"embedding请求失败: {str(e)}", exc_info=True)
-                    logger.critical(f"请求头: {headers} 请求体: {data}")
-                    return None
-
-        logger.error("达到最大重试次数，embedding请求仍然失败")
-        return None
-
-    def rerank_sync(self, query: str, documents: list, top_k: int = 5) -> list:
-        """同步方法：使用重排序API对文档进行排序
-        
-        Args:
-            query: 查询文本
-            documents: 待排序的文档列表
-            top_k: 返回前k个结果
-            
-        Returns:
-            list: [(document, score), ...] 格式的结果列表
-        """
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": self.model_name,
-            "query": query,
-            "documents": documents,
-            "top_n": top_k,
-            "return_documents": True,
-        }
-
-        api_url = f"{self.base_url.rstrip('/')}/rerank"
-        logger.info(f"发送请求到URL: {api_url}")
-
-        max_retries = 2
-        base_wait_time = 6
-
-        for retry in range(max_retries):
-            try:
-                response = requests.post(api_url, headers=headers, json=data, timeout=30)
-
-                if response.status_code == 429:
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
-                    time.sleep(wait_time)
-                    continue
-                
-                if response.status_code in [500, 503]:
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.error(f"服务器错误({response.status_code})，等待{wait_time}秒后重试...")
-                    if retry < max_retries - 1:
-                        time.sleep(wait_time)
-                        continue
-                    else:
-                        # 如果是最后一次重试，尝试使用chat/completions作为备选方案
-                        return self._fallback_rerank_with_chat(query, documents, top_k)
-
-                response.raise_for_status()
-
-                result = response.json()
-                if 'results' in result:
-                    return [(item["document"], item["score"]) for item in result["results"]]
-                return []
-
-            except Exception as e:
-                if retry < max_retries - 1:
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.error(f"[rerank_sync]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
-                    time.sleep(wait_time)
-                else:
-                    logger.critical(f"重排序请求失败: {str(e)}", exc_info=True)
-
-        logger.error("达到最大重试次数，重排序请求仍然失败")
-        return []
-
-    async def rerank(self, query: str, documents: list, top_k: int = 5) -> list:
-        """异步方法：使用重排序API对文档进行排序
-        
-        Args:
-            query: 查询文本
-            documents: 待排序的文档列表
-            top_k: 返回前k个结果
-            
-        Returns:
-            list: [(document, score), ...] 格式的结果列表
-        """
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "model": self.model_name,
-            "query": query,
-            "documents": documents,
-            "top_n": top_k,
-            "return_documents": True,
-        }
-
-        api_url = f"{self.base_url.rstrip('/')}/v1/rerank"
-        logger.info(f"发送请求到URL: {api_url}")
-
-        max_retries = 3
-        base_wait_time = 15
-
-        for retry in range(max_retries):
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(api_url, headers=headers, json=data) as response:
-                        if response.status == 429:
-                            wait_time = base_wait_time * (2 ** retry)
-                            logger.warning(f"遇到请求限制(429)，等待{wait_time}秒后重试...")
-                            await asyncio.sleep(wait_time)
-                            continue
-
-                        if response.status in [500, 503]:
-                            wait_time = base_wait_time * (2 ** retry)
-                            logger.error(f"服务器错误({response.status})，等待{wait_time}秒后重试...")
-                            if retry < max_retries - 1:
-                                await asyncio.sleep(wait_time)
-                                continue
-                            else:
-                                # 如果是最后一次重试，尝试使用chat/completions作为备选方案
-                                return await self._fallback_rerank_with_chat_async(query, documents, top_k)
-
-                        response.raise_for_status()
-
-                        result = await response.json()
-                        if 'results' in result:
-                            return [(item["document"], item["score"]) for item in result["results"]]
-                        return []
-
-            except Exception as e:
-                if retry < max_retries - 1:
-                    wait_time = base_wait_time * (2 ** retry)
-                    logger.error(f"[rerank]请求失败，等待{wait_time}秒后重试... 错误: {str(e)}", exc_info=True)
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.critical(f"重排序请求失败: {str(e)}", exc_info=True)
-                    # 作为最后的备选方案，尝试使用chat/completions
-                    return await self._fallback_rerank_with_chat_async(query, documents, top_k)
-
-        logger.error("达到最大重试次数，重排序请求仍然失败")
-        return []
-
-    async def _fallback_rerank_with_chat_async(self, query: str, documents: list, top_k: int = 5) -> list:
-        """当rerank API失败时的备选方案，使用chat/completions异步实现重排序
-        
-        Args:
-            query: 查询文本
-            documents: 待排序的文档列表
-            top_k: 返回前k个结果
-            
-        Returns:
-            list: [(document, score), ...] 格式的结果列表
-        """
-        try:
-            logger.info("使用chat/completions作为重排序的备选方案")
-            
-            # 构建提示词
-            prompt = f"""请对以下文档列表进行重排序，按照与查询的相关性从高到低排序。
-查询: {query}
-
-文档列表:
-{documents}
-
-请以JSON格式返回排序结果，格式为：
-[{{"document": "文档内容", "score": 相关性分数}}, ...]
-只返回JSON，不要其他任何文字。"""
-
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-
-            data = {
+        embedding = await self._execute_request(
+            endpoint="/embeddings",
+            prompt=text,
+            payload={
                 "model": self.model_name,
-                "messages": [{"role": "user", "content": prompt}],
-                **self.params
-            }
-
-            api_url = f"{self.base_url.rstrip('/')}/v1/chat/completions"
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.post(api_url, headers=headers, json=data) as response:
-                    response.raise_for_status()
-                    result = await response.json()
-                    
-                    if "choices" in result and len(result["choices"]) > 0:
-                        message = result["choices"][0]["message"]
-                        content = message.get("content", "")
-                        try:
-                            import json
-                            parsed_content = json.loads(content)
-                            if isinstance(parsed_content, list):
-                                return [(item["document"], item["score"]) for item in parsed_content]
-                        except:
-                            pass
-            return []
-        except Exception as e:
-            logger.error(f"备选方案也失败了: {str(e)}")
-            return []
+                "input": text,
+                "encoding_format": "float"
+            },
+            retry_policy={
+                "max_retries": 2,
+                "base_wait": 6
+            },
+            response_handler=embedding_handler
+        )
+        return embedding

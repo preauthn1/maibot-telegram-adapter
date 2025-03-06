@@ -30,9 +30,13 @@ class BotConfig:
     forget_memory_interval: int = 300  # 记忆遗忘间隔（秒）
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
     EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
-    EMOJI_CHECK_PROMPT: str = "不要包含违反公序良俗的内容" # 表情包过滤要求
+    EMOJI_SAVE: bool = True  # 偷表情包
+    EMOJI_CHECK: bool = False #是否开启过滤
+    EMOJI_CHECK_PROMPT: str = "符合公序良俗" # 表情包过滤要求
 
     ban_words = set()
+
+    max_response_length: int = 1024  # 最大回复长度
     
     # 模型配置
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
@@ -96,6 +100,8 @@ class BotConfig:
                 config.EMOJI_CHECK_INTERVAL = emoji_config.get("check_interval", config.EMOJI_CHECK_INTERVAL)
                 config.EMOJI_REGISTER_INTERVAL = emoji_config.get("register_interval", config.EMOJI_REGISTER_INTERVAL)
                 config.EMOJI_CHECK_PROMPT = emoji_config.get('check_prompt',config.EMOJI_CHECK_PROMPT)
+                config.EMOJI_SAVE = emoji_config.get('auto_save',config.EMOJI_SAVE)
+                config.EMOJI_CHECK = emoji_config.get('enable_check',config.EMOJI_CHECK)
             
             if "cq_code" in toml_dict:
                 cq_code_config = toml_dict["cq_code"]
@@ -115,6 +121,7 @@ class BotConfig:
                 config.MODEL_R1_DISTILL_PROBABILITY = response_config.get("model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY)
                 config.API_USING = response_config.get("api_using", config.API_USING)
                 config.API_PAID = response_config.get("api_paid", config.API_PAID)
+                config.max_response_length = response_config.get("max_response_length", config.max_response_length)
                 
             # 加载模型配置
             if "model" in toml_dict:

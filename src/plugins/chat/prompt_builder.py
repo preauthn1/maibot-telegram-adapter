@@ -2,7 +2,7 @@ import time
 import random
 from ..schedule.schedule_generator import bot_schedule
 import os
-from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text,find_similar_topics
+from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text
 from ...common.database import Database
 from .config import global_config
 from .topic_identifier import topic_identifier
@@ -60,7 +60,7 @@ class PromptBuilder:
         
         prompt_info = ''
         promt_info_prompt = ''
-        prompt_info = self.get_prompt_info(message_txt,threshold=0.5)
+        prompt_info = await self.get_prompt_info(message_txt,threshold=0.5)
         if prompt_info:
             prompt_info = f'''\n----------------------------------------------------\n你有以下这些[知识]：\n{prompt_info}\n请你记住上面的[知识]，之后可能会用到\n----------------------------------------------------\n'''
             
@@ -215,10 +215,10 @@ class PromptBuilder:
         return prompt_for_initiative
         
 
-    def get_prompt_info(self,message:str,threshold:float):
+    async def get_prompt_info(self,message:str,threshold:float):
         related_info = ''
         print(f"\033[1;34m[调试]\033[0m 获取知识库内容，元消息：{message[:30]}...，消息长度: {len(message)}")
-        embedding = get_embedding(message)
+        embedding = await get_embedding(message)
         related_info += self.get_info_from_db(embedding,threshold=threshold)
             
         return related_info

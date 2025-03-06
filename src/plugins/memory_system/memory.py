@@ -11,7 +11,7 @@ from ..chat.config import global_config
 from ...common.database import Database # 使用正确的导入语法
 from ..models.utils_model import LLM_request
 import math
-from ..chat.utils import calculate_information_content, get_cloest_chat_from_db ,find_similar_topics,text_to_vector,cosine_similarity
+from ..chat.utils import calculate_information_content, get_cloest_chat_from_db ,text_to_vector,cosine_similarity
 
 
 
@@ -673,7 +673,7 @@ class Hippocampus:
             if first_layer:
                 # 如果记忆条数超过限制，随机选择指定数量的记忆
                 if len(first_layer) > max_memory_num/2:
-                    first_layer = random.sample(first_layer, max_memory_num)
+                    first_layer = random.sample(first_layer, max_memory_num//2)
                 # 为每条记忆添加来源主题和相似度信息
                 for memory in first_layer:
                     relevant_memories.append({
