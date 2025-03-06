@@ -65,7 +65,8 @@ class LLM_request:
         }
 
         api_url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
-        logger.info(f"发送请求到URL: {api_url}{self.model_name}")
+        logger.info(f"发送请求到URL: {api_url}")
+        logger.info(f"使用模型: {self.model_name}")
 
         # 构建请求体
         if image_base64:
@@ -81,33 +82,32 @@ class LLM_request:
                 headers = await self._build_headers()
 
                 async with session_method as session:
-                    response = await session.post(api_url, headers=headers, json=payload)
+                    async with session.post(api_url, headers=headers, json=payload) as response:
+                        # 处理需要重试的状态码
+                        if response.status in policy["retry_codes"]:
+                            wait_time = policy["base_wait"] * (2 ** retry)
+                            logger.warning(f"错误码: {response.status}, 等待 {wait_time}秒后重试")
+                            if response.status == 413:
+                                logger.warning("请求体过大，尝试压缩...")
+                                image_base64 = compress_base64_image_by_scale(image_base64)
+                                payload = await self._build_payload(prompt, image_base64)
+                            elif response.status in [500, 503]:
+                                logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
+                                raise RuntimeError("服务器负载过高，模型恢复失败QAQ")
+                            else:
+                                logger.warning(f"请求限制(429)，等待{wait_time}秒后重试...")
 
-                # 处理需要重试的状态码
-                if response.status in policy["retry_codes"]:
-                    wait_time = policy["base_wait"] * (2 ** retry)
-                    logger.warning(f"错误码: {response.status}, 等待 {wait_time}秒后重试")
-                    if response.status == 413:
-                        logger.warning("请求体过大，尝试压缩...")
-                        image_base64 = compress_base64_image_by_scale(image_base64)
-                        payload = await self._build_payload(prompt, image_base64)
-                    elif response.status in [500, 503]:
-                        logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
-                        raise RuntimeError("服务器负载过高，模型恢复失败QAQ")
-                    else:
-                        logger.warning(f"请求限制(429)，等待{wait_time}秒后重试...")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        elif response.status in policy["abort_codes"]:
+                            logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
+                            raise RuntimeError(f"请求被拒绝: {error_code_mapping.get(response.status)}")
 
-                    await asyncio.sleep(wait_time)
-                    continue
-                elif response.status in policy["abort_codes"]:
-                    logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
-                    raise RuntimeError(f"请求被拒绝: {error_code_mapping.get(response.status)}")
+                        response.raise_for_status()
+                        result = await response.json()
 
-                response.raise_for_status()
-                result = await response.json()
-
-                # 使用自定义处理器或默认处理
-                return response_handler(result) if response_handler else self._default_response_handler(result)
+                        # 使用自定义处理器或默认处理
+                        return response_handler(result) if response_handler else self._default_response_handler(result)
 
             except Exception as e:
                 if retry < policy["max_retries"] - 1:
@@ -116,7 +116,7 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}")
-                    logger.critical(f"请求头: {self._build_headers()} 请求体: {payload}")
+                    logger.critical(f"请求头: {await self._build_headers()} 请求体: {payload}")
                     raise RuntimeError(f"API请求失败: {str(e)}")
 
         logger.error("达到最大重试次数，请求仍然失败")

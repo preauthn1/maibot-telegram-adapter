@@ -131,7 +131,7 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
     return ''
 
 
-def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
+async def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
     """从数据库获取群组最近的消息记录
     
     Args:
@@ -173,6 +173,7 @@ def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
                 processed_plain_text=msg_data.get("processed_text", ""),
                 group_id=group_id
             )
+            await msg.initialize()
             message_objects.append(msg)
         except KeyError:
             print("[WARNING] 数据库中存在无效的消息")

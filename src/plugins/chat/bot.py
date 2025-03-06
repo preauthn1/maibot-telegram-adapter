@@ -58,6 +58,7 @@ class ChatBot:
             plain_text=event.get_plaintext(),
             reply_message=event.reply,
         )
+        await message.initialize()
 
         # 过滤词
         for word in global_config.ban_words:
