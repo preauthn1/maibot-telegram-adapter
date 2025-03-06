@@ -84,7 +84,8 @@ class PromptBuilder:
         relevant_memories = await hippocampus.get_relevant_memories(
             text=message_txt,
             max_topics=5,
-            similarity_threshold=0.4
+            similarity_threshold=0.4,
+            max_memory_num=5
         )
         
         if relevant_memories:
