@@ -181,13 +181,19 @@ class Hippocampus:
         topic_num = self.calculate_topic_num(input_text, compress_rate)
         topics_response = await self.llm_model_get_topic.generate_response(self.find_topic_llm(input_text, topic_num))
         # 修改话题处理逻辑
-        print(f"话题: {topics_response[0]}")
-        topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
-        print(f"话题: {topics}")
+        # 定义需要过滤的关键词
+        filter_keywords = ['表情包', '图片', '回复', '聊天记录']
         
-        # 创建所有话题的请求任务
+        # 过滤topics
+        topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
+        filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
+        
+        # print(f"原始话题: {topics}")
+        print(f"过滤后话题: {filtered_topics}")
+        
+        # 使用过滤后的话题继续处理
         tasks = []
-        for topic in topics:
+        for topic in filtered_topics:
             topic_what_prompt = self.topic_what(input_text, topic)
             # 创建异步任务
             task = self.llm_model_summary.generate_response_async(topic_what_prompt)
@@ -501,9 +507,9 @@ class Hippocampus:
             list: 识别出的主题列表
         """
         topics_response = await self.llm_model_get_topic.generate_response(self.find_topic_llm(text, 5))
-        print(f"话题: {topics_response[0]}")
+        # print(f"话题: {topics_response[0]}")
         topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
-        print(f"话题: {topics}")
+        # print(f"话题: {topics}")
                     
         return topics
         
@@ -579,7 +585,7 @@ class Hippocampus:
         print(f"\033[1;32m[记忆激活]\033[0m 识别出的主题: {identified_topics}")
         
         if not identified_topics:
-            print(f"\033[1;32m[记忆激活]\033[0m 未识别出主题,返回0")
+            # print(f"\033[1;32m[记忆激活]\033[0m 未识别出主题,返回0")
             return 0
             
         # 查找相似主题
@@ -644,7 +650,7 @@ class Hippocampus:
         
         return int(activation)
 
-    async def get_relevant_memories(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.4) -> list:
+    async def get_relevant_memories(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.4, max_memory_num: int = 5) -> list:
         """根据输入文本获取相关的记忆内容"""
         # 识别主题
         identified_topics = await self._identify_topics(text)
@@ -665,6 +671,9 @@ class Hippocampus:
             # 获取该主题的记忆内容
             first_layer, _ = self.memory_graph.get_related_item(topic, depth=1)
             if first_layer:
+                # 如果记忆条数超过限制，随机选择指定数量的记忆
+                if len(first_layer) > max_memory_num:
+                    first_layer = random.sample(first_layer, max_memory_num)
                 # 为每条记忆添加来源主题和相似度信息
                 for memory in first_layer:
                     relevant_memories.append({
