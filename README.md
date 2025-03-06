@@ -18,6 +18,8 @@
 - 💾 MongoDB 提供数据持久化支持
 - 🐧 NapCat 作为QQ协议端支持
 
+**最新版本: v0.5.7**
+
 <div align="center">
 <a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
     <img src="docs/video.png" width="300" alt="麦麦演示视频">
@@ -31,6 +33,7 @@
 > - 文档未完善，有问题可以提交 Issue 或者 Discussion
 > - QQ机器人存在被限制风险，请自行了解，谨慎使用
 > - 由于持续迭代，可能存在一些已知或未知的bug
+> - 由于开发中，可能消耗较多token
 
 **交流群**: 123456780（仅用于开发和建议相关讨论）不建议在群内询问部署问题，我不一定有空回复，会优先写文档和代码
 
