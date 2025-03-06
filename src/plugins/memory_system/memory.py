@@ -672,7 +672,7 @@ class Hippocampus:
             first_layer, _ = self.memory_graph.get_related_item(topic, depth=1)
             if first_layer:
                 # 如果记忆条数超过限制，随机选择指定数量的记忆
-                if len(first_layer) > max_memory_num:
+                if len(first_layer) > max_memory_num/2:
                     first_layer = random.sample(first_layer, max_memory_num)
                 # 为每条记忆添加来源主题和相似度信息
                 for memory in first_layer:
@@ -681,9 +681,13 @@ class Hippocampus:
                         'similarity': score,
                         'content': memory
                     })
-        
+                    
+        # 如果记忆数量超过5个,随机选择5个
         # 按相似度排序
         relevant_memories.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        if len(relevant_memories) > max_memory_num:
+            relevant_memories = random.sample(relevant_memories, max_memory_num)
         
         return relevant_memories
 

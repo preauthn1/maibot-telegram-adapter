@@ -60,6 +60,7 @@ ban_user_id = []  #禁止回复消息的QQ号
 
 [model.llm_reasoning] #R1
 name = "Pro/deepseek-ai/DeepSeek-R1"
+# name = "Qwen/QwQ-32B"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
 
