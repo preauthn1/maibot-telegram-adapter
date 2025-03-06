@@ -169,6 +169,8 @@ class Message_Sending(Message):
     
     reply_message_id: int = None  # 存储 回复的 源消息ID
     
+    is_head: bool = False  # 是否是头部消息
+    
     def update_thinking_time(self):
         self.thinking_time = round(time.time(), 2) - self.thinking_start_time
         return self.thinking_time

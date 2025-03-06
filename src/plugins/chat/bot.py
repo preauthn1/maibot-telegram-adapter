@@ -132,6 +132,7 @@ class ChatBot:
             accu_typing_time = 0
             
             # print(f"\033[1;32m[开始回复]\033[0m 开始将回复1载入发送容器")
+            mark_head = False
             for msg in response:
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 #通过时间改变时间戳
@@ -152,6 +153,9 @@ class ChatBot:
                     thinking_start_time=thinking_start_time, #记录了思考开始的时间
                     reply_message_id=message.message_id
                 )
+                if not mark_head:
+                    bot_message.is_head = True
+                    mark_head = True
                 message_set.add_message(bot_message)
                 
             #message_set 可以直接加入 message_manager
@@ -167,7 +171,7 @@ class ChatBot:
             await relationship_manager.update_relationship_value(message.user_id, relationship_value=valuedict[emotion[0]])
 
             if random() < global_config.emoji_chance:
-                emoji_path = await emoji_manager.get_emoji_for_emotion(emotion)
+                emoji_path = await emoji_manager.get_emoji_for_text(response)
                 if emoji_path:
                     emoji_cq = CQCode.create_emoji_cq(emoji_path)
                     
