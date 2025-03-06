@@ -83,6 +83,7 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}", exc_info=True)
+                    logger.critical(f"请求头: {headers} 请求体: {data}")
                     raise RuntimeError(f"API请求失败: {str(e)}")
 
         logger.error("达到最大重试次数，请求仍然失败")
@@ -170,6 +171,7 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}", exc_info=True)
+                    logger.critical(f"请求头: {headers} 请求体: {data}")
                     raise RuntimeError(f"API请求失败: {str(e)}")
 
         logger.error("达到最大重试次数，请求仍然失败")
@@ -223,6 +225,7 @@ class LLM_request:
                         await asyncio.sleep(wait_time)
                     else:
                         logger.error(f"请求失败: {str(e)}")
+                        logger.critical(f"请求头: {headers} 请求体: {data}")
                         return f"请求失败: {str(e)}", ""
             
             logger.error("达到最大重试次数，请求仍然失败")
@@ -302,6 +305,7 @@ class LLM_request:
                     time.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}", exc_info=True)
+                    logger.critical(f"请求头: {headers} 请求体: {data}")
                     raise RuntimeError(f"API请求失败: {str(e)}")
 
         logger.error("达到最大重试次数，请求仍然失败")
@@ -358,6 +362,7 @@ class LLM_request:
                     time.sleep(wait_time)
                 else:
                     logger.critical(f"embedding请求失败: {str(e)}", exc_info=True)
+                    logger.critical(f"请求头: {headers} 请求体: {data}")
                     return None
 
         logger.error("达到最大重试次数，embedding请求仍然失败")
@@ -414,6 +419,7 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"embedding请求失败: {str(e)}", exc_info=True)
+                    logger.critical(f"请求头: {headers} 请求体: {data}")
                     return None
 
         logger.error("达到最大重试次数，embedding请求仍然失败")
