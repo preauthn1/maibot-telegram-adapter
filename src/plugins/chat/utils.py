@@ -13,6 +13,7 @@ from nonebot import get_driver
 from ..models.utils_model import LLM_request
 import aiohttp
 import jieba
+from ..utils.typo_generator import ChineseTypoGenerator
 
 driver = get_driver()
 config = driver.config
@@ -285,75 +286,6 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     print(f"处理后的句子: {sentences_done}")
     return sentences_done
 
-# 常见的错别字映射
-TYPO_DICT = {
-    '的': '地得',
-    '了': '咯啦勒',
-    '吗': '嘛麻',
-    '吧': '八把罢',
-    '是': '事',
-    '在': '再在',
-    '和': '合',
-    '有': '又',
-    '我': '沃窝喔',
-    '你': '泥尼拟',
-    '他': '它她塔祂',
-    '们': '门',
-    '啊': '阿哇',
-    '呢': '呐捏',
-    '都': '豆读毒',
-    '很': '狠',
-    '会': '回汇',
-    '去': '趣取曲',
-    '做': '作坐',
-    '想': '相像',
-    '说': '说税睡',
-    '看': '砍堪刊',
-    '来': '来莱赖',
-    '好': '号毫豪',
-    '给': '给既继',
-    '过': '锅果裹',
-    '能': '嫩',
-    '为': '位未',
-    '什': '甚深伸',
-    '么': '末麽嘛',
-    '话': '话花划',
-    '知': '织直值',
-    '道': '到',
-    '听': '听停挺',
-    '见': '见件建',
-    '觉': '觉脚搅',
-    '得': '得德锝',
-    '着': '着找招',
-    '像': '向象想',
-    '等': '等灯登',
-    '谢': '谢写卸',
-    '对': '对队',
-    '里': '里理鲤',
-    '啦': '啦拉喇',
-    '吃': '吃持迟',
-    '哦': '哦喔噢',
-    '呀': '呀压',
-    '要': '药',
-    '太': '太抬台',
-    '快': '块',
-    '点': '店',
-    '以': '以已',
-    '因': '因应',
-    '啥': '啥沙傻',
-    '行': '行型形',
-    '哈': '哈蛤铪',
-    '嘿': '嘿黑嗨',
-    '嗯': '嗯恩摁',
-    '哎': '哎爱埃',
-    '呜': '呜屋污',
-    '喂': '喂位未',
-    '嘛': '嘛麻马',
-    '嗨': '嗨害亥',
-    '哇': '哇娃蛙',
-    '咦': '咦意易',
-    '嘻': '嘻西希'
-}
 
 def random_remove_punctuation(text: str) -> str:
     """随机处理标点符号，模拟人类打字习惯
@@ -381,17 +313,6 @@ def random_remove_punctuation(text: str) -> str:
         result += char
     return result
 
-def add_typos(text: str) -> str:
-    TYPO_RATE = 0.02  # 控制错别字出现的概率(2%)
-    result = ""
-    for char in text:
-        if char in TYPO_DICT and random.random() < TYPO_RATE:
-            # 从可能的错别字中随机选择一个
-            typos = TYPO_DICT[char]
-            result += random.choice(typos)
-        else:
-            result += char
-    return result
 
 def process_llm_response(text: str) -> List[str]:
     # processed_response = process_text_with_typos(content)
@@ -399,7 +320,14 @@ def process_llm_response(text: str) -> List[str]:
             print(f"回复过长 ({len(text)} 字符)，返回默认回复")
             return ['懒得说']
     # 处理长消息
-    sentences = split_into_sentences_w_remove_punctuation(add_typos(text))
+    typo_generator = ChineseTypoGenerator(
+        error_rate=0.03,
+        min_freq=7,
+        tone_error_rate=0.2,
+        word_replace_rate=0.02
+    )
+    typoed_text = typo_generator.create_typo_sentence(text)[0]
+    sentences = split_into_sentences_w_remove_punctuation(typoed_text)
     # 检查分割后的消息数量是否过多（超过3条）
     if len(sentences) > 4:
         print(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
