@@ -299,7 +299,7 @@ class EmojiManager:
                         logger.info(f"其不满足过滤规则，被剔除 {check}")
                         continue
                     logger.info(f"check通过 {check}")
-                embedding = get_embedding(discription)
+                embedding = await get_embedding(discription)
                 if discription is not None:
                     # 准备数据库记录
                     emoji_record = {
