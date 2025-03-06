@@ -99,6 +99,9 @@ class EmojiManager:
             
             # 获取文本的embedding
             text_for_search= await self._get_kimoji_for_text(text)
+            if not text_for_search:
+                logger.error("无法获取文本的情绪")
+                return None
             text_embedding = await get_embedding(text_for_search)
             if not text_embedding:
                 logger.error("无法获取文本的embedding")
