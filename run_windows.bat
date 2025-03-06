@@ -23,6 +23,11 @@ if not exist "venv\" (
         set minor=%%c
     )
 
+    if !major! lss 3 (
+        echo 需要Python大于等于3.0，当前版本 !version!
+        exit /b 1
+    )
+
     if !major! equ 3 if !minor! lss 9 (
         echo 需要Python大于等于3.9，当前版本 !version!
         exit /b 1
@@ -59,4 +64,4 @@ echo 代理已取消。
 set no_proxy=0.0.0.0/32
 
 call nb run
-paus
+pause
