@@ -74,14 +74,12 @@ class LLM_request:
         elif payload is None:
             payload = await self._build_payload(prompt)
 
-        session_method = aiohttp.ClientSession()
-
         for retry in range(policy["max_retries"]):
             try:
                 # 使用上下文管理器处理会话
                 headers = await self._build_headers()
 
-                async with session_method as session:
+                async with aiohttp.ClientSession() as session:
                     async with session.post(api_url, headers=headers, json=payload) as response:
                         # 处理需要重试的状态码
                         if response.status in policy["retry_codes"]:
