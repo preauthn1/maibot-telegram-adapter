@@ -52,7 +52,8 @@
 - [📦 手动部署指南](docs/manual_deploy.md)
 
 ### 配置说明
-- [⚙️ 配置详细说明](docs/installation.md) - 环境和机器人配置的详细说明
+- [🎀 新手配置指南](docs/installation_cute.md) - 通俗易懂的配置教程，适合初次使用的猫娘
+- [⚙️ 标准配置指南](docs/installation_standard.md) - 简明专业的配置说明，适合有经验的用户
 
 <div align="left">
 <h3>了解麦麦 </h3>

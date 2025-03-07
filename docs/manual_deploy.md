@@ -1,122 +1,82 @@
-# 📦 手动部署指南
+# 📦 如何手动部署MaiMbot麦麦？
 
-## 部署步骤
+## 你需要什么？
 
-1. **环境准备**
+- 一台电脑，能够上网的那种
+
+- 一个QQ小号（QQ框架的使用可能导致qq被风控，严重（小概率）可能会导致账号封禁，强烈不推荐使用大号）
+
+- 可用的大模型API
+
+- 一个AI助手，网上随便搜一家打开来用都行，可以帮你解决一些不懂的问题
+
+## 你需要知道什么？
+
+- 如何正确向AI助手提问，来学习新知识
+
+- Python是什么
+
+- Python的虚拟环境是什么？如何创建虚拟环境
+
+- 命令行是什么
+
+- 数据库是什么？如何安装并启动MongoDB
+
+- 如何运行一个QQ机器人，以及NapCat框架是什么
+
+## 如果准备好了，就可以开始部署了
+
+### 1️⃣ **我们需要创建一个Python环境来运行程序**
+
+    你可以选择使用以下两种方法之一来创建Python环境：
+
 ```bash
-# 创建虚拟环境（推荐）
-python -m venv venv
-venv\\Scripts\\activate   # Windows
+# ---方法1：使用venv（Python自带）
+# 在命令行中创建虚拟环境（环境名为maimbot）
+# 这会让你在运行命令的目录下创建一个虚拟环境
+# 请确保你已通过cd命令前往到了对应路径，不然之后你可能找不到你的python环境
+python -m venv maimbot
+
+maimbot\\Scripts\\activate 
+
+# 安装依赖
+pip install -r requirements.txt
+```
+```bash
+# ---方法2：使用conda
+# 创建一个新的conda环境（环境名为maimbot）
+# Python版本为3.9
+conda create -n maimbot python=3.9
+
+# 激活环境
+conda activate maimbot
+
 # 安装依赖
 pip install -r requirements.txt
 ```
 
-2. **配置MongoDB**
+### 2️⃣ **然后你需要启动MongoDB数据库，来存储信息**
 - 安装并启动MongoDB服务
 - 默认连接本地27017端口
 
-3. **配置NapCat**
-- 安装并登录NapCat
+### 3️⃣ **配置NapCat，让麦麦bot与qq取得联系**
+- 安装并登录NapCat（用你的qq小号）
 - 添加反向WS：`ws://localhost:8080/onebot/v11/ws`
 
-4. **配置文件设置**
+### 4️⃣ **配置文件设置，让麦麦Bot正常工作**
 - 修改环境配置文件：`.env.prod`
 - 修改机器人配置文件：`bot_config.toml`
 
-5. **启动麦麦机器人**
+### 5️⃣ **启动麦麦机器人**
 - 打开命令行，cd到对应路径
 ```bash
 nb run
 ```
+- 或者cd到对应路径后
+```bash
+python bot.py
+```
 
-6. **其他组件**
+### 6️⃣ **其他组件(可选)**
 - `run_thingking.bat`: 启动可视化推理界面（未完善）
 - 直接运行 knowledge.py生成知识库
-
-## ⚙️ 配置说明
-
-### 环境配置 (.env.prod)
-```ini
-# API配置,你可以在这里定义你的密钥和base_url
-# 你可以选择定义其他服务商提供的KEY，完全可以自定义
-SILICONFLOW_KEY=your_key
-SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1/
-DEEP_SEEK_KEY=your_key
-DEEP_SEEK_BASE_URL=https://api.deepseek.com/v1
-
-# 服务配置,如果你不知道这是什么，保持默认
-HOST=127.0.0.1
-PORT=8080
-
-# 数据库配置,如果你不知道这是什么，保持默认
-MONGODB_HOST=127.0.0.1
-MONGODB_PORT=27017
-DATABASE_NAME=MegBot
-```
-
-### 机器人配置 (bot_config.toml)
-```toml
-[bot]
-qq = "你的机器人QQ号"
-nickname = "麦麦"
-
-[message]
-min_text_length = 2
-max_context_size = 15
-emoji_chance = 0.2
-
-[emoji]
-check_interval = 120
-register_interval = 10
-
-[cq_code]
-enable_pic_translate = false
-
-[response]
-#现已移除deepseek或硅基流动选项，可以直接切换分别配置任意模型
-model_r1_probability = 0.8 #推理模型权重
-model_v3_probability = 0.1 #非推理模型权重
-model_r1_distill_probability = 0.1
-
-[memory]
-build_memory_interval = 300
-
-[others]
-enable_advance_output = true  # 是否启用详细日志输出
-
-[groups]
-talk_allowed = []      # 允许回复的群号列表
-talk_frequency_down = []   # 降低回复频率的群号列表
-ban_user_id = []      # 禁止回复的用户QQ号列表
-
-[model.llm_reasoning]
-name = "Pro/deepseek-ai/DeepSeek-R1"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
-
-[model.llm_reasoning_minor]
-name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
-
-[model.llm_normal]
-name = "Pro/deepseek-ai/DeepSeek-V3"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
-
-[model.llm_normal_minor]
-name = "deepseek-ai/DeepSeek-V2.5"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
-
-[model.vlm]
-name = "deepseek-ai/deepseek-vl2"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
-```
-
-## ⚠️ 注意事项
-
-- 目前部署方案仍在测试中，可能存在未知问题
-- 配置文件中的API密钥请妥善保管，不要泄露
-- 建议先在测试环境中运行，确认无误后再部署到生产环境 
