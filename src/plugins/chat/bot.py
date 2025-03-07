@@ -165,8 +165,12 @@ class ChatBot:
             bot_response_time = tinking_time_point
 
             if random() < global_config.emoji_chance:
-                emoji_path,discription = await emoji_manager.get_emoji_for_text(response)
-                if emoji_path:
+                emoji_raw = await emoji_manager.get_emoji_for_text(response)
+                
+                # 检查是否 <没有找到> emoji
+                if emoji_raw != None:
+                    emoji_path,discription = emoji_raw
+
                     emoji_cq = CQCode.create_emoji_cq(emoji_path)
                     
                     if random() < 0.5:
