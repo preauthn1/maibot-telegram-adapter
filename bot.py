@@ -8,7 +8,7 @@ from loguru import logger
 from colorama import init, Fore
 
 init()
-text = "多年以后，面对行刑队，张三将会回想起他2023年在会议上讨论人工智能的那个下午"
+text = "多年以后，面对AI行刑队，张三将会回想起他2023年在会议上讨论人工智能的那个下午"
 rainbow_colors = [Fore.RED, Fore.YELLOW, Fore.GREEN, Fore.CYAN, Fore.BLUE, Fore.MAGENTA]
 rainbow_text = ""
 for i, char in enumerate(text):
@@ -17,11 +17,11 @@ print(rainbow_text)
 '''彩蛋'''
 
 # 初次启动检测
-if not os.path.exists("config/bot_config.toml") or not os.path.exists(".env"):
-    logger.info("检测到bot_config.toml不存在，正在从模板复制")
+if not os.path.exists("config/bot_config.toml"):
+    logger.warning("检测到bot_config.toml不存在，正在从模板复制")
     import shutil
 
-    shutil.copy("config/bot_config_template.toml", "config/bot_config.toml")
+    shutil.copy("templete/bot_config_template.toml", "config/bot_config.toml")
     logger.info("复制完成，请修改config/bot_config.toml和.env.prod中的配置后重新启动")
 
 # 初始化.env 默认ENVIRONMENT=prod

@@ -103,7 +103,7 @@ class MessageContainer:
         
     def add_message(self, message: Union[Message_Thinking, Message_Sending]) -> None:
         """添加消息到队列"""
-        print(f"\033[1;32m[添加消息]\033[0m 添加消息到对应群")
+        # print(f"\033[1;32m[添加消息]\033[0m 添加消息到对应群")
         if isinstance(message, MessageSet):
             for single_message in message.messages:
                 self.messages.append(single_message)
@@ -156,26 +156,21 @@ class MessageManager:
             #最早的对象，可能是思考消息，也可能是发送消息
             message_earliest = container.get_earliest_message() #一个message_thinking or message_sending
             
-            #一个月后删了
-            if not message_earliest:
-                print(f"\033[1;34m[BUG，如果出现这个，说明有BUG，3月4日留]\033[0m ")
-                return
-            
             #如果是思考消息
             if isinstance(message_earliest, Message_Thinking):
                 #优先等待这条消息
                 message_earliest.update_thinking_time()
                 thinking_time = message_earliest.thinking_time
-                print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒")
+                if thinking_time % 10 == 0:
+                    print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒")
             else:# 如果不是message_thinking就只能是message_sending    
                 print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
                 #直接发，等什么呢
-                if message_earliest.update_thinking_time() < 30:
-                    await message_sender.send_group_message(group_id, message_earliest.processed_plain_text, auto_escape=False)
-                else:
+                if message_earliest.is_head and message_earliest.update_thinking_time() >30:
                     await message_sender.send_group_message(group_id, message_earliest.processed_plain_text, auto_escape=False, reply_message_id=message_earliest.reply_message_id)
-                
-                #移除消息
+                else:
+                    await message_sender.send_group_message(group_id, message_earliest.processed_plain_text, auto_escape=False)
+        #移除消息
                 if message_earliest.is_emoji:
                     message_earliest.processed_plain_text = "[表情包]"
                 await self.storage.store_message(message_earliest, None)
@@ -192,10 +187,11 @@ class MessageManager:
                         
                     try:
                         #发送
-                        if msg.update_thinking_time() < 30:
-                            await message_sender.send_group_message(group_id, msg.processed_plain_text, auto_escape=False)
-                        else:
+                        if msg.is_head and msg.update_thinking_time() >30:
                             await message_sender.send_group_message(group_id, msg.processed_plain_text, auto_escape=False, reply_message_id=msg.reply_message_id)
+                        else:
+                            await message_sender.send_group_message(group_id, msg.processed_plain_text, auto_escape=False)
+                            
                         
                         #如果是表情包，则替换为"[表情包]"
                         if msg.is_emoji:

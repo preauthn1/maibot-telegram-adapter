@@ -24,6 +24,7 @@ class ResponseGenerator:
         self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7,max_tokens=1000)
         self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7,max_tokens=1000)
         self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7,max_tokens=1000)
+        self.model_v25 = LLM_request(model=global_config.llm_normal_minor, temperature=0.7,max_tokens=1000)
         self.db = Database.get_instance()
         self.current_model_type = 'r1'  # 默认使用 R1
 
@@ -44,19 +45,15 @@ class ResponseGenerator:
         print(f"+++++++++++++++++{global_config.BOT_NICKNAME}{self.current_model_type}思考中+++++++++++++++++")
         
         model_response = await self._generate_response_with_model(message, current_model)
+        raw_content=model_response
         
         if model_response:
             print(f'{global_config.BOT_NICKNAME}的回复是：{model_response}')
-            model_response, emotion = await self._process_response(model_response)
+            model_response = await self._process_response(model_response)
             if model_response:
-                print(f"为 '{model_response}' 获取到的情感标签为：{emotion}")
-                valuedict={
-                'happy':0.5,'angry':-1,'sad':-0.5,'surprised':0.5,'disgusted':-1.5,'fearful':-0.25,'neutral':0.25
-                }
-                await relationship_manager.update_relationship_value(message.user_id, relationship_value=valuedict[emotion[0]])
 
-            return model_response, emotion
-        return None, []
+                return model_response ,raw_content
+        return None,raw_content
 
     async def _generate_response_with_model(self, message: Message, model: LLM_request) -> Optional[str]:
         """使用指定的模型生成回复"""
@@ -67,10 +64,11 @@ class ResponseGenerator:
         # 获取关系值
         relationship_value = relationship_manager.get_relationship(message.user_id).relationship_value if relationship_manager.get_relationship(message.user_id) else 0.0
         if relationship_value != 0.0:
-            print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
+            # print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
+            pass
         
         # 构建prompt
-        prompt, prompt_check = prompt_builder._build_prompt(
+        prompt, prompt_check = await prompt_builder._build_prompt(
             message_txt=message.processed_plain_text,
             sender_name=sender_name,
             relationship_value=relationship_value,
@@ -142,7 +140,7 @@ class ResponseGenerator:
             内容：{content}
             输出：
             '''
-            content, _ = await self.model_v3.generate_response(prompt)
+            content, _ = await self.model_v25.generate_response(prompt)
             content=content.strip()
             if content in ['happy','angry','sad','surprised','disgusted','fearful','neutral']:
                 return [content]
@@ -158,10 +156,9 @@ class ResponseGenerator:
         if not content:
             return None, []
         
-        emotion_tags = await self._get_emotion_tags(content)
         processed_response = process_llm_response(content)
         
-        return processed_response, emotion_tags
+        return processed_response
 
 
 class InitiativeMessageGenerate:

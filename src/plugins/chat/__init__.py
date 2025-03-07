@@ -14,7 +14,13 @@ from nonebot.rule import to_me
 from .bot import chat_bot
 from .emoji_manager import emoji_manager
 import time
+from ..utils.statistic import LLMStatistics
 
+# 创建LLM统计实例
+llm_stats = LLMStatistics("llm_statistics.txt")
+
+# 添加标志变量
+_message_manager_started = False
 
 # 获取驱动器
 driver = get_driver()
@@ -55,6 +61,10 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 @driver.on_startup
 async def start_background_tasks():
     """启动后台任务"""
+    # 启动LLM统计
+    llm_stats.start()
+    print("\033[1;32m[初始化]\033[0m LLM统计功能已启动")
+    
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))
     await bot_schedule.initialize()
@@ -70,18 +80,20 @@ async def init_relationships():
 @driver.on_bot_connect
 async def _(bot: Bot):
     """Bot连接成功时的处理"""
+    global _message_manager_started
     print(f"\033[1;38;5;208m-----------{global_config.BOT_NICKNAME}成功连接！-----------\033[0m")
     await willing_manager.ensure_started()
     
-    
     message_sender.set_bot(bot)
     print("\033[1;38;5;208m-----------消息发送器已启动！-----------\033[0m")
-    asyncio.create_task(message_manager.start_processor())
-    print("\033[1;38;5;208m-----------消息处理器已启动！-----------\033[0m")
+    
+    if not _message_manager_started:
+        asyncio.create_task(message_manager.start_processor())
+        _message_manager_started = True
+        print("\033[1;38;5;208m-----------消息处理器已启动！-----------\033[0m")
     
     asyncio.create_task(emoji_manager._periodic_scan(interval_MINS=global_config.EMOJI_REGISTER_INTERVAL))
     print("\033[1;38;5;208m-----------开始偷表情包！-----------\033[0m")
-    # 启动消息发送控制任务
     
 @group_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
@@ -90,7 +102,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 # 添加build_memory定时任务
 @scheduler.scheduled_job("interval", seconds=global_config.build_memory_interval, id="build_memory")
 async def build_memory_task():
-    """每30秒执行一次记忆构建"""
+    """每build_memory_interval秒执行一次记忆构建"""
     print("\033[1;32m[记忆构建]\033[0m -------------------------------------------开始构建记忆-------------------------------------------")
     start_time = time.time()
     await hippocampus.operation_build_memory(chat_size=20)
