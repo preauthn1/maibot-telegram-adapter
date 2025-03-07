@@ -13,6 +13,7 @@ import asyncio
 from .utils_image import storage_image, storage_emoji
 from .utils_user import get_user_nickname
 from ..models.utils_model import LLM_request
+from .mapper import emojimapper
 # 解析各种CQ码
 # 包含CQ码类
 import urllib3
@@ -86,7 +87,7 @@ class CQCode:
         elif self.type == 'face':
             face_id = self.params.get('id', '')
             # self.translated_plain_text = f"[表情{face_id}]"
-            self.translated_plain_text = f"[表情]"
+            self.translated_plain_text = f"[{emojimapper.get(int(face_id), "表情")}]"
         elif self.type == 'forward':
             self.translated_plain_text = await self.translate_forward()
         else:
