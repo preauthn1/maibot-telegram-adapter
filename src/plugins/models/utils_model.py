@@ -253,7 +253,7 @@ class LLM_request:
     async def _build_payload(self, prompt: str, image_base64: str = None) -> dict:
         """构建请求体"""
         # 复制一份参数，避免直接修改 self.params
-        params_copy = self._transform_parameters(self.model_name, self.params)
+        params_copy = self._transform_parameters(self.params)
         if image_base64:
             payload = {
                 "model": self.model_name,
