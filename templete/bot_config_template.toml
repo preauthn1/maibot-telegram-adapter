@@ -68,6 +68,8 @@ ban_user_id = []  #禁止回复消息的QQ号
 name = "Pro/deepseek-ai/DeepSeek-R1"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
+pri_in = 0 #模型的输入价格（非必填，可以记录消耗）
+pri_out = 0 #模型的输出价格（非必填，可以记录消耗）
 
 [model.llm_reasoning_minor] #回复模型3 次要回复模型
 name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
@@ -100,12 +102,15 @@ key = "SILICONFLOW_KEY"
 name = "Qwen/Qwen2.5-32B-Instruct"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
+pri_in = 0
+pri_out = 0
 
 [model.moderation] #内容审核 未启用
 name = ""
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
-
+pri_in = 0
+pri_out = 0
 
 # 识图模型
 
