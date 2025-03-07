@@ -233,8 +233,18 @@ class LLM_request:
 
     async def _build_payload(self, prompt: str, image_base64: str = None) -> dict:
         """构建请求体"""
+        # 复制一份参数，避免直接修改 self.params
+        params_copy = dict(self.params)
+        if self.model_name.lower() == "o3-mini" or "o1-mini" or "o1" or "o1-2024-12-17" or "o1-preview-2024-09-12" or "o3-mini-2025-01-31" or "o1-mini-2024-09-12":
+            # 删除可能存在的 'temprature' 参数
+            params_copy.pop("temprature", None)
+            # 如果存在 'max_tokens' 参数，则将其替换为 'max_completion_tokens'
+            if "max_tokens" in params_copy:
+                params_copy["max_completion_tokens"] = params_copy.pop("max_tokens")
+        # 构造基础请求体，注意这里依然使用 global_config.max_response_length 填充 'max_tokens'
+        # 如果需要统一改为 max_completion_tokens，也可以在下面做相同的调整
         if image_base64:
-            return {
+            payload = {
                 "model": self.model_name,
                 "messages": [
                     {
@@ -246,15 +256,20 @@ class LLM_request:
                     }
                 ],
                 "max_tokens": global_config.max_response_length,
-                **self.params
+                **params_copy
             }
         else:
-            return {
+            payload = {
                 "model": self.model_name,
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": global_config.max_response_length,
-                **self.params
+                **params_copy
             }
+        # 如果是 o3-mini 模型，也将基础请求体中的 max_tokens 改为 max_completion_tokens
+        if self.model_name.lower() == "o3-mini" and "max_tokens" in payload:
+            payload["max_completion_tokens"] = payload.pop("max_tokens")
+        return payload
+        
 
     def _default_response_handler(self, result: dict, user_id: str = "system", 
                                 request_type: str = "chat", endpoint: str = "/chat/completions") -> Tuple:
