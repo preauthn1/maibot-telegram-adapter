@@ -47,11 +47,12 @@ if not exist "venv\" (
 
     call venv\Scripts\activate.bat
 
-    echo 正在安装依赖...
-    pip install -r requirements.txt
 ) else (
     call venv\Scripts\activate.bat
 )
+
+echo 正在更新依赖...
+pip install -r requirements.txt
 
 echo 当前代理设置：
 echo HTTP_PROXY=%HTTP_PROXY%
