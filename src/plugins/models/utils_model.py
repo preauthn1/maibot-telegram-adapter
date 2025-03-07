@@ -244,7 +244,7 @@ class LLM_request:
         models_needing_transformation = ["o3-mini", "o1-mini", "o1-preview", "o1-2024-12-17", "o1-preview-2024-09-12", "o3-mini-2025-01-31", "o1-mini-2024-09-12"]
         if self.model_name.lower() in models_needing_transformation:
             # 删除 'temprature' 参数（如果存在）
-            new_params.pop("temprature", None)
+            new_params.pop("temperature", None)
             # 如果存在 'max_tokens'，则重命名为 'max_completion_tokens'
             if "max_tokens" in new_params:
                 new_params["max_completion_tokens"] = new_params.pop("max_tokens")
