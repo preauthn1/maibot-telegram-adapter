@@ -14,6 +14,10 @@ from nonebot.rule import to_me
 from .bot import chat_bot
 from .emoji_manager import emoji_manager
 import time
+from ..utils.statistic import LLMStatistics
+
+# 创建LLM统计实例
+llm_stats = LLMStatistics("llm_statistics.txt")
 
 # 添加标志变量
 _message_manager_started = False
@@ -57,6 +61,10 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 @driver.on_startup
 async def start_background_tasks():
     """启动后台任务"""
+    # 启动LLM统计
+    llm_stats.start()
+    print("\033[1;32m[初始化]\033[0m LLM统计功能已启动")
+    
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))
     await bot_schedule.initialize()
