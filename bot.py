@@ -18,7 +18,7 @@ print(rainbow_text)
 
 # 初次启动检测
 if not os.path.exists("config/bot_config.toml"):
-    logger.info("检测到bot_config.toml不存在，正在从模板复制")
+    logger.warning("检测到bot_config.toml不存在，正在从模板复制")
     import shutil
 
     shutil.copy("templete/bot_config_template.toml", "config/bot_config.toml")
