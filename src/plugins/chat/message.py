@@ -71,6 +71,8 @@ class Message:
                 )
 
         # 构建详细文本
+        if self.time is None:
+            self.time = int(time.time())
         time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.time))
         name = (
             f"{self.user_nickname}(ta的昵称:{self.user_cardname},ta的id:{self.user_id})"
