@@ -148,15 +148,6 @@ class BotConfig:
                 if "rerank" in model_config:
                     config.rerank = model_config["rerank"]
                 
-            if 'topic' in toml_dict:
-                topic_config=toml_dict['topic']
-                if 'topic_extract' in topic_config:
-                    config.topic_extract=topic_config.get('topic_extract',config.topic_extract)
-                    logger.info(f"载入自定义主题提取为{config.topic_extract}")
-                if config.topic_extract=='llm' and 'llm_topic' in topic_config:
-                    config.llm_topic_extract=topic_config['llm_topic']
-                    logger.info(f"载入自定义主题提取模型为{config.llm_topic_extract['name']}")
-                
             # 消息配置
             if "message" in toml_dict:
                 msg_config = toml_dict["message"]
@@ -190,13 +181,13 @@ class BotConfig:
 
 bot_config_floder_path = BotConfig.get_config_dir()
 print(f"正在品鉴配置文件目录: {bot_config_floder_path}")
-bot_config_path = os.path.join(bot_config_floder_path, "bot_config_dev.toml")
-if not os.path.exists(bot_config_path):
+bot_config_path = os.path.join(bot_config_floder_path, "bot_config.toml")
+if os.path.exists(bot_config_path):
     # 如果开发环境配置文件不存在，则使用默认配置文件
-    bot_config_path = os.path.join(bot_config_floder_path, "bot_config.toml")
+    print(f"异常的新鲜，异常的美味: {bot_config_path}")
     logger.info("使用bot配置文件")
 else:
-    logger.info("已找到开发bot配置文件")
+    logger.info("没有找到美味")
 
 global_config = BotConfig.load_config(config_path=bot_config_path)
 
