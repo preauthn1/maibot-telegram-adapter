@@ -26,7 +26,25 @@
 
 ## 如果准备好了，就可以开始部署了
 
-### 1️⃣ **我们需要创建一个Python环境来运行程序**
+### 1️⃣ **首先，我们需要安装正确版本的Python**
+
+在创建虚拟环境之前，请确保你的电脑上安装了Python 3.9及以上版本。如果没有，可以按以下步骤安装：
+
+1. 访问Python官网下载页面：https://www.python.org/downloads/release/python-3913/
+2. 下载Windows安装程序 (64-bit): `python-3.9.13-amd64.exe`
+3. 运行安装程序，并确保勾选"Add Python 3.9 to PATH"选项
+4. 点击"Install Now"开始安装
+
+或者使用PowerShell自动下载安装（需要管理员权限）：
+```powershell
+# 下载并安装Python 3.9.13
+$pythonUrl = "https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe"
+$pythonInstaller = "$env:TEMP\python-3.9.13-amd64.exe"
+Invoke-WebRequest -Uri $pythonUrl -OutFile $pythonInstaller
+Start-Process -Wait -FilePath $pythonInstaller -ArgumentList "/quiet", "InstallAllUsers=0", "PrependPath=1" -Verb RunAs
+```
+
+### 2️⃣ **创建Python虚拟环境来运行程序**
 
     你可以选择使用以下两种方法之一来创建Python环境：
 
