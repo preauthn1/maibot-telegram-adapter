@@ -167,7 +167,7 @@ class ChatBot:
             bot_response_time = tinking_time_point
 
             if random() < global_config.emoji_chance:
-                emoji_path = await emoji_manager.get_emoji_for_text(response)
+                emoji_path,discription = await emoji_manager.get_emoji_for_text(response)
                 if emoji_path:
                     emoji_cq = CQCode.create_emoji_cq(emoji_path)
                     
@@ -183,6 +183,7 @@ class ChatBot:
                         raw_message=emoji_cq,
                         plain_text=emoji_cq,
                         processed_plain_text=emoji_cq,
+                        detailed_plain_text=discription,
                         user_nickname=global_config.BOT_NICKNAME,
                         group_name=message.group_name,
                         time=bot_response_time,
