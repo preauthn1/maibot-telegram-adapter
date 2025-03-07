@@ -109,13 +109,8 @@ class ChatBot:
             willing_manager.change_reply_willing_sent(thinking_message.group_id)
             
             response,raw_content = await self.gpt.generate_response(message)
-
-            # if response is None:
-                # thinking_message.interupt=True
             
         if response:
-            # print(f"\033[1;32m[思考结束]\033[0m 思考结束，已得到回复，开始回复")
-            # 找到并删除对应的thinking消息
             container = message_manager.get_container(event.group_id)
             thinking_message = None
             # 找到message,删除

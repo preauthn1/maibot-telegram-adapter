@@ -45,13 +45,7 @@ class BotConfig:
     llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
     embedding: Dict[str, str] = field(default_factory=lambda: {})
     vlm: Dict[str, str] = field(default_factory=lambda: {})
-    rerank: Dict[str, str] = field(default_factory=lambda: {})
 
-    # 主题提取配置
-    llm_topic_extract: Dict[str, str] = field(default_factory=lambda: {})
-    
-    API_USING: str = "siliconflow"  # 使用的API
-    API_PAID: bool = False  # 是否使用付费API
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
     MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
@@ -134,7 +128,6 @@ class BotConfig:
                 
                 if "llm_normal" in model_config:
                     config.llm_normal = model_config["llm_normal"]
-                    config.llm_topic_extract = config.llm_normal
                 
                 if "llm_normal_minor" in model_config:
                     config.llm_normal_minor = model_config["llm_normal_minor"]
