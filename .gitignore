@@ -18,6 +18,7 @@ config/bot_config.toml
 __pycache__/
 *.py[cod]
 *$py.class
+llm_statistics.txt
 
 # C extensions
 *.so
