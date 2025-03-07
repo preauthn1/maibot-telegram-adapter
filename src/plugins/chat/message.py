@@ -63,11 +63,12 @@ class Message:
 
         # 消息解析
         if self.raw_message:
-            self.message_segments = await self.parse_message_segments(self.raw_message)
-            self.processed_plain_text = ' '.join(
-                seg.translated_plain_text
-                for seg in self.message_segments
-            )
+            if not isinstance(self,Message_Sending):
+                self.message_segments = await self.parse_message_segments(self.raw_message)
+                self.processed_plain_text = ' '.join(
+                    seg.translated_plain_text
+                    for seg in self.message_segments
+                )
 
         # 构建详细文本
         time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.time))

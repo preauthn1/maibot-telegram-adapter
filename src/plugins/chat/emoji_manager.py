@@ -42,7 +42,7 @@ class EmojiManager:
         self.db = Database.get_instance()
         self._scan_task = None
         self.llm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000)
-        self.lm = LLM_request(model=global_config.llm_reasoning_minor, max_tokens=1000)
+        self.lm = LLM_request(model=global_config.llm_normal_minor, max_tokens=1000)
         
     def _ensure_emoji_dir(self):
         """确保表情存储目录存在"""
