@@ -7,6 +7,7 @@ from .llm_generator import ResponseGenerator
 from .topic_identifier import topic_identifier
 from random import random, choice
 from .emoji_manager import emoji_manager  # 导入表情包管理器
+from ..moods.moods import MoodManager  # 导入情绪管理器
 import time
 import os
 from .cq_code import CQCode  # 导入CQCode模块
@@ -24,6 +25,8 @@ class ChatBot:
         self.gpt = ResponseGenerator()
         self.bot = None  # bot 实例引用
         self._started = False
+        self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
+        self.mood_manager.start_mood_update()  # 启动情绪更新
         
         self.emoji_chance = 0.2  # 发送表情包的基础概率
         # self.message_streams = MessageStreamContainer()
@@ -192,9 +195,17 @@ class ChatBot:
             emotion = await self.gpt._get_emotion_tags(raw_content)
             print(f"为 '{response}' 获取到的情感标签为：{emotion}")
             valuedict={
-            'happy':0.5,'angry':-1,'sad':-0.5,'surprised':0.5,'disgusted':-1.5,'fearful':-0.25,'neutral':0.25
+                'happy': 0.5,
+                'angry': -1,
+                'sad': -0.5,
+                'surprised': 0.2,
+                'disgusted': -1.5,
+                'fearful': -0.7,
+                'neutral': 0.1
             }
             await relationship_manager.update_relationship_value(message.user_id, relationship_value=valuedict[emotion[0]])
+            # 使用情绪管理器更新情绪
+            self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
         
         # willing_manager.change_reply_willing_after_sent(event.group_id)
 

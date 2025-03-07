@@ -87,7 +87,7 @@ class CQCode:
         elif self.type == 'face':
             face_id = self.params.get('id', '')
             # self.translated_plain_text = f"[表情{face_id}]"
-            self.translated_plain_text = f"[{emojimapper.get(int(face_id), "表情")}]"
+            self.translated_plain_text = f"[{emojimapper.get(int(face_id), '表情')}]"
         elif self.type == 'forward':
             self.translated_plain_text = await self.translate_forward()
         else:

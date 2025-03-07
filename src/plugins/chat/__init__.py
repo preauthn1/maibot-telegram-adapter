@@ -13,6 +13,7 @@ from .willing_manager import willing_manager
 from nonebot.rule import to_me
 from .bot import chat_bot
 from .emoji_manager import emoji_manager
+from ..moods.moods import MoodManager  # 导入情绪管理器
 import time
 from ..utils.statistic import LLMStatistics
 
@@ -64,6 +65,11 @@ async def start_background_tasks():
     # 启动LLM统计
     llm_stats.start()
     print("\033[1;32m[初始化]\033[0m LLM统计功能已启动")
+    
+    # 初始化并启动情绪管理器
+    mood_manager = MoodManager.get_instance()
+    mood_manager.start_mood_update(update_interval=global_config.mood_update_interval)
+    print("\033[1;32m[初始化]\033[0m 情绪管理器已启动")
     
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))
@@ -122,4 +128,10 @@ async def merge_memory_task():
     # print("\033[1;32m[记忆整合]\033[0m 开始整合")
     # await hippocampus.operation_merge_memory(percentage=0.1)
     # print("\033[1;32m[记忆整合]\033[0m 记忆整合完成")
+
+@scheduler.scheduled_job("interval", seconds=30, id="print_mood")
+async def print_mood_task():
+    """每30秒打印一次情绪状态"""
+    mood_manager = MoodManager.get_instance()
+    mood_manager.print_mood_status()
   

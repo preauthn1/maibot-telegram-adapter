@@ -56,6 +56,10 @@ class BotConfig:
     
     enable_advance_output: bool = False  # 是否启用高级输出
     enable_kuuki_read: bool = True # 是否启用读空气功能
+    
+    mood_update_interval: float = 1.0 # 情绪更新间隔 单位秒
+    mood_decay_rate: float = 0.95 # 情绪衰减率
+    mood_intensity_factor: float = 0.7 # 情绪强度因子
 
     # 默认人设
     PROMPT_PERSONALITY=[
@@ -164,6 +168,12 @@ class BotConfig:
                 memory_config = toml_dict["memory"]
                 config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
                 config.forget_memory_interval = memory_config.get("forget_memory_interval", config.forget_memory_interval)
+                
+            if "mood" in toml_dict:
+                mood_config = toml_dict["mood"]
+                config.mood_update_interval = mood_config.get("mood_update_interval", config.mood_update_interval)
+                config.mood_decay_rate = mood_config.get("mood_decay_rate", config.mood_decay_rate)
+                config.mood_intensity_factor = mood_config.get("mood_intensity_factor", config.mood_intensity_factor)
             
             # 群组配置
             if "groups" in toml_dict:

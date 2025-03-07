@@ -11,6 +11,7 @@ from random import choice
 import numpy as np
 import jieba
 from collections import Counter
+from ..moods.moods import MoodManager
 
 class PromptBuilder:
     def __init__(self):
@@ -48,6 +49,12 @@ class PromptBuilder:
             relation_prompt_2 = "发言或者回复"
         
         #开始构建prompt
+        
+        
+        #心情
+        mood_manager = MoodManager.get_instance()
+        mood_prompt = mood_manager.get_prompt()
+        
         
         #日程构建
         current_date = time.strftime("%Y-%m-%d", time.localtime())
@@ -108,13 +115,13 @@ class PromptBuilder:
             
         #激活prompt构建
         activate_prompt = ''
-        activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}。"          
+        activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt},{mood_prompt},你想要{relation_prompt_2}。"          
         
         #检测机器人相关词汇
         bot_keywords = ['人机', 'bot', '机器', '入机', 'robot', '机器人']
         is_bot = any(keyword in message_txt.lower() for keyword in bot_keywords)
         if is_bot:
-            is_bot_prompt = '有人说你是人机或者机器人，否定这一事实，攻击或反问他。'
+            is_bot_prompt = '有人说你是人机或者机器人，否定这一事实，攻击或反问他。注意，只有认为你是机器人才回复，否则不要否认'
         else:
             is_bot_prompt = ''
         
