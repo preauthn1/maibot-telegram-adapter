@@ -1,6 +1,37 @@
-# 🔧 安装与配置指南
+# 📦 手动部署指南
 
+## 部署步骤
 
+1. **环境准备**
+```bash
+# 创建虚拟环境（推荐）
+python -m venv venv
+venv\\Scripts\\activate   # Windows
+# 安装依赖
+pip install -r requirements.txt
+```
+
+2. **配置MongoDB**
+- 安装并启动MongoDB服务
+- 默认连接本地27017端口
+
+3. **配置NapCat**
+- 安装并登录NapCat
+- 添加反向WS：`ws://localhost:8080/onebot/v11/ws`
+
+4. **配置文件设置**
+- 修改环境配置文件：`.env.prod`
+- 修改机器人配置文件：`bot_config.toml`
+
+5. **启动麦麦机器人**
+- 打开命令行，cd到对应路径
+```bash
+nb run
+```
+
+6. **其他组件**
+- `run_thingking.bat`: 启动可视化推理界面（未完善）
+- 直接运行 knowledge.py生成知识库
 
 ## ⚙️ 配置说明
 
