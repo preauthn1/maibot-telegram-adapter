@@ -26,7 +26,7 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
 ([这里](https://www.bilibili.com/opus/1041609335464001545)有一份由社区大佬编写的，适用于Windows的部署教程，可供参考)
 
 1. **环境准备**
-先参考图片，下载Releases中的`Source code(zip)`并将其解压到一个文件夹里(**路径不要有中文**)
+下载Releases中的`Source code(zip)`并将其解压到一个文件夹里(**路径不要有中文**)
 
 2. **安装Python**
 
