@@ -28,9 +28,9 @@ check_prompt = "符合公序良俗" # 表情包过滤要求
 enable_pic_translate = false
 
 [response]
-model_r1_probability = 0.8 # 麦麦回答时选择R1模型的概率
-model_v3_probability = 0.1 # 麦麦回答时选择V3模型的概率
-model_r1_distill_probability = 0.1 # 麦麦回答时选择R1蒸馏模型的概率
+model_r1_probability = 0.8 # 麦麦回答时选择主要回复模型1 模型的概率
+model_v3_probability = 0.1 # 麦麦回答时选择次要回复模型2 模型的概率
+model_r1_distill_probability = 0.1 # 麦麦回答时选择次要回复模型3 模型的概率
 max_response_length = 1024 # 麦麦回答的最大token数
 
 [memory]
@@ -62,18 +62,21 @@ ban_user_id = []  #禁止回复消息的QQ号
 
 #下面的模型若使用硅基流动则不需要更改，使用ds官方则改成.env.prod自定义的宏，使用自定义模型则选择定位相似的模型自己填写
 
-[model.llm_reasoning] #R1
+#推理模型：
+
+[model.llm_reasoning] #回复模型1 主要回复模型
 name = "Pro/deepseek-ai/DeepSeek-R1"
-# name = "Qwen/QwQ-32B"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
 
-[model.llm_reasoning_minor] #R1蒸馏
+[model.llm_reasoning_minor] #回复模型3 次要回复模型
 name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
 
-[model.llm_normal] #V3
+#非推理模型
+
+[model.llm_normal] #V3 回复模型2 次要回复模型
 name = "Pro/deepseek-ai/DeepSeek-V3"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
@@ -83,17 +86,39 @@ name = "deepseek-ai/DeepSeek-V2.5"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
 
-[model.vlm] #图像识别
-name = "deepseek-ai/deepseek-vl2"
+[model.llm_emotion_judge] #主题判断 0.7/m
+name = "Qwen/Qwen2.5-14B-Instruct"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
+
+[model.llm_topic_judge] #主题判断：建议使用qwen2.5 7b
+name = "Pro/Qwen/Qwen2.5-7B-Instruct"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
+
+[model.llm_summary_by_topic] #建议使用qwen2.5 32b 及以上
+name = "Qwen/Qwen2.5-32B-Instruct"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
+
+[model.moderation] #内容审核 未启用
+name = ""
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
+
+
+# 识图模型
+
+[model.vlm] #图像识别 0.35/m
+name = "Pro/Qwen/Qwen2-VL-7B-Instruct"
+base_url = "SILICONFLOW_BASE_URL"
+key = "SILICONFLOW_KEY"
+
+
+
+#嵌入模型
 
 [model.embedding] #嵌入
 name = "BAAI/bge-m3"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
-
-[topic.llm_topic]
-name = "Pro/deepseek-ai/DeepSeek-V3"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
