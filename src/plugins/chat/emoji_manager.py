@@ -152,7 +152,7 @@ class EmojiManager:
                         {'$inc': {'usage_count': 1}}
                     )
                     logger.success(f"找到匹配的表情包: {selected_emoji.get('discription', '无描述')} (相似度: {similarity:.4f})")
-                    return selected_emoji['path']
+                    return selected_emoji['path'],"[表情包: %s]" % selected_emoji.get('discription', '无描述')
                     
             except Exception as search_error:
                 logger.error(f"搜索表情包失败: {str(search_error)}")
