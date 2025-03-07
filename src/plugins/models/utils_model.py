@@ -185,6 +185,7 @@ class LLM_request:
                             
                         response.raise_for_status()
                         
+                        #将流式输出转化为非流式输出
                         if stream_mode:
                             accumulated_content = ""
                             async for line_bytes in response.content:
@@ -230,19 +231,29 @@ class LLM_request:
 
         logger.error("达到最大重试次数，请求仍然失败")
         raise RuntimeError("达到最大重试次数，API请求仍然失败")
+        
+    async def _transform_parameters(self, params: dict) ->dict:
+        """
+        根据模型名称转换参数：
+        - 对于需要转换的OpenAI CoT系列模型（例如 "o3-mini"），删除 'temprature' 参数，
+        并将 'max_tokens' 重命名为 'max_completion_tokens'
+        """
+        # 复制一份参数，避免直接修改原始数据
+        new_params = dict(params)
+        # 定义需要转换的模型列表
+        models_needing_transformation = ["o3-mini", "o1-mini", "o1-preview", "o1-2024-12-17", "o1-preview-2024-09-12", "o3-mini-2025-01-31", "o1-mini-2024-09-12"]
+        if self.model_name.lower() in models_needing_transformation:
+            # 删除 'temprature' 参数（如果存在）
+            new_params.pop("temprature", None)
+            # 如果存在 'max_tokens'，则重命名为 'max_completion_tokens'
+            if "max_tokens" in new_params:
+                new_params["max_completion_tokens"] = new_params.pop("max_tokens")
+        return new_params
 
     async def _build_payload(self, prompt: str, image_base64: str = None) -> dict:
         """构建请求体"""
         # 复制一份参数，避免直接修改 self.params
-        params_copy = dict(self.params)
-        if self.model_name.lower() == "o3-mini" or "o1-mini" or "o1" or "o1-2024-12-17" or "o1-preview-2024-09-12" or "o3-mini-2025-01-31" or "o1-mini-2024-09-12":
-            # 删除可能存在的 'temprature' 参数
-            params_copy.pop("temprature", None)
-            # 如果存在 'max_tokens' 参数，则将其替换为 'max_completion_tokens'
-            if "max_tokens" in params_copy:
-                params_copy["max_completion_tokens"] = params_copy.pop("max_tokens")
-        # 构造基础请求体，注意这里依然使用 global_config.max_response_length 填充 'max_tokens'
-        # 如果需要统一改为 max_completion_tokens，也可以在下面做相同的调整
+        params_copy = self._transform_parameters(self.model_name, self.params)
         if image_base64:
             payload = {
                 "model": self.model_name,
@@ -265,8 +276,8 @@ class LLM_request:
                 "max_tokens": global_config.max_response_length,
                 **params_copy
             }
-        # 如果是 o3-mini 模型，也将基础请求体中的 max_tokens 改为 max_completion_tokens
-        if self.model_name.lower() == "o3-mini" and "max_tokens" in payload:
+        # 如果 payload 中依然存在 max_tokens 且需要转换，在这里进行再次检查
+        if self.model_name.lower() in ["o3-mini", "o1-mini", "o1-preview", "o1-2024-12-17", "o1-preview-2024-09-12", "o3-mini-2025-01-31", "o1-mini-2024-09-12"] and "max_tokens" in payload:
             payload["max_completion_tokens"] = payload.pop("max_tokens")
         return payload
         
