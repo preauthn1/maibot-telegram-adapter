@@ -21,7 +21,7 @@ config = driver.config
 
 class ResponseGenerator:
     def __init__(self):
-        self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7,max_tokens=1000)
+        self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7,max_tokens=1000,stream=True)
         self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7,max_tokens=1000)
         self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7,max_tokens=1000)
         self.model_v25 = LLM_request(model=global_config.llm_normal_minor, temperature=0.7,max_tokens=1000)
@@ -194,6 +194,6 @@ class InitiativeMessageGenerate:
         prompt = prompt_builder._build_initiative_prompt(
             select_dot, prompt_template, memory
         )
-        content, reasoning = self.model_r1.generate_response(prompt)
+        content, reasoning = self.model_r1.generate_response_async(prompt)
         print(f"[DEBUG] {content} {reasoning}")
         return content
