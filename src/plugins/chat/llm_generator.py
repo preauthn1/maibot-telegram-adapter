@@ -194,6 +194,6 @@ class InitiativeMessageGenerate:
         prompt = prompt_builder._build_initiative_prompt(
             select_dot, prompt_template, memory
         )
-        content, reasoning = self.model_r1.generate_response(prompt)
+        content, reasoning = self.model_r1.generate_response_async(prompt)
         print(f"[DEBUG] {content} {reasoning}")
         return content
