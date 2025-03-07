@@ -197,13 +197,12 @@ class LLM_request:
         )
         return content, reasoning_content
 
-    async def generate_response_async(self, prompt: str) -> Union[str, Tuple[str, str]]:
+    async def generate_response_async(self, prompt: str, **kwargs) -> Union[str, Tuple[str, str]]:
         """异步方式根据输入的提示生成模型的响应"""
         # 构建请求体
         data = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.5,
             "max_tokens": global_config.max_response_length,
             **self.params
         }

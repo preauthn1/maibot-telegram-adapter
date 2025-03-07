@@ -11,7 +11,7 @@ config = driver.config
 
 class TopicIdentifier:
     def __init__(self):
-        self.llm_client = LLM_request(model=global_config.llm_topic_extract)
+        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge)
 
     async def identify_topic_llm(self, text: str) -> Optional[List[str]]:
         """识别消息主题，返回主题列表"""
@@ -23,7 +23,7 @@ class TopicIdentifier:
 消息内容：{text}"""
 
         # 使用 LLM_request 类进行请求
-        topic, _ = await self.llm_client.generate_response(prompt)
+        topic, _ = await self.llm_topic_judge.generate_response(prompt)
         
         if not topic:
             print(f"\033[1;31m[错误]\033[0m LLM API 返回为空")

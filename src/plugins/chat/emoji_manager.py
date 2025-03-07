@@ -41,8 +41,8 @@ class EmojiManager:
     def __init__(self):
         self.db = Database.get_instance()
         self._scan_task = None
-        self.llm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000)
-        self.lm = LLM_request(model=global_config.llm_normal_minor, max_tokens=1000)
+        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000)
+        self.llm_emotion_judge = LLM_request(model=global_config.llm_normal_minor, max_tokens=60,temperature=0.8) #更高的温度，更少的token（后续可以根据情绪来调整温度）
         
     def _ensure_emoji_dir(self):
         """确保表情存储目录存在"""
@@ -69,7 +69,17 @@ class EmojiManager:
             raise RuntimeError("EmojiManager not initialized")
         
     def _ensure_emoji_collection(self):
-        """确保emoji集合存在并创建索引"""
+        """确保emoji集合存在并创建索引
+        
+        这个函数用于确保MongoDB数据库中存在emoji集合,并创建必要的索引。
+        
+        索引的作用是加快数据库查询速度:
+        - embedding字段的2dsphere索引: 用于加速向量相似度搜索,帮助快速找到相似的表情包
+        - tags字段的普通索引: 加快按标签搜索表情包的速度
+        - filename字段的唯一索引: 确保文件名不重复,同时加快按文件名查找的速度
+        
+        没有索引的话,数据库每次查询都需要扫描全部数据,建立索引后可以大大提高查询效率。
+        """
         if 'emoji' not in self.db.db.list_collection_names():
             self.db.db.create_collection('emoji')
             self.db.db.emoji.create_index([('embedding', '2dsphere')])
@@ -93,6 +103,11 @@ class EmojiManager:
             text: 输入文本
         Returns:
             Optional[str]: 表情包文件路径，如果没有找到则返回None
+            
+        
+        可不可以通过 配置文件中的指令 来自定义使用表情包的逻辑？
+        我觉得可行    
+
         """
         try:
             self._ensure_db()
@@ -152,7 +167,8 @@ class EmojiManager:
                         {'$inc': {'usage_count': 1}}
                     )
                     logger.success(f"找到匹配的表情包: {selected_emoji.get('discription', '无描述')} (相似度: {similarity:.4f})")
-                    return selected_emoji['path'],"[表情包: %s]" % selected_emoji.get('discription', '无描述')
+                    # 稍微改一下文本描述，不然容易产生幻觉，描述已经包含 表情包 了
+                    return selected_emoji['path'],"[ %s ]" % selected_emoji.get('discription', '无描述')
                     
             except Exception as search_error:
                 logger.error(f"搜索表情包失败: {str(search_error)}")
@@ -169,7 +185,7 @@ class EmojiManager:
         try:
             prompt = '这是一个表情包，使用中文简洁的描述一下表情包的内容和表情包所表达的情感'
             
-            content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
+            content, _ = await self.vlm.generate_response_for_image(prompt, image_base64)
             logger.debug(f"输出描述: {content}")
             return content
             
@@ -181,7 +197,7 @@ class EmojiManager:
         try:
             prompt = f'这是一个表情包，请回答这个表情包是否满足\"{global_config.EMOJI_CHECK_PROMPT}\"的要求，是则回答是，否则回答否，不要出现任何其他内容'
             
-            content, _ = await self.llm.generate_response_for_image(prompt, image_base64)
+            content, _ = await self.vlm.generate_response_for_image(prompt, image_base64)
             logger.debug(f"输出描述: {content}")
             return content
             
@@ -193,7 +209,7 @@ class EmojiManager:
         try:
             prompt = f'这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，注意不要输出任何对消息内容的分析内容，只输出\"一种什么样的感觉\"中间的形容词部分。'
             
-            content, _ = await self.lm.generate_response_async(prompt)
+            content, _ = await self.llm_emotion_judge.generate_response_async(prompt)
             logger.info(f"输出描述: {content}")
             return content
             

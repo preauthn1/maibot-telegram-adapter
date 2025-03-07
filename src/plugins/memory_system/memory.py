@@ -132,8 +132,8 @@ class Memory_graph:
 class Hippocampus:
     def __init__(self,memory_graph:Memory_graph):
         self.memory_graph = memory_graph
-        self.llm_model_get_topic = LLM_request(model = global_config.llm_normal_minor,temperature=0.5)
-        self.llm_model_summary = LLM_request(model = global_config.llm_normal,temperature=0.5)
+        self.llm_topic_judge = LLM_request(model = global_config.llm_topic_judge,temperature=0.5)
+        self.llm_summary_by_topic = LLM_request(model = global_config.llm_summary_by_topic,temperature=0.5)
         
     def get_all_node_names(self) -> list:
         """获取记忆图中所有节点的名字列表
@@ -179,7 +179,7 @@ class Hippocampus:
         
         #获取topics
         topic_num = self.calculate_topic_num(input_text, compress_rate)
-        topics_response = await self.llm_model_get_topic.generate_response(self.find_topic_llm(input_text, topic_num))
+        topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(input_text, topic_num))
         # 修改话题处理逻辑
         # 定义需要过滤的关键词
         filter_keywords = ['表情包', '图片', '回复', '聊天记录']
@@ -196,7 +196,7 @@ class Hippocampus:
         for topic in filtered_topics:
             topic_what_prompt = self.topic_what(input_text, topic)
             # 创建异步任务
-            task = self.llm_model_summary.generate_response_async(topic_what_prompt)
+            task = self.llm_summary_by_topic.generate_response_async(topic_what_prompt)
             tasks.append((topic.strip(), task))
             
         # 等待所有任务完成
@@ -506,7 +506,7 @@ class Hippocampus:
         Returns:
             list: 识别出的主题列表
         """
-        topics_response = await self.llm_model_get_topic.generate_response(self.find_topic_llm(text, 5))
+        topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, 5))
         # print(f"话题: {topics_response[0]}")
         topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
         # print(f"话题: {topics}")

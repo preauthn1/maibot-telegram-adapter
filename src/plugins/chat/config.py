@@ -43,8 +43,12 @@ class BotConfig:
     llm_reasoning_minor: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
+    llm_topic_judge: Dict[str, str] = field(default_factory=lambda: {})
+    llm_summary_by_topic: Dict[str, str] = field(default_factory=lambda: {})
+    llm_emotion_judge: Dict[str, str] = field(default_factory=lambda: {})
     embedding: Dict[str, str] = field(default_factory=lambda: {})
     vlm: Dict[str, str] = field(default_factory=lambda: {})
+    moderation: Dict[str, str] = field(default_factory=lambda: {})
 
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
@@ -112,8 +116,6 @@ class BotConfig:
                 config.MODEL_R1_PROBABILITY = response_config.get("model_r1_probability", config.MODEL_R1_PROBABILITY)
                 config.MODEL_V3_PROBABILITY = response_config.get("model_v3_probability", config.MODEL_V3_PROBABILITY)
                 config.MODEL_R1_DISTILL_PROBABILITY = response_config.get("model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY)
-                config.API_USING = response_config.get("api_using", config.API_USING)
-                config.API_PAID = response_config.get("api_paid", config.API_PAID)
                 config.max_response_length = response_config.get("max_response_length", config.max_response_length)
                 
             # 加载模型配置
@@ -131,6 +133,15 @@ class BotConfig:
                 
                 if "llm_normal_minor" in model_config:
                     config.llm_normal_minor = model_config["llm_normal_minor"]
+                    
+                if "llm_topic_judge" in model_config:
+                    config.llm_topic_judge = model_config["llm_topic_judge"]
+                
+                if "llm_summary_by_topic" in model_config:
+                    config.llm_summary_by_topic = model_config["llm_summary_by_topic"]
+                
+                if "llm_emotion_judge" in model_config:
+                    config.llm_emotion_judge = model_config["llm_emotion_judge"]
                 
                 if "vlm" in model_config:
                     config.vlm = model_config["vlm"]
@@ -138,8 +149,8 @@ class BotConfig:
                 if "embedding" in model_config:
                     config.embedding = model_config["embedding"]
                 
-                if "rerank" in model_config:
-                    config.rerank = model_config["rerank"]
+                if "moderation" in model_config:
+                    config.moderation = model_config["moderation"]
                 
             # 消息配置
             if "message" in toml_dict:
