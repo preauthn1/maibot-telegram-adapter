@@ -192,3 +192,6 @@ jieba.cache
 
 # vscode
 /.vscode
+
+# direnv
+/.direnv
