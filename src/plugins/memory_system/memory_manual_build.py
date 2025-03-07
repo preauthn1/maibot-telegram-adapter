@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 import pymongo
 from loguru import logger
 from pathlib import Path
-from snownlp import SnowNLP
 # from chat.config import global_config
 sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
 from src.common.database import Database  

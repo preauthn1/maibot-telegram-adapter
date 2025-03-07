@@ -142,7 +142,7 @@ enable_kuuki_read = true  # 让机器人能够"察言观色"喵
 
 # 模型配置部分的详细说明喵~
 
-```toml
+
 #下面的模型若使用硅基流动则不需要更改，使用ds官方则改成在.env.prod自己指定的密钥和域名，使用自定义模型则选择定位相似的模型自己填写
 
 [model.llm_reasoning] #推理模型R1，用来理解和思考的喵
@@ -176,13 +176,6 @@ name = "BAAI/bge-m3"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
 
-# 主题提取功能，可以帮机器人理解对话的主题喵
-[topic]
-topic_extract='snownlp' # 可以选择：
-                       # - jieba（中文分词）
-                       # - snownlp（中文情感分析）
-                       # - llm（使用大模型，但需要API）
-
 # 如果选择了llm方式提取主题，就用这个模型配置喵
 [topic.llm_topic]
 name = "Pro/deepseek-ai/DeepSeek-V3"
@@ -203,11 +196,6 @@ key = "SILICONFLOW_KEY"
    - `vlm`: 负责看图片的眼睛哦
    - `embedding`: 负责理解文字含义的理解力喵
    - `topic`: 负责理解对话主题的能力呢
-
-3. **选择主题提取方式**：
-   - `jieba`: 不需要API，适合简单的中文分词
-   - `snownlp`: 不需要API，可以分析中文情感
-   - `llm`: 效果最好，但需要API服务喵
 
 ## 🌟 小提示
 - 如果你刚开始使用，建议保持默认配置呢

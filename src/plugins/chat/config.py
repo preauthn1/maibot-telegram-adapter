@@ -48,7 +48,6 @@ class BotConfig:
     rerank: Dict[str, str] = field(default_factory=lambda: {})
 
     # 主题提取配置
-    topic_extract: str = 'snownlp' # 只支持jieba,snownlp,llm
     llm_topic_extract: Dict[str, str] = field(default_factory=lambda: {})
     
     API_USING: str = "siliconflow"  # 使用的API

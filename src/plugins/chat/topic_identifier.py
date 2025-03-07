@@ -4,7 +4,6 @@ from .message import Message
 import jieba
 from nonebot import get_driver
 from .config import global_config
-from snownlp import SnowNLP
 from ..models.utils_model import LLM_request
 
 driver = get_driver()
@@ -41,26 +40,5 @@ class TopicIdentifier:
         
         print(f"\033[1;32m[主题识别]\033[0m 主题: {topic_list}")
         return topic_list if topic_list else None
-
-    def identify_topic_snownlp(self, text: str,num:int=5) -> Optional[List[str]]:
-        """使用 SnowNLP 进行主题识别
-        
-        Args:
-            text (str): 需要识别主题的文本
-            
-        Returns:
-            Optional[List[str]]: 返回识别出的主题关键词列表，如果无法识别则返回 None
-        """
-        if not text or len(text.strip()) == 0:
-            return None
-            
-        try:
-            s = SnowNLP(text)
-            # 提取前3个关键词作为主题
-            keywords = s.keywords(num)
-            return keywords if keywords else None
-        except Exception as e:
-            print(f"\033[1;31m[错误]\033[0m SnowNLP 处理失败: {str(e)}")
-            return None
 
 topic_identifier = TopicIdentifier()

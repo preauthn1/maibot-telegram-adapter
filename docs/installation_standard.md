@@ -131,8 +131,6 @@ name = "BAAI/bge-m3"
 base_url = "SILICONFLOW_BASE_URL"
 key = "SILICONFLOW_KEY"
 
-[topic]
-topic_extract='snownlp'  # 主题提取方式：jieba/snownlp/llm
 
 [topic.llm_topic]
 name = "Pro/deepseek-ai/DeepSeek-V3"
