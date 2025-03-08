@@ -83,9 +83,7 @@ def scan_provider(env_config: dict):
 
     # 利用未初始化 env 时获取的 env_mask 来对新的环境变量集去重
     # 避免 GPG_KEY 这样的变量干扰检查
-    for key in env_config:
-        if key in env_mask:
-            del env_config[key]
+    env_config = dict(filter(lambda item: item[0] not in env_mask, env_config.items()))
 
     # 遍历 env_config 的所有键
     for key in env_config:
