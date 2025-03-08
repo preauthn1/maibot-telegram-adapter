@@ -5,15 +5,8 @@ from nonebot.adapters.onebot.v11 import Adapter
 from dotenv import load_dotenv
 from loguru import logger
 
-# 获取所有环境变量
+# 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}
-
-# 设置基础配置
-base_config = {
-    "websocket_port": int(env_config.get("PORT", 8080)),
-    "host": env_config.get("HOST", "127.0.0.1"),
-    "log_level": "INFO",
-}
 
 def easter_egg():
     # 彩蛋
@@ -87,7 +80,7 @@ def load_env():
 
 def scan_provider(env_config: dict):
     provider = {}
-    
+
     # 利用未初始化 env 时获取的 env_mask 来对新的环境变量集去重
     # 避免 GPG_KEY 这样的变量干扰检查
     for key in env_config:
@@ -127,6 +120,13 @@ if __name__ == "__main__":
 
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
+
+    # 设置基础配置
+    base_config = {
+        "websocket_port": int(env_config.get("PORT", 8080)),
+        "host": env_config.get("HOST", "127.0.0.1"),
+        "log_level": "INFO",
+    }
 
     # 合并配置
     nonebot.init(**base_config, **env_config)
