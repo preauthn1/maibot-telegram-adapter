@@ -64,6 +64,8 @@ class BotConfig:
     mood_decay_rate: float = 0.95 # 情绪衰减率
     mood_intensity_factor: float = 0.7 # 情绪强度因子
 
+    keywords_reaction_rules = [] # 关键词回复规则
+
     # 默认人设
     PROMPT_PERSONALITY=[
         "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧",
@@ -194,6 +196,13 @@ class BotConfig:
                 config.mood_decay_rate = mood_config.get("mood_decay_rate", config.mood_decay_rate)
                 config.mood_intensity_factor = mood_config.get("mood_intensity_factor", config.mood_intensity_factor)
             
+            # print(toml_dict)
+            if "keywords_reaction" in toml_dict:
+                # 读取关键词回复配置
+                keywords_reaction_config = toml_dict["keywords_reaction"]
+                if keywords_reaction_config.get("enable", False):
+                    config.keywords_reaction_rules = keywords_reaction_config.get("rules", config.keywords_reaction_rules)
+
             # 群组配置
             if "groups" in toml_dict:
                 groups_config = toml_dict["groups"]
