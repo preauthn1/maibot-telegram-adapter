@@ -127,14 +127,21 @@ class PromptBuilder:
         
         #人格选择
         personality=global_config.PROMPT_PERSONALITY
+        probability_1 = global_config.PERSONALITY_1
+        probability_2 = global_config.PERSONALITY_2
+        probability_3 = global_config.PERSONALITY_3
         prompt_personality = ''
         personality_choice = random.random()
-        if personality_choice < 4/6:  # 第一种人格
+        if personality_choice < probability_1:  # 第一种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}, 你正在浏览qq群,{promt_info_prompt},
             现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{is_bot_prompt}
             请注意把握群里的聊天内容，不要刻意突出自身学科背景，不要回复的太有条理，可以有个性。'''
-        elif personality_choice < 1:  # 第二种人格
+        elif personality_choice < probability_1 + probability_2:  # 第二种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}, 你正在浏览qq群，{promt_info_prompt},
+            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
+            请你表达自己的见解和观点。可以有个性。'''
+        else:  # 第三种人格
+            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt},
             现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
             请你表达自己的见解和观点。可以有个性。'''
         
@@ -163,10 +170,12 @@ class PromptBuilder:
         activate_prompt_check=f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"     
         prompt_personality_check = ''
         extra_check_info=f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
-        if personality_choice < 4/6:  # 第一种人格
+        if personality_choice < probability_1:  # 第一种人格
             prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
-        elif personality_choice < 1:  # 第二种人格
+        elif personality_choice < probability_1 + probability_2:  # 第二种人格
             prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+        else:  # 第三种人格
+            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
 
         prompt_check_if_response=f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
         
@@ -198,10 +207,12 @@ class PromptBuilder:
         personality=global_config.PROMPT_PERSONALITY
         prompt_personality = ''
         personality_choice = random.random()
-        if personality_choice < 4/6:  # 第一种人格
+        if personality_choice < probability_1:  # 第一种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}'''
-        elif personality_choice < 1:  # 第二种人格
+        elif personality_choice < probability_1 + probability_2:  # 第二种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}'''
+        else:  # 第三种人格
+            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}'''
         
         topics_str=','.join(f"\"{topics}\"")
         prompt_for_select=f"你现在想在群里发言，回忆了一下，想到几个话题，分别是{topics_str}，综合当前状态以及群内气氛，请你在其中选择一个合适的话题，注意只需要输出话题，除了话题什么也不要输出(双引号也不要输出)"

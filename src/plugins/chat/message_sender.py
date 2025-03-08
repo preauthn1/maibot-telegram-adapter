@@ -161,8 +161,7 @@ class MessageManager:
                 #优先等待这条消息
                 message_earliest.update_thinking_time()
                 thinking_time = message_earliest.thinking_time
-                if thinking_time % 10 == 0:
-                    print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒")
+                print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒\033[K\r", end='', flush=True)
             else:# 如果不是message_thinking就只能是message_sending    
                 print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
                 #直接发，等什么呢
