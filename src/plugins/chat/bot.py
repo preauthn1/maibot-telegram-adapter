@@ -1,6 +1,4 @@
 import time
-
-# from .message_stream import MessageStream, MessageStreamContainer
 from random import random
 
 from loguru import logger
@@ -129,6 +127,11 @@ class ChatBot:
                     container.messages.remove(msg)
                     # print(f"\033[1;32m[思考消息删除]\033[0m 已找到思考消息对象，开始删除")
                     break
+                    
+            # 如果找不到思考消息，直接返回
+            if not thinking_message:
+                print(f"\033[1;33m[警告]\033[0m 未找到对应的思考消息，可能已超时被移除")
+                return
             
             #记录开始思考的时间，避免从思考到回复的时间太久
             thinking_start_time = thinking_message.thinking_start_time

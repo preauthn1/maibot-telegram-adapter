@@ -226,7 +226,7 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}")
-                    logger.critical(f"请求头: {await self._build_headers()} 请求体: {payload}")
+                    logger.critical(f"请求头: {await self._build_headers(no_key=True)} 请求体: {payload}")
                     raise RuntimeError(f"API请求失败: {str(e)}")
 
         logger.error("达到最大重试次数，请求仍然失败")
@@ -324,12 +324,19 @@ class LLM_request:
             reasoning = ""
         return content, reasoning
 
-    async def _build_headers(self) -> dict:
+    async def _build_headers(self, no_key: bool = False) -> dict:
         """构建请求头"""
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        if no_key:
+            return {
+                "Authorization": f"Bearer **********",
+                "Content-Type": "application/json"
+            }
+        else:
+            return {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            } 
+        # 防止小朋友们截图自己的key
 
     async def generate_response(self, prompt: str) -> Tuple[str, str]:
         """根据输入的提示生成模型的异步响应"""

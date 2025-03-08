@@ -21,6 +21,12 @@ class BotConfig:
     
     talk_allowed_groups = set()
     talk_frequency_down_groups = set()
+    thinking_timeout: int = 100  # 思考时间
+    
+    response_willing_amplifier: float = 1.0  # 回复意愿放大系数
+    response_interested_rate_amplifier: float = 1.0  # 回复兴趣度放大系数
+    down_frequency_rate: float = 3.5  # 降低回复频率的群组回复意愿降低系数
+    
     ban_user_id = set()
     
     build_memory_interval: int = 30  # 记忆构建间隔（秒）
@@ -172,6 +178,10 @@ class BotConfig:
                 config.MAX_CONTEXT_SIZE = msg_config.get("max_context_size", config.MAX_CONTEXT_SIZE)
                 config.emoji_chance = msg_config.get("emoji_chance", config.emoji_chance)
                 config.ban_words=msg_config.get("ban_words",config.ban_words)
+                config.thinking_timeout = msg_config.get("thinking_timeout", config.thinking_timeout)
+                config.response_willing_amplifier = msg_config.get("response_willing_amplifier", config.response_willing_amplifier)
+                config.response_interested_rate_amplifier = msg_config.get("response_interested_rate_amplifier", config.response_interested_rate_amplifier)
+                config.down_frequency_rate = msg_config.get("down_frequency_rate", config.down_frequency_rate)
 
             if "memory" in toml_dict:
                 memory_config = toml_dict["memory"]
