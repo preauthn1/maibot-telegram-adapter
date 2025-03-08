@@ -64,9 +64,14 @@ class BotConfig:
     # 默认人设
     PROMPT_PERSONALITY=[
         "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧",
-        "是一个女大学生，你有黑色头发，你会刷小红书"
+        "是一个女大学生，你有黑色头发，你会刷小红书",
+        "是一个女大学生，你会刷b站，对ACG文化感兴趣"
     ]
     PROMPT_SCHEDULE_GEN="一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
+    
+    PERSONALITY_1: float = 0.6 # 第一种人格概率
+    PERSONALITY_2: float = 0.3 # 第二种人格概率
+    PERSONALITY_3: float = 0.1 # 第三种人格概率
     
     @staticmethod
     def get_config_dir() -> str:
@@ -99,6 +104,9 @@ class BotConfig:
                     config.PROMPT_PERSONALITY=personality_config.get('prompt_personality',config.PROMPT_PERSONALITY)
                 logger.info(f"载入自定义日程prompt:{personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)}")
                 config.PROMPT_SCHEDULE_GEN=personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)
+                config.PERSONALITY_1=personality_config.get('personality_1_probability',config.PERSONALITY_1)
+                config.PERSONALITY_2=personality_config.get('personality_2_probability',config.PERSONALITY_2)
+                config.PERSONALITY_3=personality_config.get('personality_3_probability',config.PERSONALITY_3)
 
             if "emoji" in toml_dict:
                 emoji_config = toml_dict["emoji"]
