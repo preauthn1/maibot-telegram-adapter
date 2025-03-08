@@ -85,7 +85,11 @@ class BotConfig:
         config = cls()
         if os.path.exists(config_path):
             with open(config_path, "rb") as f:
-                toml_dict = tomli.load(f)
+                try:
+                    toml_dict = tomli.load(f)
+                except(tomli.TOMLDecodeError) as e:
+                    logger.critical(f"配置文件bot_config.toml填写有误，请检查第{e.lineno}行第{e.colno}处：{e.msg}")
+                    exit(1)
             
             if 'personality' in toml_dict:
                 personality_config=toml_dict['personality']
