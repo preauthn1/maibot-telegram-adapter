@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 # 获取所有环境变量
-env_config = {key: os.getenv(key) for key in os.environ}
+env_mask = {key: os.getenv(key) for key in os.environ}
 
 # 设置基础配置
 base_config = {
@@ -83,9 +83,17 @@ def load_env():
         logger.error(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
         exit(1)
 
-provider = {}
 
-def scan_provider():
+
+def scan_provider(env_config: dict):
+    provider = {}
+    
+    # 利用未初始化 env 时获取的 env_mask 来对新的环境变量集去重
+    # 避免 GPG_KEY 这样的变量干扰检查
+    for key in env_config:
+        if key in env_mask:
+            del env_config[key]
+
     # 遍历 env_config 的所有键
     for key in env_config:
         # 检查键是否符合 {provider}_BASE_URL 或 {provider}_KEY 的格式
@@ -106,13 +114,19 @@ def scan_provider():
     # 检查每个 provider 是否同时存在 url 和 key
     for provider_name, config in provider.items():
         if config["url"] is None or config["key"] is None:
+            logger.error(
+                f"provider 内容：{config}\n"
+                f"env_config 内容：{env_config}"
+            )
             raise ValueError(f"请检查 '{provider_name}' 提供商配置是否丢失 BASE_URL 或 KEY 环境变量")
 
 if __name__ == "__main__":
     easter_egg()
     init_config()
     init_env()
-    scan_provider()
+
+    env_config = {key: os.getenv(key) for key in os.environ}
+    scan_provider(env_config)
 
     # 合并配置
     nonebot.init(**base_config, **env_config)
