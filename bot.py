@@ -44,8 +44,8 @@ def init_env():
             logger.error("检测到.env.prod文件不存在")
             shutil.copy("template.env", "./.env.prod")
 
-    else:
-        # 首先加载基础环境变量.env
+    # 首先加载基础环境变量.env
+    if os.path.exists(".env"):
         load_dotenv(".env")
         logger.success("成功加载基础环境变量配置")
 
@@ -65,6 +65,8 @@ def load_env():
     }
 
     env = os.getenv("ENVIRONMENT")
+    logger.info(f"[load_env] 当前的 ENVIRONMENT 变量值：{env}")
+
     if env in fn_map:
         fn_map[env]() # 根据映射执行闭包函数
 
@@ -90,7 +92,7 @@ def scan_provider(env_config: dict):
         # 检查键是否符合 {provider}_BASE_URL 或 {provider}_KEY 的格式
         if key.endswith("_BASE_URL") or key.endswith("_KEY"):
             # 提取 provider 名称
-            provider_name = key.rsplit("_", 1)[0]  # 从右边分割一次，取第一部分
+            provider_name = key.split("_", 1)[0]  # 从左分割一次，取第一部分
 
             # 初始化 provider 的字典（如果尚未初始化）
             if provider_name not in provider:
@@ -115,6 +117,7 @@ if __name__ == "__main__":
     easter_egg()
     init_config()
     init_env()
+    load_env()
 
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
