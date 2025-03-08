@@ -14,7 +14,7 @@ from packaging.specifiers import SpecifierSet,InvalidSpecifier
 @dataclass
 class BotConfig:
     """机器人配置类"""    
-    INNER_VERSION: SpecifierSet
+    INNER_VERSION: Version = None
 
     BOT_QQ: Optional[int] = 1
     BOT_NICKNAME: Optional[str] = None
@@ -176,7 +176,6 @@ class BotConfig:
         def model(parent: dict):
             # 加载模型配置
             model_config = parent["model"]
-            config_version : Version = cls.get_config_version(parent)
 
             config_list = [
                 "llm_reasoning",
@@ -205,10 +204,10 @@ class BotConfig:
                         "pri_out" : 0
                     }
 
-                    if config_version in SpecifierSet("<0.0.0"):
+                    if config.INNER_VERSION in SpecifierSet("<0.0.0"):
                         cfg_target = cfg_item
 
-                    elif config_version in SpecifierSet(">=0.0.1"):
+                    elif config.INNER_VERSION in SpecifierSet(">=0.0.1"):
                         stable_item = ["name","pri_in","pri_out"]
                         for i in stable_item:
                             cfg_target[i] = cfg_item[i]
@@ -309,7 +308,7 @@ class BotConfig:
                 toml_dict = tomli.load(f)
                 
                 # 获取配置文件版本
-                config_version : Version = cls.get_config_version(toml_dict)
+                config.INNER_VERSION = cls.get_config_version(toml_dict)
 
                 # 如果在配置中找到了需要的项，调用对应项的闭包函数处理
                 for key in include_configs:
@@ -317,11 +316,11 @@ class BotConfig:
                         group_specifierset: SpecifierSet = toml_dict[key]["support"]
 
                         # 检查配置文件版本是否在支持范围内
-                        if config_version in group_specifierset:
+                        if config.INNER_VERSION in group_specifierset:
                             # 如果版本在支持范围内，检查是否在支持的末端
-                            if config_version == group_specifierset.filter([config_version])[-1]:
+                            if config.INNER_VERSION == group_specifierset.filter([config.INNER_VERSION])[-1]:
                                 logger.warning(
-                                    f"配置文件中的 '{key}' 字段的版本 ({config_version}) 已接近支持范围的末端。\n"
+                                    f"配置文件中的 '{key}' 字段的版本 ({config.INNER_VERSION}) 已接近支持范围的末端。\n"
                                     f"未来版本可能会移除对该字段的支持。"
                                 )
                             include_configs[key]["func"](toml_dict)
