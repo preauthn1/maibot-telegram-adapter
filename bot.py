@@ -1,4 +1,5 @@
 import os
+import shutil
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter
 from dotenv import load_dotenv
@@ -19,7 +20,7 @@ print(rainbow_text)
 # 初次启动检测
 if not os.path.exists("config/bot_config.toml"):
     logger.warning("检测到bot_config.toml不存在，正在从模板复制")
-    import shutil
+    
     # 检查config目录是否存在
     if not os.path.exists("config"):
         os.makedirs("config")
