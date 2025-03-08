@@ -1,15 +1,12 @@
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, Set
 import os
-import configparser
+from dataclasses import dataclass, field
+from typing import Dict, Optional
+
 import tomli
-import sys
 from loguru import logger
-from nonebot import get_driver
 from packaging import version
 from packaging.version import Version, InvalidVersion
 from packaging.specifiers import SpecifierSet,InvalidSpecifier
-
 
 @dataclass
 class BotConfig:
@@ -28,6 +25,12 @@ class BotConfig:
     
     talk_allowed_groups = set()
     talk_frequency_down_groups = set()
+    thinking_timeout: int = 100  # 思考时间
+    
+    response_willing_amplifier: float = 1.0  # 回复意愿放大系数
+    response_interested_rate_amplifier: float = 1.0  # 回复兴趣度放大系数
+    down_frequency_rate: float = 3.5  # 降低回复频率的群组回复意愿降低系数
+    
     ban_user_id = set()
     
     build_memory_interval: int = 30  # 记忆构建间隔（秒）
@@ -65,12 +68,19 @@ class BotConfig:
     mood_decay_rate: float = 0.95 # 情绪衰减率
     mood_intensity_factor: float = 0.7 # 情绪强度因子
 
+    keywords_reaction_rules = [] # 关键词回复规则
+
     # 默认人设
     PROMPT_PERSONALITY=[
         "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧",
-        "是一个女大学生，你有黑色头发，你会刷小红书"
+        "是一个女大学生，你有黑色头发，你会刷小红书",
+        "是一个女大学生，你会刷b站，对ACG文化感兴趣"
     ]
     PROMPT_SCHEDULE_GEN="一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
+    
+    PERSONALITY_1: float = 0.6 # 第一种人格概率
+    PERSONALITY_2: float = 0.3 # 第二种人格概率
+    PERSONALITY_3: float = 0.1 # 第三种人格概率
     
     @staticmethod
     def get_config_dir() -> str:
@@ -139,13 +149,18 @@ class BotConfig:
         config = cls()
 
         def personality(parent: dict):
-            personality_config = parent['personality']
-            personality = personality_config.get('prompt_personality')
+            personality_config=parent['personality']
+            personality=personality_config.get('prompt_personality')
             if len(personality) >= 2:
                 logger.info(f"载入自定义人格:{personality}")
                 config.PROMPT_PERSONALITY=personality_config.get('prompt_personality',config.PROMPT_PERSONALITY)
             logger.info(f"载入自定义日程prompt:{personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)}")
             config.PROMPT_SCHEDULE_GEN=personality_config.get('prompt_schedule',config.PROMPT_SCHEDULE_GEN)
+            
+            if config.INNER_VERSION in SpecifierSet(">=0.0.2"):
+                config.PERSONALITY_1=personality_config.get('personality_1_probability',config.PERSONALITY_1)
+                config.PERSONALITY_2=personality_config.get('personality_2_probability',config.PERSONALITY_2)
+                config.PERSONALITY_3=personality_config.get('personality_3_probability',config.PERSONALITY_3)
 
         def emoji(parent: dict):
             emoji_config = parent["emoji"]
@@ -246,6 +261,12 @@ class BotConfig:
             config.emoji_chance = msg_config.get("emoji_chance", config.emoji_chance)
             config.ban_words=msg_config.get("ban_words",config.ban_words)
 
+            if config.INNER_VERSION in SpecifierSet(">=0.0.2"):
+                config.thinking_timeout = msg_config.get("thinking_timeout", config.thinking_timeout)
+                config.response_willing_amplifier = msg_config.get("response_willing_amplifier", config.response_willing_amplifier)
+                config.response_interested_rate_amplifier = msg_config.get("response_interested_rate_amplifier", config.response_interested_rate_amplifier)
+                config.down_frequency_rate = msg_config.get("down_frequency_rate", config.down_frequency_rate)
+
         def memory(parent: dict):
             memory_config = parent["memory"]
             config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
@@ -256,6 +277,11 @@ class BotConfig:
             config.mood_update_interval = mood_config.get("mood_update_interval", config.mood_update_interval)
             config.mood_decay_rate = mood_config.get("mood_decay_rate", config.mood_decay_rate)
             config.mood_intensity_factor = mood_config.get("mood_intensity_factor", config.mood_intensity_factor)
+
+        def keywords_reaction(parent: dict):
+            keywords_reaction_config = parent["keywords_reaction"]
+            if keywords_reaction_config.get("enable", False):
+                config.keywords_reaction_rules = keywords_reaction_config.get("rules", config.keywords_reaction_rules)
 
         def groups(parent: dict):
             groups_config = parent["groups"]
@@ -269,7 +295,7 @@ class BotConfig:
             config.enable_kuuki_read = others_config.get("enable_kuuki_read", config.enable_kuuki_read)
 
         # 版本表达式：>=1.0.0,<2.0.0
-        # 允许字段：func: method, support: str, notice: str
+        # 允许字段：func: method, support: str, notice: str, necessary: bool
         # 如果使用 notice 字段，在该组配置加载时，会展示该字段对用户的警示
         # 例如："notice": "personality 将在 1.3.2 后被移除"，那么在有效版本中的用户就会虽然可以
         # 正常执行程序，但是会看到这条自定义提示
@@ -310,6 +336,11 @@ class BotConfig:
                 "func": mood,
                 "support": ">=0.0.0"
             },
+            "keywords_reaction": {
+                "func": keywords_reaction,
+                "support": ">=0.0.2",
+                "necessary": False
+            },
             "groups": {
                 "func": groups,
                 "support": ">=0.0.0"
@@ -327,7 +358,11 @@ class BotConfig:
 
         if os.path.exists(config_path):
             with open(config_path, "rb") as f:
-                toml_dict = tomli.load(f)
+                try:
+                    toml_dict = tomli.load(f)
+                except(tomli.TOMLDecodeError) as e:
+                    logger.critical(f"配置文件bot_config.toml填写有误，请检查第{e.lineno}行第{e.colno}处：{e.msg}")
+                    exit(1)
                 
                 # 获取配置文件版本
                 config.INNER_VERSION = cls.get_config_version(toml_dict)
@@ -339,7 +374,7 @@ class BotConfig:
 
                         # 检查配置文件版本是否在支持范围内
                         if config.INNER_VERSION in group_specifierset:
-                            # 如果版本在支持范围内，检查是否在支持的末端
+                            # 如果版本在支持范围内，检查是否存在通知
                             if 'notice' in include_configs[key]:
                                 logger.warning(include_configs[key]["notice"])
 
@@ -352,7 +387,13 @@ class BotConfig:
                                 f"当前程序仅支持以下版本范围: {group_specifierset}"
                             )
                             raise InvalidVersion(f"当前程序仅支持以下版本范围: {group_specifierset}")
-
+                    
+                    # 如果 necessary 项目存在，而且显式声明是 False，进入特殊处理
+                    elif "necessary" in include_configs[key] and include_configs[key].get("necessary") == False:
+                        # 通过 pass 处理的项虽然直接忽略也是可以的，但是为了不增加理解困难，依然需要在这里显式处理
+                        if key == "keywords_reaction":
+                            pass
+                    
                     else:
                         # 如果用户根本没有需要的配置项，提示缺少配置
                         logger.error(f"配置文件中缺少必需的字段: '{key}'")

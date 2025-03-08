@@ -1,10 +1,9 @@
-from typing import Optional, Dict, List
-from openai import OpenAI
-from .message import Message
-import jieba
+from typing import List, Optional
+
 from nonebot import get_driver
-from .config import global_config
+
 from ..models.utils_model import LLM_request
+from .config import global_config
 
 driver = get_driver()
 config = driver.config  
@@ -26,7 +25,7 @@ class TopicIdentifier:
         topic, _ = await self.llm_topic_judge.generate_response(prompt)
         
         if not topic:
-            print(f"\033[1;31m[错误]\033[0m LLM API 返回为空")
+            print("\033[1;31m[错误]\033[0m LLM API 返回为空")
             return None
             
         # 直接在这里处理主题解析

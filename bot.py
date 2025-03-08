@@ -1,9 +1,9 @@
 import os
 import shutil
 import nonebot
-from nonebot.adapters.onebot.v11 import Adapter
 from dotenv import load_dotenv
 from loguru import logger
+from nonebot.adapters.onebot.v11 import Adapter
 
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}

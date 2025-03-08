@@ -1,8 +1,8 @@
 import os
 import sys
-import numpy as np
-import requests
 import time
+
+import requests
 from dotenv import load_dotenv
 
 # 添加项目根目录到 Python 路径

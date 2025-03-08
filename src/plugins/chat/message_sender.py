@@ -1,14 +1,15 @@
-from typing import Union, List, Optional, Dict
-from collections import deque
-from .message import Message, Message_Thinking, MessageSet, Message_Sending
-import time
 import asyncio
+import time
+from typing import Dict, List, Optional, Union
+
 from nonebot.adapters.onebot.v11 import Bot
-from .config import global_config
-from .storage import MessageStorage
+
 from .cq_code import cq_code_tool
-import random
+from .message import Message, Message_Sending, Message_Thinking, MessageSet
+from .storage import MessageStorage
 from .utils import calculate_typing_time
+from .config import global_config
+
 
 class Message_Sender:
     """发送器"""
@@ -161,8 +162,12 @@ class MessageManager:
                 #优先等待这条消息
                 message_earliest.update_thinking_time()
                 thinking_time = message_earliest.thinking_time
-                if thinking_time % 10 == 0:
-                    print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒")
+                print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒\033[K\r", end='', flush=True)
+                
+                # 检查是否超时
+                if thinking_time > global_config.thinking_timeout:
+                    print(f"\033[1;33m[警告]\033[0m 消息思考超时({thinking_time}秒)，移除该消息")
+                    container.remove_message(message_earliest)
             else:# 如果不是message_thinking就只能是message_sending    
                 print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
                 #直接发，等什么呢
@@ -200,7 +205,7 @@ class MessageManager:
                         
                         # 安全地移除消息
                         if not container.remove_message(msg):
-                            print(f"\033[1;33m[警告]\033[0m 尝试删除不存在的消息")
+                            print("\033[1;33m[警告]\033[0m 尝试删除不存在的消息")
                     except Exception as e:
                         print(f"\033[1;31m[错误]\033[0m 处理超时消息时发生错误: {e}")
                         continue

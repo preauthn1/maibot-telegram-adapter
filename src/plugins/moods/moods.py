@@ -1,9 +1,10 @@
 import math
-import time
 import threading
-from typing import Dict, Tuple, Optional
+import time
 from dataclasses import dataclass
+
 from ..chat.config import global_config
+
 
 @dataclass
 class MoodState:

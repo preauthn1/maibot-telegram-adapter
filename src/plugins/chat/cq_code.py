@@ -1,24 +1,23 @@
-from dataclasses import dataclass
-from typing import Dict, Optional, List, Union
-import html
-import requests
 import base64
-from PIL import Image
+import html
 import os
-from random import random
-from nonebot.adapters.onebot.v11 import Bot
-from .config import global_config
 import time
-import asyncio
-from .utils_image import storage_image, storage_emoji
-from .utils_user import get_user_nickname
-from ..models.utils_model import LLM_request
-from .mapper import emojimapper
+from dataclasses import dataclass
+from typing import Dict, Optional
+
+import requests
+
 # 解析各种CQ码
 # 包含CQ码类
 import urllib3
-from urllib3.util import create_urllib3_context
 from nonebot import get_driver
+from urllib3.util import create_urllib3_context
+
+from ..models.utils_model import LLM_request
+from .config import global_config
+from .mapper import emojimapper
+from .utils_image import storage_emoji, storage_image
+from .utils_user import get_user_nickname
 
 driver = get_driver()
 config = driver.config
@@ -81,7 +80,7 @@ class CQCode:
             if user_nickname:
                 self.translated_plain_text = f"[@{user_nickname}]"
             else:
-                self.translated_plain_text = f"@某人"
+                self.translated_plain_text = "@某人"
         elif self.type == 'reply':
             self.translated_plain_text = await self.translate_reply()
         elif self.type == 'face':
@@ -308,7 +307,7 @@ class CQCode:
                 return f"[回复 {self.reply_message.sender.nickname} 的消息: {message_obj.processed_plain_text}]"
 
         else:
-            print(f"\033[1;31m[错误]\033[0m 回复消息的sender.user_id为空")
+            print("\033[1;31m[错误]\033[0m 回复消息的sender.user_id为空")
             return '[回复某人消息]'
 
     @staticmethod

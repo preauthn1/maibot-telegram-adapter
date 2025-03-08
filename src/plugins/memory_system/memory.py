@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
-import os
-import jieba
-import networkx as nx
-import matplotlib.pyplot as plt
-from collections import Counter
 import datetime
+import math
 import random
 import time
+
+import jieba
+import networkx as nx
+
+from ...common.database import Database  # 使用正确的导入语法
 from ..chat.config import global_config
-from ...common.database import Database # 使用正确的导入语法
+from ..chat.utils import (
+    calculate_information_content,
+    cosine_similarity,
+    get_cloest_chat_from_db,
+    text_to_vector,
+)
 from ..models.utils_model import LLM_request
-import math
-from ..chat.utils import calculate_information_content, get_cloest_chat_from_db ,text_to_vector,cosine_similarity
-
-
-
 
 
 class Memory_graph:
@@ -530,7 +531,8 @@ class Hippocampus:
         # 计算每个识别出的主题与记忆主题的相似度
         for topic in topics:
             if debug_info:
-                print(f"\033[1;32m[{debug_info}]\033[0m 正在思考有没有见过: {topic}")
+                # print(f"\033[1;32m[{debug_info}]\033[0m 正在思考有没有见过: {topic}")
+                pass
                 
             topic_vector = text_to_vector(topic)
             has_similar_topic = False
@@ -548,11 +550,13 @@ class Hippocampus:
                 if similarity >= similarity_threshold:
                     has_similar_topic = True
                     if debug_info:
-                        print(f"\033[1;32m[{debug_info}]\033[0m 找到相似主题: {topic} -> {memory_topic} (相似度: {similarity:.2f})")
+                        # print(f"\033[1;32m[{debug_info}]\033[0m 找到相似主题: {topic} -> {memory_topic} (相似度: {similarity:.2f})")
+                        pass
                     all_similar_topics.append((memory_topic, similarity))
                     
             if not has_similar_topic and debug_info:
-                print(f"\033[1;31m[{debug_info}]\033[0m 没有见过: {topic}  ，呃呃")
+                # print(f"\033[1;31m[{debug_info}]\033[0m 没有见过: {topic}  ，呃呃")
+                pass
                 
         return all_similar_topics
         
@@ -696,6 +700,7 @@ def segment_text(text):
 
 
 from nonebot import get_driver
+
 driver = get_driver()
 config = driver.config
 

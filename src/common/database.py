@@ -1,5 +1,7 @@
-from pymongo import MongoClient
 from typing import Optional
+
+from pymongo import MongoClient
+
 
 class Database:
     _instance: Optional["Database"] = None

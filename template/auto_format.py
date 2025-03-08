@@ -1,8 +1,10 @@
-import tomli
-import tomli_w
+import os
 import sys
 from pathlib import Path
-import os
+
+import tomli
+import tomli_w
+
 
 def sync_configs():
     # 读取两个配置文件
