@@ -1,4 +1,4 @@
-# 📦 如何手动部署MaiMbot麦麦？
+# 📦 Windows系统如何手动部署MaiMbot麦麦？
 
 ## 你需要什么？
 

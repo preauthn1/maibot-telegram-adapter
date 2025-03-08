@@ -51,7 +51,9 @@
 
 - [🐳 Docker部署指南](docs/docker_deploy.md)
 
-- [📦 手动部署指南](docs/manual_deploy.md)
+- [📦 手动部署指南 Windows](docs/manual_deploy_windows.md)
+
+- [📦 手动部署指南 Linux](docs/manual_deploy_linux.md)
 
 ### 配置说明
 - [🎀 新手配置指南](docs/installation_cute.md) - 通俗易懂的配置教程，适合初次使用的猫娘
