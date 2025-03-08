@@ -1,19 +1,16 @@
-from typing import Dict, Any, List, Optional, Union, Tuple
-from openai import OpenAI
-import asyncio
-from functools import partial
-from .message import Message
-from .config import global_config
-from ...common.database import Database
 import random
 import time
-import numpy as np
-from .relationship_manager import relationship_manager
-from .prompt_builder import prompt_builder
-from .config import global_config
-from .utils import process_llm_response
+from typing import List, Optional, Tuple, Union
+
 from nonebot import get_driver
+
+from ...common.database import Database
 from ..models.utils_model import LLM_request
+from .config import global_config
+from .message import Message
+from .prompt_builder import prompt_builder
+from .relationship_manager import relationship_manager
+from .utils import process_llm_response
 
 driver = get_driver()
 config = driver.config

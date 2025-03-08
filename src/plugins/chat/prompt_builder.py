@@ -1,17 +1,14 @@
-import time
 import random
-from ..schedule.schedule_generator import bot_schedule
-import os
-from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text
+import time
+from typing import Optional
+
 from ...common.database import Database
-from .config import global_config
-from .topic_identifier import topic_identifier
-from ..memory_system.memory import memory_graph,hippocampus
-from random import choice
-import numpy as np
-import jieba
-from collections import Counter
+from ..memory_system.memory import hippocampus, memory_graph
 from ..moods.moods import MoodManager
+from ..schedule.schedule_generator import bot_schedule
+from .config import global_config
+from .utils import get_embedding, get_recent_group_detailed_plain_text
+
 
 class PromptBuilder:
     def __init__(self):
@@ -25,7 +22,7 @@ class PromptBuilder:
                     message_txt: str, 
                     sender_name: str = "某人",
                     relationship_value: float = 0.0,
-                    group_id: int = None) -> str:
+                    group_id: Optional[int] = None) -> tuple[str, str]:
         """构建prompt
         
         Args:
@@ -101,7 +98,7 @@ class PromptBuilder:
             for memory in relevant_memories:
                 memory_items.append(f"关于「{memory['topic']}」的记忆：{memory['content']}")
             
-            memory_prompt = f"看到这些聊天，你想起来：\n" + "\n".join(memory_items) + "\n"
+            memory_prompt = "看到这些聊天，你想起来：\n" + "\n".join(memory_items) + "\n"
             
             # 打印调试信息
             print("\n\033[1;32m[记忆检索]\033[0m 找到以下相关记忆：")
@@ -117,13 +114,22 @@ class PromptBuilder:
         activate_prompt = ''
         activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt},{mood_prompt},你想要{relation_prompt_2}。"          
         
-        #检测机器人相关词汇
-        bot_keywords = ['人机', 'bot', '机器', '入机', 'robot', '机器人']
-        is_bot = any(keyword in message_txt.lower() for keyword in bot_keywords)
-        if is_bot:
-            is_bot_prompt = '有人说你是人机或者机器人，否定这一事实，攻击或反问他。注意，只有认为你是机器人才回复，否则不要否认'
-        else:
-            is_bot_prompt = ''
+        #检测机器人相关词汇，改为关键词检测与反应功能了，提取到全局配置中
+        # bot_keywords = ['人机', 'bot', '机器', '入机', 'robot', '机器人']
+        # is_bot = any(keyword in message_txt.lower() for keyword in bot_keywords)
+        # if is_bot:
+        #     is_bot_prompt = '有人说你是人机或者机器人，否定这一事实，攻击或反问他。注意，只有认为你是机器人才回复，否则不要否认'
+        # else:
+        #     is_bot_prompt = ''
+
+        # 关键词检测与反应
+        keywords_reaction_prompt = ''
+        for rule in global_config.keywords_reaction_rules:
+            if rule.get("enable", False):
+                if any(keyword in message_txt.lower() for keyword in rule.get("keywords", [])):
+                    print(f"检测到以下关键词之一：{rule.get('keywords', [])}，触发反应：{rule.get('reaction', '')}")
+                    keywords_reaction_prompt += rule.get("reaction", "") + '，'
+
         
         #人格选择
         personality=global_config.PROMPT_PERSONALITY
@@ -134,15 +140,15 @@ class PromptBuilder:
         personality_choice = random.random()
         if personality_choice < probability_1:  # 第一种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}, 你正在浏览qq群,{promt_info_prompt},
-            现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{is_bot_prompt}
+            现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{keywords_reaction_prompt}
             请注意把握群里的聊天内容，不要刻意突出自身学科背景，不要回复的太有条理，可以有个性。'''
         elif personality_choice < probability_1 + probability_2:  # 第二种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}, 你正在浏览qq群，{promt_info_prompt},
-            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
+            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
             请你表达自己的见解和观点。可以有个性。'''
         else:  # 第三种人格
             prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt},
-            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
+            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
             请你表达自己的见解和观点。可以有个性。'''
         
         #中文高手(新加的好玩功能)
@@ -203,7 +209,7 @@ class PromptBuilder:
 
         #激活prompt构建
         activate_prompt = ''
-        activate_prompt = f"以上是群里正在进行的聊天。"
+        activate_prompt = "以上是群里正在进行的聊天。"
         personality=global_config.PROMPT_PERSONALITY
         prompt_personality = ''
         personality_choice = random.random()

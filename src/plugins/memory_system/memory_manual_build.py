@@ -1,21 +1,22 @@
 # -*- coding: utf-8 -*-
-import sys
-import jieba
-import networkx as nx
-import matplotlib.pyplot as plt
-import math
-from collections import Counter
 import datetime
-import random
-import time
+import math
 import os
-from dotenv import load_dotenv
-import pymongo
-from loguru import logger
+import random
+import sys
+import time
+from collections import Counter
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import networkx as nx
+import pymongo
+from dotenv import load_dotenv
+from loguru import logger
+
 # from chat.config import global_config
 sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
-from src.common.database import Database  
+from src.common.database import Database
 from src.plugins.memory_system.offline_llm import LLMModel
 
 # 获取当前文件的目录
@@ -102,7 +103,7 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
             # 检查当前记录的memorized值
             current_memorized = record.get('memorized', 0)
             if current_memorized  > 3:
-                print(f"消息已读取3次，跳过")
+                print("消息已读取3次，跳过")
                 return ''
                 
             # 更新memorized值
@@ -114,7 +115,7 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
             chat_text += record["detailed_plain_text"]
             
         return chat_text
-    print(f"消息已读取3次，跳过")
+    print("消息已读取3次，跳过")
     return ''
 
 class Memory_graph:

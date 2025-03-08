@@ -1,16 +1,16 @@
-import aiohttp
 import asyncio
 import json
-import requests
-import time
 import re
+from datetime import datetime
 from typing import Tuple, Union
-from nonebot import get_driver
+
+import aiohttp
 from loguru import logger
+from nonebot import get_driver
+
+from ...common.database import Database
 from ..chat.config import global_config
 from ..chat.utils_image import compress_base64_image_by_scale
-from datetime import datetime
-from ...common.database import Database
 
 driver = get_driver()
 config = driver.config
@@ -181,6 +181,13 @@ class LLM_request:
                             continue
                         elif response.status in policy["abort_codes"]:
                             logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
+                            if response.status == 403 :
+                                if global_config.llm_normal == "Pro/deepseek-ai/DeepSeek-V3":
+                                    logger.error("可能是没有给硅基流动充钱，普通模型自动退化至非Pro模型，反应速度可能会变慢")
+                                    global_config.llm_normal = "deepseek-ai/DeepSeek-V3"
+                                if global_config.llm_reasoning == "Pro/deepseek-ai/DeepSeek-R1":
+                                    logger.error("可能是没有给硅基流动充钱，推理模型自动退化至非Pro模型，反应速度可能会变慢")
+                                    global_config.llm_reasoning = "deepseek-ai/DeepSeek-R1"
                             raise RuntimeError(f"请求被拒绝: {error_code_mapping.get(response.status)}")
                             
                         response.raise_for_status()
@@ -226,7 +233,7 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}")
-                    logger.critical(f"请求头: {await self._build_headers()} 请求体: {payload}")
+                    logger.critical(f"请求头: {await self._build_headers(no_key=True)} 请求体: {payload}")
                     raise RuntimeError(f"API请求失败: {str(e)}")
 
         logger.error("达到最大重试次数，请求仍然失败")
@@ -324,12 +331,19 @@ class LLM_request:
             reasoning = ""
         return content, reasoning
 
-    async def _build_headers(self) -> dict:
+    async def _build_headers(self, no_key: bool = False) -> dict:
         """构建请求头"""
-        return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        if no_key:
+            return {
+                "Authorization": f"Bearer **********",
+                "Content-Type": "application/json"
+            }
+        else:
+            return {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            } 
+        # 防止小朋友们截图自己的key
 
     async def generate_response(self, prompt: str) -> Tuple[str, str]:
         """根据输入的提示生成模型的异步响应"""
