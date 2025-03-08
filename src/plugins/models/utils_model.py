@@ -23,6 +23,7 @@ class LLM_request:
             self.api_key = getattr(config, model["key"])
             self.base_url = getattr(config, model["base_url"])
         except AttributeError as e:
+            logger.error(f"原始 model dict 信息：{model}")
             logger.error(f"配置错误：找不到对应的配置项 - {str(e)}")
             raise ValueError(f"配置错误：找不到对应的配置项 - {str(e)}") from e
         self.model_name = model["name"]

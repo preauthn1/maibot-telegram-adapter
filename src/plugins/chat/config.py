@@ -116,7 +116,7 @@ class BotConfig:
                 config_version : str = toml["inner"]["version"]
             except KeyError as e:
                 logger.error(f"配置文件中 inner 段 不存在 {e}, 这是错误的配置文件")
-                exit(1)
+                raise KeyError(f"配置文件中 inner 段 不存在 {e}, 这是错误的配置文件")
         else:
             toml["inner"] = { "version": "0.0.0" }
             config_version = toml["inner"]["version"]
@@ -129,7 +129,7 @@ class BotConfig:
                 "请阅读 https://semver.org/lang/zh-CN/ 修改配置，并参考本项目指定的模板进行修改\n"
                 "本项目在不同的版本下有不同的模板，请注意识别"
             )
-            exit(1)
+            raise InvalidVersion("配置文件中 inner段 的 version 键是错误的版本描述\n")
 
         return ver
     
@@ -175,7 +175,7 @@ class BotConfig:
         
         def model(parent: dict):
             # 加载模型配置
-            model_config = parent["model"]
+            model_config:dict = parent["model"]
 
             config_list = [
                 "llm_reasoning",
@@ -192,7 +192,7 @@ class BotConfig:
 
             for item in config_list:
                 if item in model_config:
-                    cfg_item = model_config[item]
+                    cfg_item:dict = model_config[item]
 
                     # base_url 的例子： SILICONFLOW_BASE_URL
                     # key 的例子： SILICONFLOW_KEY
@@ -204,15 +204,30 @@ class BotConfig:
                         "pri_out" : 0
                     }
 
-                    if config.INNER_VERSION in SpecifierSet("<0.0.0"):
+                    if config.INNER_VERSION in SpecifierSet("<=0.0.0"):
                         cfg_target = cfg_item
 
                     elif config.INNER_VERSION in SpecifierSet(">=0.0.1"):
                         stable_item = ["name","pri_in","pri_out"]
+                        pricing_item = ["pri_in","pri_out"]
+                        # 从配置中原始拷贝稳定字段
                         for i in stable_item:
-                            cfg_target[i] = cfg_item[i]
+                            # 如果 字段 属于计费项 且获取不到，那默认值是 0
+                            if i in pricing_item and i not in cfg_item:
+                                cfg_target[i] = 0
+                            else:
+                                # 没有特殊情况则原样复制
+                                try:
+                                    cfg_target[i] = cfg_item[i]
+                                except KeyError as e:
+                                    logger.error(f"{item} 中的必要字段 {e} 不存在，请检查")
+                                    raise KeyError(f"{item} 中的必要字段 {e} 不存在，请检查")
 
-                        provider = cfg_item["provider"]
+
+                        provider = cfg_item.get("provider")
+                        if provider == None:
+                            logger.error(f"provider 字段在模型配置 {item} 中不存在，请检查")
+                            raise KeyError(f"provider 字段在模型配置 {item} 中不存在，请检查")
                         
                         cfg_target["base_url"] = f"{provider}_BASE_URL"
                         cfg_target["key"] = f"{provider}_KEY"
@@ -220,6 +235,9 @@ class BotConfig:
                     
                     # 如果 列表中的项目在 model_config 中，利用反射来设置对应项目
                     setattr(config,item,cfg_target)
+                else:
+                    logger.error(f"模型 {item} 在config中不存在，请检查")
+                    raise KeyError(f"模型 {item} 在config中不存在，请检查")
 
         def message(parent: dict):
             msg_config = parent["message"]
@@ -333,12 +351,12 @@ class BotConfig:
                                 f"配置文件中的 '{key}' 字段的版本 ({config.INNER_VERSION}) 不在支持范围内。\n"
                                 f"当前程序仅支持以下版本范围: {group_specifierset}"
                             )
-                            exit(1)
+                            raise InvalidVersion(f"当前程序仅支持以下版本范围: {group_specifierset}")
 
                     else:
                         # 如果用户根本没有需要的配置项，提示缺少配置
                         logger.error(f"配置文件中缺少必需的字段: '{key}'")
-                        exit(1)
+                        raise KeyError(f"配置文件中缺少必需的字段: '{key}'")
 
                 logger.success(f"成功加载配置文件: {config_path}")
                 
