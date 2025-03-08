@@ -1,12 +1,12 @@
-import customtkinter as ctk
-from typing import Dict, List
-import json
-from datetime import datetime
-import time
-import threading
+import os
 import queue
 import sys
-import os
+import threading
+import time
+from datetime import datetime
+from typing import Dict, List
+
+import customtkinter as ctk
 from dotenv import load_dotenv
 
 # 获取当前文件的目录
@@ -25,8 +25,10 @@ else:
     print("未找到环境配置文件")
     sys.exit(1)
 
-from pymongo import MongoClient
 from typing import Optional
+
+from pymongo import MongoClient
+
 
 class Database:
     _instance: Optional["Database"] = None

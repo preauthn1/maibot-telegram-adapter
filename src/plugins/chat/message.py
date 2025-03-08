@@ -1,16 +1,12 @@
-from dataclasses import dataclass
-from typing import List, Optional, Dict, Tuple, ForwardRef
 import time
-import jieba.analyse as jieba_analyse
-import os
-from datetime import datetime
-from ...common.database import Database
-from PIL import Image
-from .config import global_config
+from dataclasses import dataclass
+from typing import Dict, ForwardRef, List, Optional
+
 import urllib3
-from .utils_user import get_user_nickname,get_user_cardname,get_groupname
+
+from .cq_code import CQCode, cq_code_tool
 from .utils_cq import parse_cq_code
-from .cq_code import cq_code_tool,CQCode
+from .utils_user import get_groupname, get_user_cardname, get_user_nickname
 
 Message = ForwardRef('Message')  # 添加这行
 # 禁用SSL警告

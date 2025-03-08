@@ -1,10 +1,11 @@
-from typing import Dict, List, Any
-import time
 import threading
-import json
-from datetime import datetime, timedelta
+import time
 from collections import defaultdict
+from datetime import datetime, timedelta
+from typing import Any, Dict
+
 from ...common.database import Database
+
 
 class LLMStatistics:
     def __init__(self, output_file: str = "llm_statistics.txt"):

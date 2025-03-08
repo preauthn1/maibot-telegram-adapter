@@ -1,27 +1,18 @@
-from typing import List, Dict, Optional
-import random
-from ...common.database import Database
-import os
-import json
-from dataclasses import dataclass
-import jieba.analyse as jieba_analyse
-import aiohttp
-import hashlib
-from datetime import datetime
-import base64
-import shutil
 import asyncio
+import os
+import random
 import time
-from PIL import Image
-import io
-from loguru import logger
 import traceback
+from typing import Optional
 
+from loguru import logger
 from nonebot import get_driver
+
+from ...common.database import Database
 from ..chat.config import global_config
-from ..models.utils_model import LLM_request
-from ..chat.utils_image import image_path_to_base64
 from ..chat.utils import get_embedding
+from ..chat.utils_image import image_path_to_base64
+from ..models.utils_model import LLM_request
 
 driver = get_driver()
 config = driver.config
@@ -275,7 +266,7 @@ class EmojiManager:
     async def _periodic_scan(self, interval_MINS: int = 10):
         """定期扫描新表情包"""
         while True:
-            print(f"\033[1;36m[表情包]\033[0m 开始扫描新表情包...")
+            print("\033[1;36m[表情包]\033[0m 开始扫描新表情包...")
             await self.scan_new_emojis()
             await asyncio.sleep(interval_MINS * 60)  # 每600秒扫描一次
 

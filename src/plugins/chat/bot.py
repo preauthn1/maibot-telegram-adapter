@@ -1,23 +1,29 @@
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message as EventMessage, Bot
-from .message import Message, MessageSet, Message_Sending
-from .config import BotConfig, global_config
-from .storage import MessageStorage
-from .llm_generator import ResponseGenerator
-# from .message_stream import MessageStream, MessageStreamContainer
-from .topic_identifier import topic_identifier
-from random import random, choice
-from .emoji_manager import emoji_manager  # 导入表情包管理器
-from ..moods.moods import MoodManager  # 导入情绪管理器
 import time
-import os
-from .cq_code import CQCode  # 导入CQCode模块
-from .message_sender import message_manager  # 导入新的消息管理器
-from .message import Message_Thinking  # 导入 Message_Thinking 类
-from .relationship_manager import relationship_manager
-from .willing_manager import willing_manager  # 导入意愿管理器
-from .utils import is_mentioned_bot_in_txt, calculate_typing_time
-from ..memory_system.memory import memory_graph,hippocampus
+
+# from .message_stream import MessageStream, MessageStreamContainer
+from random import random
+
 from loguru import logger
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent
+
+from ..memory_system.memory import hippocampus
+from ..moods.moods import MoodManager  # 导入情绪管理器
+from .config import global_config
+from .cq_code import CQCode  # 导入CQCode模块
+from .emoji_manager import emoji_manager  # 导入表情包管理器
+from .llm_generator import ResponseGenerator
+from .message import (
+    Message,
+    Message_Sending,
+    Message_Thinking,  # 导入 Message_Thinking 类
+    MessageSet,
+)
+from .message_sender import message_manager  # 导入新的消息管理器
+from .relationship_manager import relationship_manager
+from .storage import MessageStorage
+from .utils import calculate_typing_time, is_mentioned_bot_in_txt
+from .willing_manager import willing_manager  # 导入意愿管理器
+
 
 class ChatBot:
     def __init__(self):

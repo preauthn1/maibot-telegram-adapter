@@ -1,6 +1,5 @@
-from typing import Dict, List, Union, Optional, Any
 import base64
-import os
+from typing import Any, Dict, List, Union
 
 """
 OneBot v11 Message Segment Builder

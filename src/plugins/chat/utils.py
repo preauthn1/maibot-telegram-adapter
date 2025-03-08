@@ -1,19 +1,17 @@
-import time
-import random
-from typing import List
-from .message import Message
-import requests
-import numpy as np
-from .config import global_config
-import re
-from typing import Dict
-from collections import Counter
 import math
-from nonebot import get_driver
-from ..models.utils_model import LLM_request
-import aiohttp
+import random
+import time
+from collections import Counter
+from typing import Dict, List
+
 import jieba
+import numpy as np
+from nonebot import get_driver
+
+from ..models.utils_model import LLM_request
 from ..utils.typo_generator import ChineseTypoGenerator
+from .config import global_config
+from .message import Message
 
 driver = get_driver()
 config = driver.config

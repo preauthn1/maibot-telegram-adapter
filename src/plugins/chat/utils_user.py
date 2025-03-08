@@ -1,5 +1,6 @@
-from .relationship_manager import relationship_manager
 from .config import global_config
+from .relationship_manager import relationship_manager
+
 
 def get_user_nickname(user_id: int) -> str:
     if int(user_id) == int(global_config.BOT_QQ):

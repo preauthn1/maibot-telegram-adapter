@@ -1,11 +1,12 @@
 import os
+
 import nonebot
-from nonebot.adapters.onebot.v11 import Adapter
 from dotenv import load_dotenv
 from loguru import logger
+from nonebot.adapters.onebot.v11 import Adapter
 
 '''彩蛋'''
-from colorama import init, Fore
+from colorama import Fore, init
 
 init()
 text = "多年以后，面对AI行刑队，张三将会回想起他2023年在会议上讨论人工智能的那个下午"

@@ -1,14 +1,15 @@
+import base64
 import io
-from PIL import Image
-import hashlib
-import time
 import os
+import time
+import zlib  # 用于 CRC32
+
+from loguru import logger
+from nonebot import get_driver
+from PIL import Image
+
 from ...common.database import Database
 from ..chat.config import global_config
-import zlib  # 用于 CRC32
-import base64
-from nonebot import get_driver
-from loguru import logger
 
 driver = get_driver()
 config = driver.config
@@ -119,7 +120,7 @@ def storage_compress_image(base64_data: str, max_size: int = 200) -> str:
             
             # 保存记录
             collection.insert_one(image_record)
-            print(f"\033[1;32m[成功]\033[0m 保存图片记录到数据库")
+            print("\033[1;32m[成功]\033[0m 保存图片记录到数据库")
             
         except Exception as db_error:
             print(f"\033[1;31m[错误]\033[0m 数据库操作失败: {str(db_error)}")

@@ -1,12 +1,9 @@
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, Set
 import os
-import configparser
-import tomli
-import sys
-from loguru import logger
-from nonebot import get_driver
+from dataclasses import dataclass, field
+from typing import Dict, Optional
 
+import tomli
+from loguru import logger
 
 
 @dataclass

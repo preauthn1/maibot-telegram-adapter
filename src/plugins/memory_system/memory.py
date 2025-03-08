@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
-import os
-import jieba
-import networkx as nx
-import matplotlib.pyplot as plt
-from collections import Counter
 import datetime
+import math
 import random
 import time
+
+import jieba
+import networkx as nx
+
+from ...common.database import Database  # 使用正确的导入语法
 from ..chat.config import global_config
-from ...common.database import Database # 使用正确的导入语法
+from ..chat.utils import (
+    calculate_information_content,
+    cosine_similarity,
+    get_cloest_chat_from_db,
+    text_to_vector,
+)
 from ..models.utils_model import LLM_request
-import math
-from ..chat.utils import calculate_information_content, get_cloest_chat_from_db ,text_to_vector,cosine_similarity
-
-
-
 
 
 class Memory_graph:
@@ -696,6 +697,7 @@ def segment_text(text):
 
 
 from nonebot import get_driver
+
 driver = get_driver()
 config = driver.config
 

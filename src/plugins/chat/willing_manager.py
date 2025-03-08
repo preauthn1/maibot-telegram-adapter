@@ -1,5 +1,6 @@
 import asyncio
 
+
 class WillingManager:
     def __init__(self):
         self.group_reply_willing = {}  # 存储每个群的回复意愿

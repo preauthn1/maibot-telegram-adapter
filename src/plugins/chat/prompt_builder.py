@@ -1,17 +1,14 @@
-import time
 import random
-from ..schedule.schedule_generator import bot_schedule
-import os
-from .utils import get_embedding, combine_messages, get_recent_group_detailed_plain_text
+import time
+from typing import Optional
+
 from ...common.database import Database
-from .config import global_config
-from .topic_identifier import topic_identifier
-from ..memory_system.memory import memory_graph,hippocampus
-from random import choice
-import numpy as np
-import jieba
-from collections import Counter
+from ..memory_system.memory import hippocampus, memory_graph
 from ..moods.moods import MoodManager
+from ..schedule.schedule_generator import bot_schedule
+from .config import global_config
+from .utils import get_embedding, get_recent_group_detailed_plain_text
+
 
 class PromptBuilder:
     def __init__(self):
@@ -25,7 +22,7 @@ class PromptBuilder:
                     message_txt: str, 
                     sender_name: str = "某人",
                     relationship_value: float = 0.0,
-                    group_id: int = None) -> str:
+                    group_id: Optional[int] = None) -> tuple[str, str]:
         """构建prompt
         
         Args:
@@ -101,7 +98,7 @@ class PromptBuilder:
             for memory in relevant_memories:
                 memory_items.append(f"关于「{memory['topic']}」的记忆：{memory['content']}")
             
-            memory_prompt = f"看到这些聊天，你想起来：\n" + "\n".join(memory_items) + "\n"
+            memory_prompt = "看到这些聊天，你想起来：\n" + "\n".join(memory_items) + "\n"
             
             # 打印调试信息
             print("\n\033[1;32m[记忆检索]\033[0m 找到以下相关记忆：")
@@ -203,7 +200,7 @@ class PromptBuilder:
 
         #激活prompt构建
         activate_prompt = ''
-        activate_prompt = f"以上是群里正在进行的聊天。"
+        activate_prompt = "以上是群里正在进行的聊天。"
         personality=global_config.PROMPT_PERSONALITY
         prompt_personality = ''
         personality_choice = random.random()
