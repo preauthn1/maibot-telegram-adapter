@@ -83,7 +83,7 @@ class BotConfig:
         return config_dir
     
     @classmethod
-    def convert_to_specifierset(value: str) -> SpecifierSet:
+    def convert_to_specifierset(cls, value: str) -> SpecifierSet:
         """将 字符串 版本表达式转换成 SpecifierSet
         Args:
             value[str]: 版本表达式(字符串)
