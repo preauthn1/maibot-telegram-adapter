@@ -39,6 +39,9 @@ python3 --version
 sudo apt update
 sudo apt install python3.9
 # 如执行了这一步，建议在执行时将python3指向python3.9
+# 更新替代方案，设置 python3.9 为默认的 python3 版本:
+sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+sudo update-alternatives --config python3
 ```
 
 ### 2️⃣ **创建虚拟环境**
