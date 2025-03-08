@@ -251,6 +251,10 @@ class BotConfig:
             config.enable_kuuki_read = others_config.get("enable_kuuki_read", config.enable_kuuki_read)
 
         # 版本表达式：>=1.0.0,<2.0.0
+        # 允许字段：func: method, support: str, notice: str
+        # 如果使用 notice 字段，在该组配置加载时，会展示该字段对用户的警示
+        # 例如："notice": "personality 将在 1.3.2 后被移除"，那么在有效版本中的用户就会虽然可以
+        # 正常执行程序，但是会看到这条自定义提示
         include_configs = {
             "personality": {
                 "func": personality,
@@ -313,22 +317,20 @@ class BotConfig:
                 # 如果在配置中找到了需要的项，调用对应项的闭包函数处理
                 for key in include_configs:
                     if key in toml_dict:
-                        group_specifierset: SpecifierSet = toml_dict[key]["support"]
+                        group_specifierset: SpecifierSet = include_configs[key]["support"]
 
                         # 检查配置文件版本是否在支持范围内
                         if config.INNER_VERSION in group_specifierset:
                             # 如果版本在支持范围内，检查是否在支持的末端
-                            if config.INNER_VERSION == group_specifierset.filter([config.INNER_VERSION])[-1]:
-                                logger.warning(
-                                    f"配置文件中的 '{key}' 字段的版本 ({config.INNER_VERSION}) 已接近支持范围的末端。\n"
-                                    f"未来版本可能会移除对该字段的支持。"
-                                )
+                            if 'notice' in include_configs[key]:
+                                logger.warning(include_configs[key]["notice"])
+
                             include_configs[key]["func"](toml_dict)
 
                         else:
                             # 如果版本不在支持范围内，崩溃并提示用户
                             logger.error(
-                                f"配置文件中的 '{key}' 字段的版本 ({config_version}) 不在支持范围内。\n"
+                                f"配置文件中的 '{key}' 字段的版本 ({config.INNER_VERSION}) 不在支持范围内。\n"
                                 f"当前程序仅支持以下版本范围: {group_specifierset}"
                             )
                             exit(1)
