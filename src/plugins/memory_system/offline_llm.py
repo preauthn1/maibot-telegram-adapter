@@ -1,10 +1,12 @@
-import os
-import requests
-from typing import Tuple, Union
-import time
-import aiohttp
 import asyncio
+import os
+import time
+from typing import Tuple, Union
+
+import aiohttp
+import requests
 from loguru import logger
+
 
 class LLMModel:
     def __init__(self, model_name="deepseek-ai/DeepSeek-V3", **kwargs):

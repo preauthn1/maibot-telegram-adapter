@@ -1,21 +1,17 @@
-from typing import Optional, Dict, List
-from openai import OpenAI
-from .message import Message
-import jieba
+from typing import List, Optional
+
 from nonebot import get_driver
-from .config import global_config
-from snownlp import SnowNLP
+
 from ..models.utils_model import LLM_request
+from .config import global_config
 
 driver = get_driver()
 config = driver.config  
 
 class TopicIdentifier:
     def __init__(self):
-        self.llm_client = LLM_request(model=global_config.llm_topic_extract)
-        self.select=global_config.topic_extract
+        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge)
 
-        
     async def identify_topic_llm(self, text: str) -> Optional[List[str]]:
         """识别消息主题，返回主题列表"""
 
@@ -26,10 +22,10 @@ class TopicIdentifier:
 消息内容：{text}"""
 
         # 使用 LLM_request 类进行请求
-        topic, _ = await self.llm_client.generate_response(prompt)
+        topic, _ = await self.llm_topic_judge.generate_response(prompt)
         
         if not topic:
-            print(f"\033[1;31m[错误]\033[0m LLM API 返回为空")
+            print("\033[1;31m[错误]\033[0m LLM API 返回为空")
             return None
             
         # 直接在这里处理主题解析
@@ -41,26 +37,5 @@ class TopicIdentifier:
         
         print(f"\033[1;32m[主题识别]\033[0m 主题: {topic_list}")
         return topic_list if topic_list else None
-
-    def identify_topic_snownlp(self, text: str) -> Optional[List[str]]:
-        """使用 SnowNLP 进行主题识别
-        
-        Args:
-            text (str): 需要识别主题的文本
-            
-        Returns:
-            Optional[List[str]]: 返回识别出的主题关键词列表，如果无法识别则返回 None
-        """
-        if not text or len(text.strip()) == 0:
-            return None
-            
-        try:
-            s = SnowNLP(text)
-            # 提取前3个关键词作为主题
-            keywords = s.keywords(5)
-            return keywords if keywords else None
-        except Exception as e:
-            print(f"\033[1;31m[错误]\033[0m SnowNLP 处理失败: {str(e)}")
-            return None
 
 topic_identifier = TopicIdentifier()

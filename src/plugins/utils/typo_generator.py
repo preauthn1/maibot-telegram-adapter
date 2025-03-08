@@ -2,15 +2,17 @@
 错别字生成器 - 基于拼音和字频的中文错别字生成工具
 """
 
-from pypinyin import pinyin, Style
-from collections import defaultdict
 import json
-import os
-import jieba
-from pathlib import Path
-import random
 import math
+import os
+import random
 import time
+from collections import defaultdict
+from pathlib import Path
+
+import jieba
+from pypinyin import Style, pinyin
+
 
 class ChineseTypoGenerator:
     def __init__(self, 

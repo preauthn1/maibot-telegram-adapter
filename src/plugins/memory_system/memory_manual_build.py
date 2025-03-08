@@ -1,22 +1,22 @@
 # -*- coding: utf-8 -*-
-import sys
-import jieba
-import networkx as nx
-import matplotlib.pyplot as plt
-import math
-from collections import Counter
 import datetime
-import random
-import time
+import math
 import os
-from dotenv import load_dotenv
-import pymongo
-from loguru import logger
+import random
+import sys
+import time
+from collections import Counter
 from pathlib import Path
-from snownlp import SnowNLP
+
+import matplotlib.pyplot as plt
+import networkx as nx
+import pymongo
+from dotenv import load_dotenv
+from loguru import logger
+
 # from chat.config import global_config
 sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
-from src.common.database import Database  
+from src.common.database import Database
 from src.plugins.memory_system.offline_llm import LLMModel
 
 # 获取当前文件的目录
@@ -103,7 +103,7 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
             # 检查当前记录的memorized值
             current_memorized = record.get('memorized', 0)
             if current_memorized  > 3:
-                print(f"消息已读取3次，跳过")
+                print("消息已读取3次，跳过")
                 return ''
                 
             # 更新memorized值
@@ -115,7 +115,7 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
             chat_text += record["detailed_plain_text"]
             
         return chat_text
-    print(f"消息已读取3次，跳过")
+    print("消息已读取3次，跳过")
     return ''
 
 class Memory_graph:
@@ -234,16 +234,22 @@ class Hippocampus:
     async def memory_compress(self, input_text, compress_rate=0.1):
         print(input_text)
         
-        #获取topics
         topic_num = self.calculate_topic_num(input_text, compress_rate)
-        topics_response = await self.llm_model_get_topic.generate_response_async(self.find_topic_llm(input_text, topic_num))
+        topics_response = self.llm_model_get_topic.generate_response(self.find_topic_llm(input_text, topic_num))
         # 修改话题处理逻辑
+        # 定义需要过滤的关键词
+        filter_keywords = ['表情包', '图片', '回复', '聊天记录']
+        
+        # 过滤topics
         topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
-        print(f"话题: {topics}")
+        filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
+        
+        # print(f"原始话题: {topics}")
+        print(f"过滤后话题: {filtered_topics}")
         
         # 创建所有话题的请求任务
         tasks = []
-        for topic in topics:
+        for topic in filtered_topics:
             topic_what_prompt = self.topic_what(input_text, topic)
             # 创建异步任务
             task = self.llm_model_small.generate_response_async(topic_what_prompt)
@@ -650,7 +656,22 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
     G = memory_graph.G
     
     # 创建一个新图用于可视化
-    H = G.copy()    
+    H = G.copy()
+    
+    # 过滤掉内容数量小于2的节点
+    nodes_to_remove = []
+    for node in H.nodes():
+        memory_items = H.nodes[node].get('memory_items', [])
+        memory_count = len(memory_items) if isinstance(memory_items, list) else (1 if memory_items else 0)
+        if memory_count < 2:
+            nodes_to_remove.append(node)
+    
+    H.remove_nodes_from(nodes_to_remove)
+    
+    # 如果没有符合条件的节点，直接返回
+    if len(H.nodes()) == 0:
+        print("没有找到内容数量大于等于2的节点")
+        return
 
     # 计算节点大小和颜色
     node_colors = []
@@ -704,7 +725,7 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
            edge_color='gray',
            width=1.5)  # 统一的边宽度
     
-    title = '记忆图谱可视化 - 节点大小表示记忆数量\n节点颜色：蓝(弱连接)到红(强连接)渐变，边的透明度表示连接强度\n连接强度越大的节点距离越近'
+    title = '记忆图谱可视化（仅显示内容≥2的节点）\n节点大小表示记忆数量\n节点颜色：蓝(弱连接)到红(强连接)渐变，边的透明度表示连接强度\n连接强度越大的节点距离越近'
     plt.title(title, fontsize=16, fontfamily='SimHei')
     plt.show()
 

@@ -1,22 +1,27 @@
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message as EventMessage, Bot
-from .message import Message, MessageSet, Message_Sending
-from .config import BotConfig, global_config
-from .storage import MessageStorage
-from .llm_generator import ResponseGenerator
-# from .message_stream import MessageStream, MessageStreamContainer
-from .topic_identifier import topic_identifier
-from random import random, choice
-from .emoji_manager import emoji_manager  # 导入表情包管理器
 import time
-import os
-from .cq_code import CQCode  # 导入CQCode模块
-from .message_sender import message_manager  # 导入新的消息管理器
-from .message import Message_Thinking  # 导入 Message_Thinking 类
-from .relationship_manager import relationship_manager
-from .willing_manager import willing_manager  # 导入意愿管理器
-from .utils import is_mentioned_bot_in_txt, calculate_typing_time
-from ..memory_system.memory import memory_graph
+from random import random
+
 from loguru import logger
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent
+
+from ..memory_system.memory import hippocampus
+from ..moods.moods import MoodManager  # 导入情绪管理器
+from .config import global_config
+from .cq_code import CQCode  # 导入CQCode模块
+from .emoji_manager import emoji_manager  # 导入表情包管理器
+from .llm_generator import ResponseGenerator
+from .message import (
+    Message,
+    Message_Sending,
+    Message_Thinking,  # 导入 Message_Thinking 类
+    MessageSet,
+)
+from .message_sender import message_manager  # 导入新的消息管理器
+from .relationship_manager import relationship_manager
+from .storage import MessageStorage
+from .utils import calculate_typing_time, is_mentioned_bot_in_txt
+from .willing_manager import willing_manager  # 导入意愿管理器
+
 
 class ChatBot:
     def __init__(self):
@@ -24,6 +29,8 @@ class ChatBot:
         self.gpt = ResponseGenerator()
         self.bot = None  # bot 实例引用
         self._started = False
+        self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
+        self.mood_manager.start_mood_update()  # 启动情绪更新
         
         self.emoji_chance = 0.2  # 发送表情包的基础概率
         # self.message_streams = MessageStreamContainer()
@@ -58,6 +65,7 @@ class ChatBot:
             plain_text=event.get_plaintext(),
             reply_message=event.reply,
         )
+        await message.initialize()
 
         # 过滤词
         for word in global_config.ban_words:
@@ -70,24 +78,12 @@ class ChatBot:
 
 
 
-        topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
-
-
-        # topic1 = topic_identifier.identify_topic_jieba(message.processed_plain_text)
-        # topic2 = await topic_identifier.identify_topic_llm(message.processed_plain_text)
-        # topic3 = topic_identifier.identify_topic_snownlp(message.processed_plain_text)
-        logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
-        
-        all_num = 0
-        interested_num = 0
-        if topic:
-            for current_topic in topic:
-                all_num += 1
-                first_layer_items, second_layer_items = memory_graph.get_related_item(current_topic, depth=2)
-                if first_layer_items:
-                    interested_num += 1
-                    print(f"\033[1;32m[前额叶]\033[0m 对|{current_topic}|有印象")
-        interested_rate = interested_num / all_num if all_num > 0 else 0
+        # topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
+        topic = ''
+        interested_rate = 0
+        interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text)/100
+        print(f"\033[1;32m[记忆激活]\033[0m 对{message.processed_plain_text}的激活度:---------------------------------------{interested_rate}\n")
+        # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
         
         await self.storage.store_message(message, topic[0] if topic else None)
 
@@ -119,14 +115,9 @@ class ChatBot:
 
             willing_manager.change_reply_willing_sent(thinking_message.group_id)
             
-            response, emotion = await self.gpt.generate_response(message)
-
-            # if response is None:
-                # thinking_message.interupt=True
+            response,raw_content = await self.gpt.generate_response(message)
             
         if response:
-            # print(f"\033[1;32m[思考结束]\033[0m 思考结束，已得到回复，开始回复")
-            # 找到并删除对应的thinking消息
             container = message_manager.get_container(event.group_id)
             thinking_message = None
             # 找到message,删除
@@ -134,8 +125,13 @@ class ChatBot:
                 if isinstance(msg, Message_Thinking) and msg.message_id == think_id:
                     thinking_message = msg
                     container.messages.remove(msg)
-                    print(f"\033[1;32m[思考消息删除]\033[0m 已找到思考消息对象，开始删除")
+                    # print(f"\033[1;32m[思考消息删除]\033[0m 已找到思考消息对象，开始删除")
                     break
+                    
+            # 如果找不到思考消息，直接返回
+            if not thinking_message:
+                print(f"\033[1;33m[警告]\033[0m 未找到对应的思考消息，可能已超时被移除")
+                return
             
             #记录开始思考的时间，避免从思考到回复的时间太久
             thinking_start_time = thinking_message.thinking_start_time
@@ -144,6 +140,7 @@ class ChatBot:
             accu_typing_time = 0
             
             # print(f"\033[1;32m[开始回复]\033[0m 开始将回复1载入发送容器")
+            mark_head = False
             for msg in response:
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 #通过时间改变时间戳
@@ -164,16 +161,25 @@ class ChatBot:
                     thinking_start_time=thinking_start_time, #记录了思考开始的时间
                     reply_message_id=message.message_id
                 )
+                await bot_message.initialize()
+                if not mark_head:
+                    bot_message.is_head = True
+                    mark_head = True
                 message_set.add_message(bot_message)
                 
             #message_set 可以直接加入 message_manager
-            print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
+            # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
             message_manager.add_message(message_set)
             
             bot_response_time = tinking_time_point
+
             if random() < global_config.emoji_chance:
-                emoji_path = await emoji_manager.get_emoji_for_emotion(emotion)
-                if emoji_path:
+                emoji_raw = await emoji_manager.get_emoji_for_text(response)
+                
+                # 检查是否 <没有找到> emoji
+                if emoji_raw != None:
+                    emoji_path,discription = emoji_raw
+
                     emoji_cq = CQCode.create_emoji_cq(emoji_path)
                     
                     if random() < 0.5:
@@ -188,6 +194,7 @@ class ChatBot:
                         raw_message=emoji_cq,
                         plain_text=emoji_cq,
                         processed_plain_text=emoji_cq,
+                        detailed_plain_text=discription,
                         user_nickname=global_config.BOT_NICKNAME,
                         group_name=message.group_name,
                         time=bot_response_time,
@@ -196,9 +203,24 @@ class ChatBot:
                         thinking_start_time=thinking_start_time,
                         # reply_message_id=message.message_id
                     )
+                    await bot_message.initialize()
                     message_manager.add_message(bot_message)
+            emotion = await self.gpt._get_emotion_tags(raw_content)
+            print(f"为 '{response}' 获取到的情感标签为：{emotion}")
+            valuedict={
+                'happy': 0.5,
+                'angry': -1,
+                'sad': -0.5,
+                'surprised': 0.2,
+                'disgusted': -1.5,
+                'fearful': -0.7,
+                'neutral': 0.1
+            }
+            await relationship_manager.update_relationship_value(message.user_id, relationship_value=valuedict[emotion[0]])
+            # 使用情绪管理器更新情绪
+            self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
         
-        willing_manager.change_reply_willing_after_sent(event.group_id)
+        # willing_manager.change_reply_willing_after_sent(event.group_id)
 
 # 创建全局ChatBot实例
 chat_bot = ChatBot()

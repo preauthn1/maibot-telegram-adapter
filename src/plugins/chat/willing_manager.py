@@ -1,4 +1,6 @@
 import asyncio
+from .config import global_config
+
 
 class WillingManager:
     def __init__(self):
@@ -34,26 +36,32 @@ class WillingManager:
             print(f"被重复提及, 当前意愿: {current_willing}")
         
         if is_emoji:
-            current_willing *= 0.15
+            current_willing *= 0.1
             print(f"表情包, 当前意愿: {current_willing}")
         
-        if interested_rate > 0.65:
-            print(f"兴趣度: {interested_rate}, 当前意愿: {current_willing}")
-            current_willing += interested_rate-0.6
+        print(f"放大系数_interested_rate: {global_config.response_interested_rate_amplifier}")
+        interested_rate *= global_config.response_interested_rate_amplifier #放大回复兴趣度
+        if interested_rate > 0.4:
+            # print(f"兴趣度: {interested_rate}, 当前意愿: {current_willing}")
+            current_willing += interested_rate-0.4
         
-        self.group_reply_willing[group_id] = min(current_willing, 3.0)
+        current_willing *= global_config.response_willing_amplifier #放大回复意愿
+        # print(f"放大系数_willing: {global_config.response_willing_amplifier}, 当前意愿: {current_willing}")
         
-        reply_probability = max((current_willing - 0.55) * 1.9, 0)
+        reply_probability = max((current_willing - 0.45) * 2, 0)
         if group_id not in config.talk_allowed_groups:
             current_willing = 0
             reply_probability = 0
             
         if group_id in config.talk_frequency_down_groups:
-            reply_probability = reply_probability / 3.5
+            reply_probability = reply_probability / global_config.down_frequency_rate
 
         reply_probability = min(reply_probability, 1)
         if reply_probability < 0:
             reply_probability = 0
+            
+            
+        self.group_reply_willing[group_id] = min(current_willing, 3.0)
         return reply_probability
     
     def change_reply_willing_sent(self, group_id: int):

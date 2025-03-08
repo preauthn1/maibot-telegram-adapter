@@ -1,8 +1,8 @@
-import time
-from ...common.database import Database
-from nonebot.adapters.onebot.v11 import Bot
-from typing import Optional, Tuple
 import asyncio
+from typing import Optional
+
+from ...common.database import Database
+
 
 class Impression:
     traits: str = None
@@ -123,7 +123,7 @@ class RelationshipManager:
         print(f"\033[1;32m[关系管理]\033[0m 已加载 {len(self.relationships)} 条关系记录")
         
         while True:
-            print(f"\033[1;32m[关系管理]\033[0m 正在自动保存关系")
+            print("\033[1;32m[关系管理]\033[0m 正在自动保存关系")
             await asyncio.sleep(300)  # 等待300秒(5分钟)
             await self._save_all_relationships()
     

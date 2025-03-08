@@ -1,13 +1,15 @@
-import io
-from PIL import Image
-import hashlib
-import time
-import os
-from ...common.database import Database
-import zlib  # 用于 CRC32
 import base64
-from nonebot import get_driver
+import io
+import os
+import time
+import zlib  # 用于 CRC32
+
 from loguru import logger
+from nonebot import get_driver
+from PIL import Image
+
+from ...common.database import Database
+from ..chat.config import global_config
 
 driver = get_driver()
 config = driver.config
@@ -118,7 +120,7 @@ def storage_compress_image(base64_data: str, max_size: int = 200) -> str:
             
             # 保存记录
             collection.insert_one(image_record)
-            print(f"\033[1;32m[成功]\033[0m 保存图片记录到数据库")
+            print("\033[1;32m[成功]\033[0m 保存图片记录到数据库")
             
         except Exception as db_error:
             print(f"\033[1;31m[错误]\033[0m 数据库操作失败: {str(db_error)}")
@@ -143,6 +145,8 @@ def storage_emoji(image_data: bytes) -> bytes:
     Returns:
         bytes: 原始图片数据
     """
+    if not global_config.EMOJI_SAVE:
+        return image_data
     try:
         # 使用 CRC32 计算哈希值
         hash_value = format(zlib.crc32(image_data) & 0xFFFFFFFF, 'x')
@@ -227,7 +231,7 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
         image_data = base64.b64decode(base64_data)
         
         # 如果已经小于目标大小，直接返回原图
-        if len(image_data) <= target_size:
+        if len(image_data) <= 2*1024*1024:
             return base64_data
             
         # 将字节数据转换为图片对象
@@ -252,7 +256,7 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
             for frame_idx in range(img.n_frames):
                 img.seek(frame_idx)
                 new_frame = img.copy()
-                new_frame = new_frame.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                new_frame = new_frame.resize((new_width//2, new_height//2), Image.Resampling.LANCZOS) # 动图折上折
                 frames.append(new_frame)
             
             # 保存到缓冲区
@@ -287,3 +291,18 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
         import traceback
         logger.error(traceback.format_exc())
         return base64_data 
+
+def image_path_to_base64(image_path: str) -> str:
+    """将图片路径转换为base64编码
+    Args:
+        image_path: 图片文件路径
+    Returns:
+        str: base64编码的图片数据
+    """
+    try:
+        with open(image_path, 'rb') as f:
+            image_data = f.read()
+            return base64.b64encode(image_data).decode('utf-8')
+    except Exception as e:
+        logger.error(f"读取图片失败: {image_path}, 错误: {str(e)}")
+        return None 

@@ -1,20 +1,29 @@
-from loguru import logger
-from nonebot import on_message, on_command, require, get_driver
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
-from nonebot.typing import T_State
-from ...common.database import Database
-from .config import global_config
-import os
 import asyncio
+import os
 import random
-from .relationship_manager import relationship_manager
-from ..schedule.schedule_generator import bot_schedule
-from .willing_manager import willing_manager
-from nonebot.rule import to_me
-from .bot import chat_bot
-from .emoji_manager import emoji_manager
 import time
 
+from loguru import logger
+from nonebot import get_driver, on_command, on_message, require
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
+from nonebot.rule import to_me
+from nonebot.typing import T_State
+
+from ...common.database import Database
+from ..moods.moods import MoodManager  # 导入情绪管理器
+from ..schedule.schedule_generator import bot_schedule
+from ..utils.statistic import LLMStatistics
+from .bot import chat_bot
+from .config import global_config
+from .emoji_manager import emoji_manager
+from .relationship_manager import relationship_manager
+from .willing_manager import willing_manager
+
+# 创建LLM统计实例
+llm_stats = LLMStatistics("llm_statistics.txt")
+
+# 添加标志变量
+_message_manager_started = False
 
 # 获取驱动器
 driver = get_driver()
@@ -32,12 +41,11 @@ print("\033[1;32m[初始化数据库完成]\033[0m")
 
 
 # 导入其他模块
+from ..memory_system.memory import hippocampus, memory_graph
 from .bot import ChatBot
-from .emoji_manager import emoji_manager
+
 # from .message_send_control import message_sender
-from .relationship_manager import relationship_manager
-from .message_sender import message_manager,message_sender
-from ..memory_system.memory import memory_graph,hippocampus
+from .message_sender import message_manager, message_sender
 
 # 初始化表情管理器
 emoji_manager.initialize()
@@ -55,6 +63,15 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 @driver.on_startup
 async def start_background_tasks():
     """启动后台任务"""
+    # 启动LLM统计
+    llm_stats.start()
+    print("\033[1;32m[初始化]\033[0m LLM统计功能已启动")
+    
+    # 初始化并启动情绪管理器
+    mood_manager = MoodManager.get_instance()
+    mood_manager.start_mood_update(update_interval=global_config.mood_update_interval)
+    print("\033[1;32m[初始化]\033[0m 情绪管理器已启动")
+    
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))
     await bot_schedule.initialize()
@@ -70,18 +87,20 @@ async def init_relationships():
 @driver.on_bot_connect
 async def _(bot: Bot):
     """Bot连接成功时的处理"""
+    global _message_manager_started
     print(f"\033[1;38;5;208m-----------{global_config.BOT_NICKNAME}成功连接！-----------\033[0m")
     await willing_manager.ensure_started()
     
-    
     message_sender.set_bot(bot)
     print("\033[1;38;5;208m-----------消息发送器已启动！-----------\033[0m")
-    asyncio.create_task(message_manager.start_processor())
-    print("\033[1;38;5;208m-----------消息处理器已启动！-----------\033[0m")
+    
+    if not _message_manager_started:
+        asyncio.create_task(message_manager.start_processor())
+        _message_manager_started = True
+        print("\033[1;38;5;208m-----------消息处理器已启动！-----------\033[0m")
     
     asyncio.create_task(emoji_manager._periodic_scan(interval_MINS=global_config.EMOJI_REGISTER_INTERVAL))
     print("\033[1;38;5;208m-----------开始偷表情包！-----------\033[0m")
-    # 启动消息发送控制任务
     
 @group_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
@@ -90,7 +109,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 # 添加build_memory定时任务
 @scheduler.scheduled_job("interval", seconds=global_config.build_memory_interval, id="build_memory")
 async def build_memory_task():
-    """每30秒执行一次记忆构建"""
+    """每build_memory_interval秒执行一次记忆构建"""
     print("\033[1;32m[记忆构建]\033[0m -------------------------------------------开始构建记忆-------------------------------------------")
     start_time = time.time()
     await hippocampus.operation_build_memory(chat_size=20)
@@ -110,4 +129,10 @@ async def merge_memory_task():
     # print("\033[1;32m[记忆整合]\033[0m 开始整合")
     # await hippocampus.operation_merge_memory(percentage=0.1)
     # print("\033[1;32m[记忆整合]\033[0m 记忆整合完成")
+
+@scheduler.scheduled_job("interval", seconds=30, id="print_mood")
+async def print_mood_task():
+    """每30秒打印一次情绪状态"""
+    mood_manager = MoodManager.get_instance()
+    mood_manager.print_mood_status()
   

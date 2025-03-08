@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
-import os
-import jieba
-import networkx as nx
-import matplotlib.pyplot as plt
-from collections import Counter
 import datetime
+import math
 import random
 import time
+
+import jieba
+import networkx as nx
+
+from ...common.database import Database  # 使用正确的导入语法
 from ..chat.config import global_config
-from ...common.database import Database # 使用正确的导入语法
+from ..chat.utils import (
+    calculate_information_content,
+    cosine_similarity,
+    get_cloest_chat_from_db,
+    text_to_vector,
+)
 from ..models.utils_model import LLM_request
-import math
-from ..chat.utils import calculate_information_content, get_cloest_chat_from_db
-
-
-
 
 
 class Memory_graph:
@@ -132,9 +133,17 @@ class Memory_graph:
 class Hippocampus:
     def __init__(self,memory_graph:Memory_graph):
         self.memory_graph = memory_graph
-        self.llm_model_get_topic = LLM_request(model = global_config.llm_normal_minor,temperature=0.5)
-        self.llm_model_summary = LLM_request(model = global_config.llm_normal,temperature=0.5)
+        self.llm_topic_judge = LLM_request(model = global_config.llm_topic_judge,temperature=0.5)
+        self.llm_summary_by_topic = LLM_request(model = global_config.llm_summary_by_topic,temperature=0.5)
         
+    def get_all_node_names(self) -> list:
+        """获取记忆图中所有节点的名字列表
+        
+        Returns:
+            list: 包含所有节点名字的列表
+        """
+        return list(self.memory_graph.G.nodes())
+
     def calculate_node_hash(self, concept, memory_items):
         """计算节点的特征值"""
         if not isinstance(memory_items, list):
@@ -171,18 +180,24 @@ class Hippocampus:
         
         #获取topics
         topic_num = self.calculate_topic_num(input_text, compress_rate)
-        topics_response = await self.llm_model_get_topic.generate_response(self.find_topic_llm(input_text, topic_num))
+        topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(input_text, topic_num))
         # 修改话题处理逻辑
-        print(f"话题: {topics_response[0]}")
-        topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
-        print(f"话题: {topics}")
+        # 定义需要过滤的关键词
+        filter_keywords = ['表情包', '图片', '回复', '聊天记录']
         
-        # 创建所有话题的请求任务
+        # 过滤topics
+        topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
+        filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
+        
+        # print(f"原始话题: {topics}")
+        print(f"过滤后话题: {filtered_topics}")
+        
+        # 使用过滤后的话题继续处理
         tasks = []
-        for topic in topics:
+        for topic in filtered_topics:
             topic_what_prompt = self.topic_what(input_text, topic)
             # 创建异步任务
-            task = self.llm_model_summary.generate_response_async(topic_what_prompt)
+            task = self.llm_summary_by_topic.generate_response_async(topic_what_prompt)
             tasks.append((topic.strip(), task))
             
         # 等待所有任务完成
@@ -483,6 +498,201 @@ class Hippocampus:
         prompt = f'这是一段文字：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
         return prompt
 
+    async def _identify_topics(self, text: str) -> list:
+        """从文本中识别可能的主题
+        
+        Args:
+            text: 输入文本
+            
+        Returns:
+            list: 识别出的主题列表
+        """
+        topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, 5))
+        # print(f"话题: {topics_response[0]}")
+        topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
+        # print(f"话题: {topics}")
+                    
+        return topics
+        
+    def _find_similar_topics(self, topics: list, similarity_threshold: float = 0.4, debug_info: str = "") -> list:
+        """查找与给定主题相似的记忆主题
+        
+        Args:
+            topics: 主题列表
+            similarity_threshold: 相似度阈值
+            debug_info: 调试信息前缀
+            
+        Returns:
+            list: (主题, 相似度) 元组列表
+        """
+        all_memory_topics = self.get_all_node_names()
+        all_similar_topics = []
+        
+        # 计算每个识别出的主题与记忆主题的相似度
+        for topic in topics:
+            if debug_info:
+                # print(f"\033[1;32m[{debug_info}]\033[0m 正在思考有没有见过: {topic}")
+                pass
+                
+            topic_vector = text_to_vector(topic)
+            has_similar_topic = False
+            
+            for memory_topic in all_memory_topics:
+                memory_vector = text_to_vector(memory_topic)
+                # 获取所有唯一词
+                all_words = set(topic_vector.keys()) | set(memory_vector.keys())
+                # 构建向量
+                v1 = [topic_vector.get(word, 0) for word in all_words]
+                v2 = [memory_vector.get(word, 0) for word in all_words]
+                # 计算相似度
+                similarity = cosine_similarity(v1, v2)
+                
+                if similarity >= similarity_threshold:
+                    has_similar_topic = True
+                    if debug_info:
+                        # print(f"\033[1;32m[{debug_info}]\033[0m 找到相似主题: {topic} -> {memory_topic} (相似度: {similarity:.2f})")
+                        pass
+                    all_similar_topics.append((memory_topic, similarity))
+                    
+            if not has_similar_topic and debug_info:
+                # print(f"\033[1;31m[{debug_info}]\033[0m 没有见过: {topic}  ，呃呃")
+                pass
+                
+        return all_similar_topics
+        
+    def _get_top_topics(self, similar_topics: list, max_topics: int = 5) -> list:
+        """获取相似度最高的主题
+        
+        Args:
+            similar_topics: (主题, 相似度) 元组列表
+            max_topics: 最大主题数量
+            
+        Returns:
+            list: (主题, 相似度) 元组列表
+        """
+        seen_topics = set()
+        top_topics = []
+        
+        for topic, score in sorted(similar_topics, key=lambda x: x[1], reverse=True):
+            if topic not in seen_topics and len(top_topics) < max_topics:
+                seen_topics.add(topic)
+                top_topics.append((topic, score))
+                
+        return top_topics
+
+    async def memory_activate_value(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.3) -> int:
+        """计算输入文本对记忆的激活程度"""
+        print(f"\033[1;32m[记忆激活]\033[0m 识别主题: {await self._identify_topics(text)}")
+        
+        # 识别主题
+        identified_topics = await self._identify_topics(text)
+        if not identified_topics:
+            return 0
+            
+        # 查找相似主题
+        all_similar_topics = self._find_similar_topics(
+            identified_topics, 
+            similarity_threshold=similarity_threshold,
+            debug_info="记忆激活"
+        )
+        
+        if not all_similar_topics:
+            return 0
+            
+        # 获取最相关的主题
+        top_topics = self._get_top_topics(all_similar_topics, max_topics)
+        
+        # 如果只找到一个主题，进行惩罚
+        if len(top_topics) == 1:
+            topic, score = top_topics[0]
+            # 获取主题内容数量并计算惩罚系数
+            memory_items = self.memory_graph.G.nodes[topic].get('memory_items', [])
+            if not isinstance(memory_items, list):
+                memory_items = [memory_items] if memory_items else []
+            content_count = len(memory_items)
+            penalty = 1.0 / (1 + math.log(content_count + 1))
+            
+            activation = int(score * 50 * penalty)
+            print(f"\033[1;32m[记忆激活]\033[0m 单主题「{topic}」- 相似度: {score:.3f}, 内容数: {content_count}, 激活值: {activation}")
+            return activation
+            
+        # 计算关键词匹配率，同时考虑内容数量
+        matched_topics = set()
+        topic_similarities = {}
+        
+        for memory_topic, similarity in top_topics:
+            # 计算内容数量惩罚
+            memory_items = self.memory_graph.G.nodes[memory_topic].get('memory_items', [])
+            if not isinstance(memory_items, list):
+                memory_items = [memory_items] if memory_items else []
+            content_count = len(memory_items)
+            penalty = 1.0 / (1 + math.log(content_count + 1))
+            
+            # 对每个记忆主题，检查它与哪些输入主题相似
+            for input_topic in identified_topics:
+                topic_vector = text_to_vector(input_topic)
+                memory_vector = text_to_vector(memory_topic)
+                all_words = set(topic_vector.keys()) | set(memory_vector.keys())
+                v1 = [topic_vector.get(word, 0) for word in all_words]
+                v2 = [memory_vector.get(word, 0) for word in all_words]
+                sim = cosine_similarity(v1, v2)
+                if sim >= similarity_threshold:
+                    matched_topics.add(input_topic)
+                    adjusted_sim = sim * penalty
+                    topic_similarities[input_topic] = max(topic_similarities.get(input_topic, 0), adjusted_sim)
+                    print(f"\033[1;32m[记忆激活]\033[0m 主题「{input_topic}」-> 「{memory_topic}」(内容数: {content_count}, 相似度: {adjusted_sim:.3f})")
+        
+        # 计算主题匹配率和平均相似度
+        topic_match = len(matched_topics) / len(identified_topics)
+        average_similarities = sum(topic_similarities.values()) / len(topic_similarities) if topic_similarities else 0
+        
+        # 计算最终激活值
+        activation = int((topic_match + average_similarities) / 2 * 100)
+        print(f"\033[1;32m[记忆激活]\033[0m 匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
+        
+        return activation
+
+    async def get_relevant_memories(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.4, max_memory_num: int = 5) -> list:
+        """根据输入文本获取相关的记忆内容"""
+        # 识别主题
+        identified_topics = await self._identify_topics(text)
+        
+        # 查找相似主题
+        all_similar_topics = self._find_similar_topics(
+            identified_topics, 
+            similarity_threshold=similarity_threshold,
+            debug_info="记忆检索"
+        )
+        
+        # 获取最相关的主题
+        relevant_topics = self._get_top_topics(all_similar_topics, max_topics)
+        
+        # 获取相关记忆内容
+        relevant_memories = []
+        for topic, score in relevant_topics:
+            # 获取该主题的记忆内容
+            first_layer, _ = self.memory_graph.get_related_item(topic, depth=1)
+            if first_layer:
+                # 如果记忆条数超过限制，随机选择指定数量的记忆
+                if len(first_layer) > max_memory_num/2:
+                    first_layer = random.sample(first_layer, max_memory_num//2)
+                # 为每条记忆添加来源主题和相似度信息
+                for memory in first_layer:
+                    relevant_memories.append({
+                        'topic': topic,
+                        'similarity': score,
+                        'content': memory
+                    })
+                    
+        # 如果记忆数量超过5个,随机选择5个
+        # 按相似度排序
+        relevant_memories.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        if len(relevant_memories) > max_memory_num:
+            relevant_memories = random.sample(relevant_memories, max_memory_num)
+        
+        return relevant_memories
+
 
 def segment_text(text):
     seg_text = list(jieba.cut(text))
@@ -490,6 +700,7 @@ def segment_text(text):
 
 
 from nonebot import get_driver
+
 driver = get_driver()
 config = driver.config
 

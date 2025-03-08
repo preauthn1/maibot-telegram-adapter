@@ -18,6 +18,10 @@ config/bot_config.toml
 __pycache__/
 *.py[cod]
 *$py.class
+llm_statistics.txt
+mongodb
+napcat
+run_dev.bat
 
 # C extensions
 *.so
@@ -188,3 +192,10 @@ cython_debug/
 
 # jieba
 jieba.cache
+
+
+# vscode
+/.vscode
+
+# direnv
+/.direnv
