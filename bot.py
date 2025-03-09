@@ -1,5 +1,7 @@
 import os
 import shutil
+import sys
+
 import nonebot
 import time
 from dotenv import load_dotenv
@@ -9,6 +11,7 @@ import platform
 
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}
+
 
 def easter_egg():
     # 彩蛋
@@ -22,11 +25,12 @@ def easter_egg():
         rainbow_text += rainbow_colors[i % len(rainbow_colors)] + char
     print(rainbow_text)
 
+
 def init_config():
     # 初次启动检测
     if not os.path.exists("config/bot_config.toml"):
         logger.warning("检测到bot_config.toml不存在，正在从模板复制")
-        
+
         # 检查config目录是否存在
         if not os.path.exists("config"):
             os.makedirs("config")
@@ -34,6 +38,7 @@ def init_config():
 
         shutil.copy("template/bot_config_template.toml", "config/bot_config.toml")
         logger.info("复制完成，请修改config/bot_config.toml和.env.prod中的配置后重新启动")
+
 
 def init_env():
     # 初始化.env 默认ENVIRONMENT=prod
@@ -46,10 +51,16 @@ def init_env():
             logger.error("检测到.env.prod文件不存在")
             shutil.copy("template.env", "./.env.prod")
 
+    # 检测.env.dev文件是否存在，不存在的话直接复制生产环境配置
+    if not os.path.exists(".env.dev"):
+        logger.error("检测到.env.dev文件不存在")
+        shutil.copy(".env.prod", "./.env.dev")
+
     # 首先加载基础环境变量.env
     if os.path.exists(".env"):
         load_dotenv(".env")
         logger.success("成功加载基础环境变量配置")
+
 
 def load_env():
     # 使用闭包实现对加载器的横向扩展，避免大量重复判断
@@ -70,7 +81,7 @@ def load_env():
     logger.info(f"[load_env] 当前的 ENVIRONMENT 变量值：{env}")
 
     if env in fn_map:
-        fn_map[env]() # 根据映射执行闭包函数
+        fn_map[env]()  # 根据映射执行闭包函数
 
     elif os.path.exists(f".env.{env}"):
         logger.success(f"加载{env}环境变量配置")
@@ -80,6 +91,17 @@ def load_env():
         logger.error(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
         RuntimeError(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
 
+
+def load_logger():
+    logger.remove()  # 移除默认配置
+    logger.add(
+        sys.stderr,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <fg #777777>|</> <level>{level: <7}</level> <fg "
+               "#777777>|</> <cyan>{name:.<8}</cyan>:<cyan>{function:.<8}</cyan>:<cyan>{line: >4}</cyan> <fg "
+               "#777777>-</> <level>{message}</level>",
+        colorize=True,
+        level=os.getenv("LOG_LEVEL", "INFO")  # 根据环境设置日志级别，默认为INFO
+    )
 
 
 def scan_provider(env_config: dict):
@@ -115,6 +137,7 @@ def scan_provider(env_config: dict):
             )
             raise ValueError(f"请检查 '{provider_name}' 提供商配置是否丢失 BASE_URL 或 KEY 环境变量")
 
+
 if __name__ == "__main__":
     # 利用 TZ 环境变量设定程序工作的时区
     # 仅保证行为一致，不依赖 localtime()，实际对生产环境几乎没有作用
@@ -122,6 +145,7 @@ if __name__ == "__main__":
         time.tzset()
 
     easter_egg()
+    load_logger()
     init_config()
     init_env()
     load_env()
