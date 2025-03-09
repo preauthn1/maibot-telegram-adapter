@@ -98,37 +98,43 @@ def calculate_information_content(text):
 
 
 def get_cloest_chat_from_db(db, length: int, timestamp: str):
-    """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数"""
-    chat_text = ''
+    """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数
+    
+    Returns:
+        list: 消息记录字典列表，每个字典包含消息内容和时间信息
+    """
+    chat_records = []
     closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
-
-    if closest_record and closest_record.get('memorized', 0) < 4:
+    
+    if closest_record and closest_record.get('memorized', 0) < 4:            
         closest_time = closest_record['time']
-        group_id = closest_record['group_id']  # 获取groupid
+        group_id = closest_record['group_id']
         # 获取该时间戳之后的length条消息，且groupid相同
-        chat_records = list(db.db.messages.find(
+        records = list(db.db.messages.find(
             {"time": {"$gt": closest_time}, "group_id": group_id}
         ).sort('time', 1).limit(length))
-
+        
         # 更新每条消息的memorized属性
-        for record in chat_records:
-            # 检查当前记录的memorized值
+        for record in records:
             current_memorized = record.get('memorized', 0)
             if current_memorized > 3:
-                # print(f"消息已读取3次，跳过")
+                print("消息已读取3次，跳过")
                 return ''
-
+                
             # 更新memorized值
             db.db.messages.update_one(
                 {"_id": record["_id"]},
                 {"$set": {"memorized": current_memorized + 1}}
             )
-
-            chat_text += record["detailed_plain_text"]
-
-        return chat_text
-    # print(f"消息已读取3次，跳过")
-    return ''
+            
+            # 添加到记录列表中
+            chat_records.append({
+                'text': record["detailed_plain_text"],
+                'time': record["time"],
+                'group_id': record["group_id"]
+            })
+            
+    return chat_records
 
 
 async def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
