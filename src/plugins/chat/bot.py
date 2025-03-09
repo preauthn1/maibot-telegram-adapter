@@ -71,8 +71,8 @@ class ChatBot:
         for word in global_config.ban_words:
             if word in message.detailed_plain_text:
                 logger.info(
-                    f"\033[1;32m[{message.group_name}]{message.user_nickname}:\033[0m {message.processed_plain_text}")
-                logger.info(f"\033[1;32m[过滤词识别]\033[0m 消息中含有{word}，filtered")
+                    f"[{message.group_name}]{message.user_nickname}:{message.processed_plain_text}")
+                logger.info(f"[过滤词识别]消息中含有{word}，filtered")
                 return
 
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.time))
@@ -81,8 +81,8 @@ class ChatBot:
         topic = ''
         interested_rate = 0
         interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
-        logger.debug(f"\033[1;32m[记忆激活]\033[0m 对{message.processed_plain_text}"
-                     "的激活度:---------------------------------------{interested_rate}\n")
+        logger.debug(f"对{message.processed_plain_text}"
+                     f"的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
 
         await self.storage.store_message(message, topic[0] if topic else None)
@@ -99,10 +99,9 @@ class ChatBot:
         )
         current_willing = willing_manager.get_willing(event.group_id)
 
-        logger.debug(
-            f"\033[1;32m[{current_time}][{message.group_name}]{message.user_nickname}:\033[0m "
-            "{message.processed_plain_text}\033[1;36m[回复意愿:{current_willing:.2f}][概率:{reply_probability * "
-            "100:.1f}%]\033[0m")
+        logger.info(
+            f"[{current_time}][{message.group_name}]{message.user_nickname}:"
+            f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]")
 
         response = ""
 
@@ -130,7 +129,7 @@ class ChatBot:
 
             # 如果找不到思考消息，直接返回
             if not thinking_message:
-                print(f"\033[1;33m[警告]\033[0m 未找到对应的思考消息，可能已超时被移除")
+                logger.warning(f"未找到对应的思考消息，可能已超时被移除")
                 return
 
             # 记录开始思考的时间，避免从思考到回复的时间太久

@@ -224,7 +224,7 @@ class Hippocampus:
         for msg in messages:
             input_text += f"{msg['text']}\n"
 
-        print(input_text)
+        logger.debug(input_text)
 
         topic_num = self.calculate_topic_num(input_text, compress_rate)
         topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(input_text, topic_num))
@@ -235,7 +235,7 @@ class Hippocampus:
                   topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
         filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
 
-        print(f"过滤后话题: {filtered_topics}")
+        logger.info(f"过滤后话题: {filtered_topics}")
 
         # 创建所有话题的请求任务
         tasks = []
@@ -259,8 +259,9 @@ class Hippocampus:
         topic_by_length = text.count('\n') * compress_rate
         topic_by_information_content = max(1, min(5, int((information_content - 3) * 2)))
         topic_num = int((topic_by_length + topic_by_information_content) / 2)
-        print(
-            f"topic_by_length: {topic_by_length}, topic_by_information_content: {topic_by_information_content}, topic_num: {topic_num}")
+        logger.debug(
+            f"topic_by_length: {topic_by_length}, topic_by_information_content: {topic_by_information_content}, "
+            f"topic_num: {topic_num}")
         return topic_num
 
     async def operation_build_memory(self, chat_size=20):
@@ -275,22 +276,22 @@ class Hippocampus:
             bar_length = 30
             filled_length = int(bar_length * i // len(memory_sample))
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
-            print(f"\n进度: [{bar}] {progress:.1f}% ({i}/{len(memory_sample)})")
+            logger.debug(f"进度: [{bar}] {progress:.1f}% ({i}/{len(memory_sample)})")
 
             # 生成压缩后记忆 ,表现为 (话题,记忆) 的元组
             compressed_memory = set()
             compress_rate = 0.1
             compressed_memory = await self.memory_compress(input_text, compress_rate)
-            print(f"\033[1;33m压缩后记忆数量\033[0m: {len(compressed_memory)}")
+            logger.info(f"压缩后记忆数量: {len(compressed_memory)}")
 
             # 将记忆加入到图谱中
             for topic, memory in compressed_memory:
-                print(f"\033[1;32m添加节点\033[0m: {topic}")
+                logger.info(f"添加节点: {topic}")
                 self.memory_graph.add_dot(topic, memory)
                 all_topics.append(topic)  # 收集所有话题
             for i in range(len(all_topics)):
                 for j in range(i + 1, len(all_topics)):
-                    print(f"\033[1;32m连接节点\033[0m: {all_topics[i]} 和 {all_topics[j]}")
+                    logger.info(f"连接节点: {all_topics[i]} 和 {all_topics[j]}")
                     self.memory_graph.connect_dot(all_topics[i], all_topics[j])
 
         self.sync_memory_to_db()
@@ -451,14 +452,14 @@ class Hippocampus:
                 removed_item = self.memory_graph.forget_topic(node)
                 if removed_item:
                     forgotten_nodes.append((node, removed_item))
-                    print(f"遗忘节点 {node} 的记忆: {removed_item}")
+                    logger.debug(f"遗忘节点 {node} 的记忆: {removed_item}")
 
         # 同步到数据库
         if forgotten_nodes:
             self.sync_memory_to_db()
-            print(f"完成遗忘操作，共遗忘 {len(forgotten_nodes)} 个节点的记忆")
+            logger.debug(f"完成遗忘操作，共遗忘 {len(forgotten_nodes)} 个节点的记忆")
         else:
-            print("本次检查没有节点满足遗忘条件")
+            logger.debug("本次检查没有节点满足遗忘条件")
 
     async def merge_memory(self, topic):
         """
@@ -481,8 +482,8 @@ class Hippocampus:
 
         # 拼接成文本
         merged_text = "\n".join(selected_memories)
-        print(f"\n[合并记忆] 话题: {topic}")
-        print(f"选择的记忆:\n{merged_text}")
+        logger.debug(f"\n[合并记忆] 话题: {topic}")
+        logger.debug(f"选择的记忆:\n{merged_text}")
 
         # 使用memory_compress生成新的压缩记忆
         compressed_memories = await self.memory_compress(selected_memories, 0.1)
@@ -494,11 +495,11 @@ class Hippocampus:
         # 添加新的压缩记忆
         for _, compressed_memory in compressed_memories:
             memory_items.append(compressed_memory)
-            print(f"添加压缩记忆: {compressed_memory}")
+            logger.info(f"添加压缩记忆: {compressed_memory}")
 
         # 更新节点的记忆项
         self.memory_graph.G.nodes[topic]['memory_items'] = memory_items
-        print(f"完成记忆合并，当前记忆数量: {len(memory_items)}")
+        logger.debug(f"完成记忆合并，当前记忆数量: {len(memory_items)}")
 
     async def operation_merge_memory(self, percentage=0.1):
         """
@@ -524,16 +525,16 @@ class Hippocampus:
 
             # 如果内容数量超过100，进行合并
             if content_count > 100:
-                print(f"\n检查节点: {node}, 当前记忆数量: {content_count}")
+                logger.debug(f"检查节点: {node}, 当前记忆数量: {content_count}")
                 await self.merge_memory(node)
                 merged_nodes.append(node)
 
         # 同步到数据库
         if merged_nodes:
             self.sync_memory_to_db()
-            print(f"\n完成记忆合并操作，共处理 {len(merged_nodes)} 个节点")
+            logger.debug(f"完成记忆合并操作，共处理 {len(merged_nodes)} 个节点")
         else:
-            print("\n本次检查没有需要合并的节点")
+            logger.debug("本次检查没有需要合并的节点")
 
     def find_topic_llm(self, text, topic_num):
         prompt = f'这是一段文字：{text}。请你从这段话中总结出{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，用逗号,隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要有序号，不要告诉我其他内容。'
@@ -628,7 +629,7 @@ class Hippocampus:
 
     async def memory_activate_value(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.3) -> int:
         """计算输入文本对记忆的激活程度"""
-        print(f"\033[1;32m[记忆激活]\033[0m 识别主题: {await self._identify_topics(text)}")
+        logger.info(f"识别主题: {await self._identify_topics(text)}")
 
         # 识别主题
         identified_topics = await self._identify_topics(text)
@@ -659,8 +660,8 @@ class Hippocampus:
             penalty = 1.0 / (1 + math.log(content_count + 1))
 
             activation = int(score * 50 * penalty)
-            print(
-                f"\033[1;32m[记忆激活]\033[0m 单主题「{topic}」- 相似度: {score:.3f}, 内容数: {content_count}, 激活值: {activation}")
+            logger.info(
+                f"[记忆激活]单主题「{topic}」- 相似度: {score:.3f}, 内容数: {content_count}, 激活值: {activation}")
             return activation
 
         # 计算关键词匹配率，同时考虑内容数量
@@ -687,8 +688,8 @@ class Hippocampus:
                     matched_topics.add(input_topic)
                     adjusted_sim = sim * penalty
                     topic_similarities[input_topic] = max(topic_similarities.get(input_topic, 0), adjusted_sim)
-                    print(
-                        f"\033[1;32m[记忆激活]\033[0m 主题「{input_topic}」-> 「{memory_topic}」(内容数: {content_count}, 相似度: {adjusted_sim:.3f})")
+                    logger.info(
+                        f"[记忆激活]主题「{input_topic}」-> 「{memory_topic}」(内容数: {content_count}, 相似度: {adjusted_sim:.3f})")
 
         # 计算主题匹配率和平均相似度
         topic_match = len(matched_topics) / len(identified_topics)
@@ -696,8 +697,8 @@ class Hippocampus:
 
         # 计算最终激活值
         activation = int((topic_match + average_similarities) / 2 * 100)
-        print(
-            f"\033[1;32m[记忆激活]\033[0m 匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
+        logger.info(
+            f"[记忆激活]匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
 
         return activation
 
