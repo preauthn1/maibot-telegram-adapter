@@ -1,3 +1,6 @@
+[inner]
+version = "0.0.2"
+
 [bot]
 qq = 123
 nickname = "麦麦"
@@ -93,49 +96,42 @@ ban_user_id = []  #禁止回复消息的QQ号
 
 [model.llm_reasoning] #回复模型1 主要回复模型
 name = "Pro/deepseek-ai/DeepSeek-R1"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 pri_in = 0 #模型的输入价格（非必填，可以记录消耗）
 pri_out = 0 #模型的输出价格（非必填，可以记录消耗）
 
+
 [model.llm_reasoning_minor] #回复模型3 次要回复模型
 name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 
 #非推理模型
 
 [model.llm_normal] #V3 回复模型2 次要回复模型
 name = "Pro/deepseek-ai/DeepSeek-V3"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 
 [model.llm_normal_minor] #V2.5
 name = "deepseek-ai/DeepSeek-V2.5"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 
 [model.llm_emotion_judge] #主题判断 0.7/m
 name = "Qwen/Qwen2.5-14B-Instruct"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 
 [model.llm_topic_judge] #主题判断：建议使用qwen2.5 7b
 name = "Pro/Qwen/Qwen2.5-7B-Instruct"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 
 [model.llm_summary_by_topic] #建议使用qwen2.5 32b 及以上
 name = "Qwen/Qwen2.5-32B-Instruct"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 pri_in = 0
 pri_out = 0
 
 [model.moderation] #内容审核 未启用
 name = ""
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 pri_in = 0
 pri_out = 0
 
@@ -143,8 +139,7 @@ pri_out = 0
 
 [model.vlm] #图像识别 0.35/m
 name = "Pro/Qwen/Qwen2-VL-7B-Instruct"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
 
 
 
@@ -152,5 +147,4 @@ key = "SILICONFLOW_KEY"
 
 [model.embedding] #嵌入
 name = "BAAI/bge-m3"
-base_url = "SILICONFLOW_BASE_URL"
-key = "SILICONFLOW_KEY"
+provider = "SILICONFLOW"
