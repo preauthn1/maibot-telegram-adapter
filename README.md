@@ -55,6 +55,8 @@
 
 - [📦 手动部署指南 Linux](docs/manual_deploy_linux.md)
 
+-  📦 Windows 一键傻瓜式部署，请运行项目根目录中的 ```run.bat```，部署完成后请参照后续配置指南进行配置
+
 ### 配置说明
 - [🎀 新手配置指南](docs/installation_cute.md) - 通俗易懂的配置教程，适合初次使用的猫娘
 - [⚙️ 标准配置指南](docs/installation_standard.md) - 简明专业的配置说明，适合有经验的用户
