@@ -1,6 +1,4 @@
 import asyncio
-import os
-import random
 import time
 
 from loguru import logger
