@@ -98,7 +98,7 @@ def install_mongodb_compass():
     run_cmd(r"powershell mongodb\bin\Install-Compass.ps1")
     input("按任意键启动麦麦")
     input("如不需要启动此窗口可直接关闭，无需等待 Compass 安装完成")
-    install_mongodb_compass()
+    run_maimbot()
 
 
 def install_napcat():
