@@ -1,7 +1,7 @@
 from typing import Optional
 
 from ...common.database import Database
-from .message import Message
+from .message_cq import Message
 
 
 class MessageStorage:

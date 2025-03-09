@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Union
 from nonebot.adapters.onebot.v11 import Bot
 
 from .cq_code import cq_code_tool
-from .message import Message, Message_Sending, Message_Thinking, MessageSet
+from .message_cq import Message, Message_Sending, Message_Thinking, MessageSet
 from .storage import MessageStorage
 from .utils import calculate_typing_time
 from .config import global_config

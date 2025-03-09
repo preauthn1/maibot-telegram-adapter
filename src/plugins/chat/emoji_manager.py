@@ -4,6 +4,8 @@ import random
 import time
 import traceback
 from typing import Optional
+import base64
+import hashlib
 
 from loguru import logger
 from nonebot import get_driver
@@ -13,9 +15,11 @@ from ..chat.config import global_config
 from ..chat.utils import get_embedding
 from ..chat.utils_image import image_path_to_base64
 from ..models.utils_model import LLM_request
+from ..chat.utils_image import ImageManager
 
 driver = get_driver()
 config = driver.config
+image_manager = ImageManager()
 
 
 class EmojiManager:
@@ -142,14 +146,14 @@ class EmojiManager:
                 emoji_similarities.sort(key=lambda x: x[1], reverse=True)
                 
                 # 获取前3个最相似的表情包
-                top_3_emojis = emoji_similarities[:3]
+                top_10_emojis = emoji_similarities[:10 if len(emoji_similarities) > 10 else len(emoji_similarities)]
                 
-                if not top_3_emojis:
+                if not top_10_emojis:
                     logger.warning("未找到匹配的表情包")
                     return None
                 
                 # 从前3个中随机选择一个
-                selected_emoji, similarity = random.choice(top_3_emojis)
+                selected_emoji, similarity = random.choice(top_10_emojis)
                 
                 if selected_emoji and 'path' in selected_emoji:
                     # 更新使用次数
@@ -172,13 +176,13 @@ class EmojiManager:
             return None
 
     async def _get_emoji_discription(self, image_base64: str) -> str:
-        """获取表情包的标签"""
+        """获取表情包的标签，使用image_manager的描述生成功能"""
         try:
-            prompt = '这是一个表情包，使用中文简洁的描述一下表情包的内容和表情包所表达的情感'
-            
-            content, _ = await self.vlm.generate_response_for_image(prompt, image_base64)
-            logger.debug(f"输出描述: {content}")
-            return content
+            # 使用image_manager获取描述，去掉前后的方括号和"表情包："前缀
+            description = await image_manager.get_emoji_description(image_base64)
+            # 去掉[表情包：xxx]的格式，只保留描述内容
+            description = description.strip('[]').replace('表情包：', '')
+            return description
             
         except Exception as e:
             logger.error(f"获取标签失败: {str(e)}")
@@ -220,42 +224,94 @@ class EmojiManager:
             for filename in files_to_process:
                 image_path = os.path.join(emoji_dir, filename)
                 
-                # 检查是否已经注册过
-                existing_emoji = self.db.db['emoji'].find_one({'filename': filename})
-                if existing_emoji:
-                    continue
-                
-                # 压缩图片并获取base64编码
+                # 获取图片的base64编码和哈希值
                 image_base64 = image_path_to_base64(image_path)
                 if image_base64 is None:
                     os.remove(image_path)
                     continue
                 
-                # 获取表情包的描述
-                discription = await self._get_emoji_discription(image_base64)
+                image_bytes = base64.b64decode(image_base64)
+                image_hash = hashlib.md5(image_bytes).hexdigest()
+                
+                # 检查是否已经注册过
+                existing_emoji = self.db.db['emoji'].find_one({'filename': filename})
+                description = None
+                
+                if existing_emoji:
+                    # 即使表情包已存在，也检查是否需要同步到images集合
+                    description = existing_emoji.get('discription')
+                    # 检查是否在images集合中存在
+                    existing_image = await image_manager.db.db.images.find_one({'hash': image_hash})
+                    if not existing_image:
+                        # 同步到images集合
+                        image_doc = {
+                            'hash': image_hash,
+                            'path': image_path,
+                            'type': 'emoji',
+                            'description': description,
+                            'timestamp': int(time.time())
+                        }
+                        await image_manager.db.db.images.update_one(
+                            {'hash': image_hash},
+                            {'$set': image_doc},
+                            upsert=True
+                        )
+                        # 保存描述到image_descriptions集合
+                        await image_manager._save_description_to_db(image_hash, description, 'emoji')
+                        logger.success(f"同步已存在的表情包到images集合: {filename}")
+                    continue
+                
+                # 检查是否在images集合中已有描述
+                existing_description = await image_manager._get_description_from_db(image_hash, 'emoji')
+                
+                if existing_description:
+                    description = existing_description
+                else:
+                    # 获取表情包的描述
+                    description = await self._get_emoji_discription(image_base64)
+                
                 if global_config.EMOJI_CHECK:
                     check = await self._check_emoji(image_base64)
                     if '是' not in check:
                         os.remove(image_path)
-                        logger.info(f"描述: {discription}")
+                        logger.info(f"描述: {description}")
                         logger.info(f"其不满足过滤规则，被剔除 {check}")
                         continue
                     logger.info(f"check通过 {check}")
-                embedding = await get_embedding(discription)
-                if discription is not None:
+                
+                if description is not None:
+                    embedding = await get_embedding(description)
                     # 准备数据库记录
                     emoji_record = {
                         'filename': filename,
                         'path': image_path,
-                        'embedding':embedding,
-                        'discription': discription,
+                        'embedding': embedding,
+                        'discription': description,
+                        'hash': image_hash,
                         'timestamp': int(time.time())
                     }
                     
-                    # 保存到数据库
+                    # 保存到emoji数据库
                     self.db.db['emoji'].insert_one(emoji_record)
                     logger.success(f"注册新表情包: {filename}")
-                    logger.info(f"描述: {discription}")
+                    logger.info(f"描述: {description}")
+                    
+                    # 保存到images数据库
+                    image_doc = {
+                        'hash': image_hash,
+                        'path': image_path,
+                        'type': 'emoji',
+                        'description': description,
+                        'timestamp': int(time.time())
+                    }
+                    await image_manager.db.db.images.update_one(
+                        {'hash': image_hash},
+                        {'$set': image_doc},
+                        upsert=True
+                    )
+                    # 保存描述到image_descriptions集合
+                    await image_manager._save_description_to_db(image_hash, description, 'emoji')
+                    logger.success(f"同步保存到images集合: {filename}")
                 else:
                     logger.warning(f"跳过表情包: {filename}")
                 

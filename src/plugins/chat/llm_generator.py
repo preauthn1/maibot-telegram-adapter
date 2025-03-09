@@ -7,7 +7,7 @@ from nonebot import get_driver
 from ...common.database import Database
 from ..models.utils_model import LLM_request
 from .config import global_config
-from .message import Message
+from .message_cq import Message
 from .prompt_builder import prompt_builder
 from .relationship_manager import relationship_manager
 from .utils import process_llm_response

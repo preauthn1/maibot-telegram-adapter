@@ -11,30 +11,11 @@ from nonebot import get_driver
 from ..models.utils_model import LLM_request
 from ..utils.typo_generator import ChineseTypoGenerator
 from .config import global_config
-from .message import Message
+from .message_cq import Message
 
 driver = get_driver()
 config = driver.config
 
-
-def combine_messages(messages: List[Message]) -> str:
-    """将消息列表组合成格式化的字符串
-    
-    Args:
-        messages: Message对象列表
-        
-    Returns:
-        str: 格式化后的消息字符串
-    """
-    result = ""
-    for message in messages:
-        time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(message.time))
-        name = message.user_nickname or f"用户{message.user_id}"
-        content = message.processed_plain_text or message.plain_text
-
-        result += f"[{time_str}] {name}: {content}\n"
-
-    return result
 
 
 def db_message_to_str(message_dict: Dict) -> str:
@@ -159,7 +140,7 @@ async def get_recent_group_messages(db, group_id: int, limit: int = 12) -> list:
         return []
 
     # 转换为 Message对象列表
-    from .message import Message
+    from .message_cq import Message
     message_objects = []
     for msg_data in recent_messages:
         try:

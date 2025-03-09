@@ -7,10 +7,10 @@ from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
-from .cq_code import CQCode  # 导入CQCode模块
+from .cq_code import CQCode,cq_code_tool # 导入CQCode模块
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
-from .message import (
+from .message_cq import (
     Message,
     Message_Sending,
     Message_Thinking,  # 导入 Message_Thinking 类
@@ -180,7 +180,7 @@ class ChatBot:
                 if emoji_raw != None:
                     emoji_path,discription = emoji_raw
 
-                    emoji_cq = CQCode.create_emoji_cq(emoji_path)
+                    emoji_cq =  cq_code_tool.create_emoji_cq(emoji_path)
                     
                     if random() < 0.5:
                         bot_response_time = tinking_time_point - 1
