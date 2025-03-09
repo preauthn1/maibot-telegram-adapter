@@ -3,7 +3,7 @@ import os
 import random
 import time
 import traceback
-from typing import Optional
+from typing import Optional, Tuple
 import base64
 import hashlib
 
@@ -92,7 +92,7 @@ class EmojiManager:
         except Exception as e:
             logger.error(f"记录表情使用失败: {str(e)}")
             
-    async def get_emoji_for_text(self, text: str) -> Optional[str]:
+    async def get_emoji_for_text(self, text: str) -> Optional[Tuple[str,str]]:
         """根据文本内容获取相关表情包
         Args:
             text: 输入文本
