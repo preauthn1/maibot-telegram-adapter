@@ -1,6 +1,7 @@
 import os
 import shutil
 import nonebot
+import time
 from dotenv import load_dotenv
 from loguru import logger
 from nonebot.adapters.onebot.v11 import Adapter
@@ -114,6 +115,10 @@ def scan_provider(env_config: dict):
             raise ValueError(f"请检查 '{provider_name}' 提供商配置是否丢失 BASE_URL 或 KEY 环境变量")
 
 if __name__ == "__main__":
+    # 利用 TZ 环境变量设定程序工作的时区
+    # 仅保证行为一致，不依赖 localtime()，实际对生产环境几乎没有作用
+    time.tzset()
+
     easter_egg()
     init_config()
     init_env()

@@ -2,7 +2,7 @@ services:
   napcat:
     container_name: napcat
     environment:
-      - tz=Asia/Shanghai
+      - TZ=Asia/Shanghai
       - NAPCAT_UID=${NAPCAT_UID}
       - NAPCAT_GID=${NAPCAT_GID} # 让 NapCat 获取当前用户 GID,UID，防止权限问题
     ports:
@@ -19,7 +19,7 @@ services:
   mongodb:
     container_name: mongodb
     environment:
-      - tz=Asia/Shanghai
+      - TZ=Asia/Shanghai
     expose:
       - "27017"
     restart: always
@@ -31,7 +31,7 @@ services:
   maimbot:
     container_name: maimbot
     environment:
-      - tz=Asia/Shanghai
+      - TZ=Asia/Shanghai
     expose:
       - "8080"
     restart: always
