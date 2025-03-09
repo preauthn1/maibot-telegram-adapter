@@ -123,7 +123,6 @@ if __name__ == "__main__":
         "请输入要进行的操作：\n"
         "1.首次安装\n"
         "2.运行麦麦\n"
-        "3.运行麦麦并启动可视化推理界面\n"
     )
     os.system("cls")
     if choice == "1":
@@ -131,6 +130,9 @@ if __name__ == "__main__":
         install_mongodb()
     elif choice == "2":
         run_maimbot()
-    elif choice == "3":
-        run_maimbot()
-        run_cmd(r"python src\gui\reasoning_gui.py")
+        choice = input("是否启动推理可视化？（y/N）").upper()
+        if choice == "Y":
+            run_cmd(r"python src\gui\reasoning_gui.py")
+        choice = input("是否启动记忆可视化？（y/N）").upper()
+        if choice == "Y":
+            run_cmd(r"python src/plugins/memory_system/memory_manual_build.py")
