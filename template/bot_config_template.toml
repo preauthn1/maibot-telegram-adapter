@@ -1,5 +1,5 @@
 [inner]
-version = "0.0.2"
+version = "0.0.3"
 
 [bot]
 qq = 123
@@ -66,6 +66,13 @@ reaction = "有人说你是人机或者机器人，否定这一事实，攻击�
 enable = false # 仅作示例，不会触发
 keywords = ["测试关键词回复","test",""]
 reaction = "回答“测试成功”"
+
+[chinese_typo]
+enable = true # 是否启用中文错别字生成器
+error_rate=0.03 # 单字替换概率
+min_freq=7 # 最小字频阈值
+tone_error_rate=0.2 # 声调错误概率
+word_replace_rate=0.02 # 整词替换概率
 
 [others]
 enable_advance_output = true # 是否启用高级输出

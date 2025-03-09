@@ -332,18 +332,21 @@ def process_llm_response(text: str) -> List[str]:
         return ['懒得说']
     # 处理长消息
     typo_generator = ChineseTypoGenerator(
-        error_rate=0.03,
-        min_freq=7,
-        tone_error_rate=0.2,
-        word_replace_rate=0.02
+        error_rate=global_config.chinese_typo_error_rate,
+        min_freq=global_config.chinese_typo_min_freq,
+        tone_error_rate=global_config.chinese_typo_tone_error_rate,
+        word_replace_rate=global_config.chinese_typo_word_replace_rate
     )
     split_sentences = split_into_sentences_w_remove_punctuation(text)
     sentences = []
     for sentence in split_sentences:
-        typoed_text, typo_corrections = typo_generator.create_typo_sentence(sentence)
-        sentences.append(typoed_text)
-        if typo_corrections:
-            sentences.append(typo_corrections)
+        if global_config.chinese_typo_enable:
+            typoed_text, typo_corrections = typo_generator.create_typo_sentence(sentence)
+            sentences.append(typoed_text)
+            if typo_corrections:
+                sentences.append(typo_corrections)
+        else:
+            sentences.append(sentence)
     # 检查分割后的消息数量是否过多（超过3条）
     
     if len(sentences) > 5:
