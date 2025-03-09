@@ -40,6 +40,10 @@
 **交流群**: 123456782 另一个群（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
 **交流群**: 1035228475 另一个群（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
 
+**其他平台版本**
+
+- (由 [CabLate](https://github.com/cablate) 贡献) [Telegram 与其他平台(未来可能会有)的版本](https://github.com/cablate/MaiMBot/tree/telegram) - [集中讨论串](https://github.com/SengokuCola/MaiMBot/discussions/149)
+
 ## 
 <div align="left">
 <h2>📚 文档        ⬇️ 快速开始使用麦麦 ⬇️</h2>
