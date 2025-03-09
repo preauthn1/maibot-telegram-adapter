@@ -12,6 +12,7 @@ import platform
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}
 
+
 def easter_egg():
     # 彩蛋
     from colorama import init, Fore
@@ -91,6 +92,17 @@ def load_env():
         RuntimeError(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
 
 
+def load_logger():
+    logger.remove()  # 移除默认配置
+    logger.add(
+        sys.stderr,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <fg #777777>|</> <level>{level: <7}</level> <fg "
+               "#777777>|</> <cyan>{name:.<8}</cyan>:<cyan>{function:.<8}</cyan>:<cyan>{line: >4}</cyan> <fg "
+               "#777777>-</> <level>{message}</level>",
+        colorize=True,
+        level=os.getenv("LOG_LEVEL", "INFO")  # 根据环境设置日志级别，默认为INFO
+    )
+
 
 def scan_provider(env_config: dict):
     provider = {}
@@ -136,6 +148,7 @@ if __name__ == "__main__":
     init_config()
     init_env()
     load_env()
+    load_logger()
 
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
