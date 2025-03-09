@@ -63,7 +63,7 @@ async def start_background_tasks():
     # 初始化并启动情绪管理器
     mood_manager = MoodManager.get_instance()
     mood_manager.start_mood_update(update_interval=global_config.mood_update_interval)
-    logger.success("[初始化]情绪管理器已启动")
+    logger.success("情绪管理器启动成功")
 
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))

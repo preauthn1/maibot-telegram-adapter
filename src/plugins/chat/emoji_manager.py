@@ -302,7 +302,7 @@ class EmojiManager:
                         # 从数据库中删除记录
                         result = self.db.db.emoji.delete_one({'_id': emoji['_id']})
                         if result.deleted_count > 0:
-                            logger.success(f"成功删除数据库记录: {emoji['_id']}")
+                            logger.debug(f"成功删除数据库记录: {emoji['_id']}")
                             removed_count += 1
                         else:
                             logger.error(f"删除数据库记录失败: {emoji['_id']}")
