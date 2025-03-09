@@ -36,6 +36,7 @@ class EmojiManager:
         self.llm_emotion_judge = LLM_request(model=global_config.llm_normal_minor, max_tokens=60,
                                              temperature=0.8)  # 更高的温度，更少的token（后续可以根据情绪来调整温度）
 
+
     def _ensure_emoji_dir(self):
         """确保表情存储目录存在"""
         os.makedirs(self.EMOJI_DIR, exist_ok=True)
@@ -331,3 +332,4 @@ class EmojiManager:
 
 # 创建全局单例
 emoji_manager = EmojiManager()
+

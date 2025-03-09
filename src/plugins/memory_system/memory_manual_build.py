@@ -944,7 +944,7 @@ async def main():
     db = Database.get_instance()
     start_time = time.time()
     
-    test_pare = {'do_build_memory':True,'do_forget_topic':False,'do_visualize_graph':True,'do_query':False,'do_merge_memory':False}
+    test_pare = {'do_build_memory':False,'do_forget_topic':False,'do_visualize_graph':True,'do_query':False,'do_merge_memory':False}
     
     # 创建记忆图
     memory_graph = Memory_graph()

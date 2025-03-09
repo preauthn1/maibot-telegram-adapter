@@ -201,67 +201,6 @@ def topic_what(text, topic):
     prompt = f'这是一段文字：{text}。我想知道这记忆里有什么关于{topic}的话题，帮我总结成一句自然的话，可以包含时间和人物。只输出这句话就好'
     return prompt
 
-def visualize_graph(memory_graph: Memory_graph, color_by_memory: bool = False):
-    # 设置中文字体
-    plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
-    plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
-    
-    G = memory_graph.G
-    
-    # 保存图到本地
-    nx.write_gml(G, "memory_graph.gml")  # 保存为 GML 格式
-
-    # 根据连接条数或记忆数量设置节点颜色
-    node_colors = []
-    nodes = list(G.nodes())  # 获取图中实际的节点列表
-    
-    if color_by_memory:
-        # 计算每个节点的记忆数量
-        memory_counts = []
-        for node in nodes:
-            memory_items = G.nodes[node].get('memory_items', [])
-            if isinstance(memory_items, list):
-                count = len(memory_items)
-            else:
-                count = 1 if memory_items else 0
-            memory_counts.append(count)
-        max_memories = max(memory_counts) if memory_counts else 1
-        
-        for count in memory_counts:
-            # 使用不同的颜色方案：红色表示记忆多，蓝色表示记忆少
-            if max_memories > 0:
-                intensity = min(1.0, count / max_memories)
-                color = (intensity, 0, 1.0 - intensity)  # 从蓝色渐变到红色
-            else:
-                color = (0, 0, 1)  # 如果没有记忆，则为蓝色
-            node_colors.append(color)
-    else:
-        # 使用原来的连接数量着色方案
-        max_degree = max(G.degree(), key=lambda x: x[1])[1] if G.degree() else 1
-        for node in nodes:
-            degree = G.degree(node)
-            if max_degree > 0:
-                red = min(1.0, degree / max_degree)
-                blue = 1.0 - red
-                color = (red, 0, blue)
-            else:
-                color = (0, 0, 1)
-            node_colors.append(color)
-    
-    # 绘制图形
-    plt.figure(figsize=(12, 8))
-    pos = nx.spring_layout(G, k=1, iterations=50)
-    nx.draw(G, pos, 
-           with_labels=True, 
-           node_color=node_colors,
-           node_size=200,
-           font_size=10,
-           font_family='SimHei',
-           font_weight='bold')
-    
-    title = '记忆图谱可视化 - ' + ('按记忆数量着色' if color_by_memory else '按连接数量着色')
-    plt.title(title, fontsize=16, fontfamily='SimHei')
-    plt.show()
 
 
 def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = False):
@@ -280,7 +219,7 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
         memory_items = H.nodes[node].get('memory_items', [])
         memory_count = len(memory_items) if isinstance(memory_items, list) else (1 if memory_items else 0)
         degree = H.degree(node)
-        if memory_count < 5 or degree < 2:  # 改为小于2而不是小于等于2
+        if memory_count < 3 or degree < 2:  # 改为小于2而不是小于等于2
             nodes_to_remove.append(node)
     
     H.remove_nodes_from(nodes_to_remove)
@@ -291,7 +230,7 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
         return
     
     # 保存图到本地
-    nx.write_gml(H, "memory_graph.gml")  # 保存为 GML 格式
+    # nx.write_gml(H, "memory_graph.gml")  # 保存为 GML 格式
 
     # 计算节点大小和颜色
     node_colors = []
@@ -315,21 +254,23 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
         memory_count = len(memory_items) if isinstance(memory_items, list) else (1 if memory_items else 0)
         # 使用指数函数使变化更明显
         ratio = memory_count / max_memories
-        size = 500 + 5000 * (ratio ** 2)  # 使用平方函数使差异更明显
+        size = 500 + 5000 * (ratio )  # 使用1.5次方函数使差异不那么明显
         node_sizes.append(size)
         
         # 计算节点颜色（基于连接数）
         degree = H.degree(node)
         # 红色分量随着度数增加而增加
-        red = min(1.0, degree / max_degree)
+        r = (degree / max_degree) ** 0.3
+        red = min(1.0, r)
         # 蓝色分量随着度数减少而增加
-        blue = 1.0 - red
-        color = (red, 0, blue)
+        blue = max(0.0, 1 - red)
+        # blue = 1
+        color = (red, 0.1, blue)
         node_colors.append(color)
     
     # 绘制图形
     plt.figure(figsize=(12, 8))
-    pos = nx.spring_layout(H, k=1.5, iterations=50)  # 增加k值使节点分布更开
+    pos = nx.spring_layout(H, k=1, iterations=50)  # 增加k值使节点分布更开
     nx.draw(H, pos, 
            with_labels=True, 
            node_color=node_colors,
@@ -339,7 +280,7 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
            font_weight='bold',
            edge_color='gray',
            width=0.5,
-           alpha=0.7)
+           alpha=0.9)
     
     title = '记忆图谱可视化 - 节点大小表示记忆数量，颜色表示连接数'
     plt.title(title, fontsize=16, fontfamily='SimHei')
