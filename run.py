@@ -45,21 +45,15 @@ def run_cmd(command: str, open_new_window: bool = True):
         command (str): 指定要运行的命令
         open_new_window (bool): 指定是否新建一个 cmd 窗口运行
     """
-    creationflags = 0
     if open_new_window:
-        creationflags = subprocess.CREATE_NEW_CONSOLE
-    subprocess.Popen(
-        [
-            "cmd.exe",
-            "/c",
-            command,
-        ],
-        creationflags=creationflags,
-    )
+        command = "start " + command
+    subprocess.Popen(command, shell=True)
 
 
 def run_maimbot():
     run_cmd(r"napcat\NapCatWinBootMain.exe 10001", False)
+    if not os.path.exists(r"mongodb\db"):
+        os.makedirs(r"mongodb\db")
     run_cmd(
         r"mongodb\bin\mongod.exe --dbpath=" + os.getcwd() + r"\mongodb\db --port 27017"
     )
@@ -86,26 +80,29 @@ def install_mongodb():
         for data in resp.iter_content(chunk_size=1024):
             size = file.write(data)
             bar.update(size)
-        extract_files("mongodb.zip", "mongodb")
-        print("MongoDB 下载完成")
-        os.remove("mongodb.zip")
-        choice = input(
-            "是否安装 MongoDB Compass？此软件可以以可视化的方式修改数据库，建议安装（Y/n）"
-        ).upper()
-        if choice == "Y" or choice == "":
-            install_mongodb_compass()
+    extract_files("mongodb.zip", "mongodb")
+    print("MongoDB 下载完成")
+    os.remove("mongodb.zip")
+    choice = input(
+        "是否安装 MongoDB Compass？此软件可以以可视化的方式修改数据库，建议安装（Y/n）"
+    ).upper()
+    if choice == "Y" or choice == "":
+        install_mongodb_compass()
 
 
 def install_mongodb_compass():
     run_cmd(
-        r"powershell Start-Process powershell -Verb runAs 'Set-ExecutionPolicy RemoteSigned'")
+        r"powershell Start-Process powershell -Verb runAs 'Set-ExecutionPolicy RemoteSigned'"
+    )
     input("请在弹出的用户账户控制中点击“是”后按任意键继续安装")
     run_cmd(r"powershell mongodb\bin\Install-Compass.ps1")
-    input("Compass 安装完成后请按任意键继续后续安装")
+    input("按任意键启动麦麦")
+    input("如不需要启动此窗口可直接关闭，无需等待 Compass 安装完成")
+    run_maimbot()
 
 
 def install_napcat():
-    run_cmd("start https://github.com/NapNeko/NapCatQQ/releases")
+    run_cmd("start https://github.com/NapNeko/NapCatQQ/releases", False)
     print("请检查弹出的浏览器窗口，点击**第一个**蓝色的“Win64无头” 下载 napcat")
     napcat_filename = input(
         "下载完成后请把文件复制到此文件夹，并将**不包含后缀的文件名**输入至此窗口，如 NapCat.32793.Shell："
@@ -126,7 +123,6 @@ if __name__ == "__main__":
         "请输入要进行的操作：\n"
         "1.首次安装\n"
         "2.运行麦麦\n"
-        "3.运行麦麦并启动可视化推理界面\n"
     )
     os.system("cls")
     if choice == "1":
@@ -134,6 +130,9 @@ if __name__ == "__main__":
         install_mongodb()
     elif choice == "2":
         run_maimbot()
-    elif choice == "3":
-        run_maimbot()
-        run_cmd("python src/gui/reasoning_gui.py")
+        choice = input("是否启动推理可视化？（y/N）").upper()
+        if choice == "Y":
+            run_cmd(r"python src\gui\reasoning_gui.py")
+        choice = input("是否启动记忆可视化？（y/N）").upper()
+        if choice == "Y":
+            run_cmd(r"python src/plugins/memory_system/memory_manual_build.py")
