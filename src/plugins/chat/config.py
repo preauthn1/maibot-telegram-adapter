@@ -66,6 +66,12 @@ class BotConfig:
 
     keywords_reaction_rules = [] # 关键词回复规则
 
+    chinese_typo_enable=True # 是否启用中文错别字生成器
+    chinese_typo_error_rate=0.03 # 单字替换概率
+    chinese_typo_min_freq=7 # 最小字频阈值
+    chinese_typo_tone_error_rate=0.2 # 声调错误概率
+    chinese_typo_word_replace_rate=0.02 # 整词替换概率
+
     # 默认人设
     PROMPT_PERSONALITY=[
         "曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧",
@@ -202,6 +208,15 @@ class BotConfig:
                 keywords_reaction_config = toml_dict["keywords_reaction"]
                 if keywords_reaction_config.get("enable", False):
                     config.keywords_reaction_rules = keywords_reaction_config.get("rules", config.keywords_reaction_rules)
+
+            if "chinese_typo_generator" in toml_dict:
+                # 读取中文错别字生成器配置
+                chinese_typo_generator_config = toml_dict["chinese_typo_generator"]
+                config.chinese_typo_enable = chinese_typo_generator_config.get("enable", config.chinese_typo_enable)
+                config.chinese_typo_error_rate = chinese_typo_generator_config.get("error_rate", config.chinese_typo_error_rate)
+                config.chinese_typo_min_freq = chinese_typo_generator_config.get("min_freq", config.chinese_typo_min_freq)
+                config.chinese_typo_tone_error_rate = chinese_typo_generator_config.get("tone_error_rate", config.chinese_typo_tone_error_rate)
+                config.chinese_typo_word_replace_rate = chinese_typo_generator_config.get("word_replace_rate", config.chinese_typo_word_replace_rate)
 
             # 群组配置
             if "groups" in toml_dict:

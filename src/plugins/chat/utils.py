@@ -330,13 +330,16 @@ def process_llm_response(text: str) -> List[str]:
         print(f"回复过长 ({len(text)} 字符)，返回默认回复")
         return ['懒得说']
     # 处理长消息
-    typo_generator = ChineseTypoGenerator(
-        error_rate=0.03,
-        min_freq=7,
-        tone_error_rate=0.2,
-        word_replace_rate=0.02
-    )
-    typoed_text = typo_generator.create_typo_sentence(text)[0]
+    if global_config.chinese_typo_enable:
+        typo_generator = ChineseTypoGenerator(
+            error_rate=global_config.chinese_typo_error_rate,
+            min_freq=global_config.chinese_typo_min_freq,
+            tone_error_rate=global_config.chinese_typo_tone_error_rate,
+            word_replace_rate=global_config.chinese_typo_word_replace_rate
+        )
+        typoed_text = typo_generator.create_typo_sentence(text)[0]
+    else:
+        typoed_text = text
     sentences = split_into_sentences_w_remove_punctuation(typoed_text)
     # 检查分割后的消息数量是否过多（超过3条）
     if len(sentences) > 4:
