@@ -9,7 +9,7 @@ services:
       - 3000:3000
       - 3001:3001
       - 6099:6099
-    restart: always
+    restart: unless-stopped
     volumes:
       - napcatQQ:/app/.config/QQ # 持久化 QQ 本体
       - napcatCONFIG:/app/napcat/config # 持久化 NapCat 配置文件
@@ -19,10 +19,12 @@ services:
   mongodb:
     container_name: mongodb
     environment:
-      - TZ=Asia/Shanghai
+      - tz=Asia/Shanghai
+      # - MONGO_INITDB_ROOT_USERNAME=your_username
+      # - MONGO_INITDB_ROOT_PASSWORD=your_password
     expose:
       - "27017"
-    restart: always
+    restart: unless-stopped
     volumes:
       - mongodb:/data/db # 持久化 MongoDB 数据库
       - mongodbCONFIG:/data/configdb # 持久化 MongoDB 配置文件
@@ -34,7 +36,7 @@ services:
       - TZ=Asia/Shanghai
     expose:
       - "8080"
-    restart: always
+    restart: unless-stopped
     depends_on:
       - mongodb
       - napcat
