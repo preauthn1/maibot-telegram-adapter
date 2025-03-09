@@ -37,7 +37,7 @@ def extract_files(zip_path, target_dir):
                     f.write(zip_ref.read(file))
 
 
-def run_cmd(command: str, open_new_window: bool = False):
+def run_cmd(command: str, open_new_window: bool = True):
     """
     运行 cmd 命令
 
@@ -61,10 +61,9 @@ def run_cmd(command: str, open_new_window: bool = False):
 def run_maimbot():
     run_cmd(r"napcat\NapCatWinBootMain.exe 10001", False)
     run_cmd(
-        r"mongodb\bin\mongod.exe --dbpath=" + os.getcwd() + r"\mongodb\db --port 27017",
-        True,
+        r"mongodb\bin\mongod.exe --dbpath=" + os.getcwd() + r"\mongodb\db --port 27017"
     )
-    run_cmd("nb run", True)
+    run_cmd("nb run")
 
 
 def install_mongodb():
@@ -90,10 +89,23 @@ def install_mongodb():
         extract_files("mongodb.zip", "mongodb")
         print("MongoDB 下载完成")
         os.remove("mongodb.zip")
+        choice = input(
+            "是否安装 MongoDB Compass？此软件可以以可视化的方式修改数据库，建议安装（Y/n）"
+        ).upper()
+        if choice == "Y" or choice == "":
+            install_mongodb_compass()
+
+
+def install_mongodb_compass():
+    run_cmd(
+        r"powershell Start-Process powershell -Verb runAs 'Set-ExecutionPolicy RemoteSigned'")
+    input("请在弹出的用户账户控制中点击“是”后按任意键继续安装")
+    run_cmd(r"powershell mongodb\bin\Install-Compass.ps1")
+    input("Compass 安装完成后请按任意键继续后续安装")
 
 
 def install_napcat():
-    run_cmd("start https://github.com/NapNeko/NapCatQQ/releases", True)
+    run_cmd("start https://github.com/NapNeko/NapCatQQ/releases")
     print("请检查弹出的浏览器窗口，点击**第一个**蓝色的“Win64无头” 下载 napcat")
     napcat_filename = input(
         "下载完成后请把文件复制到此文件夹，并将**不包含后缀的文件名**输入至此窗口，如 NapCat.32793.Shell："
@@ -124,4 +136,4 @@ if __name__ == "__main__":
         run_maimbot()
     elif choice == "3":
         run_maimbot()
-        run_cmd("python src/gui/reasoning_gui.py", True)
+        run_cmd("python src/gui/reasoning_gui.py")
