@@ -13,6 +13,7 @@ import networkx as nx
 import pymongo
 from dotenv import load_dotenv
 from loguru import logger
+import jieba
 
 # from chat.config import global_config
 sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
@@ -86,23 +87,26 @@ def calculate_information_content(text):
     return entropy
 
 def get_cloest_chat_from_db(db, length: int, timestamp: str):
-    """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数"""
-    chat_text = ''
+    """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数
+    
+    Returns:
+        list: 消息记录字典列表，每个字典包含消息内容和时间信息
+    """
+    chat_records = []
     closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
     
     if closest_record and closest_record.get('memorized', 0) < 4:            
         closest_time = closest_record['time']
-        group_id = closest_record['group_id']  # 获取groupid
+        group_id = closest_record['group_id']
         # 获取该时间戳之后的length条消息，且groupid相同
-        chat_records = list(db.db.messages.find(
+        records = list(db.db.messages.find(
             {"time": {"$gt": closest_time}, "group_id": group_id}
         ).sort('time', 1).limit(length))
         
         # 更新每条消息的memorized属性
-        for record in chat_records:
-            # 检查当前记录的memorized值
+        for record in records:
             current_memorized = record.get('memorized', 0)
-            if current_memorized  > 3:
+            if current_memorized > 3:
                 print("消息已读取3次，跳过")
                 return ''
                 
@@ -112,11 +116,14 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
                 {"$set": {"memorized": current_memorized + 1}}
             )
             
-            chat_text += record["detailed_plain_text"]
+            # 添加到记录列表中
+            chat_records.append({
+                'text': record["detailed_plain_text"],
+                'time': record["time"],
+                'group_id': record["group_id"]
+            })
             
-        return chat_text
-    print("消息已读取3次，跳过")
-    return ''
+    return chat_records
 
 class Memory_graph:
     def __init__(self):
@@ -205,22 +212,34 @@ class Hippocampus:
         self.llm_model_summary = LLMModel(model_name="Qwen/Qwen2.5-32B-Instruct")
         
     def get_memory_sample(self, chat_size=20, time_frequency:dict={'near':2,'mid':4,'far':3}):
+        """获取记忆样本
+        
+        Returns:
+            list: 消息记录列表，每个元素是一个消息记录字典列表
+        """
         current_timestamp = datetime.datetime.now().timestamp()
-        chat_text = []
-        #短期：1h   中期：4h   长期：24h
-        for _ in range(time_frequency.get('near')):  # 循环10次
-            random_time = current_timestamp - random.randint(1, 3600*4)  # 随机时间
-            chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
-            chat_text.append(chat_)  
-        for _ in range(time_frequency.get('mid')):  # 循环10次
-            random_time = current_timestamp - random.randint(3600*4, 3600*24)  # 随机时间
-            chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
-            chat_text.append(chat_)  
-        for _ in range(time_frequency.get('far')):  # 循环10次
-            random_time = current_timestamp - random.randint(3600*24, 3600*24*7)  # 随机时间
-            chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
-            chat_text.append(chat_)
-        return [chat for chat in chat_text if chat]
+        chat_samples = []
+        
+        # 短期：1h   中期：4h   长期：24h
+        for _ in range(time_frequency.get('near')):
+            random_time = current_timestamp - random.randint(1, 3600*4)
+            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            if messages:
+                chat_samples.append(messages)
+                
+        for _ in range(time_frequency.get('mid')):
+            random_time = current_timestamp - random.randint(3600*4, 3600*24)
+            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            if messages:
+                chat_samples.append(messages)
+                
+        for _ in range(time_frequency.get('far')):
+            random_time = current_timestamp - random.randint(3600*24, 3600*24*7)
+            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            if messages:
+                chat_samples.append(messages)
+                
+        return chat_samples
     
     def calculate_topic_num(self,text, compress_rate):
         """计算文本的话题数量"""
@@ -231,16 +250,49 @@ class Hippocampus:
         print(f"topic_by_length: {topic_by_length}, topic_by_information_content: {topic_by_information_content}, topic_num: {topic_num}")
         return topic_num
     
-    async def memory_compress(self, input_text, compress_rate=0.1):
+    async def memory_compress(self, messages: list, compress_rate=0.1):
+        """压缩消息记录为记忆
+        
+        Args:
+            messages: 消息记录字典列表，每个字典包含text和time字段
+            compress_rate: 压缩率
+            
+        Returns:
+            set: (话题, 记忆) 元组集合
+        """
+        if not messages:
+            return set()
+            
+        # 合并消息文本，同时保留时间信息
+        input_text = ""
+        time_info = ""
+        # 计算最早和最晚时间
+        earliest_time = min(msg['time'] for msg in messages)
+        latest_time = max(msg['time'] for msg in messages)
+        
+        earliest_dt = datetime.datetime.fromtimestamp(earliest_time)
+        latest_dt = datetime.datetime.fromtimestamp(latest_time)
+        
+        # 如果是同一年
+        if earliest_dt.year == latest_dt.year:
+            earliest_str = earliest_dt.strftime("%m-%d %H:%M:%S")
+            latest_str = latest_dt.strftime("%m-%d %H:%M:%S")
+            time_info += f"是在{earliest_dt.year}年，{earliest_str} 到 {latest_str} 的对话:\n"
+        else:
+            earliest_str = earliest_dt.strftime("%Y-%m-%d %H:%M:%S")
+            latest_str = latest_dt.strftime("%Y-%m-%d %H:%M:%S") 
+            time_info += f"是从 {earliest_str} 到 {latest_str} 的对话:\n"
+        
+        for msg in messages:
+            input_text += f"{msg['text']}\n"
+            
         print(input_text)
         
         topic_num = self.calculate_topic_num(input_text, compress_rate)
         topics_response = self.llm_model_get_topic.generate_response(self.find_topic_llm(input_text, topic_num))
-        # 修改话题处理逻辑
-        # 定义需要过滤的关键词
-        filter_keywords = ['表情包', '图片', '回复', '聊天记录']
         
         # 过滤topics
+        filter_keywords = ['表情包', '图片', '回复', '聊天记录']
         topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
         filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
         
@@ -250,7 +302,7 @@ class Hippocampus:
         # 创建所有话题的请求任务
         tasks = []
         for topic in filtered_topics:
-            topic_what_prompt = self.topic_what(input_text, topic)
+            topic_what_prompt = self.topic_what(input_text, topic , time_info)
             # 创建异步任务
             task = self.llm_model_small.generate_response_async(topic_what_prompt)
             tasks.append((topic.strip(), task))
@@ -267,37 +319,35 @@ class Hippocampus:
     async def operation_build_memory(self, chat_size=12):
         # 最近消息获取频率
         time_frequency = {'near': 3, 'mid': 8, 'far': 5}
-        memory_sample = self.get_memory_sample(chat_size, time_frequency)
+        memory_samples = self.get_memory_sample(chat_size, time_frequency)
         
         all_topics = []  # 用于存储所有话题
 
-        for i, input_text in enumerate(memory_sample, 1):
+        for i, messages in enumerate(memory_samples, 1):
             # 加载进度可视化
             all_topics = []
-            progress = (i / len(memory_sample)) * 100
+            progress = (i / len(memory_samples)) * 100
             bar_length = 30
-            filled_length = int(bar_length * i // len(memory_sample))
+            filled_length = int(bar_length * i // len(memory_samples))
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
-            print(f"\n进度: [{bar}] {progress:.1f}% ({i}/{len(memory_sample)})")
+            print(f"\n进度: [{bar}] {progress:.1f}% ({i}/{len(memory_samples)})")
 
-            # 生成压缩后记忆 ,表现为 (话题,记忆) 的元组
-            compressed_memory = set()
+            # 生成压缩后记忆
             compress_rate = 0.1
-            compressed_memory = await self.memory_compress(input_text, compress_rate)
+            compressed_memory = await self.memory_compress(messages, compress_rate)
             print(f"\033[1;33m压缩后记忆数量\033[0m: {len(compressed_memory)}")
             
             # 将记忆加入到图谱中
             for topic, memory in compressed_memory:
                 print(f"\033[1;32m添加节点\033[0m: {topic}")
                 self.memory_graph.add_dot(topic, memory)
-                all_topics.append(topic)  # 收集所有话题
+                all_topics.append(topic)
+                
+            # 连接相关话题
             for i in range(len(all_topics)):
                 for j in range(i + 1, len(all_topics)):
                     print(f"\033[1;32m连接节点\033[0m: {all_topics[i]} 和 {all_topics[j]}")
                     self.memory_graph.connect_dot(all_topics[i], all_topics[j])
-
-                
-            
                     
         self.sync_memory_to_db()
 
@@ -375,7 +425,7 @@ class Hippocampus:
                 
             if concept not in db_nodes_dict:
                 # 数据库中缺少的节点，添加
-                logger.info(f"添加新节点: {concept}")
+                # logger.info(f"添加新节点: {concept}")
                 node_data = {
                     'concept': concept,
                     'memory_items': memory_items,
@@ -389,7 +439,7 @@ class Hippocampus:
                 
                 # 如果特征值不同，则更新节点
                 if db_hash != memory_hash:
-                    logger.info(f"更新节点内容: {concept}")
+                    # logger.info(f"更新节点内容: {concept}")
                     self.memory_graph.db.db.graph_data.nodes.update_one(
                         {'concept': concept},
                         {'$set': {
@@ -402,7 +452,7 @@ class Hippocampus:
         memory_concepts = set(node[0] for node in memory_nodes)
         for db_node in db_nodes:
             if db_node['concept'] not in memory_concepts:
-                logger.info(f"删除多余节点: {db_node['concept']}")
+                # logger.info(f"删除多余节点: {db_node['concept']}")
                 self.memory_graph.db.db.graph_data.nodes.delete_one({'concept': db_node['concept']})
                 
         # 处理边的信息
@@ -460,9 +510,10 @@ class Hippocampus:
         prompt = f'这是一段文字：{text}。请你从这段话中总结出{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，用逗号,隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要有序号，不要告诉我其他内容。'
         return prompt
 
-    def topic_what(self,text, topic):
+    def topic_what(self,text, topic, time_info):
         # prompt = f'这是一段文字：{text}。我想知道这段文字里有什么关于{topic}的话题，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
-        prompt = f'这是一段文字：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
+        # 获取当前时间
+        prompt = f'这是一段文字，{time_info}：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
         return prompt
     
     def remove_node_from_db(self, topic):
@@ -597,7 +648,7 @@ class Hippocampus:
         print(f"选择的记忆:\n{merged_text}")
         
         # 使用memory_compress生成新的压缩记忆
-        compressed_memories = await self.memory_compress(merged_text, 0.1)
+        compressed_memories = await self.memory_compress(selected_memories, 0.1)
         
         # 从原记忆列表中移除被选中的记忆
         for memory in selected_memories:
@@ -647,6 +698,164 @@ class Hippocampus:
         else:
             print("\n本次检查没有需要合并的节点")
         
+    async def _identify_topics(self, text: str) -> list:
+        """从文本中识别可能的主题"""
+        topics_response = self.llm_model_get_topic.generate_response(self.find_topic_llm(text, 5))
+        topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
+        return topics
+        
+    def _find_similar_topics(self, topics: list, similarity_threshold: float = 0.4, debug_info: str = "") -> list:
+        """查找与给定主题相似的记忆主题"""
+        all_memory_topics = list(self.memory_graph.G.nodes())
+        all_similar_topics = []
+        
+        for topic in topics:
+            if debug_info:
+                pass
+                
+            topic_vector = text_to_vector(topic)
+            has_similar_topic = False
+            
+            for memory_topic in all_memory_topics:
+                memory_vector = text_to_vector(memory_topic)
+                all_words = set(topic_vector.keys()) | set(memory_vector.keys())
+                v1 = [topic_vector.get(word, 0) for word in all_words]
+                v2 = [memory_vector.get(word, 0) for word in all_words]
+                similarity = cosine_similarity(v1, v2)
+                
+                if similarity >= similarity_threshold:
+                    has_similar_topic = True
+                    all_similar_topics.append((memory_topic, similarity))
+                    
+        return all_similar_topics
+        
+    def _get_top_topics(self, similar_topics: list, max_topics: int = 5) -> list:
+        """获取相似度最高的主题"""
+        seen_topics = set()
+        top_topics = []
+        
+        for topic, score in sorted(similar_topics, key=lambda x: x[1], reverse=True):
+            if topic not in seen_topics and len(top_topics) < max_topics:
+                seen_topics.add(topic)
+                top_topics.append((topic, score))
+                
+        return top_topics
+
+    async def memory_activate_value(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.3) -> int:
+        """计算输入文本对记忆的激活程度"""
+        print(f"\033[1;32m[记忆激活]\033[0m 识别主题: {await self._identify_topics(text)}")
+        
+        identified_topics = await self._identify_topics(text)
+        if not identified_topics:
+            return 0
+            
+        all_similar_topics = self._find_similar_topics(
+            identified_topics, 
+            similarity_threshold=similarity_threshold,
+            debug_info="记忆激活"
+        )
+        
+        if not all_similar_topics:
+            return 0
+            
+        top_topics = self._get_top_topics(all_similar_topics, max_topics)
+        
+        if len(top_topics) == 1:
+            topic, score = top_topics[0]
+            memory_items = self.memory_graph.G.nodes[topic].get('memory_items', [])
+            if not isinstance(memory_items, list):
+                memory_items = [memory_items] if memory_items else []
+            content_count = len(memory_items)
+            penalty = 1.0 / (1 + math.log(content_count + 1))
+            
+            activation = int(score * 50 * penalty)
+            print(f"\033[1;32m[记忆激活]\033[0m 单主题「{topic}」- 相似度: {score:.3f}, 内容数: {content_count}, 激活值: {activation}")
+            return activation
+            
+        matched_topics = set()
+        topic_similarities = {}
+        
+        for memory_topic, similarity in top_topics:
+            memory_items = self.memory_graph.G.nodes[memory_topic].get('memory_items', [])
+            if not isinstance(memory_items, list):
+                memory_items = [memory_items] if memory_items else []
+            content_count = len(memory_items)
+            penalty = 1.0 / (1 + math.log(content_count + 1))
+            
+            for input_topic in identified_topics:
+                topic_vector = text_to_vector(input_topic)
+                memory_vector = text_to_vector(memory_topic)
+                all_words = set(topic_vector.keys()) | set(memory_vector.keys())
+                v1 = [topic_vector.get(word, 0) for word in all_words]
+                v2 = [memory_vector.get(word, 0) for word in all_words]
+                sim = cosine_similarity(v1, v2)
+                if sim >= similarity_threshold:
+                    matched_topics.add(input_topic)
+                    adjusted_sim = sim * penalty
+                    topic_similarities[input_topic] = max(topic_similarities.get(input_topic, 0), adjusted_sim)
+                    print(f"\033[1;32m[记忆激活]\033[0m 主题「{input_topic}」-> 「{memory_topic}」(内容数: {content_count}, 相似度: {adjusted_sim:.3f})")
+        
+        topic_match = len(matched_topics) / len(identified_topics)
+        average_similarities = sum(topic_similarities.values()) / len(topic_similarities) if topic_similarities else 0
+        
+        activation = int((topic_match + average_similarities) / 2 * 100)
+        print(f"\033[1;32m[记忆激活]\033[0m 匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
+        
+        return activation
+
+    async def get_relevant_memories(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.4, max_memory_num: int = 5) -> list:
+        """根据输入文本获取相关的记忆内容"""
+        identified_topics = await self._identify_topics(text)
+        
+        all_similar_topics = self._find_similar_topics(
+            identified_topics, 
+            similarity_threshold=similarity_threshold,
+            debug_info="记忆检索"
+        )
+        
+        relevant_topics = self._get_top_topics(all_similar_topics, max_topics)
+        
+        relevant_memories = []
+        for topic, score in relevant_topics:
+            first_layer, _ = self.memory_graph.get_related_item(topic, depth=1)
+            if first_layer:
+                if len(first_layer) > max_memory_num/2:
+                    first_layer = random.sample(first_layer, max_memory_num//2)
+                for memory in first_layer:
+                    relevant_memories.append({
+                        'topic': topic,
+                        'similarity': score,
+                        'content': memory
+                    })
+                    
+        relevant_memories.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        if len(relevant_memories) > max_memory_num:
+            relevant_memories = random.sample(relevant_memories, max_memory_num)
+        
+        return relevant_memories
+
+def segment_text(text):
+    """使用jieba进行文本分词"""
+    seg_text = list(jieba.cut(text))
+    return seg_text
+
+def text_to_vector(text):
+    """将文本转换为词频向量"""
+    words = segment_text(text)
+    vector = {}
+    for word in words:
+        vector[word] = vector.get(word, 0) + 1
+    return vector
+
+def cosine_similarity(v1, v2):
+    """计算两个向量的余弦相似度"""
+    dot_product = sum(a * b for a, b in zip(v1, v2))
+    norm1 = math.sqrt(sum(a * a for a in v1))
+    norm2 = math.sqrt(sum(b * b for b in v2))
+    if norm1 == 0 or norm2 == 0:
+        return 0
+    return dot_product / (norm1 * norm2)
 
 def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = False):
     # 设置中文字体

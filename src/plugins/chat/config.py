@@ -88,6 +88,8 @@ class BotConfig:
     PERSONALITY_2: float = 0.3 # 第二种人格概率
     PERSONALITY_3: float = 0.1 # 第三种人格概率
     
+    memory_ban_words: list = field(default_factory=lambda: ['表情包', '图片', '回复', '聊天记录'])  # 添加新的配置项默认值
+    
     @staticmethod
     def get_config_dir() -> str:
         """获取配置文件目录"""
@@ -277,6 +279,10 @@ class BotConfig:
             memory_config = parent["memory"]
             config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
             config.forget_memory_interval = memory_config.get("forget_memory_interval", config.forget_memory_interval)
+            
+            # 在版本 >= 0.0.4 时才处理新增的配置项
+            if config.INNER_VERSION in SpecifierSet(">=0.0.4"):
+                config.memory_ban_words = set(memory_config.get("memory_ban_words", []))
 
         def mood(parent: dict):
             mood_config = parent["mood"]
@@ -344,7 +350,8 @@ class BotConfig:
             },
             "memory": {
                 "func": memory,
-                "support": ">=0.0.0"
+                "support": ">=0.0.0",
+                "necessary": False
             },
             "mood": {
                 "func": mood,
