@@ -150,7 +150,6 @@ if __name__ == "__main__":
     init_env()
     load_env()
 
-
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
 
