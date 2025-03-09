@@ -5,6 +5,7 @@ import time
 from dotenv import load_dotenv
 from loguru import logger
 from nonebot.adapters.onebot.v11 import Adapter
+import platform
 
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}
@@ -117,7 +118,8 @@ def scan_provider(env_config: dict):
 if __name__ == "__main__":
     # 利用 TZ 环境变量设定程序工作的时区
     # 仅保证行为一致，不依赖 localtime()，实际对生产环境几乎没有作用
-    time.tzset()
+    if platform.system().lower() != 'windows':
+        time.tzset()
 
     easter_egg()
     init_config()
