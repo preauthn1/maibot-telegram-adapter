@@ -83,12 +83,15 @@ class BotConfig:
         "是一个女大学生，你有黑色头发，你会刷小红书",
         "是一个女大学生，你会刷b站，对ACG文化感兴趣"
     ]
-    PROMPT_SCHEDULE_GEN = "一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
 
-    PERSONALITY_1: float = 0.6  # 第一种人格概率
-    PERSONALITY_2: float = 0.3  # 第二种人格概率
-    PERSONALITY_3: float = 0.1  # 第三种人格概率
-
+    PROMPT_SCHEDULE_GEN="一个曾经学习地质,现在学习心理学和脑科学的女大学生，喜欢刷qq，贴吧，知乎和小红书"
+    
+    PERSONALITY_1: float = 0.6 # 第一种人格概率
+    PERSONALITY_2: float = 0.3 # 第二种人格概率
+    PERSONALITY_3: float = 0.1 # 第三种人格概率
+    
+    memory_ban_words: list = field(default_factory=lambda: ['表情包', '图片', '回复', '聊天记录'])  # 添加新的配置项默认值
+    
     @staticmethod
     def get_config_dir() -> str:
         """获取配置文件目录"""
@@ -279,6 +282,10 @@ class BotConfig:
             memory_config = parent["memory"]
             config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
             config.forget_memory_interval = memory_config.get("forget_memory_interval", config.forget_memory_interval)
+            
+            # 在版本 >= 0.0.4 时才处理新增的配置项
+            if config.INNER_VERSION in SpecifierSet(">=0.0.4"):
+                config.memory_ban_words = set(memory_config.get("memory_ban_words", []))
 
         def mood(parent: dict):
             mood_config = parent["mood"]
@@ -348,7 +355,8 @@ class BotConfig:
             },
             "memory": {
                 "func": memory,
-                "support": ">=0.0.0"
+                "support": ">=0.0.0",
+                "necessary": False
             },
             "mood": {
                 "func": mood,

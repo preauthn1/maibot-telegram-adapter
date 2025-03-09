@@ -157,46 +157,88 @@ class Hippocampus:
         nodes = sorted([source, target])
         return hash(f"{nodes[0]}:{nodes[1]}")
         
-    def get_memory_sample(self,chat_size=20,time_frequency:dict={'near':2,'mid':4,'far':3}):
+    def get_memory_sample(self, chat_size=20, time_frequency:dict={'near':2,'mid':4,'far':3}):
+        """获取记忆样本
+        
+        Returns:
+            list: 消息记录列表，每个元素是一个消息记录字典列表
+        """
         current_timestamp = datetime.datetime.now().timestamp()
-        chat_text = []
-        #短期：1h   中期：4h   长期：24h
-        for _ in range(time_frequency.get('near')):  # 循环10次
-            random_time = current_timestamp - random.randint(1, 3600)  # 随机时间
-            chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
-            chat_text.append(chat_)  
-        for _ in range(time_frequency.get('mid')):  # 循环10次
-            random_time = current_timestamp - random.randint(3600, 3600*4)  # 随机时间
-            chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
-            chat_text.append(chat_)  
-        for _ in range(time_frequency.get('far')):  # 循环10次
-            random_time = current_timestamp - random.randint(3600*4, 3600*24)  # 随机时间
-            chat_ = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
-            chat_text.append(chat_)
-        return [text for text in chat_text if text]
-    
-    async def memory_compress(self, input_text, compress_rate=0.1):
+        chat_samples = []
+        
+        # 短期：1h   中期：4h   长期：24h
+        for _ in range(time_frequency.get('near')):
+            random_time = current_timestamp - random.randint(1, 3600)
+            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            if messages:
+                chat_samples.append(messages)
+                
+        for _ in range(time_frequency.get('mid')):
+            random_time = current_timestamp - random.randint(3600, 3600*4)
+            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            if messages:
+                chat_samples.append(messages)
+                
+        for _ in range(time_frequency.get('far')):
+            random_time = current_timestamp - random.randint(3600*4, 3600*24)
+            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            if messages:
+                chat_samples.append(messages)
+                
+        return chat_samples
+
+    async def memory_compress(self, messages: list, compress_rate=0.1):
+        """压缩消息记录为记忆
+        
+        Args:
+            messages: 消息记录字典列表，每个字典包含text和time字段
+            compress_rate: 压缩率
+            
+        Returns:
+            set: (话题, 记忆) 元组集合
+        """
+        if not messages:
+            return set()
+            
+        # 合并消息文本，同时保留时间信息
+        input_text = ""
+        time_info = ""
+        # 计算最早和最晚时间
+        earliest_time = min(msg['time'] for msg in messages)
+        latest_time = max(msg['time'] for msg in messages)
+        
+        earliest_dt = datetime.datetime.fromtimestamp(earliest_time)
+        latest_dt = datetime.datetime.fromtimestamp(latest_time)
+        
+        # 如果是同一年
+        if earliest_dt.year == latest_dt.year:
+            earliest_str = earliest_dt.strftime("%m-%d %H:%M:%S")
+            latest_str = latest_dt.strftime("%m-%d %H:%M:%S")
+            time_info += f"是在{earliest_dt.year}年，{earliest_str} 到 {latest_str} 的对话:\n"
+        else:
+            earliest_str = earliest_dt.strftime("%Y-%m-%d %H:%M:%S")
+            latest_str = latest_dt.strftime("%Y-%m-%d %H:%M:%S") 
+            time_info += f"是从 {earliest_str} 到 {latest_str} 的对话:\n"
+        
+        for msg in messages:
+            input_text += f"{msg['text']}\n"
+            
         print(input_text)
         
-        #获取topics
         topic_num = self.calculate_topic_num(input_text, compress_rate)
         topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(input_text, topic_num))
-        # 修改话题处理逻辑
-        # 定义需要过滤的关键词
-        filter_keywords = ['表情包', '图片', '回复', '聊天记录']
         
         # 过滤topics
+        filter_keywords = global_config.memory_ban_words
         topics = [topic.strip() for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",") if topic.strip()]
         filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
         
-        # print(f"原始话题: {topics}")
         print(f"过滤后话题: {filtered_topics}")
         
-        # 使用过滤后的话题继续处理
+        # 创建所有话题的请求任务
         tasks = []
         for topic in filtered_topics:
-            topic_what_prompt = self.topic_what(input_text, topic)
-            # 创建异步任务
+            topic_what_prompt = self.topic_what(input_text, topic, time_info)
             task = self.llm_summary_by_topic.generate_response_async(topic_what_prompt)
             tasks.append((topic.strip(), task))
             
@@ -440,7 +482,7 @@ class Hippocampus:
         print(f"选择的记忆:\n{merged_text}")
         
         # 使用memory_compress生成新的压缩记忆
-        compressed_memories = await self.memory_compress(merged_text, 0.1)
+        compressed_memories = await self.memory_compress(selected_memories, 0.1)
         
         # 从原记忆列表中移除被选中的记忆
         for memory in selected_memories:
@@ -494,8 +536,8 @@ class Hippocampus:
         prompt = f'这是一段文字：{text}。请你从这段话中总结出{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，用逗号,隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要有序号，不要告诉我其他内容。'
         return prompt
 
-    def topic_what(self,text, topic):
-        prompt = f'这是一段文字：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
+    def topic_what(self,text, topic, time_info):
+        prompt = f'这是一段文字，{time_info}：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，可以包含时间和人物，以及具体的观点。只输出这句话就好'
         return prompt
 
     async def _identify_topics(self, text: str) -> list:

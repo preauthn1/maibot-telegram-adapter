@@ -182,13 +182,26 @@ class LLM_request:
                             continue
                         elif response.status in policy["abort_codes"]:
                             logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
-                            if response.status == 403 :
-                                if global_config.llm_normal == "Pro/deepseek-ai/DeepSeek-V3":
-                                    logger.error("可能是没有给硅基流动充钱，普通模型自动退化至非Pro模型，反应速度可能会变慢")
-                                    global_config.llm_normal = "deepseek-ai/DeepSeek-V3"
-                                if global_config.llm_reasoning == "Pro/deepseek-ai/DeepSeek-R1":
-                                    logger.error("可能是没有给硅基流动充钱，推理模型自动退化至非Pro模型，反应速度可能会变慢")
-                                    global_config.llm_reasoning = "deepseek-ai/DeepSeek-R1"
+                            if response.status == 403:
+                                # 尝试降级Pro模型
+                                if self.model_name.startswith("Pro/") and self.base_url == "https://api.siliconflow.cn/v1/":
+                                    old_model_name = self.model_name
+                                    self.model_name = self.model_name[4:]  # 移除"Pro/"前缀
+                                    logger.warning(f"检测到403错误，模型从 {old_model_name} 降级为 {self.model_name}")
+                                    
+                                    # 对全局配置进行更新
+                                    if hasattr(global_config, 'llm_normal') and global_config.llm_normal.get('name') == old_model_name:
+                                        global_config.llm_normal['name'] = self.model_name
+                                        logger.warning(f"已将全局配置中的 llm_normal 模型降级")
+                                    
+                                    # 更新payload中的模型名
+                                    if payload and 'model' in payload:
+                                        payload['model'] = self.model_name
+                                    
+                                    # 重新尝试请求
+                                    retry -= 1  # 不计入重试次数
+                                    continue
+                            
                             raise RuntimeError(f"请求被拒绝: {error_code_mapping.get(response.status)}")
                             
                         response.raise_for_status()
