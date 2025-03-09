@@ -145,10 +145,11 @@ if __name__ == "__main__":
         time.tzset()
 
     easter_egg()
+    load_logger()
     init_config()
     init_env()
     load_env()
-    load_logger()
+
 
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
