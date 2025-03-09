@@ -176,7 +176,7 @@ class MessageSendCQ(MessageCQ):
         elif seg.type == 'image':
             # 如果是base64图片数据
             if seg.data.startswith(('data:', 'base64:')):
-                return f"[CQ:image,file=base64://{seg.data}]"
+                return cq_code_tool.create_emoji_cq_base64(seg.data)
             # 如果是表情包（本地文件）
             return cq_code_tool.create_emoji_cq(seg.data)
         elif seg.type == 'at':

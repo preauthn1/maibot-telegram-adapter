@@ -5,11 +5,10 @@ from typing import Dict, ForwardRef, List, Optional, Union
 import urllib3
 from loguru import logger
 
-from .cq_code import CQCode, cq_code_tool
-from .utils_cq import parse_cq_code
 from .utils_user import get_groupname, get_user_cardname, get_user_nickname
 from .utils_image import image_manager
 from .message_base import Seg, GroupInfo, UserInfo, BaseMessageInfo, MessageBase
+from .chat_stream import ChatStream
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -40,6 +39,7 @@ class MessageRecv(MessageBase):
         # 处理消息内容
         self.processed_plain_text = ""  # 初始化为空字符串
         self.detailed_plain_text = ""   # 初始化为空字符串
+        self.is_emoji=False
 
     async def process(self) -> None:
         """处理消息内容，生成纯文本和详细文本
@@ -88,6 +88,7 @@ class MessageRecv(MessageBase):
                     return await image_manager.get_image_description(seg.data)
                 return '[图片]'
             elif seg.type == 'emoji':
+                self.is_emoji=True
                 if isinstance(seg.data, str) and seg.data.startswith(('data:', 'base64:')):
                     return await image_manager.get_emoji_description(seg.data)
                 return '[表情]'
@@ -115,36 +116,17 @@ class MessageProcessBase(MessageBase):
     def __init__(
         self,
         message_id: str,
-        user_id: int,
-        group_id: Optional[int] = None,
-        platform: str = "qq",
+        chat_stream: ChatStream,
         message_segment: Optional[Seg] = None,
         reply: Optional['MessageRecv'] = None
     ):
-        # 构造用户信息
-        user_info = UserInfo(
-            platform=platform,
-            user_id=user_id,
-            user_nickname=get_user_nickname(user_id),
-            user_cardname=get_user_cardname(user_id) if group_id else None
-        )
-
-        # 构造群组信息（如果有）
-        group_info = None
-        if group_id:
-            group_info = GroupInfo(
-                platform=platform,
-                group_id=group_id,
-                group_name=get_groupname(group_id)
-            )
-
         # 构造基础消息信息
         message_info = BaseMessageInfo(
-            platform=platform,
+            platform=chat_stream.platform,
             message_id=message_id,
             time=int(time.time()),
-            group_info=group_info,
-            user_info=user_info
+            group_info=chat_stream.group_info,
+            user_info=chat_stream.user_info
         )
 
         # 调用父类初始化
@@ -241,23 +223,28 @@ class MessageThinking(MessageProcessBase):
     def __init__(
         self,
         message_id: str,
-        user_id: int,
-        group_id: Optional[int] = None,
-        platform: str = "qq",
+        chat_stream: ChatStream,
         reply: Optional['MessageRecv'] = None
     ):
         # 调用父类初始化
         super().__init__(
             message_id=message_id,
-            user_id=user_id,
-            group_id=group_id,
-            platform=platform,
+            chat_stream=chat_stream,
             message_segment=None,  # 思考状态不需要消息段
             reply=reply
         )
         
         # 思考状态特有属性
         self.interrupt = False
+
+    @classmethod
+    def from_chat_stream(cls, chat_stream: ChatStream, message_id: str, reply: Optional['MessageRecv'] = None) -> 'MessageThinking':
+        """从聊天流创建思考状态消息"""
+        return cls(
+            message_id=message_id,
+            chat_stream=chat_stream,
+            reply=reply
+        )
 
 @dataclass
 class MessageSending(MessageProcessBase):
@@ -266,19 +253,16 @@ class MessageSending(MessageProcessBase):
     def __init__(
         self,
         message_id: str,
-        user_id: int,
+        chat_stream: ChatStream,
         message_segment: Seg,
-        group_id: Optional[int] = None,
         reply: Optional['MessageRecv'] = None,
-        platform: str = "qq",
-        is_head: bool = False
+        is_head: bool = False,
+        is_emoji: bool = False
     ):
         # 调用父类初始化
         super().__init__(
             message_id=message_id,
-            user_id=user_id,
-            group_id=group_id,
-            platform=platform,
+            chat_stream=chat_stream,
             message_segment=message_segment,
             reply=reply
         )
@@ -286,6 +270,12 @@ class MessageSending(MessageProcessBase):
         # 发送状态特有属性
         self.reply_to_message_id = reply.message_info.message_id if reply else None
         self.is_head = is_head
+        self.is_emoji = is_emoji
+        if is_head:
+            self.message_segment = Seg(type='seglist', data=[
+                Seg(type='reply', data=reply.message_info.message_id),
+                self.message_segment
+                ])
 
     async def process(self) -> None:
         """处理消息内容，生成纯文本和详细文本"""
@@ -298,26 +288,24 @@ class MessageSending(MessageProcessBase):
         cls,
         thinking: MessageThinking,
         message_segment: Seg,
-        reply: Optional['MessageRecv'] = None,
-        is_head: bool = False
+        is_head: bool = False,
+        is_emoji: bool = False
     ) -> 'MessageSending':
         """从思考状态消息创建发送状态消息"""
         return cls(
             message_id=thinking.message_info.message_id,
-            user_id=thinking.message_info.user_info.user_id,
+            chat_stream=thinking.chat_stream,
             message_segment=message_segment,
-            group_id=thinking.message_info.group_info.group_id if thinking.message_info.group_info else None,
-            reply=reply or thinking.reply,
-            platform=thinking.message_info.platform,
-            is_head=is_head
+            reply=thinking.reply,
+            is_head=is_head,
+            is_emoji=is_emoji
         )
 
 @dataclass
 class MessageSet:
     """消息集合类，可以存储多个发送消息"""
-    def __init__(self, group_id: int, user_id: int, message_id: str):
-        self.group_id = group_id
-        self.user_id = user_id
+    def __init__(self, chat_stream: ChatStream, message_id: str):
+        self.chat_stream = chat_stream
         self.message_id = message_id
         self.messages: List[MessageSending] = []
         self.time = round(time.time(), 2)

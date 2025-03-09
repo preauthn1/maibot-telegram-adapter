@@ -373,6 +373,24 @@ class CQCode_tool:
         # 生成CQ码，设置sub_type=1表示这是表情包
         return f"[CQ:image,file=file:///{escaped_path},sub_type=1]"
     
+    @staticmethod
+    def create_emoji_cq_base64(base64_data: str) -> str:
+        """
+        创建表情包CQ码
+        Args:
+            base64_data: base64编码的表情包数据
+        Returns:
+            表情包CQ码字符串
+        """
+        # 转义base64数据
+        escaped_base64 = base64_data.replace('&', '&amp;') \
+            .replace('[', '&#91;') \
+            .replace(']', '&#93;') \
+            .replace(',', '&#44;')
+        # 生成CQ码，设置sub_type=1表示这是表情包
+        return f"[CQ:image,file=base64://{escaped_base64},sub_type=1]"
+    
+    
     
 
 
