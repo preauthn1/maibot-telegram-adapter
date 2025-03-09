@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - debug       # 新增 debug 分支触发
+      - stable-dev
     tags:
       - 'v*'       
   workflow_dispatch: 
