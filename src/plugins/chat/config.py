@@ -135,7 +135,7 @@ class BotConfig:
             try:
                 config_version: str = toml["inner"]["version"]
             except KeyError as e:
-                logger.error(f"配置文件中 inner 段 不存在 {e}, 这是错误的配置文件")
+                logger.error(f"配置文件中 inner 段 不存在, 这是错误的配置文件")
                 raise KeyError(f"配置文件中 inner 段 不存在 {e}, 这是错误的配置文件")
         else:
             toml["inner"] = {"version": "0.0.0"}
@@ -162,7 +162,7 @@ class BotConfig:
             personality_config = parent['personality']
             personality = personality_config.get('prompt_personality')
             if len(personality) >= 2:
-                logger.info(f"载入自定义人格:{personality}")
+                logger.debug(f"载入自定义人格:{personality}")
                 config.PROMPT_PERSONALITY = personality_config.get('prompt_personality', config.PROMPT_PERSONALITY)
             logger.info(f"载入自定义日程prompt:{personality_config.get('prompt_schedule', config.PROMPT_SCHEDULE_GEN)}")
             config.PROMPT_SCHEDULE_GEN = personality_config.get('prompt_schedule', config.PROMPT_SCHEDULE_GEN)
@@ -246,11 +246,11 @@ class BotConfig:
                                 try:
                                     cfg_target[i] = cfg_item[i]
                                 except KeyError as e:
-                                    logger.error(f"{item} 中的必要字段 {e} 不存在，请检查")
+                                    logger.error(f"{item} 中的必要字段不存在，请检查")
                                     raise KeyError(f"{item} 中的必要字段 {e} 不存在，请检查")
 
                         provider = cfg_item.get("provider")
-                        if provider == None:
+                        if provider is None:
                             logger.error(f"provider 字段在模型配置 {item} 中不存在，请检查")
                             raise KeyError(f"provider 字段在模型配置 {item} 中不存在，请检查")
 
