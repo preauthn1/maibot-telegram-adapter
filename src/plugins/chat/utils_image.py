@@ -59,7 +59,7 @@ class ImageManager:
             self.db.db.image_descriptions.create_index([('hash', 1)], unique=True)
             self.db.db.image_descriptions.create_index([('type', 1)])
 
-    async def _get_description_from_db(self, image_hash: str, description_type: str) -> Optional[str]:
+    def _get_description_from_db(self, image_hash: str, description_type: str) -> Optional[str]:
         """从数据库获取图片描述
         
         Args:
@@ -69,13 +69,13 @@ class ImageManager:
         Returns:
             Optional[str]: 描述文本，如果不存在则返回None
         """
-        result = await self.db.db.image_descriptions.find_one({
+        result= self.db.db.image_descriptions.find_one({
             'hash': image_hash,
             'type': description_type
         })
         return result['description'] if result else None
 
-    async def _save_description_to_db(self, image_hash: str, description: str, description_type: str) -> None:
+    def _save_description_to_db(self, image_hash: str, description: str, description_type: str) -> None:
         """保存图片描述到数据库
         
         Args:
@@ -83,7 +83,7 @@ class ImageManager:
             description: 描述文本
             description_type: 描述类型 ('emoji' 或 'image')
         """
-        await self.db.db.image_descriptions.update_one(
+        self.db.db.image_descriptions.update_one(
             {'hash': image_hash, 'type': description_type},
             {
                 '$set': {
@@ -253,8 +253,9 @@ class ImageManager:
             image_hash = hashlib.md5(image_bytes).hexdigest()
             
             # 查询缓存的描述
-            cached_description = await self._get_description_from_db(image_hash, 'emoji')
+            cached_description = self._get_description_from_db(image_hash, 'emoji')
             if cached_description:
+                logger.info(f"缓存表情包描述: {cached_description}")
                 return f"[表情包：{cached_description}]"
 
             # 调用AI获取描述
@@ -281,7 +282,7 @@ class ImageManager:
                         'description': description,
                         'timestamp': timestamp
                     }
-                    await self.db.db.images.update_one(
+                    self.db.db.images.update_one(
                         {'hash': image_hash},
                         {'$set': image_doc},
                         upsert=True
@@ -291,7 +292,7 @@ class ImageManager:
                     logger.error(f"保存表情包文件失败: {str(e)}")
             
             # 保存描述到数据库
-            await self._save_description_to_db(image_hash, description, 'emoji')
+            self._save_description_to_db(image_hash, description, 'emoji')
             
             return f"[表情包：{description}]"
         except Exception as e:
@@ -306,7 +307,7 @@ class ImageManager:
             image_hash = hashlib.md5(image_bytes).hexdigest()
             
             # 查询缓存的描述
-            cached_description = await self._get_description_from_db(image_hash, 'image')
+            cached_description = self._get_description_from_db(image_hash, 'image')
             if cached_description:
                 return f"[图片：{cached_description}]"
 
@@ -334,7 +335,7 @@ class ImageManager:
                         'description': description,
                         'timestamp': timestamp
                     }
-                    await self.db.db.images.update_one(
+                    self.db.db.images.update_one(
                         {'hash': image_hash},
                         {'$set': image_doc},
                         upsert=True
@@ -356,80 +357,6 @@ class ImageManager:
 # 创建全局单例
 image_manager = ImageManager()
 
-
-def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 1024 * 1024) -> str:
-    """压缩base64格式的图片到指定大小
-    Args:
-        base64_data: base64编码的图片数据
-        target_size: 目标文件大小（字节），默认0.8MB
-    Returns:
-        str: 压缩后的base64图片数据
-    """
-    try:
-        # 将base64转换为字节数据
-        image_data = base64.b64decode(base64_data)
-        
-        # 如果已经小于目标大小，直接返回原图
-        if len(image_data) <= 2*1024*1024:
-            return base64_data
-            
-        # 将字节数据转换为图片对象
-        img = Image.open(io.BytesIO(image_data))
-        
-        # 获取原始尺寸
-        original_width, original_height = img.size
-        
-        # 计算缩放比例
-        scale = min(1.0, (target_size / len(image_data)) ** 0.5)
-        
-        # 计算新的尺寸
-        new_width = int(original_width * scale)
-        new_height = int(original_height * scale)
-        
-        # 创建内存缓冲区
-        output_buffer = io.BytesIO()
-        
-        # 如果是GIF，处理所有帧
-        if getattr(img, "is_animated", False):
-            frames = []
-            for frame_idx in range(img.n_frames):
-                img.seek(frame_idx)
-                new_frame = img.copy()
-                new_frame = new_frame.resize((new_width//2, new_height//2), Image.Resampling.LANCZOS) # 动图折上折
-                frames.append(new_frame)
-            
-            # 保存到缓冲区
-            frames[0].save(
-                output_buffer,
-                format='GIF',
-                save_all=True,
-                append_images=frames[1:],
-                optimize=True,
-                duration=img.info.get('duration', 100),
-                loop=img.info.get('loop', 0)
-            )
-        else:
-            # 处理静态图片
-            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            
-            # 保存到缓冲区，保持原始格式
-            if img.format == 'PNG' and img.mode in ('RGBA', 'LA'):
-                resized_img.save(output_buffer, format='PNG', optimize=True)
-            else:
-                resized_img.save(output_buffer, format='JPEG', quality=95, optimize=True)
-        
-        # 获取压缩后的数据并转换为base64
-        compressed_data = output_buffer.getvalue()
-        logger.success(f"压缩图片: {original_width}x{original_height} -> {new_width}x{new_height}")
-        logger.info(f"压缩前大小: {len(image_data)/1024:.1f}KB, 压缩后大小: {len(compressed_data)/1024:.1f}KB")
-        
-        return base64.b64encode(compressed_data).decode('utf-8')
-        
-    except Exception as e:
-        logger.error(f"压缩图片失败: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return base64_data 
 
 def image_path_to_base64(image_path: str) -> str:
     """将图片路径转换为base64编码

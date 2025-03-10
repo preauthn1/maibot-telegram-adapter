@@ -23,12 +23,12 @@ class Relationship:
     saved = False
     
     def __init__(self, chat:ChatStream=None,data:dict=None):
-        self.user_id=chat.user_info.user_id if chat.user_info else data.get('user_id',0)
-        self.platform=chat.platform if chat.user_info else data.get('platform','')
-        self.nickname=chat.user_info.user_nickname if chat.user_info else data.get('nickname','')
-        self.relationship_value=data.get('relationship_value',0)
-        self.age=data.get('age',0)
-        self.gender=data.get('gender','')
+        self.user_id=chat.user_info.user_id if chat else data.get('user_id',0)
+        self.platform=chat.platform if chat else data.get('platform','')
+        self.nickname=chat.user_info.user_nickname if chat else data.get('nickname','')
+        self.relationship_value=data.get('relationship_value',0) if data else 0
+        self.age=data.get('age',0) if data else 0
+        self.gender=data.get('gender','') if data else ''
     
 
 class RelationshipManager:

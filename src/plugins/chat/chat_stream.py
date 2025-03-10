@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import time
+import copy
 from typing import Dict, Optional
 
 from loguru import logger
@@ -86,9 +87,9 @@ class ChatManager:
             self._ensure_collection()
             self._initialized = True
             # 在事件循环中启动初始化
-            asyncio.create_task(self._initialize())
-            # 启动自动保存任务
-            asyncio.create_task(self._auto_save_task())
+            # asyncio.create_task(self._initialize())
+            # # 启动自动保存任务
+            # asyncio.create_task(self._auto_save_task())
 
     async def _initialize(self):
         """异步初始化"""
@@ -122,12 +123,18 @@ class ChatManager:
         self, platform: str, user_info: UserInfo, group_info: Optional[GroupInfo] = None
     ) -> str:
         """生成聊天流唯一ID"""
-        # 组合关键信息
-        components = [
-            platform,
-            str(user_info.user_id),
-            str(group_info.group_id) if group_info else "private",
-        ]
+        if group_info:
+            # 组合关键信息
+            components = [
+                platform,
+                str(group_info.group_id)
+            ]
+        else:
+            components = [
+                platform,
+                str(user_info.user_id),
+                "private"
+            ]
 
         # 使用MD5生成唯一ID
         key = "_".join(components)
@@ -153,10 +160,11 @@ class ChatManager:
         if stream_id in self.streams:
             stream = self.streams[stream_id]
             # 更新用户信息和群组信息
+            stream.update_active_time()
+            stream=copy.deepcopy(stream)
             stream.user_info = user_info
             if group_info:
                 stream.group_info = group_info
-            stream.update_active_time()
             return stream
 
         # 检查数据库中是否存在
@@ -180,7 +188,7 @@ class ChatManager:
         # 保存到内存和数据库
         self.streams[stream_id] = stream
         await self._save_stream(stream)
-        return stream
+        return copy.deepcopy(stream)
 
     def get_stream(self, stream_id: str) -> Optional[ChatStream]:
         """通过stream_id获取聊天流"""

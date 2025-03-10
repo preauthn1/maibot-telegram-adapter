@@ -18,6 +18,7 @@ from .config import global_config
 from .emoji_manager import emoji_manager
 from .relationship_manager import relationship_manager
 from .willing_manager import willing_manager
+from .chat_stream import chat_manager
 
 # 创建LLM统计实例
 llm_stats = LLMStatistics("llm_statistics.txt")
@@ -101,6 +102,8 @@ async def _(bot: Bot):
     
     asyncio.create_task(emoji_manager._periodic_scan(interval_MINS=global_config.EMOJI_REGISTER_INTERVAL))
     print("\033[1;38;5;208m-----------开始偷表情包！-----------\033[0m")
+    asyncio.create_task(chat_manager._initialize())
+    asyncio.create_task(chat_manager._auto_save_task())
     
 @group_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State):

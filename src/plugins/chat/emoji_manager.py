@@ -239,7 +239,7 @@ class EmojiManager:
                     # 即使表情包已存在，也检查是否需要同步到images集合
                     description = existing_emoji.get('discription')
                     # 检查是否在images集合中存在
-                    existing_image = await image_manager.db.db.images.find_one({'hash': image_hash})
+                    existing_image = image_manager.db.db.images.find_one({'hash': image_hash})
                     if not existing_image:
                         # 同步到images集合
                         image_doc = {
@@ -249,7 +249,7 @@ class EmojiManager:
                             'description': description,
                             'timestamp': int(time.time())
                         }
-                        await image_manager.db.db.images.update_one(
+                        image_manager.db.db.images.update_one(
                             {'hash': image_hash},
                             {'$set': image_doc},
                             upsert=True
@@ -260,7 +260,7 @@ class EmojiManager:
                     continue
                 
                 # 检查是否在images集合中已有描述
-                existing_description = await image_manager._get_description_from_db(image_hash, 'emoji')
+                existing_description = image_manager._get_description_from_db(image_hash, 'emoji')
                 
                 if existing_description:
                     description = existing_description
@@ -302,13 +302,13 @@ class EmojiManager:
                         'description': description,
                         'timestamp': int(time.time())
                     }
-                    await image_manager.db.db.images.update_one(
+                    image_manager.db.db.images.update_one(
                         {'hash': image_hash},
                         {'$set': image_doc},
                         upsert=True
                     )
                     # 保存描述到image_descriptions集合
-                    await image_manager._save_description_to_db(image_hash, description, 'emoji')
+                    image_manager._save_description_to_db(image_hash, description, 'emoji')
                     logger.success(f"同步保存到images集合: {filename}")
                 else:
                     logger.warning(f"跳过表情包: {filename}")

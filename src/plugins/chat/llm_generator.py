@@ -7,7 +7,7 @@ from nonebot import get_driver
 from ...common.database import Database
 from ..models.utils_model import LLM_request
 from .config import global_config
-from .message import MessageRecv, MessageThinking, MessageSending
+from .message import MessageRecv, MessageThinking, MessageSending,Message
 from .prompt_builder import prompt_builder
 from .relationship_manager import relationship_manager
 from .utils import process_llm_response
@@ -144,7 +144,7 @@ class ResponseGenerator:
     #                 content: str, content_check: str, reasoning_content: str, reasoning_content_check: str):
     def _save_to_db(
         self,
-        message: Message,
+        message: MessageRecv,
         sender_name: str,
         prompt: str,
         prompt_check: str,
@@ -155,7 +155,7 @@ class ResponseGenerator:
         self.db.db.reasoning_logs.insert_one(
             {
                 "time": time.time(),
-                "group_id": message.group_id,
+                "chat_id": message.chat_stream.stream_id,
                 "user": sender_name,
                 "message": message.processed_plain_text,
                 "model": self.current_model_type,

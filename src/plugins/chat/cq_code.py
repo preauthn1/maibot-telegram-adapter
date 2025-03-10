@@ -59,6 +59,7 @@ class CQCode:
     params: Dict[str, str]
     group_id: int
     user_id: int
+    user_nickname: str
     group_name: str = ""
     user_nickname: str = ""
     translated_segments: Optional[Union[Seg, List[Seg]]] = None
@@ -68,9 +69,7 @@ class CQCode:
 
     def __post_init__(self):
         """初始化LLM实例"""
-        self._llm = LLM_request(
-            model=global_config.vlm, temperature=0.4, max_tokens=300
-        )
+        pass
 
     def translate(self):
         """根据CQ码类型进行相应的翻译处理，转换为Seg对象"""
@@ -225,8 +224,7 @@ class CQCode:
                                     group_id=msg.get("group_id", 0),
                                 )
                                 content_seg = Seg(
-                                    type="seglist", data=message_obj.message_segments
-                                )
+                                    type="seglist", data=message_obj.message_segment                                )
                             else:
                                 content_seg = Seg(type="text", data="[空消息]")
                 else:
@@ -241,7 +239,7 @@ class CQCode:
                             group_id=msg.get("group_id", 0),
                         )
                         content_seg = Seg(
-                            type="seglist", data=message_obj.message_segments
+                            type="seglist", data=message_obj.message_segment
                         )
                     else:
                         content_seg = Seg(type="text", data="[空消息]")
@@ -272,7 +270,7 @@ class CQCode:
             )
 
             segments = []
-            if message_obj.user_id == global_config.BOT_QQ:
+            if message_obj.message_info.user_info.user_id == global_config.BOT_QQ:
                 segments.append(
                     Seg(
                         type="text", data=f"[回复 {global_config.BOT_NICKNAME} 的消息: "
@@ -286,7 +284,7 @@ class CQCode:
                     )
                 )
 
-            segments.append(Seg(type="seglist", data=message_obj.message_segments))
+            segments.append(Seg(type="seglist", data=message_obj.message_segment))
             segments.append(Seg(type="text", data="]"))
             return segments
         else:
@@ -305,12 +303,13 @@ class CQCode:
 
 class CQCode_tool:
     @staticmethod
-    def cq_from_dict_to_class(cq_code: Dict, reply: Optional[Dict] = None) -> CQCode:
+    def cq_from_dict_to_class(cq_code: Dict,msg ,reply: Optional[Dict] = None) -> CQCode:
         """
         将CQ码字典转换为CQCode对象
 
         Args:
             cq_code: CQ码字典
+            msg: MessageCQ对象
             reply: 回复消息的字典（可选）
 
         Returns:
@@ -326,7 +325,13 @@ class CQCode_tool:
             params = cq_code.get("data", {})
 
         instance = CQCode(
-            type=cq_type, params=params, group_id=0, user_id=0, reply_message=reply
+            type=cq_type,
+            params=params,
+            group_id=msg.message_info.group_info.group_id,
+            user_id=msg.message_info.user_info.user_id,
+            user_nickname=msg.message_info.user_info.user_nickname,
+            group_name=msg.message_info.group_info.group_name,
+            reply_message=reply
         )
 
         # 进行翻译处理
@@ -383,6 +388,25 @@ class CQCode_tool:
         )
         # 生成CQ码，设置sub_type=1表示这是表情包
         return f"[CQ:image,file=base64://{escaped_base64},sub_type=1]"
+    
+    @staticmethod
+    def create_image_cq_base64(base64_data: str) -> str:
+        """
+        创建表情包CQ码
+        Args:
+            base64_data: base64编码的表情包数据
+        Returns:
+            表情包CQ码字符串
+        """
+        # 转义base64数据
+        escaped_base64 = (
+            base64_data.replace("&", "&amp;")
+            .replace("[", "&#91;")
+            .replace("]", "&#93;")
+            .replace(",", "&#44;")
+        )
+        # 生成CQ码，设置sub_type=1表示这是表情包
+        return f"[CQ:image,file=base64://{escaped_base64},sub_type=0]"
 
 
 cq_code_tool = CQCode_tool()

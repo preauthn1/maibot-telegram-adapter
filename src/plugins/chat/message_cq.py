@@ -27,27 +27,10 @@ class MessageCQ(MessageBase):
     def __init__(
         self,
         message_id: int,
-        user_id: int,
-        group_id: Optional[int] = None,
+        user_info: UserInfo,
+        group_info: Optional[GroupInfo] = None,
         platform: str = "qq"
     ):
-        # 构造用户信息
-        user_info = UserInfo(
-            platform=platform,
-            user_id=user_id,
-            user_nickname=get_user_nickname(user_id),
-            user_cardname=get_user_cardname(user_id) if group_id else None
-        )
-
-        # 构造群组信息（如果有）
-        group_info = None
-        if group_id:
-            group_info = GroupInfo(
-                platform=platform,
-                group_id=group_id,
-                group_name=get_groupname(group_id)
-            )
-
         # 构造基础消息信息
         message_info = BaseMessageInfo(
             platform=platform,
@@ -56,7 +39,6 @@ class MessageCQ(MessageBase):
             group_info=group_info,
             user_info=user_info
         )
-
         # 调用父类初始化，message_segment 由子类设置
         super().__init__(
             message_info=message_info,
@@ -71,14 +53,17 @@ class MessageRecvCQ(MessageCQ):
     def __init__(
         self,
         message_id: int,
-        user_id: int,
+        user_info: UserInfo,
         raw_message: str,
-        group_id: Optional[int] = None,
+        group_info: Optional[GroupInfo] = None,
+        platform: str = "qq",
         reply_message: Optional[Dict] = None,
-        platform: str = "qq"
     ):
         # 调用父类初始化
-        super().__init__(message_id, user_id, group_id, platform)
+        super().__init__(message_id, user_info, group_info, platform)
+
+        if group_info.group_name is None:
+            group_info.group_name = get_groupname(group_info.group_id)
         
         # 解析消息段
         self.message_segment = self._parse_message(raw_message, reply_message)
@@ -117,7 +102,7 @@ class MessageRecvCQ(MessageCQ):
 
         # 转换CQ码为Seg对象
         for code_item in cq_code_dict_list:
-            message_obj = cq_code_tool.cq_from_dict_to_class(code_item, reply=reply_message)
+            message_obj = cq_code_tool.cq_from_dict_to_class(code_item,msg=self,reply=reply_message)
             if message_obj.translated_segments:
                 segments.append(message_obj.translated_segments)
 
@@ -142,13 +127,14 @@ class MessageSendCQ(MessageCQ):
         data: Dict
     ):
         # 调用父类初始化
-        message_info = BaseMessageInfo(**data.get('message_info', {}))
-        message_segment = Seg(**data.get('message_segment', {}))
+        message_info = BaseMessageInfo.from_dict(data.get('message_info', {}))
+        message_segment = Seg.from_dict(data.get('message_segment', {}))
         super().__init__(
             message_info.message_id, 
-            message_info.user_info.user_id, 
-            message_info.group_info.group_id if message_info.group_info else None, 
-            message_info.platform)
+            message_info.user_info, 
+            message_info.group_info if message_info.group_info else None, 
+            message_info.platform
+            )
         
         self.message_segment = message_segment
         self.raw_message = self._generate_raw_message()
@@ -171,11 +157,9 @@ class MessageSendCQ(MessageCQ):
         if seg.type == 'text':
             return str(seg.data)
         elif seg.type == 'image':
-            # 如果是base64图片数据
-            if seg.data.startswith(('data:', 'base64:')):
-                return cq_code_tool.create_emoji_cq_base64(seg.data)
-            # 如果是表情包（本地文件）
-            return cq_code_tool.create_emoji_cq(seg.data)
+            return cq_code_tool.create_image_cq_base64(seg.data)
+        elif seg.type == 'emoji':
+            return cq_code_tool.create_emoji_cq_base64(seg.data)
         elif seg.type == 'at':
             return f"[CQ:at,qq={seg.data}]"
         elif seg.type == 'reply':

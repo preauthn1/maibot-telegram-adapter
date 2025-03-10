@@ -41,10 +41,10 @@ class Message_Sender:
                         message=message_send.raw_message,
                         auto_escape=False
                     )
-                    print(f"\033[1;34m[调试]\033[0m 发送消息{message}成功")
+                    print(f"\033[1;34m[调试]\033[0m 发送消息{message.processed_plain_text}成功")
                 except Exception as e:
                     print(f"发生错误 {e}")
-                    print(f"\033[1;34m[调试]\033[0m 发送消息{message}失败")
+                    print(f"\033[1;34m[调试]\033[0m 发送消息{message.processed_plain_text}失败")
             else:
                 try:
                     await self._current_bot.send_private_msg(
@@ -52,10 +52,10 @@ class Message_Sender:
                         message=message_send.raw_message,
                         auto_escape=False
                     )
-                    print(f"\033[1;34m[调试]\033[0m 发送消息{message}成功")
+                    print(f"\033[1;34m[调试]\033[0m 发送消息{message.processed_plain_text}成功")
                 except Exception as e:
                     print(f"发生错误 {e}")
-                    print(f"\033[1;34m[调试]\033[0m 发送消息{message}失败")
+                    print(f"\033[1;34m[调试]\033[0m 发送消息{message.processed_plain_text}失败")
 
 
 class MessageContainer:
@@ -137,11 +137,7 @@ class MessageManager:
         return self.containers[chat_id]
         
     def add_message(self, message: Union[MessageThinking, MessageSending, MessageSet]) -> None:
-        chat_stream = chat_manager.get_stream_by_info(
-            platform=message.message_info.platform,
-            user_info=message.message_info.user_info,
-            group_info=message.message_info.group_info
-        )
+        chat_stream = message.chat_stream
         if not chat_stream:
             raise ValueError("无法找到对应的聊天流")
         container = self.get_container(chat_stream.stream_id)
@@ -165,13 +161,14 @@ class MessageManager:
             else:
                 print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
                 if message_earliest.is_head and message_earliest.update_thinking_time() > 30:
-                    await message_sender.send_message(message_earliest)
+                    await message_sender.send_message(message_earliest.set_reply())
                 else:
                     await message_sender.send_message(message_earliest)
 
-                if message_earliest.is_emoji:
-                    message_earliest.processed_plain_text = "[表情包]"
-                await self.storage.store_message(message_earliest, None)
+                # if message_earliest.is_emoji:
+                #     message_earliest.processed_plain_text = "[表情包]"
+                await message_earliest.process()
+                await self.storage.store_message(message_earliest, message_earliest.chat_stream,None)
                 
                 container.remove_message(message_earliest)
             
@@ -184,13 +181,14 @@ class MessageManager:
                         
                     try:
                         if msg.is_head and msg.update_thinking_time() > 30:
-                            await message_sender.send_group_message(chat_id, msg.processed_plain_text, auto_escape=False, reply_message_id=msg.reply_message_id)
+                            await message_sender.send_message(msg.set_reply())
                         else:
-                            await message_sender.send_group_message(chat_id, msg.processed_plain_text, auto_escape=False)
+                            await message_sender.send_message(msg)
                         
-                        if msg.is_emoji:
-                            msg.processed_plain_text = "[表情包]"
-                        await self.storage.store_message(msg, None)
+                        # if msg.is_emoji:
+                        #     msg.processed_plain_text = "[表情包]"
+                        await msg.process()
+                        await self.storage.store_message(msg,msg.chat_stream, None)
                         
                         if not container.remove_message(msg):
                             print("\033[1;33m[警告]\033[0m 尝试删除不存在的消息")

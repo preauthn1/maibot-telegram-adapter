@@ -7,7 +7,7 @@ from loguru import logger
 
 from .utils_image import image_manager
 from .message_base import Seg, GroupInfo, UserInfo, BaseMessageInfo, MessageBase
-from .chat_stream import ChatStream
+from .chat_stream import ChatStream, chat_manager
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -25,8 +25,8 @@ class MessageRecv(MessageBase):
         Args:
             message_dict: MessageCQ序列化后的字典
         """
-        message_info = BaseMessageInfo(**message_dict.get('message_info', {}))
-        message_segment = Seg(**message_dict.get('message_segment', {}))
+        message_info = BaseMessageInfo.from_dict(message_dict.get('message_info', {}))
+        message_segment = Seg.from_dict(message_dict.get('message_segment', {}))
         raw_message = message_dict.get('raw_message')
         
         super().__init__(
@@ -39,7 +39,9 @@ class MessageRecv(MessageBase):
         self.processed_plain_text = ""  # 初始化为空字符串
         self.detailed_plain_text = ""   # 初始化为空字符串
         self.is_emoji=False
-
+    def update_chat_stream(self,chat_stream:ChatStream):
+        self.chat_stream=chat_stream
+    
     async def process(self) -> None:
         """处理消息内容，生成纯文本和详细文本
         
@@ -83,12 +85,12 @@ class MessageRecv(MessageBase):
                 return seg.data
             elif seg.type == 'image':
                 # 如果是base64图片数据
-                if isinstance(seg.data, str) and seg.data.startswith(('data:', 'base64:')):
+                if isinstance(seg.data, str):
                     return await image_manager.get_image_description(seg.data)
                 return '[图片]'
             elif seg.type == 'emoji':
                 self.is_emoji=True
-                if isinstance(seg.data, str) and seg.data.startswith(('data:', 'base64:')):
+                if isinstance(seg.data, str):
                     return await image_manager.get_emoji_description(seg.data)
                 return '[表情]'
             else:
@@ -217,11 +219,11 @@ class MessageProcessBase(Message):
                 return seg.data
             elif seg.type == 'image':
                 # 如果是base64图片数据
-                if isinstance(seg.data, str) and seg.data.startswith(('data:', 'base64:')):
+                if isinstance(seg.data, str):
                     return await image_manager.get_image_description(seg.data)
                 return '[图片]'
             elif seg.type == 'emoji':
-                if isinstance(seg.data, str) and seg.data.startswith(('data:', 'base64:')):
+                if isinstance(seg.data, str):
                     return await image_manager.get_emoji_description(seg.data)
                 return '[表情]'
             elif seg.type == 'at':
@@ -296,10 +298,15 @@ class MessageSending(MessageProcessBase):
         self.reply_to_message_id = reply.message_info.message_id if reply else None
         self.is_head = is_head
         self.is_emoji = is_emoji
-        if is_head:
+            
+    def set_reply(self, reply: Optional['MessageRecv']) -> None:
+        """设置回复消息"""
+        if reply:
+            self.reply = reply
+            self.reply_to_message_id = self.reply.message_info.message_id
             self.message_segment = Seg(type='seglist', data=[
-                Seg(type='reply', data=reply.message_info.message_id),
-                self.message_segment
+                    Seg(type='reply', data=reply.message_info.message_id),
+                    self.message_segment
                 ])
 
     async def process(self) -> None:
@@ -329,7 +336,7 @@ class MessageSending(MessageProcessBase):
     
     def to_dict(self):
         ret= super().to_dict()
-        ret['mesage_info']['user_info']=self.chat_stream.user_info.to_dict()
+        ret['message_info']['user_info']=self.chat_stream.user_info.to_dict()
         return ret
 
 @dataclass

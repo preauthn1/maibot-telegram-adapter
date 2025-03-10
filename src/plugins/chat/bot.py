@@ -18,7 +18,7 @@ from .chat_stream import chat_manager
 from .message_sender import message_manager  # 导入新的消息管理器
 from .relationship_manager import relationship_manager
 from .storage import MessageStorage
-from .utils import calculate_typing_time, is_mentioned_bot_in_txt
+from .utils import calculate_typing_time, is_mentioned_bot_in_message
 from .utils_image import image_path_to_base64
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
@@ -45,8 +45,8 @@ class ChatBot:
         
         self.bot = bot  # 更新 bot 实例
         
-        group_info = await bot.get_group_info(group_id=event.group_id)
-        sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
+        # group_info = await bot.get_group_info(group_id=event.group_id)
+        # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
 
         # 白名单设定由nontbot侧完成
         if event.group_id:
@@ -54,19 +54,32 @@ class ChatBot:
                 return
         if event.user_id in global_config.ban_user_id:
             return
+        
+        user_info=UserInfo(
+            user_id=event.user_id,
+            user_nickname=event.sender.nickname,
+            user_cardname=event.sender.card or None,
+            platform='qq'
+        )
+
+        group_info=GroupInfo(
+            group_id=event.group_id,
+            group_name=None,
+            platform='qq'
+        )
 
         message_cq=MessageRecvCQ(
             message_id=event.message_id,
-            user_id=event.user_id,
+            user_info=user_info,
             raw_message=str(event.original_message),
-            group_id=event.group_id,
+            group_info=group_info,
             reply_message=event.reply,
             platform='qq'
         )
         message_json=message_cq.to_dict()
 
         # 进入maimbot
-        message=MessageRecv(**message_json)
+        message=MessageRecv(message_json)
         
         groupinfo=message.message_info.group_info
         userinfo=message.message_info.user_info
@@ -75,6 +88,7 @@ class ChatBot:
         # 消息过滤，涉及到config有待更新
         
         chat = await chat_manager.get_or_create_stream(platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo)
+        message.update_chat_stream(chat)
         await relationship_manager.update_relationship(chat_stream=chat,)
         await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value = 0.5)
 
@@ -99,7 +113,7 @@ class ChatBot:
         
         await self.storage.store_message(message,chat, topic[0] if topic else None)
 
-        is_mentioned = is_mentioned_bot_in_txt(message.processed_plain_text)
+        is_mentioned = is_mentioned_bot_in_message(message)
         reply_probability = await willing_manager.change_reply_willing_received(
             chat_stream=chat,
             topic=topic[0] if topic else None,
