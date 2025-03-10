@@ -8,7 +8,7 @@
 
 ## API配置说明
 
-`.env.prod`和`bot_config.toml`中的API配置关系如下：
+`.env.prod` 和 `bot_config.toml` 中的API配置关系如下：
 
 ### 在.env.prod中定义API凭证：
 ```ini
