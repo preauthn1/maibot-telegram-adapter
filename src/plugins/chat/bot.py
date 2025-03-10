@@ -129,7 +129,7 @@ class ChatBot:
 
             # 如果找不到思考消息，直接返回
             if not thinking_message:
-                logger.warning(f"未找到对应的思考消息，可能已超时被移除")
+                logger.warning("未找到对应的思考消息，可能已超时被移除")
                 return
 
             # 记录开始思考的时间，避免从思考到回复的时间太久

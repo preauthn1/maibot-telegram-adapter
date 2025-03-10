@@ -91,7 +91,7 @@ class ScheduleGenerator:
         try:
             schedule_dict = json.loads(schedule_text)
             return schedule_dict
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             logger.exception("解析日程失败: {}".format(schedule_text))
             return False
 
