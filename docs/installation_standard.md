@@ -34,7 +34,7 @@ key = "SILICONFLOW_KEY"            # 引用.env.prod中定义的密钥
 如需切换到其他API服务，只需修改引用：
 ```toml
 [model.llm_reasoning]
-name = "Pro/deepseek-ai/DeepSeek-R1"
+name = "deepseek-reasoner"       # 改成对应的模型名称，这里为DeepseekR1
 base_url = "DEEP_SEEK_BASE_URL"  # 切换为DeepSeek服务
 key = "DEEP_SEEK_KEY"            # 使用DeepSeek密钥
 ```
