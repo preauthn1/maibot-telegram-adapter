@@ -1,6 +1,14 @@
-[tool.ruff]
 include = ["*.py"]
+
+# 行长度设置
+line-length = 120
+
+[lint]
 fixable = ["ALL"]
+unfixable = []
+
+# 如果一个变量的名称以下划线开头，即使它未被使用，也不应该被视为错误或警告。
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 # 启用的规则
 select = [
@@ -11,15 +19,10 @@ select = [
 
 ignore = ["E711"]
 
-# 如果一个变量的名称以下划线开头，即使它未被使用，也不应该被视为错误或警告。
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-
-# 行长度设置
-line-length = 120
-
-[tool.ruff.format]
+[format]
 docstring-code-format = true
 indent-style = "space"
+
 
 # 使用双引号表示字符串
 quote-style = "double"
