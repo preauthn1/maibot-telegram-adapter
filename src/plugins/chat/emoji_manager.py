@@ -259,7 +259,7 @@ class EmojiManager:
                             upsert=True
                         )
                         # 保存描述到image_descriptions集合
-                        await image_manager._save_description_to_db(image_hash, description, 'emoji')
+                        image_manager._save_description_to_db(image_hash, description, 'emoji')
                         logger.success(f"同步已存在的表情包到images集合: {filename}")
                     continue
                 

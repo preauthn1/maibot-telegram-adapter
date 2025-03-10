@@ -165,7 +165,6 @@ class ChatBot:
             
         if response:
             container = message_manager.get_container(chat.stream_id)
-            container = message_manager.get_container(chat.stream_id)
             thinking_message = None
             # 找到message,删除
             for msg in container.messages:
@@ -182,12 +181,12 @@ class ChatBot:
             # 记录开始思考的时间，避免从思考到回复的时间太久
             thinking_start_time = thinking_message.thinking_start_time
             message_set = MessageSet(chat, think_id)
-            message_set = MessageSet(chat, think_id)
             #计算打字时间，1是为了模拟打字，2是避免多条回复乱序
             accu_typing_time = 0
             
             mark_head = False
             for msg in response:
+                print("test")
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 # 通过时间改变时间戳
                 typing_time = calculate_typing_time(msg)
@@ -239,6 +238,7 @@ class ChatBot:
                         is_emoji=True
                     )
                     message_manager.add_message(bot_message)
+            
             emotion = await self.gpt._get_emotion_tags(raw_content)
             logger.debug(f"为 '{response}' 获取到的情感标签为：{emotion}")
             valuedict = {
