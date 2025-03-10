@@ -1,6 +1,5 @@
 import time
 from random import random
-
 from loguru import logger
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent
 
@@ -11,24 +10,17 @@ from .cq_code import CQCode,cq_code_tool # 导入CQCode模块
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
-from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
 from .message_cq import (
     MessageRecvCQ,
-    MessageSendCQ,
 )
 from .chat_stream import chat_manager
-    MessageRecvCQ,
-    MessageSendCQ,
-)
-from .chat_stream import chat_manager
+
 from .message_sender import message_manager  # 导入新的消息管理器
 from .relationship_manager import relationship_manager
 from .storage import MessageStorage
 from .utils import calculate_typing_time, is_mentioned_bot_in_txt
 from .utils_image import image_path_to_base64
-from .utils_image import image_path_to_base64
 from .willing_manager import willing_manager  # 导入意愿管理器
-from .message_base import UserInfo, GroupInfo, Seg
 from .message_base import UserInfo, GroupInfo, Seg
 
 class ChatBot:
@@ -53,21 +45,18 @@ class ChatBot:
         
         self.bot = bot  # 更新 bot 实例
         
-        
-        
-
         group_info = await bot.get_group_info(group_id=event.group_id)
         sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
-        
-        await relationship_manager.update_relationship(user_id = event.user_id, data = sender_info)
-        await relationship_manager.update_relationship_value(user_id = event.user_id, relationship_value = 0.5)
-        
-        message_cq=MessageRecvCQ(
+
+        # 白名单设定由nontbot侧完成
+        if event.group_id:
+            if event.group_id not in global_config.talk_allowed_groups:
+                return
+        if event.user_id in global_config.ban_user_id:
+            return
+
         message_cq=MessageRecvCQ(
             message_id=event.message_id,
-            user_id=event.user_id,
-            raw_message=str(event.original_message),
-            group_id=event.group_id,
             user_id=event.user_id,
             raw_message=str(event.original_message),
             group_id=event.group_id,
@@ -78,36 +67,25 @@ class ChatBot:
 
         # 进入maimbot
         message=MessageRecv(**message_json)
-        await message.process()
+        
         groupinfo=message.message_info.group_info
         userinfo=message.message_info.user_info
         messageinfo=message.message_info
-        chat = await chat_manager.get_or_create_stream(platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo)
 
         # 消息过滤，涉及到config有待更新
-        if groupinfo:
-            if groupinfo.group_id not in global_config.talk_allowed_groups:
-                return
-        else:
-            if userinfo:
-                if userinfo.user_id in []:
-                    pass
-                else:
-                    return 
-            else:
-                return
-        if userinfo.user_id in global_config.ban_user_id:
-            return
+        
+        chat = await chat_manager.get_or_create_stream(platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo)
+        await relationship_manager.update_relationship(chat_stream=chat,)
+        await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value = 0.5)
+
+        await message.process()
         # 过滤词
         for word in global_config.ban_words:
-            if word in message.processed_plain_text:
-                logger.info(f"\033[1;32m[{groupinfo.group_name}]{userinfo.user_nickname}:\033[0m {message.processed_plain_text}")
             if word in message.processed_plain_text:
                 logger.info(f"\033[1;32m[{groupinfo.group_name}]{userinfo.user_nickname}:\033[0m {message.processed_plain_text}")
                 logger.info(f"\033[1;32m[过滤词识别]\033[0m 消息中含有{word}，filtered")
                 return
         
-        current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
 
 
@@ -130,9 +108,7 @@ class ChatBot:
             is_emoji=message.is_emoji,
             interested_rate=interested_rate
         )
-        current_willing = willing_manager.get_willing(
-            chat_stream=chat
-        )
+        current_willing = willing_manager.get_willing(chat_stream=chat)
         
         print(f"\033[1;32m[{current_time}][{chat.group_info.group_name}]{chat.user_info.user_nickname}:\033[0m {message.processed_plain_text}\033[1;36m[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]\033[0m")
 
@@ -144,29 +120,18 @@ class ChatBot:
                 user_nickname=global_config.BOT_NICKNAME,
                 platform=messageinfo.platform
             )
-            bot_user_info=UserInfo(
-                user_id=global_config.BOT_QQ,
-                user_nickname=global_config.BOT_NICKNAME,
-                platform=messageinfo.platform
-            )
             tinking_time_point = round(time.time(), 2)
             think_id = 'mt' + str(tinking_time_point)
-            thinking_message = MessageThinking.from_chat_stream(
-                chat_stream=chat,
+            thinking_message = MessageThinking(
                 message_id=think_id,
-                reply=message
-            )
-            thinking_message = MessageThinking.from_chat_stream(
                 chat_stream=chat,
-                message_id=think_id,
+                bot_user_info=bot_user_info,
                 reply=message
             )
             
             message_manager.add_message(thinking_message)
 
-            willing_manager.change_reply_willing_sent(
-                chat_stream=chat
-            )
+            willing_manager.change_reply_willing_sent(chat)
             
             response,raw_content = await self.gpt.generate_response(message)
             
@@ -203,16 +168,9 @@ class ChatBot:
                 
                 message_segment = Seg(type='text', data=msg)
                 bot_message = MessageSending(
-                message_segment = Seg(type='text', data=msg)
-                bot_message = MessageSending(
                     message_id=think_id,
                     chat_stream=chat,
-                    message_segment=message_segment,
-                    reply=message,
-                    is_head=not mark_head,
-                    is_emoji=False
-                )
-                    chat_stream=chat,
+                    bot_user_info=bot_user_info,
                     message_segment=message_segment,
                     reply=message,
                     is_head=not mark_head,
@@ -236,7 +194,6 @@ class ChatBot:
                     emoji_path,discription = emoji_raw
 
                     emoji_cq =  image_path_to_base64(emoji_path)
-                    emoji_cq =  image_path_to_base64(emoji_path)
                     
                     if random() < 0.5:
                         bot_response_time = tinking_time_point - 1
@@ -247,15 +204,7 @@ class ChatBot:
                     bot_message = MessageSending(
                         message_id=think_id,
                         chat_stream=chat,
-                        message_segment=message_segment,
-                        reply=message,
-                        is_head=False,
-                        is_emoji=True
-                    )
-                    message_segment = Seg(type='emoji', data=emoji_cq)
-                    bot_message = MessageSending(
-                        message_id=think_id,
-                        chat_stream=chat,
+                        bot_user_info=bot_user_info,
                         message_segment=message_segment,
                         reply=message,
                         is_head=False,
@@ -273,20 +222,12 @@ class ChatBot:
                 'fearful': -0.7,
                 'neutral': 0.1
             }
-            await relationship_manager.update_relationship_value(message.user_id, relationship_value=valuedict[emotion[0]])
+            await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=valuedict[emotion[0]])
             # 使用情绪管理器更新情绪
             self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
             
             willing_manager.change_reply_willing_after_sent(
-                platform=messageinfo.platform,
-                user_info=userinfo,
-                group_info=groupinfo
-            )
-            
-            willing_manager.change_reply_willing_after_sent(
-                platform=messageinfo.platform,
-                user_info=userinfo,
-                group_info=groupinfo
+                chat_stream=chat
             )
 
 # 创建全局ChatBot实例

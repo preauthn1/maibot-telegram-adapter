@@ -1,11 +1,11 @@
 import asyncio
+import base64
+import hashlib
 import os
 import random
 import time
 import traceback
 from typing import Optional, Tuple
-import base64
-import hashlib
 
 from loguru import logger
 from nonebot import get_driver
@@ -13,9 +13,8 @@ from nonebot import get_driver
 from ...common.database import Database
 from ..chat.config import global_config
 from ..chat.utils import get_embedding
-from ..chat.utils_image import image_path_to_base64
+from ..chat.utils_image import ImageManager, image_path_to_base64
 from ..models.utils_model import LLM_request
-from ..chat.utils_image import ImageManager
 
 driver = get_driver()
 config = driver.config
@@ -78,7 +77,6 @@ class EmojiManager:
         if 'emoji' not in self.db.db.list_collection_names():
             self.db.db.create_collection('emoji')
             self.db.db.emoji.create_index([('embedding', '2dsphere')])
-            self.db.db.emoji.create_index([('tags', 1)])
             self.db.db.emoji.create_index([('filename', 1)], unique=True)
             
     def record_usage(self, emoji_id: str):

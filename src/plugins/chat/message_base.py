@@ -78,6 +78,21 @@ class GroupInfo:
     def to_dict(self) -> Dict:
         """转换为字典格式"""
         return {k: v for k, v in asdict(self).items() if v is not None}
+    
+    def from_dict(cls, data: Dict) -> 'GroupInfo':
+        """从字典创建GroupInfo实例
+        
+        Args:
+            data: 包含必要字段的字典
+            
+        Returns:
+            GroupInfo: 新的实例
+        """
+        return cls(
+            platform=data.get('platform'),
+            group_id=data.get('group_id'),
+            group_name=data.get('group_name',None)
+        )
 
 @dataclass
 class UserInfo:
@@ -90,6 +105,22 @@ class UserInfo:
     def to_dict(self) -> Dict:
         """转换为字典格式"""
         return {k: v for k, v in asdict(self).items() if v is not None}
+    
+    def from_dict(cls, data: Dict) -> 'UserInfo':
+        """从字典创建UserInfo实例
+        
+        Args:
+            data: 包含必要字段的字典
+            
+        Returns:
+            UserInfo: 新的实例
+        """
+        return cls(
+            platform=data.get('platform'),
+            user_id=data.get('user_id'),
+            user_nickname=data.get('user_nickname',None),
+            user_cardname=data.get('user_cardname',None)
+        )
 
 @dataclass
 class BaseMessageInfo:
@@ -147,7 +178,7 @@ class MessageBase:
         """
         message_info = BaseMessageInfo(**data.get('message_info', {}))
         message_segment = Seg(**data.get('message_segment', {}))
-        raw_message = data.get('raw_message')
+        raw_message = data.get('raw_message',None)
         return cls(
             message_info=message_info,
             message_segment=message_segment,

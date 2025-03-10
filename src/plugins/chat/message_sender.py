@@ -29,13 +29,12 @@ class Message_Sender:
     ) -> None:
         """发送消息"""
         if isinstance(message, MessageSending):
+            message_json = message.to_dict()
             message_send=MessageSendCQ(
-                message_id=message.message_id,
-                user_id=message.message_info.user_info.user_id,
-                message_segment=message.message_segment,
-                reply=message.reply
+                data=message_json
             )
-            if message.message_info.group_info:
+
+            if message_send.message_info.group_info:
                 try:
                     await self._current_bot.send_group_msg(
                         group_id=message.message_info.group_info.group_id,

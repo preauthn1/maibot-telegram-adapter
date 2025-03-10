@@ -139,26 +139,23 @@ class MessageSendCQ(MessageCQ):
     
     def __init__(
         self,
-        message_id: int,
-        user_id: int,
-        message_segment: Seg,
-        group_id: Optional[int] = None,
-        reply_to_message_id: Optional[int] = None,
-        platform: str = "qq"
+        data: Dict
     ):
         # 调用父类初始化
-        super().__init__(message_id, user_id, group_id, platform)
+        message_info = BaseMessageInfo(**data.get('message_info', {}))
+        message_segment = Seg(**data.get('message_segment', {}))
+        super().__init__(
+            message_info.message_id, 
+            message_info.user_info.user_id, 
+            message_info.group_info.group_id if message_info.group_info else None, 
+            message_info.platform)
         
         self.message_segment = message_segment
-        self.raw_message = self._generate_raw_message(reply_to_message_id)
+        self.raw_message = self._generate_raw_message()
 
-    def _generate_raw_message(self, reply_to_message_id: Optional[int] = None) -> str:
+    def _generate_raw_message(self, ) -> str:
         """将Seg对象转换为raw_message"""
         segments = []
-        
-        # 添加回复消息
-        if reply_to_message_id:
-            segments.append(cq_code_tool.create_reply_cq(reply_to_message_id))
 
         # 处理消息段
         if self.message_segment.type == 'seglist':

@@ -5,7 +5,6 @@ from typing import Dict, ForwardRef, List, Optional, Union
 import urllib3
 from loguru import logger
 
-from .utils_user import get_groupname, get_user_cardname, get_user_nickname
 from .utils_image import image_manager
 from .message_base import Seg, GroupInfo, UserInfo, BaseMessageInfo, MessageBase
 from .chat_stream import ChatStream
@@ -108,25 +107,32 @@ class MessageRecv(MessageBase):
             else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
         )
         return f"[{time_str}] {name}: {self.processed_plain_text}\n"
-
-@dataclass
-class MessageProcessBase(MessageBase):
-    """消息处理基类，用于处理中和发送中的消息"""
     
+@dataclass
+class Message(MessageBase):
+    chat_stream: ChatStream=None
+    reply: Optional['Message'] = None
+    detailed_plain_text: str = ""
+    processed_plain_text: str = ""
+
     def __init__(
         self,
         message_id: str,
+        time: int,
         chat_stream: ChatStream,
+        user_info: UserInfo,
         message_segment: Optional[Seg] = None,
-        reply: Optional['MessageRecv'] = None
+        reply: Optional['MessageRecv'] = None,
+        detailed_plain_text: str = "",
+        processed_plain_text: str = "",
     ):
         # 构造基础消息信息
         message_info = BaseMessageInfo(
             platform=chat_stream.platform,
             message_id=message_id,
-            time=int(time.time()),
+            time=time,
             group_info=chat_stream.group_info,
-            user_info=chat_stream.user_info
+            user_info=user_info
         )
 
         # 调用父类初始化
@@ -136,16 +142,40 @@ class MessageProcessBase(MessageBase):
             raw_message=None
         )
 
-        # 处理状态相关属性
-        self.thinking_start_time = int(time.time())
-        self.thinking_time = 0
-        
+        self.chat_stream = chat_stream
         # 文本处理相关属性
-        self.processed_plain_text = ""
-        self.detailed_plain_text = ""
+        self.processed_plain_text = detailed_plain_text
+        self.detailed_plain_text = processed_plain_text
         
         # 回复消息
         self.reply = reply
+
+
+@dataclass
+class MessageProcessBase(Message):
+    """消息处理基类，用于处理中和发送中的消息"""
+    
+    def __init__(
+        self,
+        message_id: str,
+        chat_stream: ChatStream,
+        bot_user_info: UserInfo,
+        message_segment: Optional[Seg] = None,
+        reply: Optional['MessageRecv'] = None
+    ):
+        # 调用父类初始化
+        super().__init__(
+            message_id=message_id,
+            time=int(time.time()),
+            chat_stream=chat_stream,
+            user_info=bot_user_info,
+            message_segment=message_segment,
+            reply=reply
+        )
+
+        # 处理状态相关属性
+        self.thinking_start_time = int(time.time())
+        self.thinking_time = 0
 
     def update_thinking_time(self) -> float:
         """更新思考时间"""
@@ -224,27 +254,20 @@ class MessageThinking(MessageProcessBase):
         self,
         message_id: str,
         chat_stream: ChatStream,
+        bot_user_info: UserInfo,
         reply: Optional['MessageRecv'] = None
     ):
         # 调用父类初始化
         super().__init__(
             message_id=message_id,
             chat_stream=chat_stream,
+            bot_user_info=bot_user_info,
             message_segment=None,  # 思考状态不需要消息段
             reply=reply
         )
         
         # 思考状态特有属性
         self.interrupt = False
-
-    @classmethod
-    def from_chat_stream(cls, chat_stream: ChatStream, message_id: str, reply: Optional['MessageRecv'] = None) -> 'MessageThinking':
-        """从聊天流创建思考状态消息"""
-        return cls(
-            message_id=message_id,
-            chat_stream=chat_stream,
-            reply=reply
-        )
 
 @dataclass
 class MessageSending(MessageProcessBase):
@@ -254,6 +277,7 @@ class MessageSending(MessageProcessBase):
         self,
         message_id: str,
         chat_stream: ChatStream,
+        bot_user_info: UserInfo,
         message_segment: Seg,
         reply: Optional['MessageRecv'] = None,
         is_head: bool = False,
@@ -263,6 +287,7 @@ class MessageSending(MessageProcessBase):
         super().__init__(
             message_id=message_id,
             chat_stream=chat_stream,
+            bot_user_info=bot_user_info,
             message_segment=message_segment,
             reply=reply
         )
@@ -296,10 +321,16 @@ class MessageSending(MessageProcessBase):
             message_id=thinking.message_info.message_id,
             chat_stream=thinking.chat_stream,
             message_segment=message_segment,
+            bot_user_info=thinking.message_info.user_info,
             reply=thinking.reply,
             is_head=is_head,
             is_emoji=is_emoji
         )
+    
+    def to_dict(self):
+        ret= super().to_dict()
+        ret['mesage_info']['user_info']=self.chat_stream.user_info.to_dict()
+        return ret
 
 @dataclass
 class MessageSet:

@@ -18,8 +18,9 @@ class MessageStorage:
                     "time": message.message_info.time,
                     "chat_id":chat_stream.stream_id,
                     "chat_info": chat_stream.to_dict(),
-                    "detailed_plain_text": message.detailed_plain_text,
+                    "user_info": message.message_info.user_info.to_dict(),
                     "processed_plain_text": message.processed_plain_text,
+                    "detailed_plain_text": message.detailed_plain_text,
                     "topic": topic,
                 }
             self.db.db.messages.insert_one(message_data)

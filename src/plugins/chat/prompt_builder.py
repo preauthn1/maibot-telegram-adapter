@@ -8,6 +8,7 @@ from ..moods.moods import MoodManager
 from ..schedule.schedule_generator import bot_schedule
 from .config import global_config
 from .utils import get_embedding, get_recent_group_detailed_plain_text
+from .chat_stream import ChatStream, chat_manager
 
 
 class PromptBuilder:
@@ -22,7 +23,7 @@ class PromptBuilder:
                     message_txt: str, 
                     sender_name: str = "某人",
                     relationship_value: float = 0.0,
-                    group_id: Optional[int] = None) -> tuple[str, str]:
+                    stream_id: Optional[int] = None) -> tuple[str, str]:
         """构建prompt
         
         Args:
@@ -72,11 +73,17 @@ class PromptBuilder:
         print(f"\033[1;32m[知识检索]\033[0m 耗时: {(end_time - start_time):.3f}秒")
             
         # 获取聊天上下文
+        chat_in_group=True
         chat_talking_prompt = ''
-        if group_id:
-            chat_talking_prompt = get_recent_group_detailed_plain_text(self.db, group_id, limit=global_config.MAX_CONTEXT_SIZE,combine = True)
-        
-        chat_talking_prompt = f"以下是群里正在聊天的内容：\n{chat_talking_prompt}"
+        if stream_id:
+            chat_talking_prompt = get_recent_group_detailed_plain_text(self.db, stream_id, limit=global_config.MAX_CONTEXT_SIZE,combine = True)   
+            chat_stream=chat_manager.get_stream(stream_id)
+            if chat_stream.group_info:
+                chat_talking_prompt = f"以下是群里正在聊天的内容：\n{chat_talking_prompt}"
+            else:
+                chat_in_group=False
+                chat_talking_prompt = f"以下是你正在和{sender_name}私聊的内容：\n{chat_talking_prompt}"
+                # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
         
         
         
@@ -112,8 +119,10 @@ class PromptBuilder:
             
         #激活prompt构建
         activate_prompt = ''
-        activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt},{mood_prompt},你想要{relation_prompt_2}。"          
-        
+        if chat_in_group:
+            activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和ta{relation_prompt},{mood_prompt},你想要{relation_prompt_2}。"          
+        else:
+            activate_prompt = f"以上是你正在和{sender_name}私聊的内容，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和ta{relation_prompt},{mood_prompt},你想要{relation_prompt_2}。"
         #检测机器人相关词汇
         bot_keywords = ['人机', 'bot', '机器', '入机', 'robot', '机器人']
         is_bot = any(keyword in message_txt.lower() for keyword in bot_keywords)
@@ -129,16 +138,20 @@ class PromptBuilder:
         probability_3 = global_config.PERSONALITY_3
         prompt_personality = ''
         personality_choice = random.random()
+        if chat_in_group:
+            prompt_in_group=f"你正在浏览{chat_stream.platform}群"
+        else:
+            prompt_in_group=f"你正在{chat_stream.platform}上和{sender_name}私聊"
         if personality_choice < probability_1:  # 第一种人格
-            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}, 你正在浏览qq群,{promt_info_prompt},
+            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}，{prompt_in_group},{promt_info_prompt},
             现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{is_bot_prompt}
             请注意把握群里的聊天内容，不要刻意突出自身学科背景，不要回复的太有条理，可以有个性。'''
         elif personality_choice < probability_1 + probability_2:  # 第二种人格
-            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}, 你正在浏览qq群，{promt_info_prompt},
+            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}，{prompt_in_group}，{promt_info_prompt},
             现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
             请你表达自己的见解和观点。可以有个性。'''
         else:  # 第三种人格
-            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt},
+            prompt_personality = f'''{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}，{prompt_in_group}，{promt_info_prompt},
             现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{is_bot_prompt}
             请你表达自己的见解和观点。可以有个性。'''
         
