@@ -52,12 +52,12 @@ key = "SILICONFLOW_KEY"            # 用同一张门票就可以啦
 如果你想用DeepSeek官方的服务，就要这样改：
 ```toml
 [model.llm_reasoning]
-name = "Pro/deepseek-ai/DeepSeek-R1"
+name = "deepseek-reasoner"       # 改成对应的模型名称，这里为DeepseekR1
 base_url = "DEEP_SEEK_BASE_URL"  # 改成去DeepSeek游乐园
 key = "DEEP_SEEK_KEY"            # 用DeepSeek的门票
 
 [model.llm_normal]
-name = "Pro/deepseek-ai/DeepSeek-V3"
+name = "deepseek-chat"           # 改成对应的模型名称，这里为DeepseekV3
 base_url = "DEEP_SEEK_BASE_URL"  # 也去DeepSeek游乐园
 key = "DEEP_SEEK_KEY"            # 用同一张DeepSeek门票
 ```
@@ -110,7 +110,8 @@ PLUGINS=["src2.plugins.chat"]  # 这里是机器人的插件列表呢
 ```toml
 [bot]
 qq = "把这里改成你的机器人QQ号喵"  # 填写你的机器人QQ号
-nickname = "麦麦"  # 机器人的名字，你可以改成你喜欢的任何名字哦
+nickname = "麦麦"  # 机器人的名字，你可以改成你喜欢的任何名字哦，建议和机器人QQ名称/群昵称一样哦
+alias_names = ["小麦", "阿麦"] # 也可以用这个招呼机器人，可以不设置呢
 
 [personality]
 # 这里可以设置机器人的性格呢，让它更有趣一些喵

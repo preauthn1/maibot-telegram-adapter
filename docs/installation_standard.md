@@ -8,7 +8,7 @@
 
 ## API配置说明
 
-`.env.prod`和`bot_config.toml`中的API配置关系如下：
+`.env.prod` 和 `bot_config.toml` 中的API配置关系如下：
 
 ### 在.env.prod中定义API凭证：
 ```ini
@@ -34,7 +34,7 @@ key = "SILICONFLOW_KEY"            # 引用.env.prod中定义的密钥
 如需切换到其他API服务，只需修改引用：
 ```toml
 [model.llm_reasoning]
-name = "Pro/deepseek-ai/DeepSeek-R1"
+name = "deepseek-reasoner"       # 改成对应的模型名称，这里为DeepseekR1
 base_url = "DEEP_SEEK_BASE_URL"  # 切换为DeepSeek服务
 key = "DEEP_SEEK_KEY"            # 使用DeepSeek密钥
 ```
@@ -53,11 +53,11 @@ CHAT_ANY_WHERE_BASE_URL=https://api.chatanywhere.tech/v1
 
 # 服务配置
 HOST=127.0.0.1  # 如果使用Docker部署，需要改成0.0.0.0，否则QQ消息无法传入
-PORT=8080
+PORT=8080       # 与反向端口相同
 
 # 数据库配置
 MONGODB_HOST=127.0.0.1  # 如果使用Docker部署，需要改成数据库容器的名字，默认是mongodb
-MONGODB_PORT=27017
+MONGODB_PORT=27017      # MongoDB端口
 DATABASE_NAME=MegBot
 MONGODB_USERNAME = ""  # 数据库用户名
 MONGODB_PASSWORD = ""  # 数据库密码
@@ -72,6 +72,9 @@ PLUGINS=["src2.plugins.chat"]
 [bot]
 qq = "机器人QQ号"  # 必填
 nickname = "麦麦"  # 机器人昵称
+# alias_names: 配置机器人可使用的别名。当机器人在群聊或对话中被调用时，别名可以作为直接命令或提及机器人的关键字使用。
+# 该配置项为字符串数组。例如: ["小麦", "阿麦"]
+alias_names = ["小麦", "阿麦"]  # 机器人别名
 
 [personality]
 prompt_personality = [
