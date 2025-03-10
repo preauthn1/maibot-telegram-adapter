@@ -162,12 +162,13 @@ class Memory_graph:
 def main():
     # 初始化数据库
     Database.initialize(
+        uri=os.getenv("MONGODB_URI"),
         host=os.getenv("MONGODB_HOST", "127.0.0.1"),
         port=int(os.getenv("MONGODB_PORT", "27017")),
         db_name=os.getenv("DATABASE_NAME", "MegBot"),
-        username=os.getenv("MONGODB_USERNAME", ""),
-        password=os.getenv("MONGODB_PASSWORD", ""),
-        auth_source=os.getenv("MONGODB_AUTH_SOURCE", "")
+        username=os.getenv("MONGODB_USERNAME"),
+        password=os.getenv("MONGODB_PASSWORD"),
+        auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
     )
 
     memory_graph = Memory_graph()
