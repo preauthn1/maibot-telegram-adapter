@@ -1,9 +1,20 @@
+[project]
+name = "MaiMaiBot"
+version = "0.1.0"
+description = "MaiMaiBot"
+
+[tool.nonebot]
+plugins = ["src.plugins.chat"]
+plugin_dirs = ["src/plugins"]
+
+[tool.ruff]
+
 include = ["*.py"]
 
 # 行长度设置
 line-length = 120
 
-[lint]
+[tool.ruff.lint]
 fixable = ["ALL"]
 unfixable = []
 
@@ -19,7 +30,7 @@ select = [
 
 ignore = ["E711"]
 
-[format]
+[tool.ruff.format]
 docstring-code-format = true
 indent-style = "space"
 
