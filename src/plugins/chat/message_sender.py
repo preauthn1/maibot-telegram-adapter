@@ -2,6 +2,7 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Union
 
+from loguru import logger
 from nonebot.adapters.onebot.v11 import Bot
 
 from .cq_code import cq_code_tool
@@ -14,11 +15,12 @@ from .chat_stream import chat_manager
 
 class Message_Sender:
     """发送器"""
+
     def __init__(self):
         self.message_interval = (0.5, 1)  # 消息间隔时间范围(秒)
         self.last_send_time = 0
         self._current_bot = None
-        
+
     def set_bot(self, bot: Bot):
         """设置当前bot实例"""
         self._current_bot = bot
@@ -41,10 +43,10 @@ class Message_Sender:
                         message=message_send.raw_message,
                         auto_escape=False
                     )
-                    print(f"\033[1;34m[调试]\033[0m 发送消息{message.processed_plain_text}成功")
+                    logger.success(f"[调试] 发送消息{message.processed_plain_text}成功")
                 except Exception as e:
-                    print(f"发生错误 {e}")
-                    print(f"\033[1;34m[调试]\033[0m 发送消息{message.processed_plain_text}失败")
+                    logger.error(f"[调试] 发生错误 {e}")
+                    logger.error(f"[调试] 发送消息{message.processed_plain_text}失败")
             else:
                 try:
                     await self._current_bot.send_private_msg(
@@ -52,10 +54,10 @@ class Message_Sender:
                         message=message_send.raw_message,
                         auto_escape=False
                     )
-                    print(f"\033[1;34m[调试]\033[0m 发送消息{message.processed_plain_text}成功")
+                    logger.success(f"[调试] 发送消息{message.processed_plain_text}成功")
                 except Exception as e:
-                    print(f"发生错误 {e}")
-                    print(f"\033[1;34m[调试]\033[0m 发送消息{message.processed_plain_text}失败")
+                    logger.error(f"发生错误 {e}")
+                    logger.error(f"[调试] 发送消息{message.processed_plain_text}失败")
 
 
 class MessageContainer:
@@ -71,15 +73,15 @@ class MessageContainer:
         """获取所有超时的Message_Sending对象（思考时间超过30秒），按thinking_start_time排序"""
         current_time = time.time()
         timeout_messages = []
-        
+
         for msg in self.messages:
             if isinstance(msg, MessageSending):
                 if current_time - msg.thinking_start_time > self.thinking_timeout:
                     timeout_messages.append(msg)
-                    
+
         # 按thinking_start_time排序，时间早的在前面
         timeout_messages.sort(key=lambda x: x.thinking_start_time)
-                    
+
         return timeout_messages
         
     def get_earliest_message(self) -> Optional[Union[MessageThinking, MessageSending]]:
@@ -88,11 +90,11 @@ class MessageContainer:
             return None
         earliest_time = float('inf')
         earliest_message = None
-        for msg in self.messages:            
+        for msg in self.messages:
             msg_time = msg.thinking_start_time
             if msg_time < earliest_time:
                 earliest_time = msg_time
-                earliest_message = msg     
+                earliest_message = msg
         return earliest_message
         
     def add_message(self, message: Union[MessageThinking, MessageSending]) -> None:
@@ -110,10 +112,10 @@ class MessageContainer:
                 self.messages.remove(message)
                 return True
             return False
-        except Exception as e:
-            print(f"\033[1;31m[错误]\033[0m 移除消息时发生错误: {e}")
+        except Exception:
+            logger.exception("移除消息时发生错误")
             return False
-        
+
     def has_messages(self) -> bool:
         """检查是否有待发送的消息"""
         return bool(self.messages)
@@ -121,7 +123,7 @@ class MessageContainer:
     def get_all_messages(self) -> List[Union[MessageSending, MessageThinking]]:
         """获取所有消息"""
         return list(self.messages)
-        
+
 
 class MessageManager:
     """管理所有聊天流的消息容器"""
@@ -152,11 +154,11 @@ class MessageManager:
             if isinstance(message_earliest, MessageThinking):
                 message_earliest.update_thinking_time()
                 thinking_time = message_earliest.thinking_time
-                print(f"\033[1;34m[调试]\033[0m 消息正在思考中，已思考{int(thinking_time)}秒\033[K\r", end='', flush=True)
-                
+                print(f"消息正在思考中，已思考{int(thinking_time)}秒\r", end='', flush=True)
+
                 # 检查是否超时
                 if thinking_time > global_config.thinking_timeout:
-                    print(f"\033[1;33m[警告]\033[0m 消息思考超时({thinking_time}秒)，移除该消息")
+                    logger.warning(f"消息思考超时({thinking_time}秒)，移除该消息")
                     container.remove_message(message_earliest)
             else:
                 print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
@@ -174,7 +176,7 @@ class MessageManager:
             
             message_timeout = container.get_timeout_messages()
             if message_timeout:
-                print(f"\033[1;34m[调试]\033[0m 发现{len(message_timeout)}条超时消息")
+                logger.warning(f"发现{len(message_timeout)}条超时消息")
                 for msg in message_timeout:
                     if msg == message_earliest:
                         continue
@@ -191,11 +193,11 @@ class MessageManager:
                         await self.storage.store_message(msg,msg.chat_stream, None)
                         
                         if not container.remove_message(msg):
-                            print("\033[1;33m[警告]\033[0m 尝试删除不存在的消息")
-                    except Exception as e:
-                        print(f"\033[1;31m[错误]\033[0m 处理超时消息时发生错误: {e}")
+                            logger.warning("尝试删除不存在的消息")
+                    except Exception:
+                        logger.exception("处理超时消息时发生错误")
                         continue
-            
+
     async def start_processor(self):
         """启动消息处理器"""
         while self._running:
@@ -205,6 +207,7 @@ class MessageManager:
                 tasks.append(self.process_chat_messages(chat_id))
             
             await asyncio.gather(*tasks)
+
 
 # 创建全局消息管理器实例
 message_manager = MessageManager()

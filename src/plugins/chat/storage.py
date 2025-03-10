@@ -5,6 +5,8 @@ from ...common.database import Database
 from .message_base import MessageBase
 from .message import MessageSending, MessageRecv
 from .chat_stream import ChatStream
+from loguru import logger
+
 
 class MessageStorage:
     def __init__(self):
@@ -24,7 +26,7 @@ class MessageStorage:
                     "topic": topic,
                 }
             self.db.db.messages.insert_one(message_data)
-        except Exception as e:
-            print(f"\033[1;31m[错误]\033[0m 存储消息失败: {e}") 
+        except Exception:
+            logger.exception("存储消息失败")
 
-# 如果需要其他存储相关的函数，可以在这里添加 
+# 如果需要其他存储相关的函数，可以在这里添加

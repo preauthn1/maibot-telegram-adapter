@@ -3,6 +3,7 @@ import time
 from typing import List, Optional, Tuple, Union
 
 from nonebot import get_driver
+from loguru import logger
 
 from ...common.database import Database
 from ..models.utils_model import LLM_request
@@ -55,9 +56,7 @@ class ResponseGenerator:
             self.current_model_type = "r1_distill"
             current_model = self.model_r1_distill
 
-        print(
-            f"+++++++++++++++++{global_config.BOT_NICKNAME}{self.current_model_type}思考中+++++++++++++++++"
-        )
+        logger.info(f"{global_config.BOT_NICKNAME}{self.current_model_type}思考中")
 
         model_response = await self._generate_response_with_model(
             message, current_model
@@ -65,7 +64,7 @@ class ResponseGenerator:
         raw_content = model_response
 
         if model_response:
-            print(f"{global_config.BOT_NICKNAME}的回复是：{model_response}")
+            logger.info(f'{global_config.BOT_NICKNAME}的回复是：{model_response}')
             model_response = await self._process_response(model_response)
             if model_response:
                 return model_response, raw_content
@@ -122,8 +121,8 @@ class ResponseGenerator:
         # 生成回复
         try:
             content, reasoning_content = await model.generate_response(prompt)
-        except Exception as e:
-            print(f"生成回复时出错: {e}")
+        except Exception:
+            logger.exception("生成回复时出错")
             return None
 
         # 保存到数据库
@@ -219,7 +218,7 @@ class InitiativeMessageGenerate:
             prompt_builder._build_initiative_prompt_select(message.group_id)
         )
         content_select, reasoning = self.model_v3.generate_response(topic_select_prompt)
-        print(f"[DEBUG] {content_select} {reasoning}")
+        logger.debug(f"{content_select} {reasoning}")
         topics_list = [dot[0] for dot in dots_for_select]
         if content_select:
             if content_select in topics_list:
@@ -232,12 +231,12 @@ class InitiativeMessageGenerate:
             select_dot[1], prompt_template
         )
         content_check, reasoning_check = self.model_v3.generate_response(prompt_check)
-        print(f"[DEBUG] {content_check} {reasoning_check}")
+        logger.info(f"{content_check} {reasoning_check}")
         if "yes" not in content_check.lower():
             return None
         prompt = prompt_builder._build_initiative_prompt(
             select_dot, prompt_template, memory
         )
         content, reasoning = self.model_r1.generate_response_async(prompt)
-        print(f"[DEBUG] {content} {reasoning}")
+        logger.debug(f"[DEBUG] {content} {reasoning}")
         return content

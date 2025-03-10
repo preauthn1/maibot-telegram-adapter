@@ -170,11 +170,11 @@ class CQCode:
 
             except (requests.exceptions.SSLError, requests.exceptions.HTTPError) as e:
                 if retry == max_retries - 1:
-                    print(f"\033[1;31m[致命错误]\033[0m 最终请求失败: {str(e)}")
+                    logger.error(f"最终请求失败: {str(e)}")
                 time.sleep(1.5**retry)  # 指数退避
 
-            except Exception as e:
-                print(f"\033[1;33m[未知错误]\033[0m {str(e)}")
+            except Exception:
+                logger.exception("[未知错误]")
                 return None
 
         return None
