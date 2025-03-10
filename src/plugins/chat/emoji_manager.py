@@ -51,8 +51,8 @@ class EmojiManager:
                 self._initialized = True
                 # 启动时执行一次完整性检查
                 self.check_emoji_file_integrity()
-            except Exception as e:
-                logger.exception(f"初始化表情管理器失败")
+            except Exception:
+                logger.exception("初始化表情管理器失败")
 
     def _ensure_db(self):
         """确保数据库已初始化"""
@@ -87,8 +87,8 @@ class EmojiManager:
                 {'_id': emoji_id},
                 {'$inc': {'usage_count': 1}}
             )
-        except Exception as e:
-            logger.exception(f"记录表情使用失败")
+        except Exception:
+            logger.exception("记录表情使用失败")
 
     async def get_emoji_for_text(self, text: str) -> Optional[str]:
         """根据文本内容获取相关表情包
@@ -264,8 +264,8 @@ class EmojiManager:
                 else:
                     logger.warning(f"跳过表情包: {filename}")
 
-        except Exception as e:
-            logger.exception(f"扫描表情包失败")
+        except Exception:
+            logger.exception("扫描表情包失败")
 
     async def _periodic_scan(self, interval_MINS: int = 10):
         """定期扫描新表情包"""

@@ -113,7 +113,7 @@ class BotConfig:
 
         try:
             converted = SpecifierSet(value)
-        except InvalidSpecifier as e:
+        except InvalidSpecifier:
             logger.error(
                 f"{value} 分类使用了错误的版本约束表达式\n",
                 "请阅读 https://semver.org/lang/zh-CN/ 修改代码"
@@ -135,7 +135,7 @@ class BotConfig:
             try:
                 config_version: str = toml["inner"]["version"]
             except KeyError as e:
-                logger.error(f"配置文件中 inner 段 不存在, 这是错误的配置文件")
+                logger.error("配置文件中 inner 段 不存在, 这是错误的配置文件")
                 raise KeyError(f"配置文件中 inner 段 不存在 {e}, 这是错误的配置文件")
         else:
             toml["inner"] = {"version": "0.0.0"}
@@ -143,7 +143,7 @@ class BotConfig:
 
         try:
             ver = version.parse(config_version)
-        except InvalidVersion as e:
+        except InvalidVersion:
             logger.error(
                 "配置文件中 inner段 的 version 键是错误的版本描述\n"
                 "请阅读 https://semver.org/lang/zh-CN/ 修改配置，并参考本项目指定的模板进行修改\n"
