@@ -1,9 +1,16 @@
 # 🐳 Docker 部署指南
 
-## 部署步骤（推荐，但不一定是最新）
+## 部署步骤 (推荐，但不一定是最新)
+"更新镜像与容器"部分在Part 6
+
+### 0. 前提说明
+
+**本文假设读者已具备一定的 Docker 基础知识。若您对 Docker 不熟悉，建议先参考相关教程或文档进行学习，或选择使用 [📦Linux手动部署指南](./manual_deploy_linux.md) 或 [📦Windows手动部署指南](./manual_deploy_windows.md) 。**
 
 
 ### 1. 获取Docker配置文件:
+
+- 建议先单独创建好一个文件夹并进入，作为工作目录
 
 ```bash
 wget https://raw.githubusercontent.com/SengokuCola/MaiMBot/main/docker-compose.yml -O docker-compose.yml
@@ -25,14 +32,14 @@ touch bot_config.toml
 - 启动Docker容器:
 ```bash
 NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose up -d
+# 旧版Docker中可能找不到docker compose，请使用docker-compose工具替代
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker-compose up -d
 ```
-
-- 旧版Docker中可能找不到docker compose，请使用docker-compose工具替代
 
 
 ### 3. 修改配置并重启Docker:
 
-- 请前往 [🎀 新手配置指南](./installation_cute.md) 或 [⚙️ 标准配置指南](./installation_standard.md) 完成 `.env.prod` 与 `bot_config.toml` 配置文件的编写\
+- 请前往 [🎀新手配置指南](./installation_cute.md) 或 [⚙️标准配置指南](./installation_standard.md) 完成 `.env.prod` 与 `bot_config.toml` 配置文件的编写\
 **需要注意 `.env.prod` 中HOST处IP的填写，Docker中部署和系统中直接安装的配置会有所不同**
 
 - 重启Docker容器:
@@ -43,9 +50,9 @@ docker restart maimbot  # 若修改过容器名称则替换maimbot为你自定�
 - 下方命令可以但不推荐，只是同时重启NapCat、MongoDB、MaiMBot三个服务
 ```bash
 NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
+# 旧版Docker中可能找不到docker compose，请使用docker-compose工具替代
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker-compose restart
 ```
-
-- 旧版Docker中可能找不到docker compose，请使用docker-compose工具替代
 
 
 ### 4. 登入NapCat管理页添加反向WebSocket
@@ -57,7 +64,24 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose restart
 (若修改过容器名称则替换maimbot为你自定的名称)
 
 
-### 5. 愉快地和麦麦对话吧!
+### 5. 部署完成，愉快地和麦麦对话吧!
+
+
+### 6. 更新镜像与容器
+
+- 以更新MaiMBot为例，其他两个容器可以但没必要
+
+- 先拉取最新镜像
+```bash
+docker pull sengokucola/maimbot:latest
+```
+
+- 拉取完最新镜像后回到 `docker-compose.yml` 所在工作目录执行以下命令，该指令会自动重建镜像有更新的容器并启动
+```bash
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose up -d
+# 旧版Docker中可能找不到docker compose，请使用docker-compose工具替代
+NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker-compose up -d
+```
 
 
 ## ⚠️ 注意事项
