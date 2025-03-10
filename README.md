@@ -51,17 +51,16 @@
 
 ### 部署方式
 
-如果你不知道Docker是什么，建议寻找相关教程或使用手动部署（现在不建议使用docker，更新慢，可能不适配）
+-  📦 **Windows 一键傻瓜式部署**：请运行项目根目录中的 ```run.bat```，部署完成后请参照后续配置指南进行配置
+
+- [📦 Windows 手动部署指南 ](docs/manual_deploy_windows.md)
+
+- [📦 Linux 手动部署指南 ](docs/manual_deploy_linux.md)
+
+如果你不知道Docker是什么，建议寻找相关教程或使用手动部署 **（现在不建议使用docker，更新慢，可能不适配）**
 
 - [🐳 Docker部署指南](docs/docker_deploy.md)
 
-
-- [📦 手动部署指南 Windows](docs/manual_deploy_windows.md)
-
-
-- [📦 手动部署指南 Linux](docs/manual_deploy_linux.md)
-
--  📦 Windows 一键傻瓜式部署，请运行项目根目录中的 ```run.bat```，部署完成后请参照后续配置指南进行配置
 
 ### 配置说明
 - [🎀 新手配置指南](docs/installation_cute.md) - 通俗易懂的配置教程，适合初次使用的猫娘
@@ -140,7 +139,7 @@
 
 
 ## 📌 注意事项
-SengokuCola纯编程外行，面向cursor编程，很多代码史一样多多包涵
+SengokuCola已得到大脑升级
 
 > ⚠️ **警告**：本应用生成内容来自人工智能模型，由 AI 生成，请仔细甄别，请勿用于违反法律的用途，AI生成内容不代表本人观点和立场。
 

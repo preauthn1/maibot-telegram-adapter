@@ -155,8 +155,8 @@ class CQCode:
                     logger.error(f"最终请求失败: {str(e)}")
                 time.sleep(1.5 ** retry)  # 指数退避
 
-            except Exception as e:
-                logger.exception(f"[未知错误]")
+            except Exception:
+                logger.exception("[未知错误]")
                 return None
 
         return None
@@ -281,7 +281,7 @@ class CQCode:
             logger.debug(f"合并后的转发消息: {combined_messages}")
             return f"[转发消息:\n{combined_messages}]"
 
-        except Exception as e:
+        except Exception:
             logger.exception("处理转发消息失败")
             return '[转发消息]'
 
