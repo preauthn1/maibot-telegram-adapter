@@ -119,8 +119,8 @@ class MessageContainer:
                 self.messages.remove(message)
                 return True
             return False
-        except Exception as e:
-            logger.exception(f"移除消息时发生错误: {e}")
+        except Exception:
+            logger.exception(f"移除消息时发生错误")
             return False
 
     def has_messages(self) -> bool:
@@ -213,8 +213,8 @@ class MessageManager:
                         # 安全地移除消息
                         if not container.remove_message(msg):
                             logger.warning("尝试删除不存在的消息")
-                    except Exception as e:
-                        logger.exception(f"处理超时消息时发生错误: {e}")
+                    except Exception:
+                        logger.exception(f"处理超时消息时发生错误")
                         continue
 
     async def start_processor(self):

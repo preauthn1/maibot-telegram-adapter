@@ -45,7 +45,7 @@ class LLM_request:
             self.db.db.llm_usage.create_index([("user_id", 1)])
             self.db.db.llm_usage.create_index([("request_type", 1)])
         except Exception as e:
-            logger.error(f"创建数据库索引失败: {e}")
+            logger.error(f"创建数据库索引失败")
 
     def _record_usage(self, prompt_tokens: int, completion_tokens: int, total_tokens: int,
                       user_id: str = "system", request_type: str = "chat",
@@ -79,8 +79,8 @@ class LLM_request:
                 f"提示词: {prompt_tokens}, 完成: {completion_tokens}, "
                 f"总计: {total_tokens}"
             )
-        except Exception as e:
-            logger.error(f"记录token使用情况失败: {e}")
+        except Exception:
+            logger.error(f"记录token使用情况失败")
 
     def _calculate_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
         """计算API调用成本
@@ -226,8 +226,8 @@ class LLM_request:
                                         if delta_content is None:
                                             delta_content = ""
                                         accumulated_content += delta_content
-                                    except Exception as e:
-                                        logger.error(f"解析流式输出错误: {e}")
+                                    except Exception:
+                                        logger.exception(f"解析流式输出错")
                             content = accumulated_content
                             reasoning_content = ""
                             think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)

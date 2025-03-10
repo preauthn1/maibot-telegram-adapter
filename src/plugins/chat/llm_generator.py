@@ -93,8 +93,8 @@ class ResponseGenerator:
         # 生成回复
         try:
             content, reasoning_content = await model.generate_response(prompt)
-        except Exception as e:
-            logger.exception(f"生成回复时出错: {e}")
+        except Exception:
+            logger.exception(f"生成回复时出错")
             return None
         
         # 保存到数据库
@@ -145,8 +145,8 @@ class ResponseGenerator:
             else:
                 return ["neutral"]
             
-        except Exception as e:
-            logger.exception(f"获取情感标签时出错: {e}")
+        except Exception:
+            logger.exception(f"获取情感标签时出错")
             return ["neutral"]
     
     async def _process_response(self, content: str) -> Tuple[List[str], List[str]]:

@@ -2,12 +2,13 @@ from typing import Optional
 
 from ...common.database import Database
 from .message import Message
+from loguru import logger
 
 
 class MessageStorage:
     def __init__(self):
         self.db = Database.get_instance()
-        
+
     async def store_message(self, message: Message, topic: Optional[str] = None) -> None:
         """存储消息到数据库"""
         try:
@@ -41,9 +42,9 @@ class MessageStorage:
                     "topic": topic,
                     "detailed_plain_text": message.detailed_plain_text,
                 }
-                
-            self.db.db.messages.insert_one(message_data)
-        except Exception as e:
-            print(f"\033[1;31m[错误]\033[0m 存储消息失败: {e}") 
 
-# 如果需要其他存储相关的函数，可以在这里添加 
+            self.db.db.messages.insert_one(message_data)
+        except Exception:
+            logger.exception(f"存储消息失败")
+
+# 如果需要其他存储相关的函数，可以在这里添加
