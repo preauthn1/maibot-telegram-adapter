@@ -6,8 +6,6 @@ services:
       - NAPCAT_UID=${NAPCAT_UID}
       - NAPCAT_GID=${NAPCAT_GID} # 让 NapCat 获取当前用户 GID,UID，防止权限问题
     ports:
-      - 3000:3000
-      - 3001:3001
       - 6099:6099
     restart: unless-stopped
     volumes:
