@@ -16,7 +16,10 @@ from loguru import logger
 import jieba
 
 # from chat.config import global_config
-sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
+# 添加项目根目录到 Python 路径
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+sys.path.append(root_path)
+
 from src.common.database import Database
 from src.plugins.memory_system.offline_llm import LLMModel
 

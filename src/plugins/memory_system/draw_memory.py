@@ -9,7 +9,10 @@ import networkx as nx
 from dotenv import load_dotenv
 from loguru import logger
 
-sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
+# 添加项目根目录到 Python 路径
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+sys.path.append(root_path)
+
 from src.common.database import Database  # 使用正确的导入语法
 
 # 加载.env.dev文件
