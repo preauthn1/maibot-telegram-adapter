@@ -48,7 +48,7 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker-compose up -d
 - 重启Docker容器:
 
 ```bash
-docker restart maimbot  # 若修改过容器名称则替换maimbot为你自定的名臣
+docker restart maimbot  # 若修改过容器名称则替换maimbot为你自定的名称
 ```
 
 - 下方命令可以但不推荐，只是同时重启NapCat、MongoDB、MaiMBot三个服务
