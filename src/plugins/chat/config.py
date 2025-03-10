@@ -280,7 +280,7 @@ class BotConfig:
                 )
                 config.down_frequency_rate = msg_config.get("down_frequency_rate", config.down_frequency_rate)
             
-            if config.INNER_VERSION in SpecifierSet(">=0.0.5"):
+            if config.INNER_VERSION in SpecifierSet(">=0.0.6"):
                 config.ban_msgs_regex = msg_config.get("ban_msgs_regex", config.ban_msgs_regex)
 
         def memory(parent: dict):
