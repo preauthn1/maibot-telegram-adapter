@@ -16,6 +16,7 @@ from .config import global_config
 from .emoji_manager import emoji_manager
 from .relationship_manager import relationship_manager
 from .willing_manager import willing_manager
+from .chat_stream import chat_manager
 from ..memory_system.memory import hippocampus, memory_graph
 from .bot import ChatBot
 from .message_sender import message_manager, message_sender
@@ -98,6 +99,8 @@ async def _(bot: Bot):
 
     asyncio.create_task(emoji_manager._periodic_scan(interval_MINS=global_config.EMOJI_REGISTER_INTERVAL))
     logger.success("-----------开始偷表情包！-----------")
+    asyncio.create_task(chat_manager._initialize())
+    asyncio.create_task(chat_manager._auto_save_task())
 
 
 @group_msg.handle()
