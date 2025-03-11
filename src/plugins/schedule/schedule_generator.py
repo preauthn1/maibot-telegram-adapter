@@ -1,3 +1,4 @@
+import os
 import datetime
 import json
 from typing import Dict, Union
@@ -14,13 +15,13 @@ driver = get_driver()
 config = driver.config
 
 Database.initialize(
-    uri=config.MONGODB_URI,
-    host=config.MONGODB_HOST,
-    port=int(config.MONGODB_PORT),
-    db_name=config.DATABASE_NAME,
-    username=config.MONGODB_USERNAME,
-    password=config.MONGODB_PASSWORD,
-    auth_source=config.MONGODB_AUTH_SOURCE
+    uri=os.getenv("MONGODB_URI"),
+    host=os.getenv("MONGODB_HOST", "127.0.0.1"),
+    port=int(os.getenv("MONGODB_PORT", "27017")),
+    db_name=os.getenv("DATABASE_NAME", "MegBot"),
+    username=os.getenv("MONGODB_USERNAME"),
+    password=os.getenv("MONGODB_PASSWORD"),
+    auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
 )
 
 class ScheduleGenerator:
@@ -176,6 +177,6 @@ class ScheduleGenerator:
 #     print(scheduler.tomorrow_schedule)
 
 # if __name__ == "__main__":
-#     main() 
+#     main()
 
 bot_schedule = ScheduleGenerator()
