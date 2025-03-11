@@ -186,7 +186,6 @@ class ChatBot:
             
             mark_head = False
             for msg in response:
-                print("test")
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 # 通过时间改变时间戳
                 typing_time = calculate_typing_time(msg)
