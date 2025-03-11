@@ -153,8 +153,8 @@ class ChatBot:
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ, user_nickname=global_config.BOT_NICKNAME, platform=messageinfo.platform
             )
-            tinking_time_point = round(time.time(), 2)
-            think_id = "mt" + str(tinking_time_point)
+            thinking_time_point = round(time.time(), 2)
+            think_id = "mt" + str(thinking_time_point)
             thinking_message = MessageThinking(
                 message_id=think_id, chat_stream=chat, bot_user_info=bot_user_info, reply=message
             )
@@ -197,7 +197,7 @@ class ChatBot:
                 typing_time = calculate_typing_time(msg)
                 print(f"typing_time: {typing_time}")
                 accu_typing_time += typing_time
-                timepoint = tinking_time_point + accu_typing_time
+                timepoint = thinking_time_point + accu_typing_time
                 message_segment = Seg(type="text", data=msg)
                 print(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
@@ -220,7 +220,7 @@ class ChatBot:
             print(f"添加message_set到message_manager")
             message_manager.add_message(message_set)
 
-            bot_response_time = tinking_time_point
+            bot_response_time = thinking_time_point
 
             if random() < global_config.emoji_chance:
                 emoji_raw = await emoji_manager.get_emoji_for_text(response)
@@ -232,7 +232,7 @@ class ChatBot:
                     emoji_cq = image_path_to_base64(emoji_path)
 
                     if random() < 0.5:
-                        bot_response_time = tinking_time_point - 1
+                        bot_response_time = thinking_time_point - 1
                     else:
                         bot_response_time = bot_response_time + 1
 
