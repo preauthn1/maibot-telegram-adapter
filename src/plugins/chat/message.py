@@ -18,7 +18,50 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 @dataclass
-class MessageRecv(MessageBase):
+class Message(MessageBase):
+    chat_stream: ChatStream=None
+    reply: Optional['Message'] = None
+    detailed_plain_text: str = ""
+    processed_plain_text: str = ""
+
+    def __init__(
+        self,
+        message_id: str,
+        time: int,
+        chat_stream: ChatStream,
+        user_info: UserInfo,
+        message_segment: Optional[Seg] = None,
+        reply: Optional['MessageRecv'] = None,
+        detailed_plain_text: str = "",
+        processed_plain_text: str = "",
+    ):
+        # 构造基础消息信息
+        message_info = BaseMessageInfo(
+            platform=chat_stream.platform,
+            message_id=message_id,
+            time=time,
+            group_info=chat_stream.group_info,
+            user_info=user_info
+        )
+
+        # 调用父类初始化
+        super().__init__(
+            message_info=message_info,
+            message_segment=message_segment,
+            raw_message=None
+        )
+
+        self.chat_stream = chat_stream
+        # 文本处理相关属性
+        self.processed_plain_text = processed_plain_text
+        self.detailed_plain_text = detailed_plain_text
+        
+        # 回复消息
+        self.reply = reply
+
+
+@dataclass
+class MessageRecv(Message):
     """接收消息类，用于处理从MessageCQ序列化的消息"""
 
     def __init__(self, message_dict: Dict):
@@ -27,24 +70,19 @@ class MessageRecv(MessageBase):
         Args:
             message_dict: MessageCQ序列化后的字典
         """
-        message_info = BaseMessageInfo.from_dict(message_dict.get("message_info", {}))
-        message_segment = Seg.from_dict(message_dict.get("message_segment", {}))
-        raw_message = message_dict.get("raw_message")
-
-        super().__init__(
-            message_info=message_info,
-            message_segment=message_segment,
-            raw_message=raw_message,
-        )
-
+        self.message_info = BaseMessageInfo.from_dict(message_dict.get('message_info', {}))
+        self.message_segment = Seg.from_dict(message_dict.get('message_segment', {}))
+        self.raw_message = message_dict.get('raw_message')
+        
         # 处理消息内容
         self.processed_plain_text = ""  # 初始化为空字符串
-        self.detailed_plain_text = ""  # 初始化为空字符串
-        self.is_emoji = False
-
-    def update_chat_stream(self, chat_stream: ChatStream):
-        self.chat_stream = chat_stream
-
+        self.detailed_plain_text = ""   # 初始化为空字符串
+        self.is_emoji=False
+    
+    
+    def update_chat_stream(self,chat_stream:ChatStream):
+        self.chat_stream=chat_stream
+    
     async def process(self) -> None:
         """处理消息内容，生成纯文本和详细文本
 
@@ -118,48 +156,7 @@ class MessageRecv(MessageBase):
             else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
         )
         return f"[{time_str}] {name}: {self.processed_plain_text}\n"
-
-
-@dataclass
-class Message(MessageBase):
-    chat_stream: ChatStream = None
-    reply: Optional["Message"] = None
-    detailed_plain_text: str = ""
-    processed_plain_text: str = ""
-
-    def __init__(
-        self,
-        message_id: str,
-        time: int,
-        chat_stream: ChatStream,
-        user_info: UserInfo,
-        message_segment: Optional[Seg] = None,
-        reply: Optional["MessageRecv"] = None,
-        detailed_plain_text: str = "",
-        processed_plain_text: str = "",
-    ):
-        # 构造基础消息信息
-        message_info = BaseMessageInfo(
-            platform=chat_stream.platform,
-            message_id=message_id,
-            time=time,
-            group_info=chat_stream.group_info,
-            user_info=user_info,
-        )
-
-        # 调用父类初始化
-        super().__init__(
-            message_info=message_info, message_segment=message_segment, raw_message=None
-        )
-
-        self.chat_stream = chat_stream
-        # 文本处理相关属性
-        self.processed_plain_text = detailed_plain_text
-        self.detailed_plain_text = processed_plain_text
-
-        # 回复消息
-        self.reply = reply
-
+    
 
 @dataclass
 class MessageProcessBase(Message):

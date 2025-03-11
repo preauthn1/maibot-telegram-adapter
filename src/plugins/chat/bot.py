@@ -13,6 +13,7 @@ from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
 from .cq_code import CQCode, cq_code_tool  # 导入CQCode模块
+from .cq_code import CQCode, cq_code_tool  # 导入CQCode模块
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
@@ -28,6 +29,7 @@ from .utils import calculate_typing_time, is_mentioned_bot_in_message
 from .utils_image import image_path_to_base64
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
+
 
 
 class ChatBot:
@@ -96,13 +98,16 @@ class ChatBot:
         # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
 
         message_cq = MessageRecvCQ(
+        message_cq = MessageRecvCQ(
             message_id=event.message_id,
             user_info=user_info,
             raw_message=str(event.original_message),
             group_info=group_info,
             reply_message=event.reply,
             platform="qq",
+            platform="qq",
         )
+        message_json = message_cq.to_dict()
         message_json = message_cq.to_dict()
 
         # 进入maimbot
@@ -111,8 +116,17 @@ class ChatBot:
         groupinfo = message.message_info.group_info
         userinfo = message.message_info.user_info
         messageinfo = message.message_info
+        message = MessageRecv(message_json)
+
+        groupinfo = message.message_info.group_info
+        userinfo = message.message_info.user_info
+        messageinfo = message.message_info
 
         # 消息过滤，涉及到config有待更新
+
+        chat = await chat_manager.get_or_create_stream(
+            platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo
+        )
 
         chat = await chat_manager.get_or_create_stream(
             platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo
@@ -150,12 +164,15 @@ class ChatBot:
 
         # topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
         topic = ""
+        topic = ""
         interested_rate = 0
         interested_rate = (
             await hippocampus.memory_activate_value(message.processed_plain_text) / 100
         )
         logger.debug(f"对{message.processed_plain_text}" f"的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
+
+        await self.storage.store_message(message, chat, topic[0] if topic else None)
 
         await self.storage.store_message(message, chat, topic[0] if topic else None)
 
@@ -167,8 +184,10 @@ class ChatBot:
             config=global_config,
             is_emoji=message.is_emoji,
             interested_rate=interested_rate,
+            interested_rate=interested_rate,
         )
         current_willing = willing_manager.get_willing(chat_stream=chat)
+
 
         logger.info(
             f"[{current_time}][{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{chat.user_info.user_nickname}:"
@@ -176,6 +195,7 @@ class ChatBot:
         )
 
         response = None
+
 
         if random() < reply_probability:
             bot_user_info = UserInfo(
@@ -192,9 +212,13 @@ class ChatBot:
                 reply=message,
             )
 
+
             message_manager.add_message(thinking_message)
 
             willing_manager.change_reply_willing_sent(chat)
+
+            response, raw_content = await self.gpt.generate_response(message)
+
 
             response, raw_content = await self.gpt.generate_response(message)
 
@@ -257,7 +281,7 @@ class ChatBot:
             print(f"添加message_set到message_manager")
             message_manager.add_message(message_set)
 
-            bot_response_time = tinking_time_point
+            bot_response_time = thinking_time_point
 
             if random() < global_config.emoji_chance:
                 emoji_raw = await emoji_manager.get_emoji_for_text(response)
@@ -269,7 +293,7 @@ class ChatBot:
                     emoji_cq = image_path_to_base64(emoji_path)
 
                     if random() < 0.5:
-                        bot_response_time = tinking_time_point - 1
+                        bot_response_time = thinking_time_point - 1
                     else:
                         bot_response_time = bot_response_time + 1
 
