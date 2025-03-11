@@ -120,6 +120,9 @@ sudo nano /etc/systemd/system/maimbot.service
 
 输入以下内容：
 
+`<maimbot_directory>`：你的maimbot目录
+`<venv_directory>`：你的venv环境（就是上文创建环境后，执行的代码`source maimbot/bin/activate`中source后面的路径的绝对路径）
+
 ```ini
 [Unit]
 Description=MaiMbot 麦麦
@@ -127,8 +130,8 @@ After=network.target mongod.service
 
 [Service]
 Type=simple
-WorkingDirectory=/path/to/your/maimbot/
-ExecStart=/path/to/your/venv/python3 bot.py
+WorkingDirectory=<maimbot_directory>
+ExecStart=<venv_directory>/python3 bot.py
 Restart=always
 RestartSec=10s
 
@@ -136,7 +139,7 @@ RestartSec=10s
 WantedBy=multi-user.target
 ```
 
-输入以下命令重新加载 systemd：
+输入以下命令重新加载systemd：
 
 ```bash
 sudo systemctl daemon-reload
