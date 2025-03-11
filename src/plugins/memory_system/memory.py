@@ -523,9 +523,14 @@ class Hippocampus:
 
     async def operation_forget_topic(self, percentage=0.1):
         """随机选择图中一定比例的节点和边进行检查,根据时间条件决定是否遗忘"""
+        # 检查数据库是否为空
         all_nodes = list(self.memory_graph.G.nodes())
         all_edges = list(self.memory_graph.G.edges())
         
+        if not all_nodes and not all_edges:
+            logger.info("记忆图为空,无需进行遗忘操作")
+            return
+            
         check_nodes_count = max(1, int(len(all_nodes) * percentage))
         check_edges_count = max(1, int(len(all_edges) * percentage))
         
