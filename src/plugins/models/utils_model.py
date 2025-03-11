@@ -184,9 +184,9 @@ class LLM_request:
                         elif response.status in policy["abort_codes"]:
                             logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
                             if response.status == 403:
-                                # 尝试降级Pro模型
-                                if self.model_name.startswith(
-                                        "Pro/") and self.base_url == "https://api.siliconflow.cn/v1/":
+                                #只针对硅基流动的V3和R1进行降级处理
+                                if self.model_name.startswith( 
+                                        "Pro/deepseek-ai") and self.base_url == "https://api.siliconflow.cn/v1/": 
                                     old_model_name = self.model_name
                                     self.model_name = self.model_name[4:]  # 移除"Pro/"前缀
                                     logger.warning(f"检测到403错误，模型从 {old_model_name} 降级为 {self.model_name}")
@@ -195,7 +195,12 @@ class LLM_request:
                                     if hasattr(global_config, 'llm_normal') and global_config.llm_normal.get(
                                             'name') == old_model_name:
                                         global_config.llm_normal['name'] = self.model_name
-                                        logger.warning("已将全局配置中的 llm_normal 模型降级")
+                                        logger.warning(f"将全局配置中的 llm_normal 模型临时降级至{self.model_name}")
+
+                                    if hasattr(global_config, 'llm_reasoning') and global_config.llm_reasoning.get(
+                                            'name') == old_model_name:
+                                        global_config.llm_reasoning['name'] = self.model_name
+                                        logger.warning(f"将全局配置中的 llm_reasoning 模型临时降级至{self.model_name}")
 
                                     # 更新payload中的模型名
                                     if payload and 'model' in payload:
