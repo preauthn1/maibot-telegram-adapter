@@ -1,16 +1,12 @@
 import base64
-import io
 import os
 import time
-import zlib
 import aiohttp
 import hashlib
-from typing import Optional, Tuple, Union
-from urllib.parse import urlparse
+from typing import Optional, Union
 
 from loguru import logger
 from nonebot import get_driver
-from PIL import Image
 
 from ...common.database import Database
 from ..chat.config import global_config

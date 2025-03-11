@@ -2,12 +2,16 @@ import re
 import time
 from random import random
 from loguru import logger
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent
+from nonebot.adapters.onebot.v11 import (
+    Bot,
+    GroupMessageEvent,
+    MessageEvent,
+    PrivateMessageEvent,
+)
 
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
-from .cq_code import CQCode, cq_code_tool  # 导入CQCode模块
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
@@ -42,39 +46,53 @@ class ChatBot:
         if not self._started:
             self._started = True
 
-    async def handle_message(self, event: GroupMessageEvent, bot: Bot) -> None:
-        """处理收到的群消息"""
+    async def handle_message(self, event: MessageEvent, bot: Bot) -> None:
+        """处理收到的消息"""
 
         self.bot = bot  # 更新 bot 实例
 
-        try:
-            group_info_api = await bot.get_group_info(group_id=event.group_id)
-            logger.info(f"成功获取群信息: {group_info_api}")
-            group_name = group_info_api["group_name"]
-        except Exception as e:
-            logger.error(f"获取群信息失败: {str(e)}")
-            group_name = None
-
-        # 白名单设定由nontbot侧完成
-        # 消息过滤，涉及到config有待更新
-        if event.group_id:
-            if event.group_id not in global_config.talk_allowed_groups:
-                return
+        # 用户屏蔽,不区分私聊/群聊
         if event.user_id in global_config.ban_user_id:
             return
 
-        user_info = UserInfo(
-            user_id=event.user_id,
-            user_nickname=event.sender.nickname,
-            user_cardname=event.sender.card or None,
-            platform="qq",
-        )
+        # 处理私聊消息
+        if isinstance(event, PrivateMessageEvent):
+            if not global_config.enable_friend_chat:  # 私聊过滤
+                return
+            else:
+                try:
+                    user_info = UserInfo(
+                        user_id=event.user_id,
+                        user_nickname=(await bot.get_stranger_info(user_id=event.user_id, no_cache=True))["nickname"],
+                        user_cardname=None,
+                        platform="qq",
+                    )
+                except Exception as e:
+                    logger.error(f"获取陌生人信息失败: {e}")
+                    return
+                logger.debug(user_info)
 
-        group_info = GroupInfo(
-            group_id=event.group_id,
-            group_name=group_name,  # 使用获取到的群名称或None
-            platform="qq",
-        )
+                # group_info = GroupInfo(group_id=0, group_name="私聊", platform="qq")
+                group_info = None
+
+        # 处理群聊消息
+        else:
+            # 白名单设定由nontbot侧完成
+            if event.group_id:
+                if event.group_id not in global_config.talk_allowed_groups:
+                    return
+
+            user_info = UserInfo(
+                user_id=event.user_id,
+                user_nickname=event.sender.nickname,
+                user_cardname=event.sender.card or None,
+                platform="qq",
+            )
+
+            group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
+
+        # group_info = await bot.get_group_info(group_id=event.group_id)
+        # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
 
         message_cq = MessageRecvCQ(
             message_id=event.message_id,
@@ -88,7 +106,6 @@ class ChatBot:
 
         # 进入maimbot
         message = MessageRecv(message_json)
-
         groupinfo = message.message_info.group_info
         userinfo = message.message_info.user_info
         messageinfo = message.message_info
@@ -108,7 +125,9 @@ class ChatBot:
         # 过滤词
         for word in global_config.ban_words:
             if word in message.processed_plain_text:
-                logger.info(f"[群{groupinfo.group_id}]{userinfo.user_nickname}:{message.processed_plain_text}")
+                logger.info(
+                    f"[{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{userinfo.user_nickname}:{message.processed_plain_text}"
+                )
                 logger.info(f"[过滤词识别]消息中含有{word}，filtered")
                 return
 
@@ -116,7 +135,7 @@ class ChatBot:
         for pattern in global_config.ban_msgs_regex:
             if re.search(pattern, message.raw_message):
                 logger.info(
-                    f"[群{message.message_info.group_info.group_id}]{message.user_nickname}:{message.raw_message}"
+                    f"[{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{message.user_nickname}:{message.raw_message}"
                 )
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
@@ -124,8 +143,8 @@ class ChatBot:
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
 
         # topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
+        
         topic = ""
-        interested_rate = 0
         interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
         logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
@@ -144,7 +163,7 @@ class ChatBot:
         current_willing = willing_manager.get_willing(chat_stream=chat)
 
         logger.info(
-            f"[{current_time}][群{chat.group_info.group_id}]{chat.user_info.user_nickname}:"
+            f"[{current_time}][{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{chat.user_info.user_nickname}:"
             f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
         )
 
@@ -152,12 +171,17 @@ class ChatBot:
 
         if random() < reply_probability:
             bot_user_info = UserInfo(
-                user_id=global_config.BOT_QQ, user_nickname=global_config.BOT_NICKNAME, platform=messageinfo.platform
+                user_id=global_config.BOT_QQ,
+                user_nickname=global_config.BOT_NICKNAME,
+                platform=messageinfo.platform,
             )
             thinking_time_point = round(time.time(), 2)
             think_id = "mt" + str(thinking_time_point)
             thinking_message = MessageThinking(
-                message_id=think_id, chat_stream=chat, bot_user_info=bot_user_info, reply=message
+                message_id=think_id,
+                chat_stream=chat,
+                bot_user_info=bot_user_info,
+                reply=message,
             )
 
             message_manager.add_message(thinking_message)
@@ -196,15 +220,16 @@ class ChatBot:
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 # 通过时间改变时间戳
                 typing_time = calculate_typing_time(msg)
-                print(f"typing_time: {typing_time}")
+                logger.debug(f"typing_time: {typing_time}")
                 accu_typing_time += typing_time
                 timepoint = thinking_time_point + accu_typing_time
                 message_segment = Seg(type="text", data=msg)
-                print(f"message_segment: {message_segment}")
+                # logger.debug(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
                     message_id=think_id,
                     chat_stream=chat,
                     bot_user_info=bot_user_info,
+                    sender_info=userinfo,
                     message_segment=message_segment,
                     reply=message,
                     is_head=not mark_head,
@@ -218,7 +243,9 @@ class ChatBot:
 
             # message_set 可以直接加入 message_manager
             # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
-            print(f"添加message_set到message_manager")
+
+            logger.debug("添加message_set到message_manager")
+
             message_manager.add_message(message_set)
 
             bot_response_time = thinking_time_point
@@ -242,6 +269,7 @@ class ChatBot:
                         message_id=think_id,
                         chat_stream=chat,
                         bot_user_info=bot_user_info,
+                        sender_info=userinfo,
                         message_segment=message_segment,
                         reply=message,
                         is_head=False,

@@ -4,7 +4,7 @@ import os
 
 from loguru import logger
 from nonebot import get_driver, on_message, require
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment,MessageEvent
 from nonebot.typing import T_State
 
 from ...common.database import Database
@@ -38,8 +38,8 @@ emoji_manager.initialize()
 logger.debug(f"正在唤醒{global_config.BOT_NICKNAME}......")
 # 创建机器人实例
 chat_bot = ChatBot()
-# 注册群消息处理器
-group_msg = on_message(priority=5)
+# 注册消息处理器
+msg_in = on_message(priority=5)
 # 创建定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
@@ -91,8 +91,8 @@ async def _(bot: Bot):
     asyncio.create_task(chat_manager._auto_save_task())
 
 
-@group_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+@msg_in.handle()
+async def _(bot: Bot, event: MessageEvent, state: T_State):
     await chat_bot.handle_message(event, bot)
 
 

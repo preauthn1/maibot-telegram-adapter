@@ -9,7 +9,7 @@ from ..moods.moods import MoodManager
 from ..schedule.schedule_generator import bot_schedule
 from .config import global_config
 from .utils import get_embedding, get_recent_group_detailed_plain_text
-from .chat_stream import ChatStream, chat_manager
+from .chat_stream import chat_manager
 
 
 class PromptBuilder:

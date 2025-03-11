@@ -1,12 +1,12 @@
 import time
 from dataclasses import dataclass
-from typing import Dict, ForwardRef, List, Optional, Union
+from typing import Dict, Optional
 
 import urllib3
 
-from .cq_code import CQCode, cq_code_tool
+from .cq_code import cq_code_tool
 from .utils_cq import parse_cq_code
-from .utils_user import get_groupname, get_user_cardname, get_user_nickname
+from .utils_user import get_groupname
 from .message_base import Seg, GroupInfo, UserInfo, BaseMessageInfo, MessageBase
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -61,8 +61,12 @@ class MessageRecvCQ(MessageCQ):
     ):
         # 调用父类初始化
         super().__init__(message_id, user_info, group_info, platform)
+        
+        # 私聊消息不携带group_info
+        if group_info is None:
+            pass
 
-        if group_info.group_name is None:
+        elif group_info.group_name is None:
             group_info.group_name = get_groupname(group_info.group_id)
         
         # 解析消息段

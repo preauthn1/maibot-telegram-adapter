@@ -1,5 +1,5 @@
 from dataclasses import dataclass, asdict
-from typing import List, Optional, Union, Any, Dict
+from typing import List, Optional, Union, Dict
 
 @dataclass
 class Seg:
