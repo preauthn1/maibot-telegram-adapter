@@ -80,7 +80,10 @@ class MessageRecv(Message):
             pattern = r'\[CQ:json,data=(?P<json_data>.+?)\]'
             match = re.search(pattern, message_dict.get('raw_message',''))
             raw_json = html.unescape(match.group('json_data'))
-            json_message = json.loads(raw_json)
+            try:
+                json_message = json.loads(raw_json)
+            except json.JSONDecodeError:
+                json_message = {}
             message_segment['data'] = json_message.get('prompt','')
 
         self.message_segment = Seg.from_dict(message_dict.get('message_segment', {}))
