@@ -61,8 +61,12 @@ class MessageRecvCQ(MessageCQ):
     ):
         # 调用父类初始化
         super().__init__(message_id, user_info, group_info, platform)
+        
+        # 私聊消息不携带group_info
+        if group_info is None:
+            pass
 
-        if group_info.group_name is None:
+        elif group_info.group_name is None:
             group_info.group_name = get_groupname(group_info.group_id)
         
         # 解析消息段
