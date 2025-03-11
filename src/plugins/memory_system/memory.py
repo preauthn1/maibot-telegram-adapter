@@ -3,11 +3,13 @@ import datetime
 import math
 import random
 import time
+import os
 
 import jieba
 import networkx as nx
 
 from loguru import logger
+from nonebot import get_driver
 from ...common.database import Database  # 使用正确的导入语法
 from ..chat.config import global_config
 from ..chat.utils import (
@@ -17,7 +19,6 @@ from ..chat.utils import (
     text_to_vector,
 )
 from ..models.utils_model import LLM_request
-
 
 class Memory_graph:
     def __init__(self):
@@ -150,7 +151,7 @@ class Memory_graph:
         return None
 
 
-# 海马体 
+# 海马体
 class Hippocampus:
     def __init__(self, memory_graph: Memory_graph):
         self.memory_graph = memory_graph
@@ -318,6 +319,8 @@ class Hippocampus:
             compressed_memory, similar_topics_dict = await self.memory_compress(messages, compress_rate)
             logger.info(f"压缩后记忆数量: {len(compressed_memory)}，似曾相识的话题: {len(similar_topics_dict)}")
             
+            current_time = datetime.datetime.now().timestamp()
+            
             for topic, memory in compressed_memory:
                 logger.info(f"添加节点: {topic}")
                 self.memory_graph.add_dot(topic, memory)
@@ -330,7 +333,10 @@ class Hippocampus:
                         if topic != similar_topic:
                             strength = int(similarity * 10)
                             logger.info(f"连接相似节点: {topic} 和 {similar_topic} (强度: {strength})")
-                            self.memory_graph.G.add_edge(topic, similar_topic, strength=strength)
+                            self.memory_graph.G.add_edge(topic, similar_topic, 
+                                                       strength=strength,
+                                                       created_time=current_time,
+                                                       last_modified=current_time)
             
             # 连接同批次的相关话题
             for i in range(len(all_topics)):
@@ -438,21 +444,39 @@ class Hippocampus:
 
     def sync_memory_from_db(self):
         """从数据库同步数据到内存中的图结构"""
+        current_time = datetime.datetime.now().timestamp()
+        need_update = False
+        
         # 清空当前图
         self.memory_graph.G.clear()
 
         # 从数据库加载所有节点
-        nodes = self.memory_graph.db.db.graph_data.nodes.find()
+        nodes = list(self.memory_graph.db.db.graph_data.nodes.find())
         for node in nodes:
             concept = node['concept']
             memory_items = node.get('memory_items', [])
-            # 确保memory_items是列表
             if not isinstance(memory_items, list):
                 memory_items = [memory_items] if memory_items else []
             
-            # 获取时间信息
-            created_time = node.get('created_time', datetime.datetime.now().timestamp())
-            last_modified = node.get('last_modified', datetime.datetime.now().timestamp())
+            # 检查时间字段是否存在
+            if 'created_time' not in node or 'last_modified' not in node:
+                need_update = True
+                # 更新数据库中的节点
+                update_data = {}
+                if 'created_time' not in node:
+                    update_data['created_time'] = current_time
+                if 'last_modified' not in node:
+                    update_data['last_modified'] = current_time
+                
+                self.memory_graph.db.db.graph_data.nodes.update_one(
+                    {'concept': concept},
+                    {'$set': update_data}
+                )
+                logger.info(f"为节点 {concept} 添加缺失的时间字段")
+            
+            # 获取时间信息(如果不存在则使用当前时间)
+            created_time = node.get('created_time', current_time)
+            last_modified = node.get('last_modified', current_time)
             
             # 添加节点到图中
             self.memory_graph.G.add_node(concept, 
@@ -461,15 +485,31 @@ class Hippocampus:
                                        last_modified=last_modified)
 
         # 从数据库加载所有边
-        edges = self.memory_graph.db.db.graph_data.edges.find()
+        edges = list(self.memory_graph.db.db.graph_data.edges.find())
         for edge in edges:
             source = edge['source']
             target = edge['target']
-            strength = edge.get('strength', 1)  # 获取 strength,默认为 1
+            strength = edge.get('strength', 1)
             
-            # 获取时间信息
-            created_time = edge.get('created_time', datetime.datetime.now().timestamp())
-            last_modified = edge.get('last_modified', datetime.datetime.now().timestamp())
+            # 检查时间字段是否存在
+            if 'created_time' not in edge or 'last_modified' not in edge:
+                need_update = True
+                # 更新数据库中的边
+                update_data = {}
+                if 'created_time' not in edge:
+                    update_data['created_time'] = current_time
+                if 'last_modified' not in edge:
+                    update_data['last_modified'] = current_time
+                
+                self.memory_graph.db.db.graph_data.edges.update_one(
+                    {'source': source, 'target': target},
+                    {'$set': update_data}
+                )
+                logger.info(f"为边 {source} - {target} 添加缺失的时间字段")
+            
+            # 获取时间信息(如果不存在则使用当前时间)
+            created_time = edge.get('created_time', current_time)
+            last_modified = edge.get('last_modified', current_time)
             
             # 只有当源节点和目标节点都存在时才添加边
             if source in self.memory_graph.G and target in self.memory_graph.G:
@@ -477,6 +517,9 @@ class Hippocampus:
                                            strength=strength,
                                            created_time=created_time,
                                            last_modified=last_modified)
+        
+        if need_update:
+            logger.success("已为缺失的时间字段进行补充")
 
     async def operation_forget_topic(self, percentage=0.1):
         """随机选择图中一定比例的节点和边进行检查,根据时间条件决定是否遗忘"""
@@ -839,21 +882,19 @@ def segment_text(text):
     seg_text = list(jieba.cut(text))
     return seg_text
 
-
-from nonebot import get_driver
-
 driver = get_driver()
 config = driver.config
 
 start_time = time.time()
 
 Database.initialize(
-    host=config.MONGODB_HOST,
-    port=config.MONGODB_PORT,
-    db_name=config.DATABASE_NAME,
-    username=config.MONGODB_USERNAME,
-    password=config.MONGODB_PASSWORD,
-    auth_source=config.MONGODB_AUTH_SOURCE
+    uri=os.getenv("MONGODB_URI"),
+    host=os.getenv("MONGODB_HOST", "127.0.0.1"),
+    port=int(os.getenv("MONGODB_PORT", "27017")),
+    db_name=os.getenv("DATABASE_NAME", "MegBot"),
+    username=os.getenv("MONGODB_USERNAME"),
+    password=os.getenv("MONGODB_PASSWORD"),
+    auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
 )
 # 创建记忆图
 memory_graph = Memory_graph()
