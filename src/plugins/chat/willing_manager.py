@@ -1,13 +1,9 @@
 import asyncio
 from typing import Dict
-from loguru import logger
 
-from typing import Dict
-from loguru import logger
 
 from .config import global_config
-from .message_base import UserInfo, GroupInfo
-from .chat_stream import chat_manager,ChatStream
+from .chat_stream import ChatStream
 
 
 class WillingManager:

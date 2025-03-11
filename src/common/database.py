@@ -1,7 +1,5 @@
 from typing import Optional
-
 from pymongo import MongoClient
-
 
 class Database:
     _instance: Optional["Database"] = None
@@ -51,24 +49,3 @@ class Database:
         if cls._instance is None:
             raise RuntimeError("Database not initialized")
         return cls._instance
-
-
-    #测试用
-    
-    def get_random_group_messages(self, group_id: str, limit: int = 5):
-        # 先随机获取一条消息
-        random_message = list(self.db.messages.aggregate([
-            {"$match": {"group_id": group_id}},
-            {"$sample": {"size": 1}}
-        ]))[0]
-        
-        # 获取该消息之后的消息
-        subsequent_messages = list(self.db.messages.find({
-            "group_id": group_id,
-            "time": {"$gt": random_message["time"]}
-        }).sort("time", 1).limit(limit))
-        
-        # 将随机消息和后续消息合并
-        messages = [random_message] + subsequent_messages
-        
-        return messages
