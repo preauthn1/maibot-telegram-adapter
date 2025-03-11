@@ -63,6 +63,9 @@ class ResponseGenerator:
         )
         raw_content = model_response
 
+        # print(f"raw_content: {raw_content}")
+        # print(f"model_response: {model_response}")
+        
         if model_response:
             logger.info(f'{global_config.BOT_NICKNAME}的回复是：{model_response}')
             model_response = await self._process_response(model_response)
@@ -200,6 +203,8 @@ class ResponseGenerator:
             return None, []
 
         processed_response = process_llm_response(content)
+        
+        # print(f"得到了处理后的llm返回{processed_response}")
 
         return processed_response
 

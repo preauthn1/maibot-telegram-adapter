@@ -149,6 +149,7 @@ class MessageManager:
         """处理聊天流消息"""
         container = self.get_container(chat_id)
         if container.has_messages():
+            # print(f"处理有message的容器chat_id: {chat_id}")
             message_earliest = container.get_earliest_message()
             
             if isinstance(message_earliest, MessageThinking):
@@ -161,15 +162,15 @@ class MessageManager:
                     logger.warning(f"消息思考超时({thinking_time}秒)，移除该消息")
                     container.remove_message(message_earliest)
             else:
-                print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
+                
                 if message_earliest.is_head and message_earliest.update_thinking_time() > 30:
                     await message_sender.send_message(message_earliest.set_reply())
                 else:
                     await message_sender.send_message(message_earliest)
-
-                # if message_earliest.is_emoji:
-                #     message_earliest.processed_plain_text = "[表情包]"
                 await message_earliest.process()
+                
+                print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
+                
                 await self.storage.store_message(message_earliest, message_earliest.chat_stream,None)
                 
                 container.remove_message(message_earliest)
