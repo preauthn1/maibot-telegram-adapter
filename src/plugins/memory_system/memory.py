@@ -318,6 +318,8 @@ class Hippocampus:
             compressed_memory, similar_topics_dict = await self.memory_compress(messages, compress_rate)
             logger.info(f"压缩后记忆数量: {len(compressed_memory)}，似曾相识的话题: {len(similar_topics_dict)}")
             
+            current_time = datetime.datetime.now().timestamp()
+            
             for topic, memory in compressed_memory:
                 logger.info(f"添加节点: {topic}")
                 self.memory_graph.add_dot(topic, memory)
@@ -330,7 +332,10 @@ class Hippocampus:
                         if topic != similar_topic:
                             strength = int(similarity * 10)
                             logger.info(f"连接相似节点: {topic} 和 {similar_topic} (强度: {strength})")
-                            self.memory_graph.G.add_edge(topic, similar_topic, strength=strength)
+                            self.memory_graph.G.add_edge(topic, similar_topic, 
+                                                       strength=strength,
+                                                       created_time=current_time,
+                                                       last_modified=current_time)
             
             # 连接同批次的相关话题
             for i in range(len(all_topics)):
