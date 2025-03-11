@@ -192,13 +192,11 @@ class LLM_request:
                                     logger.warning(f"检测到403错误，模型从 {old_model_name} 降级为 {self.model_name}")
 
                                     # 对全局配置进行更新
-                                    if hasattr(global_config, 'llm_normal') and global_config.llm_normal.get(
-                                            'name') == old_model_name:
+                                    if global_config.llm_normal.get('name') == old_model_name:
                                         global_config.llm_normal['name'] = self.model_name
                                         logger.warning(f"将全局配置中的 llm_normal 模型临时降级至{self.model_name}")
 
-                                    if hasattr(global_config, 'llm_reasoning') and global_config.llm_reasoning.get(
-                                            'name') == old_model_name:
+                                    if global_config.llm_reasoning.get('name') == old_model_name:
                                         global_config.llm_reasoning['name'] = self.model_name
                                         logger.warning(f"将全局配置中的 llm_reasoning 模型临时降级至{self.model_name}")
 
