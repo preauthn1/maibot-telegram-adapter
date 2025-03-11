@@ -303,7 +303,7 @@ class Hippocampus:
         return topic_num
 
     async def operation_build_memory(self, chat_size=20):
-        time_frequency = {'near': 3, 'mid': 8, 'far': 5}
+        time_frequency = {'near': 1, 'mid': 4, 'far': 4}
         memory_samples = self.get_memory_sample(chat_size, time_frequency)
         
         for i, messages in enumerate(memory_samples, 1):
@@ -315,7 +315,7 @@ class Hippocampus:
             bar = '█' * filled_length + '-' * (bar_length - filled_length)
             logger.debug(f"进度: [{bar}] {progress:.1f}% ({i}/{len(memory_samples)})")
 
-            compress_rate = 0.1
+            compress_rate = global_config.memory_compress_rate
             compressed_memory, similar_topics_dict = await self.memory_compress(messages, compress_rate)
             logger.info(f"压缩后记忆数量: {len(compressed_memory)}，似曾相识的话题: {len(similar_topics_dict)}")
             
@@ -551,7 +551,7 @@ class Hippocampus:
             # print(f"float(last_modified):{float(last_modified)}"    )
             # print(f"current_time:{current_time}")
             # print(f"current_time - last_modified:{current_time - last_modified}")
-            if current_time - last_modified > 3600*24:  # test
+            if current_time - last_modified > 3600*global_config.memory_forget_time:  # test
                 current_strength = edge_data.get('strength', 1)
                 new_strength = current_strength - 1
                 
