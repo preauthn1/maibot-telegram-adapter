@@ -11,6 +11,7 @@ from .message import MessageSending, MessageThinking, MessageRecv,MessageSet
 from .storage import MessageStorage
 from .config import global_config
 from .chat_stream import chat_manager
+from .utils import truncate_message
 
 
 class Message_Sender:
@@ -36,6 +37,8 @@ class Message_Sender:
                 data=message_json
             )
 
+            message_preview = truncate_message(message.processed_plain_text)
+
             if message_send.message_info.group_info:
                 try:
                     await self._current_bot.send_group_msg(
@@ -43,10 +46,10 @@ class Message_Sender:
                         message=message_send.raw_message,
                         auto_escape=False
                     )
-                    logger.success(f"[调试] 发送消息{message.processed_plain_text}成功")
+                    logger.success(f"[调试] 发送消息“{message_preview}”成功")
                 except Exception as e:
                     logger.error(f"[调试] 发生错误 {e}")
-                    logger.error(f"[调试] 发送消息{message.processed_plain_text}失败")
+                    logger.error(f"[调试] 发送消息“{message_preview}”失败")
             else:
                 try:
                     await self._current_bot.send_private_msg(
@@ -54,10 +57,10 @@ class Message_Sender:
                         message=message_send.raw_message,
                         auto_escape=False
                     )
-                    logger.success(f"[调试] 发送消息{message.processed_plain_text}成功")
+                    logger.success(f"[调试] 发送消息“{message_preview}”成功")
                 except Exception as e:
                     logger.error(f"[调试] 发生错误 {e}")
-                    logger.error(f"[调试] 发送消息{message.processed_plain_text}失败")
+                    logger.error(f"[调试] 发送消息“{message_preview}”失败")
 
 
 class MessageContainer:
@@ -169,7 +172,7 @@ class MessageManager:
                     await message_sender.send_message(message_earliest)
                 await message_earliest.process()
                 
-                print(f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中")
+                print(f"\033[1;34m[调试]\033[0m 消息“{truncate_message(message_earliest.processed_plain_text)}”正在发送中")
                 
                 await self.storage.store_message(message_earliest, message_earliest.chat_stream,None)
                 
