@@ -241,11 +241,11 @@ class ChatBot:
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 # 通过时间改变时间戳
                 typing_time = calculate_typing_time(msg)
-                print(f"typing_time: {typing_time}")
+                logger.debug(f"typing_time: {typing_time}")
                 accu_typing_time += typing_time
                 timepoint = thinking_time_point + accu_typing_time
                 message_segment = Seg(type="text", data=msg)
-                print(f"message_segment: {message_segment}")
+                logger.info(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
                     message_id=think_id,
                     chat_stream=chat,
@@ -264,7 +264,7 @@ class ChatBot:
 
             # message_set 可以直接加入 message_manager
             # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
-            print(f"添加message_set到message_manager")
+            logger.debug("添加message_set到message_manager")
             message_manager.add_message(message_set)
 
             bot_response_time = thinking_time_point
