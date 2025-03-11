@@ -1,6 +1,5 @@
 import base64
 import html
-import os
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional
@@ -17,7 +16,7 @@ from urllib3.util import create_urllib3_context
 from ..models.utils_model import LLM_request
 from .config import global_config
 from .mapper import emojimapper
-from .utils_image import storage_emoji, storage_image
+from .utils_image import image_path_to_base64, storage_emoji, storage_image
 from .utils_user import get_user_nickname
 
 driver = get_driver()
@@ -328,15 +327,10 @@ class CQCode:
         Returns:
             表情包CQ码字符串
         """
-        # 确保使用绝对路径
-        abs_path = os.path.abspath(file_path)
-        # 转义特殊字符
-        escaped_path = abs_path.replace('&', '&amp;') \
-            .replace('[', '&#91;') \
-            .replace(']', '&#93;') \
-            .replace(',', '&#44;')
+        base64_content = image_path_to_base64(file_path)
+
         # 生成CQ码，设置sub_type=1表示这是表情包
-        return f"[CQ:image,file=file:///{escaped_path},sub_type=1]"
+        return f"[CQ:image,file=base64://{base64_content},sub_type=1]"
 
 
 class CQCode_tool:
