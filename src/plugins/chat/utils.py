@@ -402,3 +402,10 @@ def find_similar_topics_simple(text: str, topics: list, top_k: int = 5) -> list:
 
     # 按相似度降序排序并返回前k个
     return sorted(similarities, key=lambda x: x[1], reverse=True)[:top_k]
+
+
+def truncate_message(message: str, max_length=20) -> str:
+    """截断消息，使其不超过指定长度"""
+    if len(message) > max_length:
+        return message[:max_length] + "..."
+    return message
