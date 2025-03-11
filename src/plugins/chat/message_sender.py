@@ -30,13 +30,14 @@ class Message_Sender:
             message: MessageSending,
     ) -> None:
         """发送消息"""
+        
         if isinstance(message, MessageSending):
             message_json = message.to_dict()
             message_send=MessageSendCQ(
                 data=message_json
             )
-
-            if message_send.message_info.group_info:
+            # logger.debug(message_send.message_info,message_send.raw_message)
+            if message_send.message_info.group_info.group_id:
                 try:
                     await self._current_bot.send_group_msg(
                         group_id=message.message_info.group_info.group_id,
@@ -49,8 +50,9 @@ class Message_Sender:
                     logger.error(f"[调试] 发送消息{message.processed_plain_text}失败")
             else:
                 try:
+                    logger.debug(message.message_info.user_info)
                     await self._current_bot.send_private_msg(
-                        user_id=message.message_info.user_info.user_id,
+                        user_id=message.sender_info.user_id,
                         message=message_send.raw_message,
                         auto_escape=False
                     )

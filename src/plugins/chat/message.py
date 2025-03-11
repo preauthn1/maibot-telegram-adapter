@@ -280,6 +280,7 @@ class MessageSending(MessageProcessBase):
         message_id: str,
         chat_stream: ChatStream,
         bot_user_info: UserInfo,
+        sender_info:UserInfo, # 用来记录发送者信息,用于私聊回复
         message_segment: Seg,
         reply: Optional['MessageRecv'] = None,
         is_head: bool = False,
@@ -295,6 +296,7 @@ class MessageSending(MessageProcessBase):
         )
         
         # 发送状态特有属性
+        self.sender_info=sender_info
         self.reply_to_message_id = reply.message_info.message_id if reply else None
         self.is_head = is_head
         self.is_emoji = is_emoji
