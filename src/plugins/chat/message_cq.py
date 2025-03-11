@@ -1,12 +1,12 @@
 import time
 from dataclasses import dataclass
-from typing import Dict, ForwardRef, List, Optional, Union
+from typing import Dict, Optional
 
 import urllib3
 
-from .cq_code import CQCode, cq_code_tool
+from .cq_code import cq_code_tool
 from .utils_cq import parse_cq_code
-from .utils_user import get_groupname, get_user_cardname, get_user_nickname
+from .utils_user import get_groupname
 from .message_base import Seg, GroupInfo, UserInfo, BaseMessageInfo, MessageBase
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

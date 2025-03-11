@@ -12,7 +12,6 @@ from nonebot.adapters.onebot.v11 import (
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
-from .cq_code import CQCode, cq_code_tool  # 导入CQCode模块
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
@@ -244,7 +243,9 @@ class ChatBot:
 
             # message_set 可以直接加入 message_manager
             # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
+
             logger.debug("添加message_set到message_manager")
+
             message_manager.add_message(message_set)
 
             bot_response_time = thinking_time_point

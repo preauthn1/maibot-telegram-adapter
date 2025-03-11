@@ -12,8 +12,8 @@ from loguru import logger
 from ..models.utils_model import LLM_request
 from ..utils.typo_generator import ChineseTypoGenerator
 from .config import global_config
-from .message import MessageThinking, MessageRecv,MessageSending,MessageProcessBase,Message
-from .message_base import MessageBase,BaseMessageInfo,UserInfo,GroupInfo
+from .message import MessageRecv,Message
+from .message_base import UserInfo
 from .chat_stream import ChatStream
 from ..moods.moods import MoodManager
 
@@ -39,8 +39,12 @@ def db_message_to_str(message_dict: Dict) -> str:
 def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
     """检查消息是否提到了机器人"""
     keywords = [global_config.BOT_NICKNAME]
+    nicknames = global_config.BOT_ALIAS_NAMES
     for keyword in keywords:
         if keyword in message.processed_plain_text:
+            return True
+    for nickname in nicknames:
+        if nickname in message.processed_plain_text:
             return True
     return False
 

@@ -5,12 +5,11 @@ from typing import Dict, List, Optional, Union
 from loguru import logger
 from nonebot.adapters.onebot.v11 import Bot
 
-from .cq_code import cq_code_tool
 from .message_cq import MessageSendCQ
 from .message import MessageSending, MessageThinking, MessageRecv, MessageSet
+
 from .storage import MessageStorage
 from .config import global_config
-from .chat_stream import chat_manager
 
 
 class Message_Sender:

@@ -161,6 +161,7 @@ class EmojiManager:
                         {'_id': selected_emoji['_id']},
                         {'$inc': {'usage_count': 1}}
                     )
+
                     logger.success(
                         f"找到匹配的表情包: {selected_emoji.get('description', '无描述')} (相似度: {similarity:.4f})")
                     # 稍微改一下文本描述，不然容易产生幻觉，描述已经包含 表情包 了
@@ -176,8 +177,10 @@ class EmojiManager:
             logger.error(f"获取表情包失败: {str(e)}")
             return None
 
+
     async def _get_emoji_discription(self, image_base64: str) -> str:
         """获取表情包的标签，使用image_manager的描述生成功能"""
+
         try:
             # 使用image_manager获取描述，去掉前后的方括号和"表情包："前缀
             description = await image_manager.get_emoji_description(image_base64)
@@ -272,11 +275,14 @@ class EmojiManager:
                     # 获取表情包的描述
                     description = await self._get_emoji_discription(image_base64)
                 
+
+
                 if global_config.EMOJI_CHECK:
                     check = await self._check_emoji(image_base64)
                     if '是' not in check:
                         os.remove(image_path)
                         logger.info(f"描述: {description}")
+
                         logger.info(f"描述: {description}")
                         logger.info(f"其不满足过滤规则，被剔除 {check}")
                         continue
@@ -287,6 +293,7 @@ class EmojiManager:
                 
                 if description is not None:
                     embedding = await get_embedding(description)
+
                     # 准备数据库记录
                     emoji_record = {
                         'filename': filename,
@@ -301,6 +308,7 @@ class EmojiManager:
                     self.db.db['emoji'].insert_one(emoji_record)
                     logger.success(f"注册新表情包: {filename}")
                     logger.info(f"描述: {description}")
+
                     
                     # 保存到images数据库
                     image_doc = {
@@ -389,5 +397,7 @@ class EmojiManager:
 
 
 # 创建全局单例
+
 emoji_manager = EmojiManager()
+
 

@@ -1,6 +1,5 @@
 import asyncio
-from typing import Optional, Union
-from typing import Optional, Union
+from typing import Optional
 from loguru import logger
 
 from ...common.database import Database

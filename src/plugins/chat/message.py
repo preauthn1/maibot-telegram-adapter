@@ -3,12 +3,13 @@ import html
 import re
 import json
 from dataclasses import dataclass
-from typing import Dict, ForwardRef, List, Optional, Union
+from typing import Dict, List, Optional
 
 import urllib3
 from loguru import logger
 
 from .utils_image import image_manager
+
 from .message_base import Seg, GroupInfo, UserInfo, BaseMessageInfo, MessageBase
 from .chat_stream import ChatStream, chat_manager
 

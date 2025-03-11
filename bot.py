@@ -63,7 +63,7 @@ def init_env():
 
     # 首先加载基础环境变量.env
     if os.path.exists(".env"):
-        load_dotenv(".env")
+        load_dotenv(".env",override=True)
         logger.success("成功加载基础环境变量配置")
 
 
