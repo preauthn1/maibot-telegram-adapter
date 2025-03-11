@@ -225,7 +225,7 @@ class ChatBot:
                 accu_typing_time += typing_time
                 timepoint = thinking_time_point + accu_typing_time
                 message_segment = Seg(type="text", data=msg)
-                logger.info(f"message_segment: {message_segment}")
+                # logger.debug(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
                     message_id=think_id,
                     chat_stream=chat,
