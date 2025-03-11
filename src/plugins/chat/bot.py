@@ -103,9 +103,7 @@ class ChatBot:
             group_info=group_info,
             reply_message=event.reply,
             platform="qq",
-            platform="qq",
         )
-        message_json = message_cq.to_dict()
         message_json = message_cq.to_dict()
 
         # 进入maimbot
@@ -177,7 +175,6 @@ class ChatBot:
             config=global_config,
             is_emoji=message.is_emoji,
             interested_rate=interested_rate,
-            interested_rate=interested_rate,
         )
         current_willing = willing_manager.get_willing(chat_stream=chat)
 
@@ -194,8 +191,8 @@ class ChatBot:
                 user_nickname=global_config.BOT_NICKNAME,
                 platform=messageinfo.platform,
             )
-            tinking_time_point = round(time.time(), 2)
-            think_id = "mt" + str(tinking_time_point)
+            thinking_time_point = round(time.time(), 2)
+            think_id = "mt" + str(thinking_time_point)
             thinking_message = MessageThinking(
                 message_id=think_id,
                 chat_stream=chat,
@@ -246,7 +243,7 @@ class ChatBot:
                 typing_time = calculate_typing_time(msg)
                 print(f"typing_time: {typing_time}")
                 accu_typing_time += typing_time
-                timepoint = tinking_time_point + accu_typing_time
+                timepoint = thinking_time_point + accu_typing_time
                 message_segment = Seg(type="text", data=msg)
                 print(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
