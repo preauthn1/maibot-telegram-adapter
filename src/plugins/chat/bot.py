@@ -31,7 +31,6 @@ from .willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
 
 
-
 class ChatBot:
     def __init__(self):
         self.storage = MessageStorage()
@@ -59,7 +58,7 @@ class ChatBot:
 
         # 处理私聊消息的逻辑
         if isinstance(event, PrivateMessageEvent):
-            if not 0 in global_config.talk_allowed_groups:
+            if not global_config.enable_friend_chat:  # 私聊过滤
                 return
             else:
                 user_info = UserInfo(
@@ -182,14 +181,12 @@ class ChatBot:
         )
         current_willing = willing_manager.get_willing(chat_stream=chat)
 
-
         logger.info(
             f"[{current_time}][{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{chat.user_info.user_nickname}:"
             f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
         )
 
         response = None
-
 
         if random() < reply_probability:
             bot_user_info = UserInfo(
@@ -206,13 +203,11 @@ class ChatBot:
                 reply=message,
             )
 
-
             message_manager.add_message(thinking_message)
 
             willing_manager.change_reply_willing_sent(chat)
 
             response, raw_content = await self.gpt.generate_response(message)
-
 
             response, raw_content = await self.gpt.generate_response(message)
 
