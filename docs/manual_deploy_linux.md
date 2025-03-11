@@ -132,6 +132,7 @@ After=network.target mongod.service
 Type=simple
 WorkingDirectory=<maimbot_directory>
 ExecStart=<venv_directory>/python3 bot.py
+ExecStop=/bin/kill -2 $MAINPID
 Restart=always
 RestartSec=10s
 
