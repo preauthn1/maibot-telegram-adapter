@@ -7,7 +7,7 @@ from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
-from .cq_code import CQCode,cq_code_tool # 导入CQCode模块
+from .cq_code import CQCode, cq_code_tool  # 导入CQCode模块
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
@@ -23,6 +23,7 @@ from .utils import calculate_typing_time, is_mentioned_bot_in_message
 from .utils_image import image_path_to_base64
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
+
 
 class ChatBot:
     def __init__(self):
@@ -46,8 +47,13 @@ class ChatBot:
 
         self.bot = bot  # 更新 bot 实例
 
-        # group_info = await bot.get_group_info(group_id=event.group_id)
-        # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
+        try:
+            group_info_api = await bot.get_group_info(group_id=event.group_id)
+            logger.info(f"成功获取群信息: {group_info_api}")
+            group_name = group_info_api["group_name"]
+        except Exception as e:
+            logger.error(f"获取群信息失败: {str(e)}")
+            group_name = None
 
         # 白名单设定由nontbot侧完成
         if event.group_id:
@@ -55,50 +61,53 @@ class ChatBot:
                 return
         if event.user_id in global_config.ban_user_id:
             return
-        
-        user_info=UserInfo(
+
+        user_info = UserInfo(
             user_id=event.user_id,
             user_nickname=event.sender.nickname,
             user_cardname=event.sender.card or None,
-            platform='qq'
+            platform="qq",
         )
 
-        group_info=GroupInfo(
+        group_info = GroupInfo(
             group_id=event.group_id,
-            group_name=None,
-            platform='qq'
+            group_name=group_name,  # 使用获取到的群名称或None
+            platform="qq",
         )
 
-        message_cq=MessageRecvCQ(
+        message_cq = MessageRecvCQ(
             message_id=event.message_id,
             user_info=user_info,
             raw_message=str(event.original_message),
             group_info=group_info,
             reply_message=event.reply,
-            platform='qq'
+            platform="qq",
         )
-        message_json=message_cq.to_dict()
+        message_json = message_cq.to_dict()
 
         # 进入maimbot
-        message=MessageRecv(message_json)
-        
-        groupinfo=message.message_info.group_info
-        userinfo=message.message_info.user_info
-        messageinfo=message.message_info
+        message = MessageRecv(message_json)
+
+        groupinfo = message.message_info.group_info
+        userinfo = message.message_info.user_info
+        messageinfo = message.message_info
 
         # 消息过滤，涉及到config有待更新
-        
-        chat = await chat_manager.get_or_create_stream(platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo)
+
+        chat = await chat_manager.get_or_create_stream(
+            platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo
+        )
         message.update_chat_stream(chat)
-        await relationship_manager.update_relationship(chat_stream=chat,)
-        await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value = 0.5)
+        await relationship_manager.update_relationship(
+            chat_stream=chat,
+        )
+        await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=0.5)
 
         await message.process()
         # 过滤词
         for word in global_config.ban_words:
             if word in message.processed_plain_text:
-                logger.info(
-                    f"[{groupinfo.group_name}]{userinfo.user_nickname}:{message.processed_plain_text}")
+                logger.info(f"[群{groupinfo.group_id}]{userinfo.user_nickname}:{message.processed_plain_text}")
                 logger.info(f"[过滤词识别]消息中含有{word}，filtered")
                 return
 
@@ -106,23 +115,21 @@ class ChatBot:
         for pattern in global_config.ban_msgs_regex:
             if re.search(pattern, message.raw_message):
                 logger.info(
-                    f"[{message.group_name}]{message.user_nickname}:{message.raw_message}")
+                    f"[群{message.message_info.group_info.group_id}]{message.user_nickname}:{message.raw_message}"
+                )
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
-        
+
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
 
-
-
         # topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
-        topic = ''
+        topic = ""
         interested_rate = 0
         interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
-        logger.debug(f"对{message.processed_plain_text}"
-                     f"的激活度:{interested_rate}")
+        logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
-        
-        await self.storage.store_message(message,chat, topic[0] if topic else None)
+
+        await self.storage.store_message(message, chat, topic[0] if topic else None)
 
         is_mentioned = is_mentioned_bot_in_message(message)
         reply_probability = await willing_manager.change_reply_willing_received(
@@ -131,38 +138,33 @@ class ChatBot:
             is_mentioned_bot=is_mentioned,
             config=global_config,
             is_emoji=message.is_emoji,
-            interested_rate=interested_rate
+            interested_rate=interested_rate,
         )
         current_willing = willing_manager.get_willing(chat_stream=chat)
-        
+
         logger.info(
-            f"[{current_time}][{chat.group_info.group_name}]{chat.user_info.user_nickname}:"
+            f"[{current_time}][群{chat.group_info.group_id}]{chat.user_info.user_nickname}:"
             f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
         )
 
         response = None
-        
+
         if random() < reply_probability:
-            bot_user_info=UserInfo(
-                user_id=global_config.BOT_QQ,
-                user_nickname=global_config.BOT_NICKNAME,
-                platform=messageinfo.platform
+            bot_user_info = UserInfo(
+                user_id=global_config.BOT_QQ, user_nickname=global_config.BOT_NICKNAME, platform=messageinfo.platform
             )
             tinking_time_point = round(time.time(), 2)
-            think_id = 'mt' + str(tinking_time_point)
+            think_id = "mt" + str(tinking_time_point)
             thinking_message = MessageThinking(
-                message_id=think_id,
-                chat_stream=chat,
-                bot_user_info=bot_user_info,
-                reply=message
+                message_id=think_id, chat_stream=chat, bot_user_info=bot_user_info, reply=message
             )
-            
+
             message_manager.add_message(thinking_message)
 
             willing_manager.change_reply_willing_sent(chat)
-            
-            response,raw_content = await self.gpt.generate_response(message)
-            
+
+            response, raw_content = await self.gpt.generate_response(message)
+
         # print(f"response: {response}")
         if response:
             # print(f"有response: {response}")
@@ -185,9 +187,9 @@ class ChatBot:
             # 记录开始思考的时间，避免从思考到回复的时间太久
             thinking_start_time = thinking_message.thinking_start_time
             message_set = MessageSet(chat, think_id)
-            #计算打字时间，1是为了模拟打字，2是避免多条回复乱序
+            # 计算打字时间，1是为了模拟打字，2是避免多条回复乱序
             accu_typing_time = 0
-            
+
             mark_head = False
             for msg in response:
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
@@ -196,7 +198,7 @@ class ChatBot:
                 print(f"typing_time: {typing_time}")
                 accu_typing_time += typing_time
                 timepoint = tinking_time_point + accu_typing_time
-                message_segment = Seg(type='text', data=msg)
+                message_segment = Seg(type="text", data=msg)
                 print(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
                     message_id=think_id,
@@ -205,7 +207,7 @@ class ChatBot:
                     message_segment=message_segment,
                     reply=message,
                     is_head=not mark_head,
-                    is_emoji=False
+                    is_emoji=False,
                 )
                 print(f"bot_message: {bot_message}")
                 if not mark_head:
@@ -227,14 +229,14 @@ class ChatBot:
                 if emoji_raw != None:
                     emoji_path, description = emoji_raw
 
-                    emoji_cq =  image_path_to_base64(emoji_path)
-                    
+                    emoji_cq = image_path_to_base64(emoji_path)
+
                     if random() < 0.5:
                         bot_response_time = tinking_time_point - 1
                     else:
                         bot_response_time = bot_response_time + 1
-                        
-                    message_segment = Seg(type='emoji', data=emoji_cq)
+
+                    message_segment = Seg(type="emoji", data=emoji_cq)
                     bot_message = MessageSending(
                         message_id=think_id,
                         chat_stream=chat,
@@ -242,25 +244,27 @@ class ChatBot:
                         message_segment=message_segment,
                         reply=message,
                         is_head=False,
-                        is_emoji=True
+                        is_emoji=True,
                     )
                     message_manager.add_message(bot_message)
-            
+
             emotion = await self.gpt._get_emotion_tags(raw_content)
             logger.debug(f"为 '{response}' 获取到的情感标签为：{emotion}")
             valuedict = {
-                'happy': 0.5,
-                'angry': -1,
-                'sad': -0.5,
-                'surprised': 0.2,
-                'disgusted': -1.5,
-                'fearful': -0.7,
-                'neutral': 0.1
+                "happy": 0.5,
+                "angry": -1,
+                "sad": -0.5,
+                "surprised": 0.2,
+                "disgusted": -1.5,
+                "fearful": -0.7,
+                "neutral": 0.1,
             }
-            await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=valuedict[emotion[0]])
+            await relationship_manager.update_relationship_value(
+                chat_stream=chat, relationship_value=valuedict[emotion[0]]
+            )
             # 使用情绪管理器更新情绪
             self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
-            
+
             # willing_manager.change_reply_willing_after_sent(
             #     chat_stream=chat
             # )
