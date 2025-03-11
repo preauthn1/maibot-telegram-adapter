@@ -127,7 +127,7 @@ async def build_memory_task():
 async def forget_memory_task():
     """每30秒执行一次记忆构建"""
     print("\033[1;32m[记忆遗忘]\033[0m 开始遗忘记忆...")
-    await hippocampus.operation_forget_topic(percentage=0.1)
+    await hippocampus.operation_forget_topic(percentage=global_config.memory_forget_percentage)
     print("\033[1;32m[记忆遗忘]\033[0m 记忆遗忘完成")
 
 
