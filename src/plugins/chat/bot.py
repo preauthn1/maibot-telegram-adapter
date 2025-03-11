@@ -13,7 +13,6 @@ from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
 from .cq_code import CQCode, cq_code_tool  # 导入CQCode模块
-from .cq_code import CQCode, cq_code_tool  # 导入CQCode模块
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
@@ -62,16 +61,16 @@ class ChatBot:
             if not global_config.enable_friend_chat:  # 私聊过滤
                 return
             else:
-                user_info = UserInfo(
-                    user_id=event.user_id,
-                    user_nickname=(
-                        await bot.get_stranger_info(
-                            user_id=event.user_id, no_cache=True
-                        )
-                    )["nickname"],
-                    user_cardname=None,
-                    platform="qq",
-                )
+                try:
+                    user_info = UserInfo(
+                        user_id=event.user_id,
+                        user_nickname=(await bot.get_stranger_info(user_id=event.user_id, no_cache=True))["nickname"],
+                        user_cardname=None,
+                        platform="qq",
+                    )
+                except Exception as e:
+                    logger.error(f"获取陌生人信息失败: {e}")
+                    return
                 logger.debug(user_info)
 
                 # group_info = GroupInfo(group_id=0, group_name="私聊", platform="qq")
@@ -91,9 +90,7 @@ class ChatBot:
                 platform="qq",
             )
 
-            group_info = GroupInfo(
-                group_id=event.group_id, group_name=None, platform="qq"
-            )
+            group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
 
         # group_info = await bot.get_group_info(group_id=event.group_id)
         # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
@@ -110,7 +107,6 @@ class ChatBot:
 
         # 进入maimbot
         message = MessageRecv(message_json)
-
         groupinfo = message.message_info.group_info
         userinfo = message.message_info.user_info
         messageinfo = message.message_info
@@ -120,17 +116,11 @@ class ChatBot:
         chat = await chat_manager.get_or_create_stream(
             platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo
         )
-
-        chat = await chat_manager.get_or_create_stream(
-            platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo
-        )
         message.update_chat_stream(chat)
         await relationship_manager.update_relationship(
             chat_stream=chat,
         )
-        await relationship_manager.update_relationship_value(
-            chat_stream=chat, relationship_value=0.5
-        )
+        await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=0.5)
 
         await message.process()
         # 过滤词
@@ -151,21 +141,14 @@ class ChatBot:
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
 
-        current_time = time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time)
-        )
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
 
         # topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
+        
         topic = ""
-        topic = ""
-        interested_rate = 0
-        interested_rate = (
-            await hippocampus.memory_activate_value(message.processed_plain_text) / 100
-        )
-        logger.debug(f"对{message.processed_plain_text}" f"的激活度:{interested_rate}")
+        interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
+        logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
-
-        await self.storage.store_message(message, chat, topic[0] if topic else None)
 
         await self.storage.store_message(message, chat, topic[0] if topic else None)
 
@@ -208,8 +191,6 @@ class ChatBot:
 
             response, raw_content = await self.gpt.generate_response(message)
 
-            response, raw_content = await self.gpt.generate_response(message)
-
         # print(f"response: {response}")
         if response:
             # print(f"有response: {response}")
@@ -218,10 +199,7 @@ class ChatBot:
             # 找到message,删除
             # print(f"开始找思考消息")
             for msg in container.messages:
-                if (
-                    isinstance(msg, MessageThinking)
-                    and msg.message_info.message_id == think_id
-                ):
+                if isinstance(msg, MessageThinking) and msg.message_info.message_id == think_id:
                     # print(f"找到思考消息: {msg}")
                     thinking_message = msg
                     container.messages.remove(msg)
@@ -312,9 +290,7 @@ class ChatBot:
                 chat_stream=chat, relationship_value=valuedict[emotion[0]]
             )
             # 使用情绪管理器更新情绪
-            self.mood_manager.update_mood_from_emotion(
-                emotion[0], global_config.mood_intensity_factor
-            )
+            self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
 
             # willing_manager.change_reply_willing_after_sent(
             #     chat_stream=chat
