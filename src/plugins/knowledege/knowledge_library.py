@@ -17,17 +17,6 @@ load_dotenv(env_path)
 
 from src.common.database import Database
 
-# 从环境变量获取配置
-Database.initialize(
-    uri=os.getenv("MONGODB_URI"),
-    host=os.getenv("MONGODB_HOST", "127.0.0.1"),
-    port=int(os.getenv("MONGODB_PORT", "27017")),
-    db_name=os.getenv("DATABASE_NAME", "MegBot"),
-    username=os.getenv("MONGODB_USERNAME"),
-    password=os.getenv("MONGODB_PASSWORD"),
-    auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
-)
-
 class KnowledgeLibrary:
     def __init__(self):
         self.db = Database.get_instance()
@@ -72,7 +61,7 @@ class KnowledgeLibrary:
         """处理单个文件"""
         try:
             # 检查文件是否已处理
-            if self.db.db.processed_files.find_one({"file_path": file_path}):
+            if self.db.processed_files.find_one({"file_path": file_path}):
                 print(f"文件已处理过，跳过: {file_path}")
                 return
                 
@@ -104,14 +93,14 @@ class KnowledgeLibrary:
                 content_hash = hash(segment)
                 
                 # 更新或插入文档
-                self.db.db.knowledges.update_one(
+                self.db.knowledges.update_one(
                     {"content_hash": content_hash},
                     {"$set": doc},
                     upsert=True
                 )
                 
             # 记录文件已处理
-            self.db.db.processed_files.insert_one({
+            self.db.processed_files.insert_one({
                 "file_path": file_path,
                 "processed_time": time.time()
             })
@@ -178,7 +167,7 @@ class KnowledgeLibrary:
             {"$project": {"content": 1, "similarity": 1, "file_path": 1}}
         ]
         
-        results = list(self.db.db.knowledges.aggregate(pipeline))
+        results = list(self.db.knowledges.aggregate(pipeline))
         return results
 
 # 创建单例实例
