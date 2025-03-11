@@ -51,8 +51,8 @@ class Message(MessageBase):
 
         self.chat_stream = chat_stream
         # 文本处理相关属性
-        self.processed_plain_text = detailed_plain_text
-        self.detailed_plain_text = processed_plain_text
+        self.processed_plain_text = processed_plain_text
+        self.detailed_plain_text = detailed_plain_text
         
         # 回复消息
         self.reply = reply
