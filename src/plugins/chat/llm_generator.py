@@ -8,7 +8,7 @@ from loguru import logger
 from ...common.database import Database
 from ..models.utils_model import LLM_request
 from .config import global_config
-from .message import MessageRecv, MessageThinking, MessageSending,Message
+from .message import MessageRecv, MessageThinking, Message
 from .prompt_builder import prompt_builder
 from .relationship_manager import relationship_manager
 from .utils import process_llm_response

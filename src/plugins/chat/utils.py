@@ -12,8 +12,8 @@ from loguru import logger
 from ..models.utils_model import LLM_request
 from ..utils.typo_generator import ChineseTypoGenerator
 from .config import global_config
-from .message import MessageThinking, MessageRecv,MessageSending,MessageProcessBase,Message
-from .message_base import MessageBase,BaseMessageInfo,UserInfo,GroupInfo
+from .message import MessageRecv,Message
+from .message_base import UserInfo
 from .chat_stream import ChatStream
 from ..moods.moods import MoodManager
 

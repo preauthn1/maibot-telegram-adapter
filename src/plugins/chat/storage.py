@@ -1,8 +1,6 @@
 from typing import Optional, Union
-from typing import Optional, Union
 
 from ...common.database import Database
-from .message_base import MessageBase
 from .message import MessageSending, MessageRecv
 from .chat_stream import ChatStream
 from loguru import logger
