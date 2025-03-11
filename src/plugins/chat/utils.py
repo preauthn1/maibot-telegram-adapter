@@ -15,6 +15,7 @@ from .config import global_config
 from .message import MessageThinking, MessageRecv,MessageSending,MessageProcessBase,Message
 from .message_base import MessageBase,BaseMessageInfo,UserInfo,GroupInfo
 from .chat_stream import ChatStream
+from ..moods.moods import MoodManager
 
 driver = get_driver()
 config = driver.config
@@ -72,43 +73,42 @@ def calculate_information_content(text):
 
 
 def get_cloest_chat_from_db(db, length: int, timestamp: str):
-    """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数
+    """从数据库中获取最接近指定时间戳的聊天记录
     
+    Args:
+        db: 数据库实例
+        length: 要获取的消息数量
+        timestamp: 时间戳
+        
     Returns:
-        list: 消息记录字典列表，每个字典包含消息内容和时间信息
+        list: 消息记录列表，每个记录包含时间和文本信息
     """
     chat_records = []
     closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
     
-    if closest_record and closest_record.get('memorized', 0) < 4:            
+    if closest_record:            
         closest_time = closest_record['time']
-        chat_id = closest_record['chat_id']  # 获取groupid
-        # 获取该时间戳之后的length条消息，且groupid相同
+        chat_id = closest_record['chat_id']  # 获取chat_id
+        # 获取该时间戳之后的length条消息，保持相同的chat_id
         chat_records = list(db.db.messages.find(
-            {"time": {"$gt": closest_time}, "chat_id": chat_id}
+            {
+                "time": {"$gt": closest_time},
+                "chat_id": chat_id  # 添加chat_id过滤
+            }
         ).sort('time', 1).limit(length))
         
-        # 更新每条消息的memorized属性
-        for record in records:
-            current_memorized = record.get('memorized', 0)
-            if current_memorized > 3:
-                print("消息已读取3次，跳过")
-                return ''
-                
-            # 更新memorized值
-            db.db.messages.update_one(
-                {"_id": record["_id"]},
-                {"$set": {"memorized": current_memorized + 1}}
-            )
-            
-            # 添加到记录列表中
-            chat_records.append({
-                'text': record["detailed_plain_text"],
+        # 转换记录格式
+        formatted_records = []
+        for record in chat_records:
+            formatted_records.append({
                 'time': record["time"],
-                'group_id': record["group_id"]
+                'chat_id': record["chat_id"],
+                'detailed_plain_text': record.get("detailed_plain_text", "")  # 添加文本内容
             })
             
-    return chat_records
+        return formatted_records
+            
+    return []
 
 
 async def get_recent_group_messages(db, chat_id:str, limit: int = 12) -> list:
