@@ -69,6 +69,7 @@ class BotConfig:
     enable_advance_output: bool = False  # 是否启用高级输出
     enable_kuuki_read: bool = True  # 是否启用读空气功能
     enable_debug_output: bool = False  # 是否启用调试输出
+    enable_friend_chat: bool = False  # 是否启用好友聊天
 
     mood_update_interval: float = 1.0  # 情绪更新间隔 单位秒
     mood_decay_rate: float = 0.95  # 情绪衰减率
@@ -327,7 +328,9 @@ class BotConfig:
             others_config = parent["others"]
             config.enable_advance_output = others_config.get("enable_advance_output", config.enable_advance_output)
             config.enable_kuuki_read = others_config.get("enable_kuuki_read", config.enable_kuuki_read)
-            config.enable_debug_output = others_config.get("enable_debug_output", config.enable_debug_output)
+            if config.INNER_VERSION in SpecifierSet(">=0.0.7"):
+                config.enable_debug_output = others_config.get("enable_debug_output", config.enable_debug_output)
+                config.enable_friend_chat = others_config.get("enable_friend_chat", config.enable_friend_chat)
 
         # 版本表达式：>=1.0.0,<2.0.0
         # 允许字段：func: method, support: str, notice: str, necessary: bool
