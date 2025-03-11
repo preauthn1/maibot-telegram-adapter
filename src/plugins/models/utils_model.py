@@ -216,6 +216,7 @@ class LLM_request:
 
                         # 将流式输出转化为非流式输出
                         if stream_mode:
+                            flag_delta_content_finished = False
                             accumulated_content = ""
                             async for line_bytes in response.content:
                                 line = line_bytes.decode("utf-8").strip()
@@ -227,13 +228,25 @@ class LLM_request:
                                         break
                                     try:
                                         chunk = json.loads(data_str)
-                                        delta = chunk["choices"][0]["delta"]
-                                        delta_content = delta.get("content")
-                                        if delta_content is None:
-                                            delta_content = ""
-                                        accumulated_content += delta_content
+                                        if flag_delta_content_finished:
+                                            usage = chunk.get("usage", None) # 获取tokn用量
+                                        else:
+                                            delta = chunk["choices"][0]["delta"]
+                                            delta_content = delta.get("content")
+                                            if delta_content is None:
+                                                delta_content = ""
+                                            accumulated_content += delta_content
+                                            # 检测流式输出文本是否结束
+                                            finish_reason =  chunk["choices"][0]["finish_reason"]
+                                            if finish_reason == "stop":
+                                                usage = chunk.get("usage", None)
+                                                if usage:
+                                                    break
+                                                # 部分平台在文本输出结束前不会返回token用量，此时需要再获取一次chunk
+                                                flag_delta_content_finished = True
+                                            
                                     except Exception:
-                                        logger.exception("解析流式输出错")
+                                        logger.exception("解析流式输出错误")
                             content = accumulated_content
                             reasoning_content = ""
                             think_match = re.search(r'<think>(.*?)</think>', content, re.DOTALL)
@@ -242,7 +255,7 @@ class LLM_request:
                             content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
                             # 构造一个伪result以便调用自定义响应处理器或默认处理器
                             result = {
-                                "choices": [{"message": {"content": content, "reasoning_content": reasoning_content}}]}
+                                "choices": [{"message": {"content": content, "reasoning_content": reasoning_content}}],  "usage": usage}
                             return response_handler(result) if response_handler else self._default_response_handler(
                                 result, user_id, request_type, endpoint)
                         else:
