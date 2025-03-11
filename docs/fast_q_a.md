@@ -6,6 +6,14 @@
 
 <br>
 
+### 完整安装教程
+
+<br>
+
+[MaiMbot简易配置教程](https://www.bilibili.com/video/BV1zsQ5YCEE6)
+
+<br>
+
 ### Api相关问题
 
 <br>
