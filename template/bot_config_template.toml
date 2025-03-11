@@ -1,9 +1,21 @@
 [inner]
-version = "0.0.3"
+version = "0.0.6"
+
+#如果你想要修改配置文件，请在修改后将version的值进行变更
+#如果新增项目，请在BotConfig类下新增相应的变量
+#1.如果你修改的是[]层级项目，例如你新增了 [memory],那么请在config.py的 load_config函数中的include_configs字典中新增"内容":{
+#"func":memory,
+#"support":">=0.0.0",  #新的版本号
+#"necessary":False      #是否必须
+#}
+#2.如果你修改的是[]下的项目，例如你新增了[memory]下的 memory_ban_words ,那么请在config.py的 load_config函数中的 memory函数下新增版本判断:
+            # if config.INNER_VERSION in SpecifierSet(">=0.0.2"):
+            #     config.memory_ban_words = set(memory_config.get("memory_ban_words", []))
 
 [bot]
 qq = 123
 nickname = "麦麦"
+alias_names = ["小麦", "阿麦"]
 
 [personality]
 prompt_personality = [
@@ -29,6 +41,13 @@ ban_words = [
     # "403","张三"
     ]
 
+ban_msgs_regex = [
+    # 需要过滤的消息（原始消息）匹配的正则表达式，匹配到的消息将被过滤（支持CQ码），若不了解正则表达式请勿修改
+    #"https?://[^\\s]+", # 匹配https链接
+    #"\\d{4}-\\d{2}-\\d{2}", # 匹配日期
+    # "\\[CQ:at,qq=\\d+\\]" # 匹配@
+]
+
 [emoji]
 check_interval = 120 # 检查表情包的时间间隔
 register_interval = 10 # 注册表情包的时间间隔
@@ -48,6 +67,10 @@ max_response_length = 1024 # 麦麦回答的最大token数
 [memory]
 build_memory_interval = 300 # 记忆构建间隔 单位秒
 forget_memory_interval = 300 # 记忆遗忘间隔 单位秒
+
+memory_ban_words = [ #不希望记忆的词
+    # "403","张三"
+]
 
 [mood]
 mood_update_interval = 1.0 # 情绪更新间隔 单位秒
@@ -69,14 +92,15 @@ reaction = "回答“测试成功”"
 
 [chinese_typo]
 enable = true # 是否启用中文错别字生成器
-error_rate=0.03 # 单字替换概率
+error_rate=0.006 # 单字替换概率
 min_freq=7 # 最小字频阈值
 tone_error_rate=0.2 # 声调错误概率
-word_replace_rate=0.02 # 整词替换概率
+word_replace_rate=0.006 # 整词替换概率
 
 [others]
 enable_advance_output = true # 是否启用高级输出
 enable_kuuki_read = true # 是否启用读空气功能
+enable_debug_output = false # 是否启用调试输出
 
 [groups]
 talk_allowed = [
