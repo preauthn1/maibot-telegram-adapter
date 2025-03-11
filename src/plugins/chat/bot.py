@@ -50,6 +50,7 @@ class ChatBot:
         # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
 
         # 白名单设定由nontbot侧完成
+        # 消息过滤，涉及到config有待更新
         if event.group_id:
             if event.group_id not in global_config.talk_allowed_groups:
                 return
@@ -68,7 +69,6 @@ class ChatBot:
             group_name=None,
             platform='qq'
         )
-
         message_cq=MessageRecvCQ(
             message_id=event.message_id,
             user_info=user_info,
@@ -86,7 +86,7 @@ class ChatBot:
         userinfo=message.message_info.user_info
         messageinfo=message.message_info
 
-        # 消息过滤，涉及到config有待更新
+        
         
         chat = await chat_manager.get_or_create_stream(platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo)
         message.update_chat_stream(chat)
