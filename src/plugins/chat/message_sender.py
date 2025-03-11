@@ -56,7 +56,7 @@ class Message_Sender:
                     )
                     logger.success(f"[调试] 发送消息{message.processed_plain_text}成功")
                 except Exception as e:
-                    logger.error(f"发生错误 {e}")
+                    logger.error(f"[调试] 发生错误 {e}")
                     logger.error(f"[调试] 发送消息{message.processed_plain_text}失败")
 
 
