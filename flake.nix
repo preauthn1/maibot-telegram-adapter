@@ -21,13 +21,14 @@
         buildInputs = [
           pythonPackages.python
           pythonPackages.venvShellHook
+          pythonPackages.numpy
         ];
 
         postVenvCreation = ''
           unset SOURCE_DATE_EPOCH
           pip install -r requirements.txt
         '';
-        
+
         postShellHook = ''
           # allow pip to install wheels
           unset SOURCE_DATE_EPOCH
