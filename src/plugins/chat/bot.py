@@ -53,10 +53,11 @@ class ChatBot:
 
         self.bot = bot  # 更新 bot 实例
 
+        # 用户屏蔽,不区分私聊/群聊
         if event.user_id in global_config.ban_user_id:
             return
 
-        # 处理私聊消息的逻辑
+        # 处理私聊消息
         if isinstance(event, PrivateMessageEvent):
             if not global_config.enable_friend_chat:  # 私聊过滤
                 return
@@ -76,6 +77,7 @@ class ChatBot:
                 # group_info = GroupInfo(group_id=0, group_name="私聊", platform="qq")
                 group_info = None
 
+        # 处理群聊消息
         else:
             # 白名单设定由nontbot侧完成
             if event.group_id:
