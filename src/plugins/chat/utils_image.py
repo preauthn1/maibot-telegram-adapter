@@ -345,7 +345,7 @@ class ImageManager:
                     logger.error(f"保存图片文件失败: {str(e)}")
             
             # 保存描述到数据库
-            await self._save_description_to_db(image_hash, description, 'image')
+            self._save_description_to_db(image_hash, description, 'image')
             
             return f"[图片：{description}]"
         except Exception as e:

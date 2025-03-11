@@ -78,11 +78,7 @@ class WillingManager:
         reply_probability = max((current_willing - 0.45) * 2, 0)
         
         # 检查群组权限（如果是群聊）
-        if chat_stream.group_info:
-            if chat_stream.group_info.group_id not in config.talk_allowed_groups:
-                current_willing = 0
-                reply_probability = 0
-                
+        if chat_stream.group_info:                
             if chat_stream.group_info.group_id in config.talk_frequency_down_groups:
                 reply_probability = reply_probability / global_config.down_frequency_rate
 
@@ -90,7 +86,6 @@ class WillingManager:
         if reply_probability < 0:
             reply_probability = 0
             
-        self.chat_reply_willing[chat_id] = min(current_willing, 3.0)
         self.chat_reply_willing[chat_id] = min(current_willing, 3.0)
         return reply_probability
     
