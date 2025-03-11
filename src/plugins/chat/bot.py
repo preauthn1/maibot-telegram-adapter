@@ -98,7 +98,6 @@ class ChatBot:
         # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
 
         message_cq = MessageRecvCQ(
-        message_cq = MessageRecvCQ(
             message_id=event.message_id,
             user_info=user_info,
             raw_message=str(event.original_message),
@@ -111,11 +110,6 @@ class ChatBot:
         message_json = message_cq.to_dict()
 
         # 进入maimbot
-        message = MessageRecv(message_json)
-
-        groupinfo = message.message_info.group_info
-        userinfo = message.message_info.user_info
-        messageinfo = message.message_info
         message = MessageRecv(message_json)
 
         groupinfo = message.message_info.group_info
@@ -144,7 +138,7 @@ class ChatBot:
         for word in global_config.ban_words:
             if word in message.processed_plain_text:
                 logger.info(
-                    f"[{groupinfo.group_name}]{userinfo.user_nickname}:{message.processed_plain_text}"
+                    f"[{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{userinfo.user_nickname}:{message.processed_plain_text}"
                 )
                 logger.info(f"[过滤词识别]消息中含有{word}，filtered")
                 return
@@ -153,7 +147,7 @@ class ChatBot:
         for pattern in global_config.ban_msgs_regex:
             if re.search(pattern, message.raw_message):
                 logger.info(
-                    f"[{message.group_name}]{message.user_nickname}:{message.raw_message}"
+                    f"[{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{message.user_nickname}:{message.raw_message}"
                 )
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
