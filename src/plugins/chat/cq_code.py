@@ -18,7 +18,8 @@ from ..models.utils_model import LLM_request
 from .config import global_config
 from .mapper import emojimapper
 from .message_base import Seg
-from .utils_user import get_user_nickname
+from .utils_user import get_user_nickname,get_groupname
+from .message_base import GroupInfo, UserInfo
 
 driver = get_driver()
 config = driver.config
@@ -57,11 +58,8 @@ class CQCode:
 
     type: str
     params: Dict[str, str]
-    group_id: int
-    user_id: int
-    user_nickname: str
-    group_name: str = ""
-    user_nickname: str = ""
+    group_info: Optional[GroupInfo] = None
+    user_info: Optional[UserInfo] = None
     translated_segments: Optional[Union[Seg, List[Seg]]] = None
     reply_message: Dict = None  # 存储回复消息
     image_base64: Optional[str] = None
@@ -215,13 +213,23 @@ class CQCode:
                         else:
                             if raw_message:
                                 from .message_cq import MessageRecvCQ
+                                user_info=UserInfo(
+                                    platform='qq',
+                                    user_id=msg.get("user_id", 0),
+                                    user_nickname=nickname,
+                                )
+                                group_info=GroupInfo(
+                                    platform='qq',
+                                    group_id=msg.get("group_id", 0),
+                                    group_name=get_groupname(msg.get("group_id", 0))
+                                )
 
                                 message_obj = MessageRecvCQ(
-                                    user_id=msg.get("user_id", 0),
                                     message_id=msg.get("message_id", 0),
+                                    user_info=user_info,
                                     raw_message=raw_message,
                                     plain_text=raw_message,
-                                    group_id=msg.get("group_id", 0),
+                                    group_info=group_info,
                                 )
                                 content_seg = Seg(
                                     type="seglist", data=message_obj.message_segment                                )
@@ -231,12 +239,22 @@ class CQCode:
                     if raw_message:
                         from .message_cq import MessageRecvCQ
 
-                        message_obj = MessageRecvCQ(
+                        user_info=UserInfo(
+                            platform='qq',
                             user_id=msg.get("user_id", 0),
+                            user_nickname=nickname,
+                        )
+                        group_info=GroupInfo(
+                            platform='qq',
+                            group_id=msg.get("group_id", 0),
+                            group_name=get_groupname(msg.get("group_id", 0))
+                        )
+                        message_obj = MessageRecvCQ(
                             message_id=msg.get("message_id", 0),
+                            user_info=user_info,
                             raw_message=raw_message,
                             plain_text=raw_message,
-                            group_id=msg.get("group_id", 0),
+                            group_info=group_info,
                         )
                         content_seg = Seg(
                             type="seglist", data=message_obj.message_segment
@@ -262,11 +280,12 @@ class CQCode:
             return None
 
         if self.reply_message.sender.user_id:
+            
             message_obj = MessageRecvCQ(
-                user_id=self.reply_message.sender.user_id,
+                user_info=UserInfo(user_id=self.reply_message.sender.user_id,user_nickname=self.reply_message.sender.get("nickname",None)),
                 message_id=self.reply_message.message_id,
                 raw_message=str(self.reply_message.message),
-                group_id=self.group_id,
+                group_info=GroupInfo(group_id=self.reply_message.group_id),
             )
 
             segments = []
@@ -300,7 +319,6 @@ class CQCode:
             .replace("&amp;", "&")
         )
 
-
 class CQCode_tool:
     @staticmethod
     def cq_from_dict_to_class(cq_code: Dict,msg ,reply: Optional[Dict] = None) -> CQCode:
@@ -327,10 +345,8 @@ class CQCode_tool:
         instance = CQCode(
             type=cq_type,
             params=params,
-            group_id=msg.message_info.group_info.group_id,
-            user_id=msg.message_info.user_info.user_id,
-            user_nickname=msg.message_info.user_info.user_nickname,
-            group_name=msg.message_info.group_info.group_name,
+            group_info=msg.message_info.group_info,
+            user_info=msg.message_info.user_info,
             reply_message=reply
         )
 
