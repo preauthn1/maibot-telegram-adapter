@@ -199,15 +199,6 @@ class ImageManager:
             logger.error(f"获取base64失败: {str(e)}")
             return None
             
-    async def save_base64_image(self, base64_str: str, description: str = None) -> Optional[str]:
-        """保存base64图像(带查重)
-        Args:
-            base64_str: base64字符串
-            description: 图像描述
-        Returns:
-            str: 保存路径,失败返回None
-        """
-        return await self.save_image(base64_str, description=description, is_base64=True)
         
     def check_url_exists(self, url: str) -> bool:
         """检查URL是否已存在
@@ -266,8 +257,8 @@ class ImageManager:
             if global_config.EMOJI_SAVE:
                 # 生成文件名和路径
                 timestamp = int(time.time())
-                filename = f"emoji_{timestamp}_{image_hash[:8]}.jpg"
-                file_path = os.path.join(self.IMAGE_DIR, filename)
+                filename = f"{timestamp}_{image_hash[:8]}.jpg"
+                file_path = os.path.join(self.IMAGE_DIR, 'emoji',filename)
                 
                 try:
                     # 保存文件
@@ -323,8 +314,8 @@ class ImageManager:
             if global_config.EMOJI_SAVE:
                 # 生成文件名和路径
                 timestamp = int(time.time())
-                filename = f"image_{timestamp}_{image_hash[:8]}.jpg"
-                file_path = os.path.join(self.IMAGE_DIR, filename)
+                filename = f"{timestamp}_{image_hash[:8]}.jpg"
+                file_path = os.path.join(self.IMAGE_DIR,'image', filename)
                 
                 try:
                     # 保存文件
