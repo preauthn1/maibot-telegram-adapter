@@ -238,7 +238,7 @@ class Hippocampus:
             time_info += f"是从 {earliest_str} 到 {latest_str} 的对话:\n"
 
         for msg in messages:
-            input_text += f"{msg['text']}\n"
+            input_text += f"{msg['detailed_plain_text']}\n"
 
         logger.debug(input_text)
 

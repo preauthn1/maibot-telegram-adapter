@@ -163,12 +163,16 @@ class ChatBot:
             
             response,raw_content = await self.gpt.generate_response(message)
             
+        # print(f"response: {response}")
         if response:
+            # print(f"有response: {response}")
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None
             # 找到message,删除
+            # print(f"开始找思考消息")
             for msg in container.messages:
                 if isinstance(msg, MessageThinking) and msg.message_info.message_id == think_id:
+                    # print(f"找到思考消息: {msg}")
                     thinking_message = msg
                     container.messages.remove(msg)
                     break
@@ -186,14 +190,14 @@ class ChatBot:
             
             mark_head = False
             for msg in response:
-                print("test")
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 # 通过时间改变时间戳
                 typing_time = calculate_typing_time(msg)
+                print(f"typing_time: {typing_time}")
                 accu_typing_time += typing_time
                 timepoint = tinking_time_point + accu_typing_time
-                
                 message_segment = Seg(type='text', data=msg)
+                print(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
                     message_id=think_id,
                     chat_stream=chat,
@@ -203,12 +207,15 @@ class ChatBot:
                     is_head=not mark_head,
                     is_emoji=False
                 )
+                print(f"bot_message: {bot_message}")
                 if not mark_head:
                     mark_head = True
+                print(f"添加消息到message_set: {bot_message}")
                 message_set.add_message(bot_message)
 
             # message_set 可以直接加入 message_manager
             # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
+            print(f"添加message_set到message_manager")
             message_manager.add_message(message_set)
 
             bot_response_time = tinking_time_point
