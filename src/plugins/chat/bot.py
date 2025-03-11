@@ -268,6 +268,7 @@ class ChatBot:
                         message_id=think_id,
                         chat_stream=chat,
                         bot_user_info=bot_user_info,
+                        sender_info=userinfo,
                         message_segment=message_segment,
                         reply=message,
                         is_head=False,
