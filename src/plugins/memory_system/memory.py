@@ -349,7 +349,7 @@ class Hippocampus:
     def sync_memory_to_db(self):
         """检查并同步内存中的图结构与数据库"""
         # 获取数据库中所有节点和内存中所有节点
-        db_nodes = list(self.memory_graph.db.db.graph_data.nodes.find())
+        db_nodes = list(self.memory_graph.db.graph_data.nodes.find())
         memory_nodes = list(self.memory_graph.G.nodes(data=True))
 
         # 转换数据库节点为字典格式,方便查找
@@ -377,7 +377,7 @@ class Hippocampus:
                     'created_time': created_time,
                     'last_modified': last_modified
                 }
-                self.memory_graph.db.db.graph_data.nodes.insert_one(node_data)
+                self.memory_graph.db.graph_data.nodes.insert_one(node_data)
             else:
                 # 获取数据库中节点的特征值
                 db_node = db_nodes_dict[concept]
@@ -385,7 +385,7 @@ class Hippocampus:
 
                 # 如果特征值不同,则更新节点
                 if db_hash != memory_hash:
-                    self.memory_graph.db.db.graph_data.nodes.update_one(
+                    self.memory_graph.db.graph_data.nodes.update_one(
                         {'concept': concept},
                         {'$set': {
                             'memory_items': memory_items,
@@ -396,7 +396,7 @@ class Hippocampus:
                     )
 
         # 处理边的信息
-        db_edges = list(self.memory_graph.db.db.graph_data.edges.find())
+        db_edges = list(self.memory_graph.db.graph_data.edges.find())
         memory_edges = list(self.memory_graph.G.edges(data=True))
 
         # 创建边的哈希值字典
@@ -428,11 +428,11 @@ class Hippocampus:
                     'created_time': created_time,
                     'last_modified': last_modified
                 }
-                self.memory_graph.db.db.graph_data.edges.insert_one(edge_data)
+                self.memory_graph.db.graph_data.edges.insert_one(edge_data)
             else:
                 # 检查边的特征值是否变化
                 if db_edge_dict[edge_key]['hash'] != edge_hash:
-                    self.memory_graph.db.db.graph_data.edges.update_one(
+                    self.memory_graph.db.graph_data.edges.update_one(
                         {'source': source, 'target': target},
                         {'$set': {
                             'hash': edge_hash,
@@ -451,7 +451,7 @@ class Hippocampus:
         self.memory_graph.G.clear()
 
         # 从数据库加载所有节点
-        nodes = list(self.memory_graph.db.db.graph_data.nodes.find())
+        nodes = list(self.memory_graph.db.graph_data.nodes.find())
         for node in nodes:
             concept = node['concept']
             memory_items = node.get('memory_items', [])
@@ -468,7 +468,7 @@ class Hippocampus:
                 if 'last_modified' not in node:
                     update_data['last_modified'] = current_time
                 
-                self.memory_graph.db.db.graph_data.nodes.update_one(
+                self.memory_graph.db.graph_data.nodes.update_one(
                     {'concept': concept},
                     {'$set': update_data}
                 )
@@ -485,7 +485,7 @@ class Hippocampus:
                                        last_modified=last_modified)
 
         # 从数据库加载所有边
-        edges = list(self.memory_graph.db.db.graph_data.edges.find())
+        edges = list(self.memory_graph.db.graph_data.edges.find())
         for edge in edges:
             source = edge['source']
             target = edge['target']
@@ -501,7 +501,7 @@ class Hippocampus:
                 if 'last_modified' not in edge:
                     update_data['last_modified'] = current_time
                 
-                self.memory_graph.db.db.graph_data.edges.update_one(
+                self.memory_graph.db.graph_data.edges.update_one(
                     {'source': source, 'target': target},
                     {'$set': update_data}
                 )

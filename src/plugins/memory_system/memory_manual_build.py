@@ -56,13 +56,13 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
         list: 消息记录字典列表，每个字典包含消息内容和时间信息
     """
     chat_records = []
-    closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
+    closest_record = db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
     
     if closest_record and closest_record.get('memorized', 0) < 4:            
         closest_time = closest_record['time']
         group_id = closest_record['group_id']
         # 获取该时间戳之后的length条消息，且groupid相同
-        records = list(db.db.messages.find(
+        records = list(db.messages.find(
             {"time": {"$gt": closest_time}, "group_id": group_id}
         ).sort('time', 1).limit(length))
         
@@ -74,7 +74,7 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
                 return ''
                 
             # 更新memorized值
-            db.db.messages.update_one(
+            db.messages.update_one(
                 {"_id": record["_id"]},
                 {"$set": {"memorized": current_memorized + 1}}
             )
@@ -323,7 +323,7 @@ class Hippocampus:
         self.memory_graph.G.clear()
         
         # 从数据库加载所有节点
-        nodes = self.memory_graph.db.db.graph_data.nodes.find()
+        nodes = self.memory_graph.db.graph_data.nodes.find()
         for node in nodes:
             concept = node['concept']
             memory_items = node.get('memory_items', [])
@@ -334,7 +334,7 @@ class Hippocampus:
             self.memory_graph.G.add_node(concept, memory_items=memory_items)
             
         # 从数据库加载所有边
-        edges = self.memory_graph.db.db.graph_data.edges.find()
+        edges = self.memory_graph.db.graph_data.edges.find()
         for edge in edges:
             source = edge['source']
             target = edge['target']
@@ -371,7 +371,7 @@ class Hippocampus:
         使用特征值(哈希值)快速判断是否需要更新
         """
         # 获取数据库中所有节点和内存中所有节点
-        db_nodes = list(self.memory_graph.db.db.graph_data.nodes.find())
+        db_nodes = list(self.memory_graph.db.graph_data.nodes.find())
         memory_nodes = list(self.memory_graph.G.nodes(data=True))
         
         # 转换数据库节点为字典格式，方便查找
@@ -394,7 +394,7 @@ class Hippocampus:
                     'memory_items': memory_items,
                     'hash': memory_hash
                 }
-                self.memory_graph.db.db.graph_data.nodes.insert_one(node_data)
+                self.memory_graph.db.graph_data.nodes.insert_one(node_data)
             else:
                 # 获取数据库中节点的特征值
                 db_node = db_nodes_dict[concept]
@@ -403,7 +403,7 @@ class Hippocampus:
                 # 如果特征值不同，则更新节点
                 if db_hash != memory_hash:
                     # logger.info(f"更新节点内容: {concept}")
-                    self.memory_graph.db.db.graph_data.nodes.update_one(
+                    self.memory_graph.db.graph_data.nodes.update_one(
                         {'concept': concept},
                         {'$set': {
                             'memory_items': memory_items,
@@ -416,10 +416,10 @@ class Hippocampus:
         for db_node in db_nodes:
             if db_node['concept'] not in memory_concepts:
                 # logger.info(f"删除多余节点: {db_node['concept']}")
-                self.memory_graph.db.db.graph_data.nodes.delete_one({'concept': db_node['concept']})
+                self.memory_graph.db.graph_data.nodes.delete_one({'concept': db_node['concept']})
                 
         # 处理边的信息
-        db_edges = list(self.memory_graph.db.db.graph_data.edges.find())
+        db_edges = list(self.memory_graph.db.graph_data.edges.find())
         memory_edges = list(self.memory_graph.G.edges())
         
         # 创建边的哈希值字典
@@ -445,12 +445,12 @@ class Hippocampus:
                     'num': 1,
                     'hash': edge_hash
                 }
-                self.memory_graph.db.db.graph_data.edges.insert_one(edge_data)
+                self.memory_graph.db.graph_data.edges.insert_one(edge_data)
             else:
                 # 检查边的特征值是否变化
                 if db_edge_dict[edge_key]['hash'] != edge_hash:
                     logger.info(f"更新边: {source} - {target}")
-                    self.memory_graph.db.db.graph_data.edges.update_one(
+                    self.memory_graph.db.graph_data.edges.update_one(
                         {'source': source, 'target': target},
                         {'$set': {'hash': edge_hash}}
                     )
@@ -461,7 +461,7 @@ class Hippocampus:
             if edge_key not in memory_edge_set:
                 source, target = edge_key
                 logger.info(f"删除多余边: {source} - {target}")
-                self.memory_graph.db.db.graph_data.edges.delete_one({
+                self.memory_graph.db.graph_data.edges.delete_one({
                     'source': source,
                     'target': target
                 })
@@ -487,9 +487,9 @@ class Hippocampus:
             topic: 要删除的节点概念
         """
         # 删除节点
-        self.memory_graph.db.db.graph_data.nodes.delete_one({'concept': topic})
+        self.memory_graph.db.graph_data.nodes.delete_one({'concept': topic})
         # 删除所有涉及该节点的边
-        self.memory_graph.db.db.graph_data.edges.delete_many({
+        self.memory_graph.db.graph_data.edges.delete_many({
             '$or': [
                 {'source': topic},
                 {'target': topic}
