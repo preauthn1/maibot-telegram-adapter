@@ -2,6 +2,7 @@ import asyncio
 import random
 import time
 from typing import Dict
+from loguru import logger
 
 
 from .config import global_config
@@ -27,7 +28,7 @@ class WillingManager:
         """定期衰减回复意愿"""
         while True:
             await asyncio.sleep(5)
-            for chat_id in list(self.chat_reply_willing.keys()):
+            for chat_id in self.chat_reply_willing:
                 is_high_mode = self.chat_high_willing_mode.get(chat_id, False)
                 if is_high_mode:
                     # 高回复意愿期内轻微衰减
@@ -42,7 +43,7 @@ class WillingManager:
             current_time = time.time()
             await asyncio.sleep(10)  # 每10秒检查一次
             
-            for chat_id in list(self.chat_high_willing_mode.keys()):
+            for chat_id in self.chat_high_willing_mode:
                 last_change_time = self.chat_last_mode_change.get(chat_id, 0)
                 is_high_mode = self.chat_high_willing_mode.get(chat_id, False)
                 
@@ -146,7 +147,7 @@ class WillingManager:
             is_follow_up_question = True
             in_conversation_context = True
             self.chat_conversation_context[chat_id] = True
-            print(f"检测到追问 (同一用户), 提高回复意愿")
+            logger.debug(f"检测到追问 (同一用户), 提高回复意愿")
             current_willing += 0.3
         
         # 特殊情况处理
@@ -154,11 +155,11 @@ class WillingManager:
             current_willing += 0.5
             in_conversation_context = True
             self.chat_conversation_context[chat_id] = True
-            print(f"被提及, 当前意愿: {current_willing}")
+            logger.debug(f"被提及, 当前意愿: {current_willing}")
         
         if is_emoji:
             current_willing *= 0.1
-            print(f"表情包, 当前意愿: {current_willing}")
+            logger.debug(f"表情包, 当前意愿: {current_willing}")
         
         # 根据话题兴趣度适当调整
         if interested_rate > 0.5:
@@ -170,7 +171,7 @@ class WillingManager:
         if in_conversation_context:
             # 在对话上下文中，降低基础回复概率
             base_probability = 0.5 if is_high_mode else 0.25
-            print(f"处于对话上下文中，基础回复概率: {base_probability}")
+            logger.debug(f"处于对话上下文中，基础回复概率: {base_probability}")
         elif is_high_mode:
             # 高回复周期：4-8句话有50%的概率会回复一次
             base_probability = 0.50 if 4 <= msg_count <= 8 else 0.2

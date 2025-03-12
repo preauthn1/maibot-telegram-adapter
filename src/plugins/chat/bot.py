@@ -135,7 +135,7 @@ class ChatBot:
         for pattern in global_config.ban_msgs_regex:
             if re.search(pattern, message.raw_message):
                 logger.info(
-                    f"[{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{message.user_nickname}:{message.raw_message}"
+                    f"[{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{userinfo.user_nickname}:{message.raw_message}"
                 )
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
@@ -239,10 +239,10 @@ class ChatBot:
                     is_head=not mark_head,
                     is_emoji=False,
                 )
-                print(f"bot_message: {bot_message}")
+                logger.debug(f"bot_message: {bot_message}")
                 if not mark_head:
                     mark_head = True
-                print(f"添加消息到message_set: {bot_message}")
+                logger.debug(f"添加消息到message_set: {bot_message}")
                 message_set.add_message(bot_message)
 
             # message_set 可以直接加入 message_manager
