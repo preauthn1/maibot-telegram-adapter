@@ -121,7 +121,7 @@ class ImageManager:
                     
             # 计算哈希值
             image_hash = hashlib.md5(image_bytes).hexdigest()
-            image_format = Image.open(io.BytesIO(image_bytes)).format
+            image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
             
             # 查重
             existing = self.db.images.find_one({'hash': image_hash})
@@ -241,7 +241,7 @@ class ImageManager:
             # 计算图片哈希
             image_bytes = base64.b64decode(image_base64)
             image_hash = hashlib.md5(image_bytes).hexdigest()
-            image_format = Image.open(io.BytesIO(image_bytes)).format
+            image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
 
             # 查询缓存的描述
             cached_description = self._get_description_from_db(image_hash, 'emoji')
@@ -296,7 +296,7 @@ class ImageManager:
             # 计算图片哈希
             image_bytes = base64.b64decode(image_base64)
             image_hash = hashlib.md5(image_bytes).hexdigest()
-            image_format = Image.open(io.BytesIO(image_bytes)).format
+            image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
 
             # 查询缓存的描述
             cached_description = self._get_description_from_db(image_hash, 'image')

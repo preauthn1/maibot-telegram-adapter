@@ -393,7 +393,7 @@ class LLM_request:
         )
         return content, reasoning_content
 
-    async def generate_response_for_image(self, prompt: str, image_base64: str, image_format: str) -> Tuple[str, str, str]:
+    async def generate_response_for_image(self, prompt: str, image_base64: str, image_format: str) -> Tuple[str, str]:
         """根据输入的提示和图片生成模型的异步响应"""
 
         content, reasoning_content = await self._execute_request(
