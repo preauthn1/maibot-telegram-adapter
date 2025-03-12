@@ -75,13 +75,13 @@ class WillingManager:
             self.chat_high_willing_mode[chat_id] = False
             self.chat_reply_willing[chat_id] = 0.1  # 设置为最低回复意愿
             self.chat_low_willing_duration[chat_id] = random.randint(600, 1200)  # 10-20分钟
-            print(f"聊天流 {chat_id} 切换到低回复意愿期，持续 {self.chat_low_willing_duration[chat_id]} 秒")
+            logger.debug(f"聊天流 {chat_id} 切换到低回复意愿期，持续 {self.chat_low_willing_duration[chat_id]} 秒")
         else:
             # 从低回复期切换到高回复期
             self.chat_high_willing_mode[chat_id] = True
             self.chat_reply_willing[chat_id] = 1.0  # 设置为较高回复意愿
             self.chat_high_willing_duration[chat_id] = random.randint(180, 240)  # 3-4分钟
-            print(f"聊天流 {chat_id} 切换到高回复意愿期，持续 {self.chat_high_willing_duration[chat_id]} 秒")
+            logger.debug(f"聊天流 {chat_id} 切换到高回复意愿期，持续 {self.chat_high_willing_duration[chat_id]} 秒")
         
         self.chat_last_mode_change[chat_id] = time.time()
         self.chat_msg_count[chat_id] = 0  # 重置消息计数
