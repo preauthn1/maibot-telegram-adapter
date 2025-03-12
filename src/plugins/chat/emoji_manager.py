@@ -356,7 +356,8 @@ class EmojiManager:
                             removed_count += 1
                         else:
                             logger.error(f"删除数据库记录失败: {emoji['_id']}")
-                    
+                        continue
+
                     if "hash" not in emoji:
                         logger.warning(f"发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
                         hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
