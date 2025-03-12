@@ -77,7 +77,7 @@ def calculate_information_content(text):
     return entropy
 
 
-def get_cloest_chat_from_db(length: int, timestamp: str):
+def get_closest_chat_from_db(length: int, timestamp: str):
     """从数据库中获取最接近指定时间戳的聊天记录
     
     Args:

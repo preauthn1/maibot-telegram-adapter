@@ -49,7 +49,7 @@ def calculate_information_content(text):
     
     return entropy
 
-def get_cloest_chat_from_db(length: int, timestamp: str):
+def get_closest_chat_from_db(length: int, timestamp: str):
     """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数
     
     Returns:
@@ -185,19 +185,19 @@ class Hippocampus:
         # 短期：1h   中期：4h   长期：24h
         for _ in range(time_frequency.get('near')):
             random_time = current_timestamp - random.randint(1, 3600*4)
-            messages = get_cloest_chat_from_db(length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
                 
         for _ in range(time_frequency.get('mid')):
             random_time = current_timestamp - random.randint(3600*4, 3600*24)
-            messages = get_cloest_chat_from_db(length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
                 
         for _ in range(time_frequency.get('far')):
             random_time = current_timestamp - random.randint(3600*24, 3600*24*7)
-            messages = get_cloest_chat_from_db(length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
                 

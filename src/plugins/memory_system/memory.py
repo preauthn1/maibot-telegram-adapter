@@ -15,7 +15,7 @@ from ..chat.config import global_config
 from ..chat.utils import (
     calculate_information_content,
     cosine_similarity,
-    get_cloest_chat_from_db,
+    get_closest_chat_from_db,
     text_to_vector,
 )
 from ..models.utils_model import LLM_request
@@ -190,19 +190,19 @@ class Hippocampus:
         # 短期：1h   中期：4h   长期：24h
         for _ in range(time_frequency.get('near')):
             random_time = current_timestamp - random.randint(1, 3600)
-            messages = get_cloest_chat_from_db(length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
 
         for _ in range(time_frequency.get('mid')):
             random_time = current_timestamp - random.randint(3600, 3600 * 4)
-            messages = get_cloest_chat_from_db(length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
 
         for _ in range(time_frequency.get('far')):
             random_time = current_timestamp - random.randint(3600 * 4, 3600 * 24)
-            messages = get_cloest_chat_from_db(length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
 
