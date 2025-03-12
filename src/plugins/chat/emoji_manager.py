@@ -76,16 +76,16 @@ class EmojiManager:
         
         没有索引的话,数据库每次查询都需要扫描全部数据,建立索引后可以大大提高查询效率。
         """
-        if 'emoji' not in self.db.db.list_collection_names():
-            self.db.db.create_collection('emoji')
-            self.db.db.emoji.create_index([('embedding', '2dsphere')])
-            self.db.db.emoji.create_index([('filename', 1)], unique=True)
+        if 'emoji' not in self.db.list_collection_names():
+            self.db.create_collection('emoji')
+            self.db.emoji.create_index([('embedding', '2dsphere')])
+            self.db.emoji.create_index([('filename', 1)], unique=True)
 
     def record_usage(self, emoji_id: str):
         """记录表情使用次数"""
         try:
             self._ensure_db()
-            self.db.db.emoji.update_one(
+            self.db.emoji.update_one(
                 {'_id': emoji_id},
                 {'$inc': {'usage_count': 1}}
             )
@@ -119,7 +119,7 @@ class EmojiManager:
 
             try:
                 # 获取所有表情包
-                all_emojis = list(self.db.db.emoji.find({}, {'_id': 1, 'path': 1, 'embedding': 1, 'description': 1}))
+                all_emojis = list(self.db.emoji.find({}, {'_id': 1, 'path': 1, 'embedding': 1, 'description': 1}))
 
                 if not all_emojis:
                     logger.warning("数据库中没有任何表情包")
@@ -157,10 +157,11 @@ class EmojiManager:
                 
                 if selected_emoji and 'path' in selected_emoji:
                     # 更新使用次数
-                    self.db.db.emoji.update_one(
+                    self.db.emoji.update_one(
                         {'_id': selected_emoji['_id']},
                         {'$inc': {'usage_count': 1}}
                     )
+
                     logger.success(
                         f"找到匹配的表情包: {selected_emoji.get('description', '无描述')} (相似度: {similarity:.4f})")
                     # 稍微改一下文本描述，不然容易产生幻觉，描述已经包含 表情包 了
@@ -176,8 +177,10 @@ class EmojiManager:
             logger.error(f"获取表情包失败: {str(e)}")
             return None
 
+
     async def _get_emoji_discription(self, image_base64: str) -> str:
         """获取表情包的标签，使用image_manager的描述生成功能"""
+
         try:
             # 使用image_manager获取描述，去掉前后的方括号和"表情包："前缀
             description = await image_manager.get_emoji_description(image_base64)
@@ -236,7 +239,7 @@ class EmojiManager:
                 image_hash = hashlib.md5(image_bytes).hexdigest()
                 
                 # 检查是否已经注册过
-                existing_emoji = self.db.db['emoji'].find_one({'filename': filename})
+                existing_emoji = self.db['emoji'].find_one({'filename': filename})
                 description = None
                 
                 if existing_emoji:
@@ -272,11 +275,14 @@ class EmojiManager:
                     # 获取表情包的描述
                     description = await self._get_emoji_discription(image_base64)
                 
+
+
                 if global_config.EMOJI_CHECK:
                     check = await self._check_emoji(image_base64)
                     if '是' not in check:
                         os.remove(image_path)
                         logger.info(f"描述: {description}")
+
                         logger.info(f"描述: {description}")
                         logger.info(f"其不满足过滤规则，被剔除 {check}")
                         continue
@@ -287,6 +293,7 @@ class EmojiManager:
                 
                 if description is not None:
                     embedding = await get_embedding(description)
+
                     # 准备数据库记录
                     emoji_record = {
                         'filename': filename,
@@ -298,9 +305,10 @@ class EmojiManager:
                     }
                     
                     # 保存到emoji数据库
-                    self.db.db['emoji'].insert_one(emoji_record)
+                    self.db['emoji'].insert_one(emoji_record)
                     logger.success(f"注册新表情包: {filename}")
                     logger.info(f"描述: {description}")
+
                     
                     # 保存到images数据库
                     image_doc = {
@@ -338,7 +346,7 @@ class EmojiManager:
         try:
             self._ensure_db()
             # 获取所有表情包记录
-            all_emojis = list(self.db.db.emoji.find())
+            all_emojis = list(self.db.emoji.find())
             removed_count = 0
             total_count = len(all_emojis)
 
@@ -346,13 +354,13 @@ class EmojiManager:
                 try:
                     if 'path' not in emoji:
                         logger.warning(f"发现无效记录（缺少path字段），ID: {emoji.get('_id', 'unknown')}")
-                        self.db.db.emoji.delete_one({'_id': emoji['_id']})
+                        self.db.emoji.delete_one({'_id': emoji['_id']})
                         removed_count += 1
                         continue
 
                     if 'embedding' not in emoji:
                         logger.warning(f"发现过时记录（缺少embedding字段），ID: {emoji.get('_id', 'unknown')}")
-                        self.db.db.emoji.delete_one({'_id': emoji['_id']})
+                        self.db.emoji.delete_one({'_id': emoji['_id']})
                         removed_count += 1
                         continue
 
@@ -360,7 +368,7 @@ class EmojiManager:
                     if not os.path.exists(emoji['path']):
                         logger.warning(f"表情包文件已被删除: {emoji['path']}")
                         # 从数据库中删除记录
-                        result = self.db.db.emoji.delete_one({'_id': emoji['_id']})
+                        result = self.db.emoji.delete_one({'_id': emoji['_id']})
                         if result.deleted_count > 0:
                             logger.debug(f"成功删除数据库记录: {emoji['_id']}")
                             removed_count += 1
@@ -371,7 +379,7 @@ class EmojiManager:
                     continue
 
             # 验证清理结果
-            remaining_count = self.db.db.emoji.count_documents({})
+            remaining_count = self.db.emoji.count_documents({})
             if removed_count > 0:
                 logger.success(f"已清理 {removed_count} 个失效的表情包记录")
                 logger.info(f"清理前总数: {total_count} | 清理后总数: {remaining_count}")
@@ -389,5 +397,7 @@ class EmojiManager:
 
 
 # 创建全局单例
+
 emoji_manager = EmojiManager()
+
 

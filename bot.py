@@ -12,6 +12,8 @@ from loguru import logger
 from nonebot.adapters.onebot.v11 import Adapter
 import platform
 
+from src.common.database import Database
+
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}
 
@@ -51,19 +53,19 @@ def init_env():
         with open(".env", "w") as f:
             f.write("ENVIRONMENT=prod")
 
-    # 检测.env.prod文件是否存在
-    if not os.path.exists(".env.prod"):
-        logger.error("检测到.env.prod文件不存在")
-        shutil.copy("template.env", "./.env.prod")
+        # 检测.env.prod文件是否存在
+        if not os.path.exists(".env.prod"):
+            logger.error("检测到.env.prod文件不存在")
+            shutil.copy("template.env", "./.env.prod")
 
     # 检测.env.dev文件是否存在，不存在的话直接复制生产环境配置
     if not os.path.exists(".env.dev"):
         logger.error("检测到.env.dev文件不存在")
-        shutil.copy("template.env", "./.env.dev")
+        shutil.copy(".env.prod", "./.env.dev")
 
     # 首先加载基础环境变量.env
     if os.path.exists(".env"):
-        load_dotenv(".env")
+        load_dotenv(".env",override=True)
         logger.success("成功加载基础环境变量配置")
 
 
@@ -96,18 +98,39 @@ def load_env():
         logger.error(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
         RuntimeError(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
 
+def init_database():
+    Database.initialize(
+        uri=os.getenv("MONGODB_URI"),
+        host=os.getenv("MONGODB_HOST", "127.0.0.1"),
+        port=int(os.getenv("MONGODB_PORT", "27017")),
+        db_name=os.getenv("DATABASE_NAME", "MegBot"),
+        username=os.getenv("MONGODB_USERNAME"),
+        password=os.getenv("MONGODB_PASSWORD"),
+        auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
+    )
+    
 
 def load_logger():
     logger.remove()  # 移除默认配置
-    logger.add(
-        sys.stderr,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <fg #777777>|</> <level>{level: <7}</level> <fg "
-               "#777777>|</> <cyan>{name:.<8}</cyan>:<cyan>{function:.<8}</cyan>:<cyan>{line: >4}</cyan> <fg "
-               "#777777>-</> <level>{message}</level>",
-        colorize=True,
-        level=os.getenv("LOG_LEVEL", "INFO"),  # 根据环境设置日志级别，默认为INFO
-        filter=lambda record: "nonebot" not in record["name"]
-    )
+    if os.getenv("ENVIRONMENT") == "dev":
+        logger.add(
+            sys.stderr,
+            format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <fg #777777>|</> <level>{level: <7}</level> <fg "
+                   "#777777>|</> <cyan>{name:.<8}</cyan>:<cyan>{function:.<8}</cyan>:<cyan>{line: >4}</cyan> <fg "
+                   "#777777>-</> <level>{message}</level>",
+            colorize=True,
+            level=os.getenv("LOG_LEVEL", "DEBUG"),  # 根据环境设置日志级别，默认为DEBUG
+        )
+    else:
+        logger.add(
+            sys.stderr,
+            format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <fg #777777>|</> <level>{level: <7}</level> <fg "
+                "#777777>|</> <cyan>{name:.<8}</cyan>:<cyan>{function:.<8}</cyan>:<cyan>{line: >4}</cyan> <fg "
+                "#777777>-</> <level>{message}</level>",
+            colorize=True,
+            level=os.getenv("LOG_LEVEL", "INFO"),  # 根据环境设置日志级别，默认为INFO
+            filter=lambda record: "nonebot" not in record["name"]
+        )
 
 
 
@@ -188,6 +211,7 @@ def raw_main():
     init_config()
     init_env()
     load_env()
+    init_database() # 加载完成环境后初始化database
     load_logger()
 
     env_config = {key: os.getenv(key) for key in os.environ}
@@ -213,7 +237,6 @@ def raw_main():
 
 
 if __name__ == "__main__":
-
     try:
         raw_main()
 
