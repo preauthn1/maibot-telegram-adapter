@@ -1,8 +1,3 @@
----
-name: Pull Request
-about: Pull Request
-labels: "Pull Request"
----
 # 请填写以下内容
 （删除掉中括号内的空格，并替换为**小写的x**）
 1. - [ ] `main` 分支 **禁止修改**，请确认本次提交的分支 **不是 `main` 分支**
