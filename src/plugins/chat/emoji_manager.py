@@ -232,7 +232,7 @@ class EmojiManager:
                 image_hash = hashlib.md5(image_bytes).hexdigest()
                 image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
                 # 检查是否已经注册过
-                existing_emoji = db["emoji"].find_one({"filename": filename})
+                existing_emoji = db["emoji"].find_one({"hash": image_hash})
                 description = None
 
                 if existing_emoji:
