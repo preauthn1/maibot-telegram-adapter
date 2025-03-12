@@ -362,6 +362,7 @@ class EmojiManager:
                         logger.warning(f"发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
                         hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
                         db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
+
                 except Exception as item_error:
                     logger.error(f"处理表情包记录时出错: {str(item_error)}")
                     continue
