@@ -194,7 +194,6 @@ def raw_main():
         time.tzset()
 
     easter_egg()
-    load_logger()
     init_config()
     init_env()
     load_env()
