@@ -121,7 +121,7 @@ class ImageManager:
                     
             # 计算哈希值
             image_hash = hashlib.md5(image_bytes).hexdigest()
-            img_format = Image.open(io.BytesIO(image_bytes)).format()
+            image_format = Image.open(io.BytesIO(image_bytes)).format
             
             # 查重
             existing = self.db.images.find_one({'hash': image_hash})
@@ -130,7 +130,7 @@ class ImageManager:
                 
             # 生成文件名和路径
             timestamp = int(time.time())
-            filename = f"{timestamp}_{image_hash[:8]}.{img_format}"
+            filename = f"{timestamp}_{image_hash[:8]}.{image_format}"
             file_path = os.path.join(self.IMAGE_DIR, filename)
             
             # 保存文件
