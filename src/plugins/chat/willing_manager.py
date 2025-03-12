@@ -151,7 +151,7 @@ class WillingManager:
         
         # 特殊情况处理
         if is_mentioned_bot:
-            current_willing += 0.3
+            current_willing += 0.5
             in_conversation_context = True
             self.chat_conversation_context[chat_id] = True
             print(f"被提及, 当前意愿: {current_willing}")
@@ -168,15 +168,15 @@ class WillingManager:
         base_probability = 0.0
         
         if in_conversation_context:
-            # 在对话上下文中，提高基础回复概率
-            base_probability = 0.75 if is_high_mode else 0.5
+            # 在对话上下文中，降低基础回复概率
+            base_probability = 0.5 if is_high_mode else 0.25
             print(f"处于对话上下文中，基础回复概率: {base_probability}")
         elif is_high_mode:
-            # 高回复周期：4-8句话有65%的概率会回复一次
-            base_probability = 0.65 if 4 <= msg_count <= 8 else 0.3
+            # 高回复周期：4-8句话有50%的概率会回复一次
+            base_probability = 0.50 if 4 <= msg_count <= 8 else 0.2
         else:
-            # 低回复周期：需要最少15句才有50%的概率会回一句
-            base_probability = 0.5 if msg_count >= 15 else 0.05 * min(msg_count, 10)
+            # 低回复周期：需要最少15句才有30%的概率会回一句
+            base_probability = 0.30 if msg_count >= 15 else 0.03 * min(msg_count, 10)
             
         # 考虑回复意愿的影响
         reply_probability = base_probability * current_willing
@@ -186,7 +186,8 @@ class WillingManager:
             if chat_stream.group_info.group_id in config.talk_frequency_down_groups:
                 reply_probability = reply_probability / global_config.down_frequency_rate
 
-        reply_probability = min(reply_probability, 1)
+        # 限制最大回复概率
+        reply_probability = min(reply_probability, 0.75)  # 设置最大回复概率为75%
         if reply_probability < 0:
             reply_probability = 0
         
