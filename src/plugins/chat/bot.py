@@ -135,7 +135,7 @@ class ChatBot:
         for pattern in global_config.ban_msgs_regex:
             if re.search(pattern, message.raw_message):
                 logger.info(
-                    f"[{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{userinfo.user_nickname}:{message.raw_message}"
+                    f"[{chat.group_info.group_name if chat.group_info.group_id else '私聊'}]{message.user_nickname}:{message.raw_message}"
                 )
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
@@ -159,6 +159,7 @@ class ChatBot:
             config=global_config,
             is_emoji=message.is_emoji,
             interested_rate=interested_rate,
+            sender_id=str(message.message_info.user_info.user_id),
         )
         current_willing = willing_manager.get_willing(chat_stream=chat)
 
@@ -189,6 +190,9 @@ class ChatBot:
             willing_manager.change_reply_willing_sent(chat)
 
             response, raw_content = await self.gpt.generate_response(message)
+        else:
+            # 决定不回复时，也更新回复意愿
+            willing_manager.change_reply_willing_not_sent(chat)
 
         # print(f"response: {response}")
         if response:
@@ -235,10 +239,10 @@ class ChatBot:
                     is_head=not mark_head,
                     is_emoji=False,
                 )
-                logger.debug(f"bot_message: {bot_message}")
+                print(f"bot_message: {bot_message}")
                 if not mark_head:
                     mark_head = True
-                logger.debug(f"添加消息到message_set: {bot_message}")
+                print(f"添加消息到message_set: {bot_message}")
                 message_set.add_message(bot_message)
 
             # message_set 可以直接加入 message_manager
