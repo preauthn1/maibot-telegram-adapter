@@ -176,7 +176,7 @@ class KnowledgeLibrary:
         
         try:
             current_hash = self.calculate_file_hash(file_path)
-            processed_record = self.db.db.processed_files.find_one({"file_path": file_path})
+            processed_record = self.db.processed_files.find_one({"file_path": file_path})
             
             if processed_record:
                 if processed_record.get("hash") == current_hash:
@@ -197,14 +197,14 @@ class KnowledgeLibrary:
                         "split_length": knowledge_length,
                         "created_at": datetime.now()
                     }
-                    self.db.db.knowledges.insert_one(knowledge)
+                    self.db.knowledges.insert_one(knowledge)
                     result["chunks_processed"] += 1
             
             split_by = processed_record.get("split_by", []) if processed_record else []
             if knowledge_length not in split_by:
                 split_by.append(knowledge_length)
             
-            self.db.db.processed_files.update_one(
+            self.db.knowledges.processed_files.update_one(
                 {"file_path": file_path},
                 {
                     "$set": {
@@ -322,7 +322,7 @@ class KnowledgeLibrary:
             {"$project": {"content": 1, "similarity": 1, "file_path": 1}}
         ]
         
-        results = list(self.db.db.knowledges.aggregate(pipeline))
+        results = list(self.db.knowledges.aggregate(pipeline))
         return results
 
 # 创建单例实例
@@ -346,7 +346,7 @@ if __name__ == "__main__":
         elif choice == '2':
             confirm = input("确定要删除所有知识吗？这个操作不可撤销！(y/n): ").strip().lower()
             if confirm == 'y':
-                knowledge_library.db.db.knowledges.delete_many({})
+                knowledge_library.db.knowledges.delete_many({})
                 console.print("[green]已清空所有知识！[/green]")
             continue
         elif choice == '1':

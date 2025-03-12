@@ -246,7 +246,7 @@ class EmojiManager:
                     # 即使表情包已存在，也检查是否需要同步到images集合
                     description = existing_emoji.get('discription')
                     # 检查是否在images集合中存在
-                    existing_image = image_manager.db.db.images.find_one({'hash': image_hash})
+                    existing_image = image_manager.db.images.find_one({'hash': image_hash})
                     if not existing_image:
                         # 同步到images集合
                         image_doc = {
@@ -256,7 +256,7 @@ class EmojiManager:
                             'description': description,
                             'timestamp': int(time.time())
                         }
-                        image_manager.db.db.images.update_one(
+                        image_manager.db.images.update_one(
                             {'hash': image_hash},
                             {'$set': image_doc},
                             upsert=True
@@ -318,7 +318,7 @@ class EmojiManager:
                         'description': description,
                         'timestamp': int(time.time())
                     }
-                    image_manager.db.db.images.update_one(
+                    image_manager.db.images.update_one(
                         {'hash': image_hash},
                         {'$set': image_doc},
                         upsert=True
