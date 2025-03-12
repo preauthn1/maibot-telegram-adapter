@@ -10,7 +10,7 @@ import io
 from loguru import logger
 from nonebot import get_driver
 
-from ...common.database import Database
+from ...common.database import db
 from ..chat.config import global_config
 from ..models.utils_model import LLM_request
 driver = get_driver()
@@ -23,13 +23,11 @@ class ImageManager:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance.db = None
             cls._instance._initialized = False
         return cls._instance
     
     def __init__(self):
         if not self._initialized:
-            self.db = Database.get_instance()
             self._ensure_image_collection()
             self._ensure_description_collection()
             self._ensure_image_dir()
@@ -42,20 +40,20 @@ class ImageManager:
         
     def _ensure_image_collection(self):
         """确保images集合存在并创建索引"""
-        if 'images' not in self.db.list_collection_names():
-            self.db.create_collection('images')
+        if 'images' not in db.list_collection_names():
+            db.create_collection('images')
             # 创建索引
-            self.db.images.create_index([('hash', 1)], unique=True)
-            self.db.images.create_index([('url', 1)])
-            self.db.images.create_index([('path', 1)])
+            db.images.create_index([('hash', 1)], unique=True)
+            db.images.create_index([('url', 1)])
+            db.images.create_index([('path', 1)])
 
     def _ensure_description_collection(self):
         """确保image_descriptions集合存在并创建索引"""
-        if 'image_descriptions' not in self.db.list_collection_names():
-            self.db.create_collection('image_descriptions')
+        if 'image_descriptions' not in db.list_collection_names():
+            db.create_collection('image_descriptions')
             # 创建索引
-            self.db.image_descriptions.create_index([('hash', 1)], unique=True)
-            self.db.image_descriptions.create_index([('type', 1)])
+            db.image_descriptions.create_index([('hash', 1)], unique=True)
+            db.image_descriptions.create_index([('type', 1)])
 
     def _get_description_from_db(self, image_hash: str, description_type: str) -> Optional[str]:
         """从数据库获取图片描述
@@ -67,7 +65,7 @@ class ImageManager:
         Returns:
             Optional[str]: 描述文本，如果不存在则返回None
         """
-        result= self.db.image_descriptions.find_one({
+        result= db.image_descriptions.find_one({
             'hash': image_hash,
             'type': description_type
         })
@@ -81,7 +79,7 @@ class ImageManager:
             description: 描述文本
             description_type: 描述类型 ('emoji' 或 'image')
         """
-        self.db.image_descriptions.update_one(
+        db.image_descriptions.update_one(
             {'hash': image_hash, 'type': description_type},
             {
                 '$set': {
@@ -124,7 +122,7 @@ class ImageManager:
             image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
             
             # 查重
-            existing = self.db.images.find_one({'hash': image_hash})
+            existing = db.images.find_one({'hash': image_hash})
             if existing:
                 return existing['path']
                 
@@ -145,7 +143,7 @@ class ImageManager:
                 'description': description,
                 'timestamp': timestamp
             }
-            self.db.images.insert_one(image_doc)
+            db.images.insert_one(image_doc)
             
             return file_path
             
@@ -162,7 +160,7 @@ class ImageManager:
         """
         try:
             # 先查找是否已存在
-            existing = self.db.images.find_one({'url': url})
+            existing = db.images.find_one({'url': url})
             if existing:
                 return existing['path']
                 
@@ -206,7 +204,7 @@ class ImageManager:
         Returns:
             bool: 是否存在
         """
-        return self.db.images.find_one({'url': url}) is not None
+        return db.images.find_one({'url': url}) is not None
         
     def check_hash_exists(self, image_data: Union[str, bytes], is_base64: bool = False) -> bool:
         """检查图像是否已存在
@@ -229,7 +227,7 @@ class ImageManager:
                     return False
                     
             image_hash = hashlib.md5(image_bytes).hexdigest()
-            return self.db.images.find_one({'hash': image_hash}) is not None
+            return db.images.find_one({'hash': image_hash}) is not None
             
         except Exception as e:
             logger.error(f"检查哈希失败: {str(e)}")
@@ -273,7 +271,7 @@ class ImageManager:
                         'description': description,
                         'timestamp': timestamp
                     }
-                    self.db.images.update_one(
+                    db.images.update_one(
                         {'hash': image_hash},
                         {'$set': image_doc},
                         upsert=True
@@ -335,7 +333,7 @@ class ImageManager:
                         'description': description,
                         'timestamp': timestamp
                     }
-                    self.db.images.update_one(
+                    db.images.update_one(
                         {'hash': image_hash},
                         {'$set': image_doc},
                         upsert=True
