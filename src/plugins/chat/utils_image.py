@@ -247,6 +247,8 @@ class ImageManager:
                 # 生成文件名和路径
                 timestamp = int(time.time())
                 filename = f"{timestamp}_{image_hash[:8]}.{image_format}"
+                if not os.path.exists(os.path.join(self.IMAGE_DIR, "emoji")):
+                    os.makedirs(os.path.join(self.IMAGE_DIR, "emoji"))
                 file_path = os.path.join(self.IMAGE_DIR, "emoji", filename)
 
                 try:
@@ -307,6 +309,8 @@ class ImageManager:
                 # 生成文件名和路径
                 timestamp = int(time.time())
                 filename = f"{timestamp}_{image_hash[:8]}.{image_format}"
+                if not os.path.exists(os.path.join(self.IMAGE_DIR, "image")):
+                    os.makedirs(os.path.join(self.IMAGE_DIR, "image"))
                 file_path = os.path.join(self.IMAGE_DIR, "image", filename)
 
                 try:
