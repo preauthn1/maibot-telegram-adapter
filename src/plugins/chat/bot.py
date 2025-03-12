@@ -7,6 +7,8 @@ from nonebot.adapters.onebot.v11 import (
     GroupMessageEvent,
     MessageEvent,
     PrivateMessageEvent,
+    NoticeEvent,
+    PokeNotifyEvent,
 )
 
 from ..memory_system.memory import hippocampus
@@ -25,6 +27,7 @@ from .relationship_manager import relationship_manager
 from .storage import MessageStorage
 from .utils import calculate_typing_time, is_mentioned_bot_in_message
 from .utils_image import image_path_to_base64
+from .utils_user import get_user_nickname, get_user_cardname, get_groupname
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
 
@@ -45,6 +48,69 @@ class ChatBot:
         """确保所有任务已启动"""
         if not self._started:
             self._started = True
+
+    async def handle_notice(self, event: NoticeEvent, bot: Bot) -> None:
+        """处理收到的通知"""
+        # 戳一戳通知
+        if isinstance(event, PokeNotifyEvent):
+            # 用户屏蔽,不区分私聊/群聊
+            if event.user_id in global_config.ban_user_id:
+                return
+            reply_poke_probability = 1  # 回复戳一戳的概率
+
+            if random() < reply_poke_probability:
+                user_info = UserInfo(
+                    user_id=event.user_id,
+                    user_nickname=get_user_nickname(event.user_id) or None,
+                    user_cardname=get_user_cardname(event.user_id) or None,
+                    platform="qq",
+                )
+                group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
+                message_cq = MessageRecvCQ(
+                    message_id=None,
+                    user_info=user_info,
+                    raw_message=str("[戳了戳]你"),
+                    group_info=group_info,
+                    reply_message=None,
+                    platform="qq",
+                )
+                message_json = message_cq.to_dict()
+
+                # 进入maimbot
+                message = MessageRecv(message_json)
+                groupinfo = message.message_info.group_info
+                userinfo = message.message_info.user_info
+                messageinfo = message.message_info
+
+                chat = await chat_manager.get_or_create_stream(
+                    platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo
+                )
+                message.update_chat_stream(chat)
+                await message.process()
+
+                bot_user_info = UserInfo(
+                    user_id=global_config.BOT_QQ,
+                    user_nickname=global_config.BOT_NICKNAME,
+                    platform=messageinfo.platform,
+                )
+
+                response, raw_content = await self.gpt.generate_response(message)
+
+                if response:
+                    for msg in response:
+                        message_segment = Seg(type="text", data=msg)
+
+                        bot_message = MessageSending(
+                            message_id=None,
+                            chat_stream=chat,
+                            bot_user_info=bot_user_info,
+                            sender_info=userinfo,
+                            message_segment=message_segment,
+                            reply=None,
+                            is_head=False,
+                            is_emoji=False,
+                        )
+                        message_manager.add_message(bot_message)
 
     async def handle_message(self, event: MessageEvent, bot: Bot) -> None:
         """处理收到的消息"""
@@ -143,7 +209,7 @@ class ChatBot:
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
 
         # topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
-        
+
         topic = ""
         interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
         logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
