@@ -12,7 +12,7 @@ import io
 from loguru import logger
 from nonebot import get_driver
 
-from ...common.database import Database
+from ...common.database import db
 from ..chat.config import global_config
 from ..chat.utils import get_embedding
 from ..chat.utils_image import ImageManager, image_path_to_base64
@@ -30,12 +30,10 @@ class EmojiManager:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance.db = None
             cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
-        self.db = Database.get_instance()
         self._scan_task = None
         self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000)
         self.llm_emotion_judge = LLM_request(
@@ -50,7 +48,6 @@ class EmojiManager:
         """初始化数据库连接和表情目录"""
         if not self._initialized:
             try:
-                self.db = Database.get_instance()
                 self._ensure_emoji_collection()
                 self._ensure_emoji_dir()
                 self._initialized = True
@@ -78,16 +75,16 @@ class EmojiManager:
 
         没有索引的话,数据库每次查询都需要扫描全部数据,建立索引后可以大大提高查询效率。
         """
-        if "emoji" not in self.db.list_collection_names():
-            self.db.create_collection("emoji")
-            self.db.emoji.create_index([("embedding", "2dsphere")])
-            self.db.emoji.create_index([("filename", 1)], unique=True)
+        if "emoji" not in db.list_collection_names():
+            db.create_collection("emoji")
+            db.emoji.create_index([("embedding", "2dsphere")])
+            db.emoji.create_index([("filename", 1)], unique=True)
 
     def record_usage(self, emoji_id: str):
         """记录表情使用次数"""
         try:
             self._ensure_db()
-            self.db.emoji.update_one({"_id": emoji_id}, {"$inc": {"usage_count": 1}})
+            db.emoji.update_one({"_id": emoji_id}, {"$inc": {"usage_count": 1}})
         except Exception as e:
             logger.error(f"记录表情使用失败: {str(e)}")
 
@@ -118,7 +115,7 @@ class EmojiManager:
 
             try:
                 # 获取所有表情包
-                all_emojis = list(self.db.emoji.find({}, {"_id": 1, "path": 1, "embedding": 1, "description": 1}))
+                all_emojis = list(db.emoji.find({}, {"_id": 1, "path": 1, "embedding": 1, "description": 1}))
 
                 if not all_emojis:
                     logger.warning("数据库中没有任何表情包")
@@ -155,7 +152,7 @@ class EmojiManager:
 
                 if selected_emoji and "path" in selected_emoji:
                     # 更新使用次数
-                    self.db.emoji.update_one({"_id": selected_emoji["_id"]}, {"$inc": {"usage_count": 1}})
+                    db.emoji.update_one({"_id": selected_emoji["_id"]}, {"$inc": {"usage_count": 1}})
 
                     logger.success(
                         f"找到匹配的表情包: {selected_emoji.get('description', '无描述')} (相似度: {similarity:.4f})"
@@ -235,14 +232,14 @@ class EmojiManager:
                 image_hash = hashlib.md5(image_bytes).hexdigest()
                 image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
                 # 检查是否已经注册过
-                existing_emoji = self.db["emoji"].find_one({"filename": filename})
+                existing_emoji = db["emoji"].find_one({"filename": filename})
                 description = None
 
                 if existing_emoji:
                     # 即使表情包已存在，也检查是否需要同步到images集合
                     description = existing_emoji.get("discription")
                     # 检查是否在images集合中存在
-                    existing_image = image_manager.db.images.find_one({"hash": image_hash})
+                    existing_image = db.images.find_one({"hash": image_hash})
                     if not existing_image:
                         # 同步到images集合
                         image_doc = {
@@ -252,7 +249,7 @@ class EmojiManager:
                             "description": description,
                             "timestamp": int(time.time()),
                         }
-                        image_manager.db.images.update_one({"hash": image_hash}, {"$set": image_doc}, upsert=True)
+                        db.images.update_one({"hash": image_hash}, {"$set": image_doc}, upsert=True)
                         # 保存描述到image_descriptions集合
                         image_manager._save_description_to_db(image_hash, description, "emoji")
                         logger.success(f"同步已存在的表情包到images集合: {filename}")
@@ -295,7 +292,7 @@ class EmojiManager:
                     }
 
                     # 保存到emoji数据库
-                    self.db["emoji"].insert_one(emoji_record)
+                    db["emoji"].insert_one(emoji_record)
                     logger.success(f"注册新表情包: {filename}")
                     logger.info(f"描述: {description}")
 
@@ -307,7 +304,7 @@ class EmojiManager:
                         "description": description,
                         "timestamp": int(time.time()),
                     }
-                    image_manager.db.images.update_one({"hash": image_hash}, {"$set": image_doc}, upsert=True)
+                    db.images.update_one({"hash": image_hash}, {"$set": image_doc}, upsert=True)
                     # 保存描述到image_descriptions集合
                     image_manager._save_description_to_db(image_hash, description, "emoji")
                     logger.success(f"同步保存到images集合: {filename}")
@@ -331,7 +328,7 @@ class EmojiManager:
         try:
             self._ensure_db()
             # 获取所有表情包记录
-            all_emojis = list(self.db.emoji.find())
+            all_emojis = list(db.emoji.find())
             removed_count = 0
             total_count = len(all_emojis)
 
@@ -339,26 +336,26 @@ class EmojiManager:
                 try:
                     if "path" not in emoji:
                         logger.warning(f"发现无效记录（缺少path字段），ID: {emoji.get('_id', 'unknown')}")
-                        self.db.emoji.delete_one({"_id": emoji["_id"]})
+                        db.emoji.delete_one({"_id": emoji["_id"]})
                         removed_count += 1
                         continue
 
                     if "embedding" not in emoji:
                         logger.warning(f"发现过时记录（缺少embedding字段），ID: {emoji.get('_id', 'unknown')}")
-                        self.db.emoji.delete_one({"_id": emoji["_id"]})
+                        db.emoji.delete_one({"_id": emoji["_id"]})
                         removed_count += 1
                         continue
 
                     if "hash" not in emoji:
                         logger.warning(f"发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
                         hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
-                        self.db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
+                        db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
 
                     # 检查文件是否存在
                     if not os.path.exists(emoji["path"]):
                         logger.warning(f"表情包文件已被删除: {emoji['path']}")
                         # 从数据库中删除记录
-                        result = self.db.emoji.delete_one({"_id": emoji["_id"]})
+                        result = db.emoji.delete_one({"_id": emoji["_id"]})
                         if result.deleted_count > 0:
                             logger.debug(f"成功删除数据库记录: {emoji['_id']}")
                             removed_count += 1
@@ -369,7 +366,7 @@ class EmojiManager:
                     continue
 
             # 验证清理结果
-            remaining_count = self.db.emoji.count_documents({})
+            remaining_count = db.emoji.count_documents({})
             if removed_count > 0:
                 logger.success(f"已清理 {removed_count} 个失效的表情包记录")
                 logger.info(f"清理前总数: {total_count} | 清理后总数: {remaining_count}")

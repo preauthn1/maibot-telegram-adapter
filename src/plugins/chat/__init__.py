@@ -7,7 +7,6 @@ from nonebot import get_driver, on_message, require
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment,MessageEvent
 from nonebot.typing import T_State
 
-from ...common.database import Database
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from ..schedule.schedule_generator import bot_schedule
 from ..utils.statistic import LLMStatistics

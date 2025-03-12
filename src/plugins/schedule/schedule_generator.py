@@ -8,7 +8,7 @@ from nonebot import get_driver
 
 from src.plugins.chat.config import global_config
 
-from ...common.database import Database  # 使用正确的导入语法
+from ...common.database import db  # 使用正确的导入语法
 from ..models.utils_model import LLM_request
 
 driver = get_driver()
@@ -19,7 +19,6 @@ class ScheduleGenerator:
         # 根据global_config.llm_normal这一字典配置指定模型
         # self.llm_scheduler = LLMModel(model = global_config.llm_normal,temperature=0.9)
         self.llm_scheduler = LLM_request(model=global_config.llm_normal, temperature=0.9)
-        self.db = Database.get_instance()
         self.today_schedule_text = ""
         self.today_schedule = {}
         self.tomorrow_schedule_text = ""
@@ -46,7 +45,7 @@ class ScheduleGenerator:
 
         schedule_text = str
 
-        existing_schedule = self.db.schedule.find_one({"date": date_str})
+        existing_schedule = db.schedule.find_one({"date": date_str})
         if existing_schedule:
             logger.debug(f"{date_str}的日程已存在:")
             schedule_text = existing_schedule["schedule"]
@@ -63,7 +62,7 @@ class ScheduleGenerator:
 
             try:
                 schedule_text, _ = await self.llm_scheduler.generate_response(prompt)
-                self.db.schedule.insert_one({"date": date_str, "schedule": schedule_text})
+                db.schedule.insert_one({"date": date_str, "schedule": schedule_text})
             except Exception as e:
                 logger.error(f"生成日程失败: {str(e)}")
                 schedule_text = "生成日程时出错了"
@@ -143,7 +142,7 @@ class ScheduleGenerator:
         """打印完整的日程安排"""
         if not self._parse_schedule(self.today_schedule_text):
             logger.warning("今日日程有误，将在下次运行时重新生成")
-            self.db.schedule.delete_one({"date": datetime.datetime.now().strftime("%Y-%m-%d")})
+            db.schedule.delete_one({"date": datetime.datetime.now().strftime("%Y-%m-%d")})
         else:
             logger.info("=== 今日日程安排 ===")
             for time_str, activity in self.today_schedule.items():

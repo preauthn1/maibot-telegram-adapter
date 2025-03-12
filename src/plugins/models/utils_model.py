@@ -10,7 +10,7 @@ from nonebot import get_driver
 import base64
 from PIL import Image
 import io
-from ...common.database import Database
+from ...common.database import db
 from ..chat.config import global_config
 
 driver = get_driver()
@@ -34,17 +34,16 @@ class LLM_request:
         self.pri_out = model.get("pri_out", 0)
 
         # 获取数据库实例
-        self.db = Database.get_instance()
         self._init_database()
 
     def _init_database(self):
         """初始化数据库集合"""
         try:
             # 创建llm_usage集合的索引
-            self.db.llm_usage.create_index([("timestamp", 1)])
-            self.db.llm_usage.create_index([("model_name", 1)])
-            self.db.llm_usage.create_index([("user_id", 1)])
-            self.db.llm_usage.create_index([("request_type", 1)])
+            db.llm_usage.create_index([("timestamp", 1)])
+            db.llm_usage.create_index([("model_name", 1)])
+            db.llm_usage.create_index([("user_id", 1)])
+            db.llm_usage.create_index([("request_type", 1)])
         except Exception:
             logger.error("创建数据库索引失败")
 
@@ -73,7 +72,7 @@ class LLM_request:
                 "status": "success",
                 "timestamp": datetime.now()
             }
-            self.db.llm_usage.insert_one(usage_data)
+            db.llm_usage.insert_one(usage_data)
             logger.info(
                 f"Token使用情况 - 模型: {self.model_name}, "
                 f"用户: {user_id}, 类型: {request_type}, "
