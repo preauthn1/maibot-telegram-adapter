@@ -54,7 +54,7 @@ install_packages() {
     if [[ ${#missing_packages[@]} -gt 0 ]]; then
         whiptail --title "📦 [3/6] 软件包检查" --yesno "检测到以下软件包缺失（MongoDB除外）:\n${missing_packages[*]}\n\n是否要自动安装？" 12 60
         if [[ $? -eq 0 ]]; then
-            break
+            return
         else
             whiptail --title "⚠️ 注意" --yesno "某些必要的软件包未安装，可能会影响运行！\n是否继续？" 10 60 || exit 1
         fi
