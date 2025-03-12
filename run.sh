@@ -5,7 +5,7 @@
 # 请小心使用任何一键脚本！
 
 # 如无法访问GitHub请修改此处镜像地址
-GITHUB_REPO="https://ghfast.top/https://github.com/SengokuCola/MaiMBot.git"
+GITHUB_REPO="https://github.com/SengokuCola/MaiMBot.git"
 
 # 颜色输出
 GREEN="\e[32m"
@@ -119,7 +119,7 @@ confirm_install() {
 
     confirm_message+="🛠️ 添加 Maimbot 作为系统服务 ($SERVICE_NAME.service)\n"
 
-    confitm_message+="\n\n注意：本脚本使用GitHub，如无法访问请手动修改仓库地址。"
+    confirm_message+="\n\n注意：本脚本使用GitHub，如无法访问请手动修改仓库地址。"
     whiptail --title "🔧 安装确认" --yesno "$confirm_message\n\n是否继续安装？" 15 60
     if [[ $? -ne 0 ]]; then
         whiptail --title "🚫 取消安装" --msgbox "安装已取消。" 10 60
