@@ -105,13 +105,11 @@ def load_logger():
     current_env = os.getenv("ENV", "dev")
 
     # 公共配置参数
-    log_level = os.getenv(
-        "LOG_LEVEL",
-        "INFO" if current_env == "prod" else "DEBUG"
-    )
+    log_level = os.getenv("LOG_LEVEL", "INFO" if current_env == "prod" else "DEBUG")
     log_filter = lambda record: (
-        ("nonebot" not in record["name"] or record["level"].no >= logger.level("ERROR").no
-         ) if current_env == "prod" else True
+        ("nonebot" not in record["name"] or record["level"].no >= logger.level("ERROR").no)
+        if current_env == "prod"
+        else True
     )
     log_format = (
         "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> "
@@ -129,17 +127,11 @@ def load_logger():
         colorize=False,
         level=log_level,
         filter=log_filter,
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     # 终端输出
-    logger.add(
-        sys.stderr,
-        format=log_format,
-        colorize=True,
-        level=log_level,
-        filter=log_filter
-    )
+    logger.add(sys.stderr, format=log_format, colorize=True, level=log_level, filter=log_filter)
 
 
 def scan_provider(env_config: dict):

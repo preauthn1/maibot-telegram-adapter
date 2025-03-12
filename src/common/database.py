@@ -22,9 +22,7 @@ def __create_database_instance():
 
     if username and password:
         # 如果有用户名和密码，使用认证连接
-        return MongoClient(
-            host, port, username=username, password=password, authSource=auth_source
-        )
+        return MongoClient(host, port, username=username, password=password, authSource=auth_source)
 
     # 否则使用无认证连接
     return MongoClient(host, port)
