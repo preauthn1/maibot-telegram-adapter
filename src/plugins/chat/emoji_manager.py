@@ -346,11 +346,6 @@ class EmojiManager:
                         removed_count += 1
                         continue
 
-                    if "hash" not in emoji:
-                        logger.warning(f"发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
-                        hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
-                        db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
-
                     # 检查文件是否存在
                     if not os.path.exists(emoji["path"]):
                         logger.warning(f"表情包文件已被删除: {emoji['path']}")
@@ -361,6 +356,12 @@ class EmojiManager:
                             removed_count += 1
                         else:
                             logger.error(f"删除数据库记录失败: {emoji['_id']}")
+                    
+                    if "hash" not in emoji:
+                        logger.warning(f"发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
+                        hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
+                        db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
+
                 except Exception as item_error:
                     logger.error(f"处理表情包记录时出错: {str(item_error)}")
                     continue
