@@ -231,6 +231,7 @@ class ChatBot:
             config=global_config,
             is_emoji=message.is_emoji,
             interested_rate=interested_rate,
+            sender_id=str(message.message_info.user_info.user_id),
         )
         current_willing = willing_manager.get_willing(chat_stream=chat)
 
@@ -261,6 +262,9 @@ class ChatBot:
             willing_manager.change_reply_willing_sent(chat)
 
             response, raw_content = await self.gpt.generate_response(message)
+        else:
+            # 决定不回复时，也更新回复意愿
+            willing_manager.change_reply_willing_not_sent(chat)
 
         # print(f"response: {response}")
         if response:

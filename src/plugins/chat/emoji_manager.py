@@ -31,7 +31,7 @@ image_manager = ImageManager()
 
 class EmojiManager:
     _instance = None
-    EMOJI_DIR = "data/emoji"  # 表情包存储目录
+    EMOJI_DIR = os.path.join("data", "emoji")  # 表情包存储目录
 
     def __new__(cls):
         if cls._instance is None:
@@ -217,7 +217,7 @@ class EmojiManager:
     async def scan_new_emojis(self):
         """扫描新的表情包"""
         try:
-            emoji_dir = "data/emoji"
+            emoji_dir = self.EMOJI_DIR
             os.makedirs(emoji_dir, exist_ok=True)
 
             # 获取所有支持的图片文件
