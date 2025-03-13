@@ -155,6 +155,6 @@ async def remove_recalled_message() -> None:
     """删除撤回消息"""
     try:
         storage = MessageStorage()
-        storage.remove_recalled_message(time.time())
+        await storage.remove_recalled_message(time.time())
     except Exception:
         logger.exception("删除撤回消息失败")
