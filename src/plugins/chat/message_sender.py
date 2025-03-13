@@ -181,9 +181,7 @@ class MessageManager:
                     and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                 ):
                     message_earliest.set_reply()
-                    await message_sender.send_message(message_earliest)
-                else:
-                    await message_sender.send_message(message_earliest)
+                await message_sender.send_message(message_earliest)
                 await message_earliest.process()
 
                 print(
@@ -210,9 +208,7 @@ class MessageManager:
                             and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                         ):
                             msg.set_reply()
-                            await message_sender.send_message(msg.set_reply())
-                        else:
-                            await message_sender.send_message(msg)
+                        await message_sender.send_message(msg)
 
                         # if msg.is_emoji:
                         #     msg.processed_plain_text = "[表情包]"
