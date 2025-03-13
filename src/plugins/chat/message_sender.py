@@ -180,7 +180,8 @@ class MessageManager:
                     and message_earliest.update_thinking_time() > 30
                     and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                 ):
-                    await message_sender.send_message(message_earliest.set_reply())
+                    message_earliest.set_reply()
+                    await message_sender.send_message(message_earliest)
                 else:
                     await message_sender.send_message(message_earliest)
                 await message_earliest.process()
@@ -208,6 +209,7 @@ class MessageManager:
                             and msg.update_thinking_time() > 30
                             and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                         ):
+                            msg.set_reply()
                             await message_sender.send_message(msg.set_reply())
                         else:
                             await message_sender.send_message(msg)
