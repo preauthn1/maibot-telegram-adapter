@@ -3,8 +3,9 @@ import time
 import os
 
 from loguru import logger
-from nonebot import get_driver, on_message, require
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment,MessageEvent
+from nonebot import get_driver, on_message, on_notice, require
+from nonebot.rule import to_me
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment, MessageEvent, NoticeEvent
 from nonebot.typing import T_State
 
 from ..moods.moods import MoodManager  # 导入情绪管理器
@@ -39,6 +40,8 @@ logger.debug(f"正在唤醒{global_config.BOT_NICKNAME}......")
 chat_bot = ChatBot()
 # 注册消息处理器
 msg_in = on_message(priority=5)
+# 注册和bot相关的通知处理器
+notice_matcher = on_notice(priority=1)
 # 创建定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
@@ -95,19 +98,24 @@ async def _(bot: Bot, event: MessageEvent, state: T_State):
     await chat_bot.handle_message(event, bot)
 
 
+@notice_matcher.handle()
+async def _(bot: Bot, event: NoticeEvent, state: T_State):
+    logger.debug(f"收到通知：{event}")
+    await chat_bot.handle_notice(event, bot)
+
+
 # 添加build_memory定时任务
 @scheduler.scheduled_job("interval", seconds=global_config.build_memory_interval, id="build_memory")
 async def build_memory_task():
     """每build_memory_interval秒执行一次记忆构建"""
-    logger.debug(
-        "[记忆构建]"
-        "------------------------------------开始构建记忆--------------------------------------")
+    logger.debug("[记忆构建]------------------------------------开始构建记忆--------------------------------------")
     start_time = time.time()
     await hippocampus.operation_build_memory(chat_size=20)
     end_time = time.time()
     logger.success(
         f"[记忆构建]--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} "
-        "秒-------------------------------------------")
+        "秒-------------------------------------------"
+    )
 
 
 @scheduler.scheduled_job("interval", seconds=global_config.forget_memory_interval, id="forget_memory")
