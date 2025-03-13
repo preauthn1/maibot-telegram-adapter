@@ -1,7 +1,9 @@
 data/
+data1/
 mongodb/
 NapCat.Framework.Windows.Once/
 log/
+logs/
 /test
 /src/test
 message_queue_content.txt
@@ -188,14 +190,17 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-.env
 
 # jieba
 jieba.cache
 
-
-# vscode
-/.vscode
+# .vscode
+!.vscode/settings.json
 
 # direnv
 /.direnv
+
+# JetBrains
+.idea
+*.iml
+*.ipr

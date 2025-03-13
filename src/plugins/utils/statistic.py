@@ -3,8 +3,9 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict
+from loguru import logger
 
-from ...common.database import Database
+from ...common.database import db
 
 
 class LLMStatistics:
@@ -14,7 +15,6 @@ class LLMStatistics:
         Args:
             output_file: 统计结果输出文件路径
         """
-        self.db = Database.get_instance()
         self.output_file = output_file
         self.running = False
         self.stats_thread = None
@@ -52,7 +52,7 @@ class LLMStatistics:
             "costs_by_model": defaultdict(float)
         }
         
-        cursor = self.db.db.llm_usage.find({
+        cursor = db.llm_usage.find({
             "timestamp": {"$gte": start_time}
         })
         
@@ -153,8 +153,8 @@ class LLMStatistics:
             try:
                 all_stats = self._collect_all_statistics()
                 self._save_statistics(all_stats)
-            except Exception as e:
-                print(f"\033[1;31m[错误]\033[0m 统计数据处理失败: {e}")
+            except Exception:
+                logger.exception("统计数据处理失败")
             
             # 等待1分钟
             for _ in range(60):

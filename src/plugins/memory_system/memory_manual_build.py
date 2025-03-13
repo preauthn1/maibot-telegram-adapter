@@ -10,14 +10,16 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import networkx as nx
-import pymongo
 from dotenv import load_dotenv
 from loguru import logger
 import jieba
 
 # from chat.config import global_config
-sys.path.append("C:/GitHub/MaiMBot")  # 添加项目根目录到 Python 路径
-from src.common.database import Database
+# 添加项目根目录到 Python 路径
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+sys.path.append(root_path)
+
+from src.common.database import db
 from src.plugins.memory_system.offline_llm import LLMModel
 
 # 获取当前文件的目录
@@ -35,45 +37,6 @@ else:
     logger.warning(f"未找到环境变量文件: {env_path}")
     logger.info("将使用默认配置")
 
-class Database:
-    _instance = None
-    db = None
-    
-    @classmethod
-    def get_instance(cls):
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-    
-    def __init__(self):
-        if not Database.db:
-            Database.initialize(
-                host=os.getenv("MONGODB_HOST"),
-                port=int(os.getenv("MONGODB_PORT")),
-                db_name=os.getenv("DATABASE_NAME"),
-                username=os.getenv("MONGODB_USERNAME"),
-                password=os.getenv("MONGODB_PASSWORD"),
-                auth_source=os.getenv("MONGODB_AUTH_SOURCE")
-            )
-            
-    @classmethod
-    def initialize(cls, host, port, db_name, username=None, password=None, auth_source="admin"):
-        try:
-            if username and password:
-                uri = f"mongodb://{username}:{password}@{host}:{port}/{db_name}?authSource={auth_source}"
-            else:
-                uri = f"mongodb://{host}:{port}"
-                
-            client = pymongo.MongoClient(uri)
-            cls.db = client[db_name]
-            # 测试连接
-            client.server_info()
-            logger.success("MongoDB连接成功!")
-            
-        except Exception as e:
-            logger.error(f"初始化MongoDB失败: {str(e)}")
-            raise
-
 def calculate_information_content(text):
     """计算文本的信息量（熵）"""
     char_count = Counter(text)
@@ -86,20 +49,20 @@ def calculate_information_content(text):
     
     return entropy
 
-def get_cloest_chat_from_db(db, length: int, timestamp: str):
+def get_closest_chat_from_db(length: int, timestamp: str):
     """从数据库中获取最接近指定时间戳的聊天记录，并记录读取次数
     
     Returns:
         list: 消息记录字典列表，每个字典包含消息内容和时间信息
     """
     chat_records = []
-    closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
+    closest_record = db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
     
     if closest_record and closest_record.get('memorized', 0) < 4:            
         closest_time = closest_record['time']
         group_id = closest_record['group_id']
         # 获取该时间戳之后的length条消息，且groupid相同
-        records = list(db.db.messages.find(
+        records = list(db.messages.find(
             {"time": {"$gt": closest_time}, "group_id": group_id}
         ).sort('time', 1).limit(length))
         
@@ -111,7 +74,7 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
                 return ''
                 
             # 更新memorized值
-            db.db.messages.update_one(
+            db.messages.update_one(
                 {"_id": record["_id"]},
                 {"$set": {"memorized": current_memorized + 1}}
             )
@@ -128,7 +91,6 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
 class Memory_graph:
     def __init__(self):
         self.G = nx.Graph()  # 使用 networkx 的图结构
-        self.db = Database.get_instance()
         
     def connect_dot(self, concept1, concept2):
         # 如果边已存在，增加 strength
@@ -202,7 +164,7 @@ class Memory_graph:
         # 返回所有节点对应的 Memory_dot 对象
         return [self.get_dot(node) for node in self.G.nodes()]
 
-# 海马体 
+# 海马体
 class Hippocampus:
     def __init__(self, memory_graph: Memory_graph):
         self.memory_graph = memory_graph
@@ -223,19 +185,19 @@ class Hippocampus:
         # 短期：1h   中期：4h   长期：24h
         for _ in range(time_frequency.get('near')):
             random_time = current_timestamp - random.randint(1, 3600*4)
-            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
                 
         for _ in range(time_frequency.get('mid')):
             random_time = current_timestamp - random.randint(3600*4, 3600*24)
-            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
                 
         for _ in range(time_frequency.get('far')):
             random_time = current_timestamp - random.randint(3600*24, 3600*24*7)
-            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=random_time)
             if messages:
                 chat_samples.append(messages)
                 
@@ -360,7 +322,7 @@ class Hippocampus:
         self.memory_graph.G.clear()
         
         # 从数据库加载所有节点
-        nodes = self.memory_graph.db.db.graph_data.nodes.find()
+        nodes = db.graph_data.nodes.find()
         for node in nodes:
             concept = node['concept']
             memory_items = node.get('memory_items', [])
@@ -371,7 +333,7 @@ class Hippocampus:
             self.memory_graph.G.add_node(concept, memory_items=memory_items)
             
         # 从数据库加载所有边
-        edges = self.memory_graph.db.db.graph_data.edges.find()
+        edges = db.graph_data.edges.find()
         for edge in edges:
             source = edge['source']
             target = edge['target']
@@ -408,7 +370,7 @@ class Hippocampus:
         使用特征值(哈希值)快速判断是否需要更新
         """
         # 获取数据库中所有节点和内存中所有节点
-        db_nodes = list(self.memory_graph.db.db.graph_data.nodes.find())
+        db_nodes = list(db.graph_data.nodes.find())
         memory_nodes = list(self.memory_graph.G.nodes(data=True))
         
         # 转换数据库节点为字典格式，方便查找
@@ -431,7 +393,7 @@ class Hippocampus:
                     'memory_items': memory_items,
                     'hash': memory_hash
                 }
-                self.memory_graph.db.db.graph_data.nodes.insert_one(node_data)
+                db.graph_data.nodes.insert_one(node_data)
             else:
                 # 获取数据库中节点的特征值
                 db_node = db_nodes_dict[concept]
@@ -440,7 +402,7 @@ class Hippocampus:
                 # 如果特征值不同，则更新节点
                 if db_hash != memory_hash:
                     # logger.info(f"更新节点内容: {concept}")
-                    self.memory_graph.db.db.graph_data.nodes.update_one(
+                    db.graph_data.nodes.update_one(
                         {'concept': concept},
                         {'$set': {
                             'memory_items': memory_items,
@@ -453,10 +415,10 @@ class Hippocampus:
         for db_node in db_nodes:
             if db_node['concept'] not in memory_concepts:
                 # logger.info(f"删除多余节点: {db_node['concept']}")
-                self.memory_graph.db.db.graph_data.nodes.delete_one({'concept': db_node['concept']})
+                db.graph_data.nodes.delete_one({'concept': db_node['concept']})
                 
         # 处理边的信息
-        db_edges = list(self.memory_graph.db.db.graph_data.edges.find())
+        db_edges = list(db.graph_data.edges.find())
         memory_edges = list(self.memory_graph.G.edges())
         
         # 创建边的哈希值字典
@@ -482,12 +444,12 @@ class Hippocampus:
                     'num': 1,
                     'hash': edge_hash
                 }
-                self.memory_graph.db.db.graph_data.edges.insert_one(edge_data)
+                db.graph_data.edges.insert_one(edge_data)
             else:
                 # 检查边的特征值是否变化
                 if db_edge_dict[edge_key]['hash'] != edge_hash:
                     logger.info(f"更新边: {source} - {target}")
-                    self.memory_graph.db.db.graph_data.edges.update_one(
+                    db.graph_data.edges.update_one(
                         {'source': source, 'target': target},
                         {'$set': {'hash': edge_hash}}
                     )
@@ -498,7 +460,7 @@ class Hippocampus:
             if edge_key not in memory_edge_set:
                 source, target = edge_key
                 logger.info(f"删除多余边: {source} - {target}")
-                self.memory_graph.db.db.graph_data.edges.delete_one({
+                db.graph_data.edges.delete_one({
                     'source': source,
                     'target': target
                 })
@@ -524,9 +486,9 @@ class Hippocampus:
             topic: 要删除的节点概念
         """
         # 删除节点
-        self.memory_graph.db.db.graph_data.nodes.delete_one({'concept': topic})
+        db.graph_data.nodes.delete_one({'concept': topic})
         # 删除所有涉及该节点的边
-        self.memory_graph.db.db.graph_data.edges.delete_many({
+        db.graph_data.edges.delete_many({
             '$or': [
                 {'source': topic},
                 {'target': topic}
@@ -743,7 +705,7 @@ class Hippocampus:
 
     async def memory_activate_value(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.3) -> int:
         """计算输入文本对记忆的激活程度"""
-        print(f"\033[1;32m[记忆激活]\033[0m 识别主题: {await self._identify_topics(text)}")
+        logger.info(f"[记忆激活]识别主题: {await self._identify_topics(text)}")
         
         identified_topics = await self._identify_topics(text)
         if not identified_topics:
@@ -939,61 +901,58 @@ def visualize_graph_lite(memory_graph: Memory_graph, color_by_memory: bool = Fal
     plt.show()
 
 async def main():
-    # 初始化数据库
-    logger.info("正在初始化数据库连接...")
-    db = Database.get_instance()
     start_time = time.time()
-    
+
     test_pare = {'do_build_memory':False,'do_forget_topic':False,'do_visualize_graph':True,'do_query':False,'do_merge_memory':False}
-    
+
     # 创建记忆图
     memory_graph = Memory_graph()
-    
+
     # 创建海马体
     hippocampus = Hippocampus(memory_graph)
-    
+
     # 从数据库同步数据
     hippocampus.sync_memory_from_db()
-    
+
     end_time = time.time()
     logger.info(f"\033[32m[加载海马体耗时: {end_time - start_time:.2f} 秒]\033[0m")
-    
+
     # 构建记忆
     if test_pare['do_build_memory']:
         logger.info("开始构建记忆...")
         chat_size = 20
         await hippocampus.operation_build_memory(chat_size=chat_size)
-        
+
         end_time = time.time()
         logger.info(f"\033[32m[构建记忆耗时: {end_time - start_time:.2f} 秒,chat_size={chat_size},chat_count = 16]\033[0m")
-        
+
     if test_pare['do_forget_topic']:
         logger.info("开始遗忘记忆...")
         await hippocampus.operation_forget_topic(percentage=0.1)
-        
+
         end_time = time.time()
         logger.info(f"\033[32m[遗忘记忆耗时: {end_time - start_time:.2f} 秒]\033[0m")
-        
+
     if test_pare['do_merge_memory']:
         logger.info("开始合并记忆...")
         await hippocampus.operation_merge_memory(percentage=0.1)
-        
+
         end_time = time.time()
         logger.info(f"\033[32m[合并记忆耗时: {end_time - start_time:.2f} 秒]\033[0m")
-    
+
     if test_pare['do_visualize_graph']:
         # 展示优化后的图形
         logger.info("生成记忆图谱可视化...")
         print("\n生成优化后的记忆图谱：")
         visualize_graph_lite(memory_graph)
-    
+
     if test_pare['do_query']:
         # 交互式查询
         while True:
             query = input("\n请输入新的查询概念（输入'退出'以结束）：")
             if query.lower() == '退出':
                 break
-            
+
             items_list = memory_graph.get_related_item(query)
             if items_list:
                 first_layer, second_layer = items_list
@@ -1008,9 +967,6 @@ async def main():
             else:
                 print("未找到相关记忆。")
 
-
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
-
-    
