@@ -3,8 +3,6 @@ from .relationship_manager import relationship_manager
 
 
 def get_user_nickname(user_id: int) -> str:
-    if user_id == "all":
-        return "全体成员"
     if int(user_id) == int(global_config.BOT_QQ):
         return global_config.BOT_NICKNAME
     #     print(user_id)
