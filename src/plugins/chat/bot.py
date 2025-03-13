@@ -53,10 +53,15 @@ class ChatBot:
         """处理收到的通知"""
         # 戳一戳通知
         if isinstance(event, PokeNotifyEvent):
+            # 不处理其他人的戳戳
+            if not event.is_tome():
+                return
+
             # 用户屏蔽,不区分私聊/群聊
             if event.user_id in global_config.ban_user_id:
                 return
-            reply_poke_probability = 1  # 回复戳一戳的概率
+
+            reply_poke_probability = 1  # 回复戳一戳的概率，如果要改可以在这里改，暂不提取到配置文件
 
             if random() < reply_poke_probability:
                 user_info = UserInfo(
@@ -66,10 +71,15 @@ class ChatBot:
                     platform="qq",
                 )
                 group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
+
+                raw_message = "[戳了戳]你"
+                if info := event.raw_info:
+                    raw_message = f"[{info[2]}]你"
+
                 message_cq = MessageRecvCQ(
                     message_id=None,
                     user_info=user_info,
-                    raw_message=str("[戳了戳]你"),
+                    raw_message=raw_message,
                     group_info=group_info,
                     reply_message=None,
                     platform="qq",
@@ -120,8 +130,13 @@ class ChatBot:
         # 用户屏蔽,不区分私聊/群聊
         if event.user_id in global_config.ban_user_id:
             return
-        
-        if event.reply and hasattr(event.reply, 'sender') and hasattr(event.reply.sender, 'user_id') and event.reply.sender.user_id in global_config.ban_user_id:
+
+        if (
+            event.reply
+            and hasattr(event.reply, "sender")
+            and hasattr(event.reply.sender, "user_id")
+            and event.reply.sender.user_id in global_config.ban_user_id
+        ):
             logger.debug(f"跳过处理回复来自被ban用户 {event.reply.sender.user_id} 的消息")
             return
         # 处理私聊消息
