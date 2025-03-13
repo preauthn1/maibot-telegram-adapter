@@ -5,7 +5,10 @@
 # 请小心使用任何一键脚本！
 
 # 如无法访问GitHub请修改此处镜像地址
-GITHUB_REPO="https://github.com/SengokuCola/MaiMBot.git"
+
+LANG=C.UTF-8
+
+GITHUB_REPO="https://ghfast.top/https://github.com/SengokuCola/MaiMBot.git"
 
 # 颜色输出
 GREEN="\e[32m"
@@ -13,13 +16,16 @@ RED="\e[31m"
 RESET="\e[0m"
 
 # 需要的基本软件包
-REQUIRED_PACKAGES=("git" "sudo" "python3" "python3-venv" "python3-pip")
+REQUIRED_PACKAGES=("git" "sudo" "python3" "python3-venv" "curl" "gnupg" "python3-pip")
 
 # 默认项目目录
 DEFAULT_INSTALL_DIR="/opt/maimbot"
 
 # 服务名称
 SERVICE_NAME="maimbot"
+
+IS_INSTALL_MONGODB=false
+IS_INSTALL_NAPCAT=false
 
 # 1/6: 检测是否安装 whiptail
 if ! command -v whiptail &>/dev/null; then
@@ -38,10 +44,26 @@ get_os_info() {
     echo "$OS_INFO"
 }
 
+# 检查系统
 check_system() {
-    OS_NAME=$(get_os_info)
-    whiptail --title "⚙️ [2/6] 检查系统" --yesno "本脚本仅支持Debian 12。\n当前系统为 $OS_NAME\n是否继续？" 10 60 || exit 1
+    # 检查是否为 root 用户
+    if [[ "$(id -u)" -ne 0 ]]; then
+        whiptail --title "🚫 权限不足" --msgbox "请使用 root 用户运行此脚本！\n执行方式: sudo bash $0" 10 60
+        exit 1
+    fi
+
+    if [[ -f /etc/os-release ]]; then
+        source /etc/os-release
+        if [[ "$ID" != "debian" || "$VERSION_ID" != "12" ]]; then
+            whiptail --title "🚫 不支持的系统" --msgbox "此脚本仅支持 Debian 12 (Bookworm)！\n当前系统: $PRETTY_NAME\n安装已终止。" 10 60
+            exit 1
+        fi
+    else
+        whiptail --title "⚠️ 无法检测系统" --msgbox "无法识别系统版本，安装已终止。" 10 60
+        exit 1
+    fi
 }
+
 # 3/6: 询问用户是否安装缺失的软件包
 install_packages() {
     missing_packages=()
@@ -52,11 +74,11 @@ install_packages() {
     done
 
     if [[ ${#missing_packages[@]} -gt 0 ]]; then
-        whiptail --title "📦 [3/6] 软件包检查" --yesno "检测到以下软件包缺失（MongoDB除外）:\n${missing_packages[*]}\n\n是否要自动安装？" 12 60
+        whiptail --title "📦 [3/6] 软件包检查" --yesno "检测到以下必须的依赖项目缺失:\n${missing_packages[*]}\n\n是否要自动安装？" 12 60
         if [[ $? -eq 0 ]]; then
-            return
+            return 0
         else
-            whiptail --title "⚠️ 注意" --yesno "某些必要的软件包未安装，可能会影响运行！\n是否继续？" 10 60 || exit 1
+            whiptail --title "⚠️ 注意" --yesno "某些必要的依赖项未安装，可能会影响运行！\n是否继续？" 10 60 || exit 1
         fi
     fi
 }
@@ -105,21 +127,31 @@ confirm_install() {
     if [[ ${#missing_packages[@]} -gt 0 ]]; then
         confirm_message+="📦 安装缺失的依赖项: ${missing_packages[*]}\n"
     else
-        confirm_message+="✅ 所有依赖项已安装，无需额外安装\n"
+        confirm_message+="✅ 所有依赖项已安装\n"
     fi
 
-    confirm_message+="📂 安装目录: $INSTALL_DIR\n"
+    confirm_message+="📂 安装麦麦Bot到: $INSTALL_DIR\n"
     confirm_message+="🔀 分支: $BRANCH\n"
 
-    if dpkg -s mongodb-org &>/dev/null; then
+    if [[ "$MONGODB_INSTALLED" == "true" ]]; then
         confirm_message+="✅ MongoDB 已安装\n"
     else
-        confirm_message+="⚠️ MongoDB 可能未安装（请参阅官方文档安装）\n"
+        if [[ "$IS_INSTALL_MONGODB" == "true" ]]; then
+            confirm_message+="📦 安装 MongoDB\n"
+        fi
     fi
 
-    confirm_message+="🛠️ 添加 Maimbot 作为系统服务 ($SERVICE_NAME.service)\n"
+    if [[ "$NAPCAT_INSTALLED" == "true" ]]; then
+        confirm_message+="✅ NapCat 已安装\n"
+    else
+        if [[ "$IS_INSTALL_NAPCAT" == "true" ]]; then
+            confirm_message+="📦 安装 NapCat\n"
+        fi
+    fi
 
-    confirm_message+="\n\n注意：本脚本使用GitHub，如无法访问请手动修改仓库地址。"
+    confirm_message+="🛠️ 添加麦麦Bot作为系统服务 ($SERVICE_NAME.service)\n"
+
+    confitm_message+="\n\n注意：本脚本默认使用ghfast.top为GitHub进行加速，如不想使用请手动修改脚本开头的GITHUB_REPO变量。"
     whiptail --title "🔧 安装确认" --yesno "$confirm_message\n\n是否继续安装？" 15 60
     if [[ $? -ne 0 ]]; then
         whiptail --title "🚫 取消安装" --msgbox "安装已取消。" 10 60
@@ -127,20 +159,82 @@ confirm_install() {
     fi
 }
 
+check_mongodb() {
+    if command -v mongod &>/dev/null; then
+        MONGO_INSTALLED=true
+    else
+        MONGO_INSTALLED=false
+    fi
+}
+
+# 安装 MongoDB
+install_mongodb() {
+    if [[ "$MONGO_INSTALLED" == "true" ]]; then
+        return 0
+    fi
+
+    whiptail --title "📦 [3/6] 软件包检查" --yesno "检测到未安装MongoDB，是否安装？\n如果您想使用远程数据库，请跳过此步。" 10 60
+    if [[ $? -ne 0 ]]; then
+        return 1
+    fi
+    IS_INSTALL_MONGODB=true
+}
+
+check_napcat() {
+    if command -v napcat &>/dev/null; then
+        NAPCAT_INSTALLED=true
+    else
+        NAPCAT_INSTALLED=false
+    fi
+}
+
+install_napcat() {
+    if [[ "$NAPCAT_INSTALLED" == "true" ]]; then
+        return 0
+    fi
+
+    whiptail --title "📦 [3/6] 软件包检查" --yesno "检测到未安装NapCat，是否安装？\n如果您想使用远程NapCat，请跳过此步。" 10 60
+    if [[ $? -ne 0 ]]; then
+        return 1
+    fi
+    IS_INSTALL_NAPCAT=true
+}
+
 # 运行安装步骤
 check_system
+check_mongodb
+check_napcat
 install_packages
+install_mongodb
+install_napcat
 check_python
 choose_branch
 choose_install_dir
 confirm_install
 
 # 开始安装
-whiptail --title "🚀 开始安装" --msgbox "所有环境检查完毕，即将开始安装 Maimbot！" 10 60
+whiptail --title "🚀 开始安装" --msgbox "所有环境检查完毕，即将开始安装麦麦Bot！" 10 60
 
 echo -e "${GREEN}安装依赖项...${RESET}"
 
 apt update && apt install -y "${missing_packages[@]}"
+
+
+if [[ "$IS_INSTALL_MONGODB" == "true" ]]; then
+    echo -e "${GREEN}安装 MongoDB...${RESET}"
+    curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | gpg -o /usr/share/keyrings/mongodb-server-8.0.gpg --dearmor
+    echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/8.0 main" | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+    apt-get update
+    apt-get install -y mongodb-org
+
+    systemctl enable mongod
+    systemctl start mongod
+fi
+
+if [[ "$IS_INSTALL_NAPCAT" == "true" ]]; then
+    echo -e "${GREEN}安装 NapCat...${RESET}"
+    curl -o napcat.sh https://nclatest.znin.net/NapNeko/NapCat-Installer/main/script/install.sh && bash napcat.sh
+fi
 
 echo -e "${GREEN}创建 Python 虚拟环境...${RESET}"
 mkdir -p "$INSTALL_DIR"
@@ -158,6 +252,7 @@ echo -e "${GREEN}安装 Python 依赖...${RESET}"
 pip install -r requirements.txt
 
 echo -e "${GREEN}设置服务...${RESET}"
+
 # 设置 Maimbot 服务
 cat <<EOF | tee /etc/systemd/system/$SERVICE_NAME.service
 [Unit]
@@ -180,4 +275,4 @@ systemctl daemon-reload
 systemctl enable maimbot
 systemctl start maimbot
 
-whiptail --title "🎉 安装完成" --msgbox "Maimbot 安装完成！\n已经启动MaimBot服务。\n\n安装路径: $INSTALL_DIR\n分支: $BRANCH" 12 60
+whiptail --title "🎉 安装完成" --msgbox "麦麦Bot安装完成！\n已经启动麦麦Bot服务。\n\n安装路径: $INSTALL_DIR\n分支: $BRANCH" 12 60
