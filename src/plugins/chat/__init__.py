@@ -141,7 +141,7 @@ async def print_mood_task():
     mood_manager.print_mood_status()
 
 
-@scheduler.scheduled_job("interval", seconds=30, id="generate_schedule")
+@scheduler.scheduled_job("interval", seconds=7200, id="generate_schedule")
 async def generate_schedule_task():
     """每2小时尝试生成一次日程"""
     logger.debug("尝试生成日程")
