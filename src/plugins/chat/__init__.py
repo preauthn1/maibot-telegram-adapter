@@ -148,6 +148,9 @@ async def generate_schedule_task():
     await bot_schedule.initialize()
     if not bot_schedule.enable_output:
         bot_schedule.print_schedule()
+
+@scheduler.scheduled_job("interval", seconds=3600, id="remove_recalled_message")
+
 async def remove_recalled_message(self) -> None:
     """删除撤回消息"""
     try:

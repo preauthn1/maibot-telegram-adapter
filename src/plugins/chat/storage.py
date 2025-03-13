@@ -42,10 +42,7 @@ class MessageStorage:
     async def remove_recalled_message(self, time: str) -> None:
         """删除撤回消息"""
         try:
-            for msg in db.recalled_messages.distinct("message_id", {"time": time}):
-                if msg.time < (time-300):
-                    db.recalled_messages.delete_one({"message_id": msg.message
-                })
+            db.recalled_messages.delete_many({"time": {"$lt": time-300}})
         except Exception:
             logger.exception("删除撤回消息失败")
 # 如果需要其他存储相关的函数，可以在这里添加
