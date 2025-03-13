@@ -24,4 +24,28 @@ class MessageStorage:
         except Exception:
             logger.exception("存储消息失败")
 
+    async def store_recalled_message(self, message_id: str, time: str, chat_stream:ChatStream) -> None:
+        """存储撤回消息到数据库"""
+        if "recalled_messages" not in db.list_collection_names():
+            db.create_collection("recalled_messages")
+        else:
+            try:
+                message_data = {
+                        "message_id": message_id,
+                        "time": time,
+                        "stream_id":chat_stream.stream_id,
+                        }
+                db.recalled_messages.insert_one(message_data)
+            except Exception:
+                logger.exception("存储撤回消息失败")
+
+    async def remove_recalled_message(self, time: str) -> None:
+        """删除撤回消息"""
+        try:
+            for msg in db.recalled_messages.distinct("message_id", {"time": time}):
+                if msg.time < (time-300):
+                    db.recalled_messages.delete_one({"message_id": msg.message
+                })
+        except Exception:
+            logger.exception("删除撤回消息失败")
 # 如果需要其他存储相关的函数，可以在这里添加

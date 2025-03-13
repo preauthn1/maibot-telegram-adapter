@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union
 
 from loguru import logger
 from nonebot.adapters.onebot.v11 import Bot
-
+from ...common.database import db
 from .message_cq import MessageSendCQ
 from .message import MessageSending, MessageThinking, MessageRecv, MessageSet
 
@@ -36,10 +36,7 @@ class Message_Sender:
             message_send = MessageSendCQ(data=message_json)
             # logger.debug(message_send.message_info,message_send.raw_message)
             message_preview = truncate_message(message.processed_plain_text)
-            if (
-                message_send.message_info.group_info
-                and message_send.message_info.group_info.group_id
-            ):
+            if message_send.message_info.group_info and message_send.message_info.group_info.group_id:
                 try:
                     await self._current_bot.send_group_msg(
                         group_id=message.message_info.group_info.group_id,
@@ -73,6 +70,23 @@ class MessageContainer:
         self.messages = []
         self.last_send_time = 0
         self.thinking_timeout = 20  # 思考超时时间（秒）
+
+    def get_recalled_messages(self) -> List[MessageSending]:
+        """获取所有撤回的Message_Sending对象"""
+        recalled_messages = []
+
+        for msg in self.messages:
+            if isinstance(msg, MessageSending):
+                # 检查是否撤回，对应stream_id和message_id
+                if (
+                    db.chat_streams.find({"stream_id": msg.chat_stream.stream_id}, {"message_id": msg.message_info.message_id})
+                    is not None
+                ):
+                    recalled_messages.append(msg)
+
+        # 按thinking_start_time排序，时间早的在前面
+        recalled_messages.sort(key=lambda x: x.thinking_start_time)
+        return recalled_messages
 
     def get_timeout_messages(self) -> List[MessageSending]:
         """获取所有超时的Message_Sending对象（思考时间超过30秒），按thinking_start_time排序"""
@@ -144,9 +158,7 @@ class MessageManager:
             self.containers[chat_id] = MessageContainer(chat_id)
         return self.containers[chat_id]
 
-    def add_message(
-        self, message: Union[MessageThinking, MessageSending, MessageSet]
-    ) -> None:
+    def add_message(self, message: Union[MessageThinking, MessageSending, MessageSet]) -> None:
         chat_stream = message.chat_stream
         if not chat_stream:
             raise ValueError("无法找到对应的聊天流")
@@ -173,8 +185,20 @@ class MessageManager:
                 if thinking_time > global_config.thinking_timeout:
                     logger.warning(f"消息思考超时({thinking_time}秒)，移除该消息")
                     container.remove_message(message_earliest)
-            else:
 
+                # 检查消息是否被撤回
+                recalled_messages = container.get_recalled_messages()
+                recalled_message_ids = [msg.message_id for msg in recalled_messages]
+                recalled_messages_stream_id = [msg.chat_stream.stream_id for msg in recalled_messages]
+
+                if (
+                    message_earliest.message_info.message_id in recalled_message_ids
+                    and message_earliest.chat_stream.stream_id in recalled_messages_stream_id
+                ):
+                    logger.info(f"消息已被撤回，移除该消息: {message_earliest.message_id}")
+                    container.remove_message(message_earliest)
+
+            else:
                 if (
                     message_earliest.is_head
                     and message_earliest.update_thinking_time() > 30
@@ -189,9 +213,7 @@ class MessageManager:
                     f"\033[1;34m[调试]\033[0m 消息“{truncate_message(message_earliest.processed_plain_text)}”正在发送中"
                 )
 
-                await self.storage.store_message(
-                    message_earliest, message_earliest.chat_stream, None
-                )
+                await self.storage.store_message(message_earliest, message_earliest.chat_stream, None)
 
                 container.remove_message(message_earliest)
 

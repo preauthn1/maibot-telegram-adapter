@@ -8,6 +8,9 @@ from nonebot.adapters.onebot.v11 import (
     PrivateMessageEvent,
     NoticeEvent,
     PokeNotifyEvent,
+    GroupRecallNoticeEvent,
+    FriendRecallNoticeEvent,
+
 )
 
 from ..memory_system.memory import hippocampus
@@ -114,6 +117,36 @@ class ChatBot:
                             is_emoji=False,
                         )
                         message_manager.add_message(bot_message)
+            
+        if isinstance(event, GroupRecallNoticeEvent) or isinstance(event, FriendRecallNoticeEvent):
+            user_info = UserInfo(
+                user_id=event.user_id,
+                user_nickname=get_user_nickname(event.user_id) or None,
+                user_cardname=get_user_cardname(event.user_id) or None,
+                platform="qq",
+            )
+
+            message_cq = MessageRecvCQ(
+                    message_id=None,
+                    user_info=user_info,
+                    raw_message=str("[撤回了一条消息]"),
+                    group_info=None,
+                    reply_message=None,
+                    platform="qq",
+                )
+            message_json = message_cq.to_dict()
+            
+            group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
+
+            chat = await chat_manager.get_or_create_stream(
+                platform=user_info.platform, user_info=user_info, group_info=group_info
+            )
+            
+            await self.storage.store_recalled_message(event.message_id, time.time(), chat)
+            message=MessageRecv(message_json)
+            message.update_chat_stream(chat)
+            await message.process()
+
 
     async def handle_message(self, event: MessageEvent, bot: Bot) -> None:
         """处理收到的消息"""
