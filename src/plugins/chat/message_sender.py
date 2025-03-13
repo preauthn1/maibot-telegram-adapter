@@ -79,7 +79,7 @@ class MessageContainer:
             if isinstance(msg, MessageSending):
                 # 检查是否撤回，对应stream_id和message_id
                 if (
-                    db.chat_streams.find({"stream_id": msg.chat_stream.stream_id}, {"message_id": msg.message_info.message_id})
+                    db.recalled_messages.find({"stream_id": msg.chat_stream.stream_id}, {"message_id": msg.message_info.message_id})
                     is not None
                 ):
                     recalled_messages.append(msg)
@@ -188,15 +188,10 @@ class MessageManager:
 
                 # 检查消息是否被撤回
                 recalled_messages = container.get_recalled_messages()
-                recalled_message_ids = [msg.message_id for msg in recalled_messages]
-                recalled_messages_stream_id = [msg.chat_stream.stream_id for msg in recalled_messages]
-
-                if (
-                    message_earliest.message_info.message_id in recalled_message_ids
-                    and message_earliest.chat_stream.stream_id in recalled_messages_stream_id
-                ):
-                    logger.info(f"消息已被撤回，移除该消息: {message_earliest.message_id}")
-                    container.remove_message(message_earliest)
+                for msg in recalled_messages:
+                    if message_earliest.message_info.message_id == msg.message_info.message_id:
+                        logger.warning(f"消息已被撤回，移除该消息: {message_earliest.message_info.message_id}")
+                        container.remove_message(message_earliest)
 
             else:
                 if (
