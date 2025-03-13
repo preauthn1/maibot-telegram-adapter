@@ -16,7 +16,7 @@
 
 docker-compose.yml: https://github.com/SengokuCola/MaiMBot/blob/main/docker-compose.yml
 下载后打开，将 `services-mongodb-image` 修改为 `mongo:4.4.24`。这是因为最新的 MongoDB 强制要求 AVX 指令集，而群晖似乎不支持这个指令集
-![](/Users/propersama/Desktop/synology_docker-compose.png)
+![](https://raw.githubusercontent.com/ProperSAMA/MaiMBot/refs/heads/debug/docs/synology_docker-compose.png)
 
 bot_config.toml: https://github.com/SengokuCola/MaiMBot/blob/main/template/bot_config_template.toml
 下载后，重命名为 `bot_config.toml`
@@ -25,13 +25,13 @@ bot_config.toml: https://github.com/SengokuCola/MaiMBot/blob/main/template/bot_c
 .env.prod: https://github.com/SengokuCola/MaiMBot/blob/main/template.env
 下载后，重命名为 `.env.prod`
 按下图修改 mongodb 设置，使用  `MONGODB_URI`
-![](/Users/propersama/Desktop/synology_.env.prod.png)
+![](https://raw.githubusercontent.com/ProperSAMA/MaiMBot/refs/heads/debug/docs/synology_.env.prod.png)
 
 把 `bot_config.toml` 和 `.env.prod` 放入之前创建的 `MaiMBot`文件夹
 
 #### 如何下载？
 
-点这里！![](/Users/propersama/Desktop/synology_how_to_download.png)
+点这里！![](https://raw.githubusercontent.com/ProperSAMA/MaiMBot/refs/heads/debug/docs/synology_how_to_download.png)
 
 ### 创建项目
 
@@ -44,7 +44,7 @@ bot_config.toml: https://github.com/SengokuCola/MaiMBot/blob/main/template/bot_c
 
 图例：
 
-![](/Users/propersama/Desktop/synology_create_project.png)
+![](https://raw.githubusercontent.com/ProperSAMA/MaiMBot/refs/heads/debug/docs/synology_create_project.png)
 
 一路点下一步，等待项目创建完成
 
