@@ -1,7 +1,6 @@
 import re
 import time
 from random import random
-from loguru import logger
 from nonebot.adapters.onebot.v11 import (
     Bot,
     GroupMessageEvent,
@@ -30,6 +29,10 @@ from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname, get_groupname
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
+from ..utils.logger_config import setup_logger, LogModule
+
+# 配置日志
+logger = setup_logger(LogModule.CHAT)
 
 
 class ChatBot:
