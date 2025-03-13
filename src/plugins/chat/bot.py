@@ -79,6 +79,24 @@ class ChatBot:
                 raw_message += "（这是一个类似摸摸头的友善行为，而不是恶意行为，请不要作出攻击发言）"
                 await self.directly_reply(raw_message, event.user_id, event.group_id)
 
+        if isinstance(event, GroupRecallNoticeEvent) or isinstance(event, FriendRecallNoticeEvent):
+            user_info = UserInfo(
+                user_id=event.user_id,
+                user_nickname=get_user_nickname(event.user_id) or None,
+                user_cardname=get_user_cardname(event.user_id) or None,
+                platform="qq",
+            )
+
+            group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
+
+            chat = await chat_manager.get_or_create_stream(
+                platform=user_info.platform, user_info=user_info, group_info=group_info
+            )
+            
+            await self.storage.store_recalled_message(event.message_id, time.time(), chat)
+            
+
+
     async def handle_message(self, event: MessageEvent, bot: Bot) -> None:
         """处理收到的消息"""
 
