@@ -4,7 +4,7 @@ import os
 
 from loguru import logger
 from nonebot import get_driver, on_message, require
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment,MessageEvent
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment, MessageEvent
 from nonebot.typing import T_State
 
 from ..moods.moods import MoodManager  # 导入情绪管理器
@@ -99,15 +99,14 @@ async def _(bot: Bot, event: MessageEvent, state: T_State):
 @scheduler.scheduled_job("interval", seconds=global_config.build_memory_interval, id="build_memory")
 async def build_memory_task():
     """每build_memory_interval秒执行一次记忆构建"""
-    logger.debug(
-        "[记忆构建]"
-        "------------------------------------开始构建记忆--------------------------------------")
+    logger.debug("[记忆构建]------------------------------------开始构建记忆--------------------------------------")
     start_time = time.time()
     await hippocampus.operation_build_memory(chat_size=20)
     end_time = time.time()
     logger.success(
         f"[记忆构建]--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} "
-        "秒-------------------------------------------")
+        "秒-------------------------------------------"
+    )
 
 
 @scheduler.scheduled_job("interval", seconds=global_config.forget_memory_interval, id="forget_memory")
@@ -131,3 +130,12 @@ async def print_mood_task():
     """每30秒打印一次情绪状态"""
     mood_manager = MoodManager.get_instance()
     mood_manager.print_mood_status()
+
+
+@scheduler.scheduled_job("interval", seconds=30, id="generate_schedule")
+async def generate_schedule_task():
+    """每2小时尝试生成一次日程"""
+    logger.debug("尝试生成日程")
+    await bot_schedule.initialize()
+    if not bot_schedule.enable_output:
+        bot_schedule.print_schedule()
