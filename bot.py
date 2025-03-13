@@ -102,7 +102,7 @@ def load_logger():
     if not os.path.exists(log_path):
         os.makedirs(log_path)
 
-    current_env = os.getenv("ENV", "dev")
+    current_env = os.getenv("ENVIRONMENT", "dev")
 
     # 公共配置参数
     log_level = os.getenv("LOG_LEVEL", "INFO" if current_env == "prod" else "DEBUG")
