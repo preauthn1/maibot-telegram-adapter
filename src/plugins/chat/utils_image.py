@@ -44,18 +44,23 @@ class ImageManager:
         """确保images集合存在并创建索引"""
         if "images" not in db.list_collection_names():
             db.create_collection("images")
-            # 创建索引
-            db.images.create_index([("hash", 1)], unique=True)
-            db.images.create_index([("url", 1)])
-            db.images.create_index([("path", 1)])
+
+        # 删除旧索引
+        db.images.drop_indexes()
+        # 创建新的复合索引
+        db.images.create_index([("hash", 1), ("type", 1)], unique=True)
+        db.images.create_index([("url", 1)])
+        db.images.create_index([("path", 1)])
 
     def _ensure_description_collection(self):
         """确保image_descriptions集合存在并创建索引"""
         if "image_descriptions" not in db.list_collection_names():
             db.create_collection("image_descriptions")
-            # 创建索引
-            db.image_descriptions.create_index([("hash", 1)], unique=True)
-            db.image_descriptions.create_index([("type", 1)])
+
+        # 删除旧索引
+        db.image_descriptions.drop_indexes()
+        # 创建新的复合索引
+        db.image_descriptions.create_index([("hash", 1), ("type", 1)], unique=True)
 
     def _get_description_from_db(self, image_hash: str, description_type: str) -> Optional[str]:
         """从数据库获取图片描述
@@ -78,151 +83,21 @@ class ImageManager:
             description: 描述文本
             description_type: 描述类型 ('emoji' 或 'image')
         """
-        db.image_descriptions.update_one(
-            {"hash": image_hash, "type": description_type},
-            {"$set": {"description": description, "timestamp": int(time.time())}},
-            upsert=True,
-        )
-
-    async def save_image(
-        self, image_data: Union[str, bytes], url: str = None, description: str = None, is_base64: bool = False
-    ) -> Optional[str]:
-        """保存图像
-        Args:
-            image_data: 图像数据(base64字符串或字节)
-            url: 图像URL
-            description: 图像描述
-            is_base64: image_data是否为base64格式
-        Returns:
-            str: 保存后的文件路径,失败返回None
-        """
         try:
-            # 转换为字节格式
-            if is_base64:
-                if isinstance(image_data, str):
-                    image_bytes = base64.b64decode(image_data)
-                else:
-                    return None
-            else:
-                if isinstance(image_data, bytes):
-                    image_bytes = image_data
-                else:
-                    return None
-
-            # 计算哈希值
-            image_hash = hashlib.md5(image_bytes).hexdigest()
-            image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
-
-            # 查重
-            existing = db.images.find_one({"hash": image_hash})
-            if existing:
-                return existing["path"]
-
-            # 生成文件名和路径
-            timestamp = int(time.time())
-            filename = f"{timestamp}_{image_hash[:8]}.{image_format}"
-            file_path = os.path.join(self.IMAGE_DIR, filename)
-
-            # 保存文件
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-
-            # 保存到数据库
-            image_doc = {
-                "hash": image_hash,
-                "path": file_path,
-                "url": url,
-                "description": description,
-                "timestamp": timestamp,
-            }
-            db.images.insert_one(image_doc)
-
-            return file_path
-
+            db.image_descriptions.update_one(
+                {"hash": image_hash, "type": description_type},
+                {
+                    "$set": {
+                        "description": description,
+                        "timestamp": int(time.time()),
+                        "hash": image_hash,  # 确保hash字段存在
+                        "type": description_type,  # 确保type字段存在
+                    }
+                },
+                upsert=True,
+            )
         except Exception as e:
-            logger.error(f"保存图像失败: {str(e)}")
-            return None
-
-    async def get_image_by_url(self, url: str) -> Optional[str]:
-        """根据URL获取图像路径(带查重)
-        Args:
-            url: 图像URL
-        Returns:
-            str: 本地文件路径,不存在返回None
-        """
-        try:
-            # 先查找是否已存在
-            existing = db.images.find_one({"url": url})
-            if existing:
-                return existing["path"]
-
-            # 下载图像
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        image_bytes = await resp.read()
-                        return await self.save_image(image_bytes, url=url)
-            return None
-
-        except Exception as e:
-            logger.error(f"获取图像失败: {str(e)}")
-            return None
-
-    async def get_base64_by_url(self, url: str) -> Optional[str]:
-        """根据URL获取base64(带查重)
-        Args:
-            url: 图像URL
-        Returns:
-            str: base64字符串,失败返回None
-        """
-        try:
-            image_path = await self.get_image_by_url(url)
-            if not image_path:
-                return None
-
-            with open(image_path, "rb") as f:
-                image_bytes = f.read()
-                return base64.b64encode(image_bytes).decode("utf-8")
-
-        except Exception as e:
-            logger.error(f"获取base64失败: {str(e)}")
-            return None
-
-    def check_url_exists(self, url: str) -> bool:
-        """检查URL是否已存在
-        Args:
-            url: 图像URL
-        Returns:
-            bool: 是否存在
-        """
-        return db.images.find_one({"url": url}) is not None
-
-    def check_hash_exists(self, image_data: Union[str, bytes], is_base64: bool = False) -> bool:
-        """检查图像是否已存在
-        Args:
-            image_data: 图像数据(base64或字节)
-            is_base64: 是否为base64格式
-        Returns:
-            bool: 是否存在
-        """
-        try:
-            if is_base64:
-                if isinstance(image_data, str):
-                    image_bytes = base64.b64decode(image_data)
-                else:
-                    return False
-            else:
-                if isinstance(image_data, bytes):
-                    image_bytes = image_data
-                else:
-                    return False
-
-            image_hash = hashlib.md5(image_bytes).hexdigest()
-            return db.images.find_one({"hash": image_hash}) is not None
-
-        except Exception as e:
-            logger.error(f"检查哈希失败: {str(e)}")
-            return False
+            logger.error(f"保存描述到数据库失败: {str(e)}")
 
     async def get_emoji_description(self, image_base64: str) -> str:
         """获取表情包描述，带查重和保存功能"""
@@ -241,6 +116,11 @@ class ImageManager:
             # 调用AI获取描述
             prompt = "这是一个表情包，使用中文简洁的描述一下表情包的内容和表情包所表达的情感"
             description, _ = await self._llm.generate_response_for_image(prompt, image_base64, image_format)
+
+            cached_description = self._get_description_from_db(image_hash, "emoji")
+            if cached_description:
+                logger.warning(f"虽然生成了描述，但是找到缓存表情包描述: {cached_description}")
+                return f"[表情包：{cached_description}]"
 
             # 根据配置决定是否保存图片
             if global_config.EMOJI_SAVE:
@@ -280,7 +160,6 @@ class ImageManager:
     async def get_image_description(self, image_base64: str) -> str:
         """获取普通图片描述，带查重和保存功能"""
         try:
-            print("处理图片中")
             # 计算图片哈希
             image_bytes = base64.b64decode(image_base64)
             image_hash = hashlib.md5(image_bytes).hexdigest()
@@ -289,7 +168,7 @@ class ImageManager:
             # 查询缓存的描述
             cached_description = self._get_description_from_db(image_hash, "image")
             if cached_description:
-                print("图片描述缓存中")
+                logger.info(f"图片描述缓存中 {cached_description}")
                 return f"[图片：{cached_description}]"
 
             # 调用AI获取描述
@@ -298,7 +177,12 @@ class ImageManager:
             )
             description, _ = await self._llm.generate_response_for_image(prompt, image_base64, image_format)
 
-            print(f"描述是{description}")
+            cached_description = self._get_description_from_db(image_hash, "image")
+            if cached_description:
+                logger.warning(f"虽然生成了描述，但是找到缓存图片描述 {cached_description}")
+                return f"[图片：{cached_description}]"
+
+            logger.info(f"描述是{description}")
 
             if description is None:
                 logger.warning("AI未能生成图片描述")
