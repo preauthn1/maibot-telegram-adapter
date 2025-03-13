@@ -151,10 +151,10 @@ async def generate_schedule_task():
 
 @scheduler.scheduled_job("interval", seconds=3600, id="remove_recalled_message")
 
-async def remove_recalled_message(self) -> None:
+async def remove_recalled_message() -> None:
     """删除撤回消息"""
     try:
-        self.storage = MessageStorage()
-        self.storage.remove_recalled_message(time.time())
+        storage = MessageStorage()
+        storage.remove_recalled_message(time.time())
     except Exception:
         logger.exception("删除撤回消息失败")
