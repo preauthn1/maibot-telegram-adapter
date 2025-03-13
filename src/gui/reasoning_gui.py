@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Dict, List
 from loguru import logger
 from typing import Optional
-from ..common.database import db
+
 
 import customtkinter as ctk
 from dotenv import load_dotenv
@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # 获取项目根目录
 root_dir = os.path.abspath(os.path.join(current_dir, '..', '..'))
+sys.path.insert(0, root_dir)
+from src.common.database import db
 
 # 加载环境变量
 if os.path.exists(os.path.join(root_dir, '.env.dev')):

@@ -139,3 +139,12 @@ async def print_mood_task():
     """每30秒打印一次情绪状态"""
     mood_manager = MoodManager.get_instance()
     mood_manager.print_mood_status()
+
+
+@scheduler.scheduled_job("interval", seconds=7200, id="generate_schedule")
+async def generate_schedule_task():
+    """每2小时尝试生成一次日程"""
+    logger.debug("尝试生成日程")
+    await bot_schedule.initialize()
+    if not bot_schedule.enable_output:
+        bot_schedule.print_schedule()
