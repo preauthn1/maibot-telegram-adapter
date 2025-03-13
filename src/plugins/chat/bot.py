@@ -120,7 +120,10 @@ class ChatBot:
         # 用户屏蔽,不区分私聊/群聊
         if event.user_id in global_config.ban_user_id:
             return
-
+        
+        if event.reply and hasattr(event.reply, 'sender') and hasattr(event.reply.sender, 'user_id') and event.reply.sender.user_id in global_config.ban_user_id:
+            logger.debug(f"跳过处理回复来自被ban用户 {event.reply.sender.user_id} 的消息")
+            return
         # 处理私聊消息
         if isinstance(event, PrivateMessageEvent):
             if not global_config.enable_friend_chat:  # 私聊过滤
