@@ -92,7 +92,7 @@ class ScheduleGenerator:
         """解析日程文本，转换为时间和活动的字典"""
         try:
             reg = r"\{(.|\r|\n)+\}"
-            matched = re.search(reg, schedule_text)
+            matched = re.search(reg, schedule_text)[0]
             schedule_dict = json.loads(matched)
             return schedule_dict
         except json.JSONDecodeError:
