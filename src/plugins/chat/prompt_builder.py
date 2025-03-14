@@ -42,7 +42,6 @@ class PromptBuilder:
         """
         # 关系（载入当前聊天记录里所以人的关系）
         relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "爱慕"]
-        relation_prompt2 = ""
         relation_prompt2_list = ["极度厌恶，冷漠回应或直接辱骂", "关系较差，冷淡回复，保持距离", "关系一般，保持理性", \
                                  "关系较好，友善回复，积极互动", "关系很好，积极回复，关心对方", "关系暧昧，热情回复，无条件支持", ]
         relation_prompt = ""
@@ -50,12 +49,6 @@ class PromptBuilder:
         who_chat_in_group += get_recent_group_speaker(stream_id, (chat_stream.user_info.user_id, chat_stream.user_info.platform), limit=global_config.MAX_CONTEXT_SIZE)
         for person in who_chat_in_group:
             relationship_value = relationship_manager.get_relationship(person).relationship_value
-            if person.user_info.user_cardname:
-                relation_prompt += f"你对昵称为'[({person.user_info.user_id}){person.user_info.user_nickname}]{person.user_info.user_cardname}'的用户的态度为"
-                relation_prompt2 += f"你对昵称为'[({person.user_info.user_id}){person.user_info.user_nickname}]{person.user_info.user_cardname}'的用户的回复态度为"
-            else:
-                relation_prompt += f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的态度为"
-                relation_prompt2 += f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的回复态度为"
             relationship_level_num = 2
             if -1000 <= relationship_value < -227:
                 relationship_level_num = 0
@@ -75,9 +68,12 @@ class PromptBuilder:
                 else:
                     relationship_level_num = 0
                 logger.debug("relationship_value 超出有效范围 (-1000 到 1000)")
-
-            relation_prompt2 += relation_prompt2_list[relationship_level_num] + "，"
-            relation_prompt += relationship_level[relationship_level_num] + "，"
+            if person.user_info.user_cardname:
+                relation_prompt += f"你对昵称为'[({person.user_info.user_id}){person.user_info.user_nickname}]{person.user_info.user_cardname}'的用户的态度为{relationship_level[relationship_level_num]}，"
+                relation_prompt += f"回复态度为{relation_prompt2_list[relationship_level_num]}，"
+            else:
+                relation_prompt += f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的态度为{relationship_level[relationship_level_num]}，"
+                relation_prompt += f"回复态度为{relation_prompt2_list[relationship_level_num]}，"
 
         # 开始构建prompt
 
@@ -148,9 +144,9 @@ class PromptBuilder:
         activate_prompt = ""
         if chat_in_group:
             activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt}，\
-            {relation_prompt}{relation_prompt2}现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意。请分析聊天记录，根据你和他的关系和态度进行回复，明确你的立场和情感。"
+            {relation_prompt}现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意。请分析聊天记录，根据你和他的关系和态度进行回复，明确你的立场和情感。"
         else:
-            activate_prompt = f"以上是你正在和{sender_name}私聊的内容，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意，{relation_prompt}{mood_prompt}，你的回复态度是{relation_prompt2}"
+            activate_prompt = f"以上是你正在和{sender_name}私聊的内容，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意，{relation_prompt}{mood_prompt}，"
 
         # 关键词检测与反应
         keywords_reaction_prompt = ""
@@ -217,6 +213,8 @@ class PromptBuilder:
         #     prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
 
         # prompt_check_if_response = f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
+
+        logger.info(prompt)
 
         prompt_check_if_response = ""
         return prompt, prompt_check_if_response

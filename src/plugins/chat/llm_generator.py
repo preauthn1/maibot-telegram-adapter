@@ -67,7 +67,7 @@ class ResponseGenerator:
         elif message.chat_stream.user_info.user_nickname:
             sender_name = f"({message.chat_stream.user_info.user_id}){message.chat_stream.user_info.user_nickname}"
         else:
-            f"用户({message.chat_stream.user_info.user_id})"
+            sender_name = f"用户({message.chat_stream.user_info.user_id})"
 
         # 构建prompt
         prompt, prompt_check = await prompt_builder._build_prompt(
@@ -145,7 +145,7 @@ class ResponseGenerator:
 
     async def _get_emotion_tags(
         self, content: str, processed_plain_text: str
-    ) -> List[str]:
+    ):
         """提取情感标签，结合立场和情绪"""
         try:
             # 构建提示词，结合回复内容、被回复的内容以及立场分析
