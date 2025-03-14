@@ -216,7 +216,6 @@ class ChatBot:
         is_mentioned = is_mentioned_bot_in_message(message)
         reply_probability = await willing_manager.change_reply_willing_received(
             chat_stream=chat,
-            topic=topic[0] if topic else None,
             is_mentioned_bot=is_mentioned,
             config=global_config,
             is_emoji=message.is_emoji,
