@@ -342,18 +342,22 @@ class ChatBot:
 
             emotion = await self.gpt._get_emotion_tags(raw_content)
             logger.debug(f"为 '{response}' 获取到的情感标签为：{emotion}")
-            valuedict = {
-                "happy": 0.5,
-                "angry": -1,
-                "sad": -0.5,
-                "surprised": 0.2,
-                "disgusted": -1.5,
-                "fearful": -0.7,
-                "neutral": 0.1,
-            }
-            await relationship_manager.update_relationship_value(
-                chat_stream=chat, relationship_value=valuedict[emotion[0]]
-            )
+            await relationship_manager.calculate_update_relationship_value(chat_stream=chat,label=emotion[0])
+
+            # emotion = await self.gpt._get_emotion_tags(raw_content)
+            # logger.debug(f"为 '{response}' 获取到的情感标签为：{emotion}")
+            # valuedict = {
+            #     "happy": 0.5,
+            #     "angry": -1,
+            #     "sad": -0.5,
+            #     "surprised": 0.2,
+            #     "disgusted": -1.5,
+            #     "fearful": -0.7,
+            #     "neutral": 0.1,
+            # }
+            # await relationship_manager.update_relationship_value(
+            #     chat_stream=chat, relationship_value=valuedict[emotion[0]]
+            # )
             # 使用情绪管理器更新情绪
             self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
 
