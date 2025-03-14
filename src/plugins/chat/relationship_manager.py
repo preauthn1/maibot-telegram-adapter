@@ -251,8 +251,9 @@ class RelationshipManager:
             return "某人"
         
     async def calculate_update_relationship_value(self,
-                                            chat_stream: ChatStream,
-                                            label) -> None:
+                                                  chat_stream: ChatStream,
+                                                  label: str,
+                                                  stance: str) -> None:
         """计算变更关系值  
             新的关系值变更计算方式：
                 将关系值限定在-1000到1000
@@ -261,6 +262,12 @@ class RelationshipManager:
                     2.关系越差，改善越难，关系越好，恶化越容易
                     3.人维护关系的精力往往有限，所以当高关系值用户越多，对于中高关系值用户增长越慢
         """
+        stancedict = {
+                "supportive": 0,
+                "neutrality": 1,
+                "opposed": 2,
+            }
+
         valuedict = {
                 "happy": 1.0,
                 "angry": -2.0,
@@ -282,7 +289,7 @@ class RelationshipManager:
         
         value = valuedict[label]
         if old_value >= 0:
-            if valuedict[label] >= 0:
+            if valuedict[label] >= 0 and stancedict[stance] != 2:
                 value = value*math.cos(math.pi*old_value/2000)
                 if old_value > 500:
                     high_value_count = 0
@@ -290,15 +297,15 @@ class RelationshipManager:
                         if relationship.relationship_value >= 900:
                             high_value_count += 1
                     value *= 3/(high_value_count + 3)
-            elif valuedict[label] < 0:
+            elif valuedict[label] < 0 and stancedict[stance] != 0:
                 value = value*math.exp(old_value/1000)
         elif old_value < 0:
-            if valuedict[label] >= 0:
+            if valuedict[label] >= 0 and stancedict[stance] != 2:
                 value = value*math.exp(old_value/1000)
-            elif valuedict[label] < 0:
-                value = -value*math.cos(math.pi*old_value/2000)
+            elif valuedict[label] < 0 and stancedict[stance] != 0:
+                value = value*math.cos(math.pi*old_value/2000)
         
-        logger.info(f"[zyf调试]  标签：{label}  关系值：{value} 原值：{old_value}")
+        logger.debug(f"[关系变更调试] 立场：{stance}  标签：{label}  关系值：{value} 原值：{old_value}")
 
         await self.update_relationship_value(
                 chat_stream=chat_stream, relationship_value=value

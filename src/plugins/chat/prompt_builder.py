@@ -8,8 +8,9 @@ from ..memory_system.memory import hippocampus, memory_graph
 from ..moods.moods import MoodManager
 from ..schedule.schedule_generator import bot_schedule
 from .config import global_config
-from .utils import get_embedding, get_recent_group_detailed_plain_text
+from .utils import get_embedding, get_recent_group_detailed_plain_text, get_recent_group_speaker
 from .chat_stream import chat_manager
+from .relationship_manager import relationship_manager
 
 
 class PromptBuilder:
@@ -148,9 +149,10 @@ class PromptBuilder:
         # 激活prompt构建
         activate_prompt = ''
         if chat_in_group:
-            activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和ta{relation_prompt},{mood_prompt},你想要{relation_prompt_2}。"          
+            activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt}，\
+            {relation_prompt}{relation_prompt2}现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意。请分析聊天记录，根据你和他的关系和态度进行回复，明确你的立场和情感。"
         else:
-            activate_prompt = f"以上是你正在和{sender_name}私聊的内容，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和ta{relation_prompt},{mood_prompt},你想要{relation_prompt_2}。"
+            activate_prompt = f"以上是你正在和{sender_name}私聊的内容，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意，{relation_prompt}{mood_prompt}，你的回复态度是{relation_prompt2}"
 
         # 关键词检测与反应
         keywords_reaction_prompt = ''
@@ -168,21 +170,18 @@ class PromptBuilder:
         
         prompt_personality = f'{activate_prompt}你的网名叫{global_config.BOT_NICKNAME}，你还有很多别名:{"/".join(global_config.BOT_ALIAS_NAMES)}，'
         personality_choice = random.random()
-        if chat_in_group:
-            prompt_in_group=f"你正在浏览{chat_stream.platform}群"
-        else:
-            prompt_in_group=f"你正在{chat_stream.platform}上和{sender_name}私聊"
+
         if personality_choice < probability_1:  # 第一种人格
             prompt_personality += f'''{personality[0]}, 你正在浏览qq群,{promt_info_prompt},
-            现在请你给出日常且口语化的回复，平淡一些，尽量简短一些。{keywords_reaction_prompt}
+            现在请你给出日常且口语化的回复，根据关系明确你的立场，表现你自己的见解，尽量简短一些。{keywords_reaction_prompt}
             请注意把握群里的聊天内容，不要刻意突出自身学科背景，不要回复的太有条理，可以有个性。'''
         elif personality_choice < probability_1 + probability_2:  # 第二种人格
             prompt_personality += f'''{personality[1]}, 你正在浏览qq群，{promt_info_prompt},
-            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
+            现在请你给出日常且口语化的回复，根据关系明确你的立场，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
             请你表达自己的见解和观点。可以有个性。'''
         else:  # 第三种人格
             prompt_personality += f'''{personality[2]}, 你正在浏览qq群，{promt_info_prompt},
-            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
+            现在请你给出日常且口语化的回复，根据关系明确你的立场，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
             请你表达自己的见解和观点。可以有个性。'''
 
         # 中文高手(新加的好玩功能)
@@ -195,7 +194,7 @@ class PromptBuilder:
             prompt_ger += '你喜欢用文言文'
 
         # 额外信息要求
-        extra_info = '''但是记得回复平淡一些，简短一些，尤其注意在没明确提到时不要过多提及自身的背景, 不要直接回复别人发的表情包，记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只需要输出回复内容就好，不要输出其他任何内容'''
+        extra_info = f'''但是记得你的回复态度和你的立场，切记你回复的人是{sender_name}，不要输出你的思考过程，只需要输出最终的回复，务必简短一些，尤其注意在没明确提到时不要过多提及自身的背景, 不要直接回复别人发的表情包，记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只需要输出回复内容就好，不要输出其他任何内容'''
 
         # 合并prompt
         prompt = ""
@@ -206,19 +205,20 @@ class PromptBuilder:
         prompt += f"{prompt_ger}\n"
         prompt += f"{extra_info}\n"
 
-        '''读空气prompt处理'''
-        activate_prompt_check = f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"
-        prompt_personality_check = ''
-        extra_check_info = f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
-        if personality_choice < probability_1:  # 第一种人格
-            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
-        elif personality_choice < probability_1 + probability_2:  # 第二种人格
-            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
-        else:  # 第三种人格
-            prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+        # '''读空气prompt处理'''
+        # activate_prompt_check = f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"
+        # prompt_personality_check = ''
+        # extra_check_info = f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
+        # if personality_choice < probability_1:  # 第一种人格
+        #     prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+        # elif personality_choice < probability_1 + probability_2:  # 第二种人格
+        #     prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
+        # else:  # 第三种人格
+        #     prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
 
-        prompt_check_if_response = f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
+        # prompt_check_if_response = f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
 
+        prompt_check_if_response = ""
         return prompt, prompt_check_if_response
 
     def _build_initiative_prompt_select(self, group_id, probability_1=0.8, probability_2=0.1):

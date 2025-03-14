@@ -340,9 +340,9 @@ class ChatBot:
                     )
                     message_manager.add_message(bot_message)
 
-            emotion = await self.gpt._get_emotion_tags(raw_content)
-            logger.debug(f"为 '{response}' 获取到的情感标签为：{emotion}")
-            await relationship_manager.calculate_update_relationship_value(chat_stream=chat,label=emotion[0])
+            stance,emotion = await self.gpt._get_emotion_tags(raw_content,message.processed_plain_text)
+            logger.debug(f"为 '{response}' 立场为：{stance} 获取到的情感标签为：{emotion}")
+            await relationship_manager.calculate_update_relationship_value(chat_stream=chat, label=emotion, stance=stance)
 
             # emotion = await self.gpt._get_emotion_tags(raw_content)
             # logger.debug(f"为 '{response}' 获取到的情感标签为：{emotion}")
