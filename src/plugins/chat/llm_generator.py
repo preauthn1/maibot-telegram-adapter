@@ -69,18 +69,6 @@ class ResponseGenerator:
         else:
             f"用户({message.chat_stream.user_info.user_id})"
 
-        # # 获取关系值
-        # relationship_value = (
-        #     relationship_manager.get_relationship(
-        #         message.chat_stream
-        #     ).relationship_value
-        #     if relationship_manager.get_relationship(message.chat_stream)
-        #     else 0.0
-        # )
-        # if relationship_value != 0.0:
-        #     # print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
-        #     pass
-
         # 构建prompt
         prompt, prompt_check = await prompt_builder._build_prompt(
             message.chat_stream,

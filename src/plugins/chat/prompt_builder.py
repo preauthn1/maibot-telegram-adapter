@@ -34,11 +34,9 @@ class PromptBuilder:
         Returns:
             str: 构建好的prompt
         """
-        # 关系
+        # 关系（载入当前聊天记录里所以人的关系）
         relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "爱慕"]
-        # position_attitude_list = ["反驳", "中立", "支持"]
         relation_prompt2 = ""
-        # position_attitude = ""
         relation_prompt2_list = ["极度厌恶，冷漠回应或直接辱骂", "关系较差，冷淡回复，保持距离", "关系一般，保持理性", \
                                  "关系较好，友善回复，积极互动", "关系很好，积极回复，关心对方", "关系暧昧，热情回复，无条件支持", ]
         relation_prompt = ""
@@ -53,29 +51,26 @@ class PromptBuilder:
                 relation_prompt += f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的态度为"
                 relation_prompt2 += f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的回复态度为"
             relationship_level_num = 2
-            # position_attitude_num = 1
             if -1000 <= relationship_value < -227:
                 relationship_level_num = 0
-                # position_attitude_num = 0
             elif -227 <= relationship_value < -73:
                 relationship_level_num = 1
-                # position_attitude_num = 0
             elif -76 <= relationship_value < 227:
                 relationship_level_num = 2
-                # position_attitude_num = 1
             elif 227 <= relationship_value < 587:
                 relationship_level_num = 3
-                # position_attitude_num = 2
             elif 587 <= relationship_value < 900:
                 relationship_level_num = 4
-                # position_attitude_num = 2
-            elif 900 <= relationship_value <= 1000:  # 不是随便写的数据！
+            elif 900 <= relationship_value <= 1000:  # 不是随便写的数据喵
                 relationship_level_num = 5
-                # position_attitude_num = 2
-            else:
+            elif relationship_value > 1000 or relationship_value < -1000:
+                if relationship_value > 1000:
+                    relationship_level_num = 5
+                else:
+                    relationship_level_num = 0
                 logger.debug("relationship_value 超出有效范围 (-1000 到 1000)")
+
             relation_prompt2 += relation_prompt2_list[relationship_level_num] + "，"
-            # position_attitude = position_attitude_list[position_attitude_num]
             relation_prompt += relationship_level[relationship_level_num] + "，"
 
         # 开始构建prompt
