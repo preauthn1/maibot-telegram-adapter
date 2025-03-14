@@ -19,6 +19,7 @@ class MessageStorage:
                     "processed_plain_text": message.processed_plain_text,
                     "detailed_plain_text": message.detailed_plain_text,
                     "topic": topic,
+                    "memorized_times": message.memorized_times,
                 }
             db.messages.insert_one(message_data)
         except Exception:
