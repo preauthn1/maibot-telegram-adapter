@@ -165,7 +165,10 @@ def format_list_to_str_alias(lst):
     format_list_to_str([1, "two", 3.0])
     '[1, "two", 3.0]'
     """
-    resarr = lst.split(", ")
+    resarr = []
+    if len(lst) != 0:
+        resarr = lst.split(", ")
+
     return resarr
 
 def format_list_to_int(lst):
@@ -208,7 +211,18 @@ def save_trigger(server_address, server_port, final_result_list,t_mongodb_host,t
 #==============================================
 #主要配置文件保存函数
 def save_config_to_file(t_config_data):
-    with open("config/bot_config.toml", "w", encoding="utf-8") as f:
+    filename = "config/bot_config.toml"
+    backup_filename = f"{filename}.bak"
+    if not os.path.exists(backup_filename):
+        if os.path.exists(filename):
+            logger.info(f"{filename} 已存在，正在备份到 {backup_filename}...")
+            shutil.copy(filename, backup_filename)  # 备份文件
+            logger.success(f"文件已备份到 {backup_filename}")
+        else:
+            logger.warning(f"{filename} 不存在，无法进行备份。")
+
+
+    with open(filename, "w", encoding="utf-8") as f:
         toml.dump(t_config_data, f)
     logger.success("配置已保存到 bot_config.toml 文件中")
 def save_bot_config(t_qqbot_qq, t_nickname,t_nickname_final_result):
@@ -729,24 +743,24 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                         with gr.Row():
                             ban_msgs_regex_list_display = gr.TextArea(
                                 value="\n".join(ban_msgs_regex_list),
-                                label="违禁词列表",
+                                label="违禁消息正则列表",
                                 interactive=False,
                                 lines=5
                             )
                         with gr.Row():
                             with gr.Column(scale=3):
-                                ban_msgs_regex_new_item_input = gr.Textbox(label="添加新违禁词")
+                                ban_msgs_regex_new_item_input = gr.Textbox(label="添加新违禁消息正则")
                                 ban_msgs_regex_add_btn = gr.Button("添加", scale=1)
 
                         with gr.Row():
                             with gr.Column(scale=3):
                                 ban_msgs_regex_item_to_delete = gr.Dropdown(
                                     choices=ban_msgs_regex_list,
-                                    label="选择要删除的违禁词"
+                                    label="选择要删除的违禁消息正则"
                                 )
                             ban_msgs_regex_delete_btn = gr.Button("删除", scale=1)
 
-                        ban_msgs_regex_final_result = gr.Text(label="修改后的违禁词")
+                        ban_msgs_regex_final_result = gr.Text(label="修改后的违禁消息正则")
                         ban_msgs_regex_add_btn.click(
                             add_item,
                             inputs=[ban_msgs_regex_new_item_input, ban_msgs_regex_list_state],
