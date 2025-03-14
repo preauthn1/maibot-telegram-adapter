@@ -10,10 +10,11 @@ import uvicorn
 from dotenv import load_dotenv
 from nonebot.adapters.onebot.v11 import Adapter
 import platform
-from src.plugins.utils.logger_config import LogModule, LogClassification
+from src.common.logger import get_module_logger
 
 
-# 配置日志格式
+# 配置主程序日志格式
+logger = get_module_logger("主程序")
 
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}
@@ -76,11 +77,11 @@ def init_env():
 def load_env():
     # 使用闭包实现对加载器的横向扩展，避免大量重复判断
     def prod():
-        logger.success("加载生产环境变量配置")
+        logger.success("成功加载生产环境变量配置")
         load_dotenv(".env.prod", override=True)  # override=True 允许覆盖已存在的环境变量
 
     def dev():
-        logger.success("加载开发环境变量配置")
+        logger.success("成功加载开发环境变量配置")
         load_dotenv(".env.dev", override=True)  # override=True 允许覆盖已存在的环境变量
 
     fn_map = {"prod": prod, "dev": dev}
@@ -99,11 +100,6 @@ def load_env():
         logger.error(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
         RuntimeError(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
 
-
-def load_logger():
-    global logger # 使得bot.py中其他函数也能调用
-    log_module = LogModule()
-    logger = log_module.setup_logger(LogClassification.BASE)
 
 
 def scan_provider(env_config: dict):
@@ -206,8 +202,6 @@ def raw_main():
 
 if __name__ == "__main__":
     try:
-        # 配置日志，使得主程序直接退出时候也能访问logger
-        load_logger()
         raw_main()
 
         app = nonebot.get_asgi()
