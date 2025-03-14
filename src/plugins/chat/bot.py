@@ -381,6 +381,7 @@ class ChatBot:
             reply_message=None,
             platform="qq",
         )
+        await message_cq.initialize()
         message_json = message_cq.to_dict()
 
         message = MessageRecv(message_json)
