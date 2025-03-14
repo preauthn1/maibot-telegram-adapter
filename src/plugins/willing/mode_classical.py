@@ -11,10 +11,9 @@ class WillingManager:
     async def _decay_reply_willing(self):
         """定期衰减回复意愿"""
         while True:
-            await asyncio.sleep(3)
+            await asyncio.sleep(1)
             for chat_id in self.chat_reply_willing:
-                # 每分钟衰减10%的回复意愿
-                self.chat_reply_willing[chat_id] = max(0, self.chat_reply_willing[chat_id] * 0.6)
+                self.chat_reply_willing[chat_id] = max(0, self.chat_reply_willing[chat_id] * 0.9)
                 
     def get_willing(self, chat_stream: ChatStream) -> float:
         """获取指定聊天流的回复意愿"""
@@ -54,8 +53,6 @@ class WillingManager:
         
         
         reply_probability = min(max((current_willing - 0.5),0.03)* config.response_willing_amplifier * 2,1)
-        
-        reply_probability = reply_probability
 
         # 检查群组权限（如果是群聊）
         if chat_stream.group_info and config:
@@ -65,9 +62,6 @@ class WillingManager:
                 
             if chat_stream.group_info.group_id in config.talk_frequency_down_groups:
                 reply_probability = reply_probability / 3.5
-                
-            if is_mentioned_bot and sender_id == "123456784":
-                reply_probability = 1
             
         return reply_probability
     
