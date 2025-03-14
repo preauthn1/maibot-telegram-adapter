@@ -1,6 +1,6 @@
 @echo off
-@REM setlocal enabledelayedexpansion
-@chcp 65001
+setlocal enabledelayedexpansion
+@chcp 936
 
 @REM 设置版本号
 set "VERSION=0.3"
@@ -13,38 +13,174 @@ set "_root=%_root:~0,-1%"
 cd "%_root%"
 echo "%_root%
 
+:search_python
 if exist "%_root%\python" (
     set "PYTHON_HOME=%_root%\python"
 ) else if exist "%_root%\venv" (
     call "%_root%\venv\Scripts\activate.bat"
     set "PYTHON_HOME=%_root%\venv\Scripts"
-) else if python -V >nul 2>&1 (
-    for /f "delims=" %%a in ('where python') do (
-        set "PYTHON_HOME=%%~dpa"
-    )
-) else if python3 -V >nul 2>&1 (
-    for /f "delims=" %%a in ('where python3') do (
-        set "PYTHON_HOME=%%~dpa"
-    )
 ) else (
-    echo Python环境未找到，请检查安装路径。
-    exit /b
-)
+    echo 正在自动查找Python解释器...
 
+    where python >nul 2>&1
+    if %errorlevel% equ 0 (
+        for /f "delims=" %%i in ('where python') do (
+            echo %%i | findstr /i /c:"!LocalAppData!\Microsoft\WindowsApps\python.exe" >nul
+            if errorlevel 1 (
+                echo 找到Python解释器：%%i
+                set "py_path=%%i"
+                goto :validate_python
+            )
+        )
+    )
+    set "search_paths=%ProgramFiles%\Git*;!LocalAppData!\Programs\Python\Python*"
+    for /d %%d in (!search_paths!) do (
+        if exist "%%d\python.exe" (
+            set "py_path=%%d\python.exe"
+            goto :validate_python
+        )
+    )
+    echo 没有找到Python解释器,要安装吗?
+    set /p pyinstall_confirm="继续？(Y/n): "
+    echo !pyinstall_confirm!
+    if /i "!pyinstall_confirm!"=="Y" (
+        @REM echo 正在安装Python...
+        winget install --id Python.Python.3.13 -e --accept-package-agreements --accept-source-agreements
+        if %errorlevel% neq 0 (
+            echo 安装失败，请手动安装Python
+            start https://www.python.org/downloads/
+            exit /b
+        )
+        echo 安装完成，正在验证Python...
+        goto search_python
+
+    ) else (
+        echo 取消安装Python，按任意键退出...
+        pause >nul
+        exit /b
+    )
+
+    echo 错误：未找到可用的Python解释器！
+    exit /b 1
+
+    :validate_python
+    "!py_path!" --version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo 无效的Python解释器：%py_path%
+        exit /b 1
+    )
+
+    :: 提取安装目录
+    for %%i in ("%py_path%") do set "PYTHON_HOME=%%~dpi"
+    set "PYTHON_HOME=%PYTHON_HOME:~0,-1%"
+)
+if not exist "%PYTHON_HOME%\python.exe" (
+    echo Python路径验证失败：%PYTHON_HOME%
+    echo 请检查Python安装路径中是否有python.exe文件
+    exit /b 1
+)
+echo 成功设置Python路径：%PYTHON_HOME%
+
+
+
+:search_git
 if exist "%_root%\tools\git\bin" (
     set "GIT_HOME=%_root%\tools\git\bin"
-) else if git -v >nul 2>&1 (
-    for /f "delims=" %%a in ('where git') do (
-        set "GIT_HOME=%%~dpa"
-    )
 ) else (
-    echo Git环境未找到，请检查安装路径。
-    exit /b
+    echo 正在自动查找Git...
+
+    where git >nul 2>&1
+    if %errorlevel% equ 0 (
+        for /f "delims=" %%i in ('where git') do (
+            set "git_path=%%i"
+            goto :validate_git
+        )
+    )
+    echo 正在扫描常见安装路径...
+    set "search_paths=!ProgramFiles!\Git\cmd"
+    for /d %%d in (!search_paths!) do (
+        if exist "%%d\bin\git.exe" (
+            set "git_path=%%d\bin\git.exe"
+            goto :validate_git
+        )
+    )
+    echo 没有找到Git，要安装吗？
+    set /p confirm="继续？(Y/N): "
+    if /i "!confirm!"=="Y" (
+        echo 正在安装Git...
+        winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
+        if %errorlevel% neq 0 (
+            echo 安装失败，请手动安装Git
+            start https://git-scm.com/download/win
+            exit /b
+        )
+        echo 安装完成，正在验证Git...
+        where git >nul 2>&1
+        if %errorlevel% equ 0 (
+            for /f "delims=" %%i in ('where git') do (
+                set "git_path=%%i"
+                goto :validate_git
+            )
+            echo sba
+            goto :search_git
+
+        ) else (
+            echo 安装完成，但未找到Git，请手动安装Git
+            start https://git-scm.com/download/win
+            exit /b
+        )
+
+    ) else (
+        echo 取消安装Git，按任意键退出...
+        pause >nul
+        exit /b
+    )
+
+    echo 错误：未找到可用的Git！
+    exit /b 1
+
+    :validate_git
+    "%git_path%" --version >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo 无效的Git：%git_path%
+        exit /b 1
+    )
+
+    :: 提取安装目录
+    for %%i in ("%git_path%") do set "GIT_HOME=%%~dpi"
+    set "GIT_HOME=%GIT_HOME:~0,-1%"
 )
 
 
-set "GIT_HOME=%_root%\tools\git\bin"
+@REM set "GIT_HOME=%_root%\tools\git\bin"
 set "PATH=%PYTHON_HOME%;%GIT_HOME%;%PATH%"
+
+:install_maim
+if not exist "%_root%\bot.py" (
+    echo 你似乎没有安装麦麦Bot，要自动安装吗？(Y/N)
+    set /p confirm="继续？(Y/N): "
+    if /i "%confirm%"=="Y" (
+        echo 要使用Git代理下载吗？(Y/N)
+        set /p proxy_confirm="继续？(Y/N): "
+        if /i "%proxy_confirm%"=="Y" (
+            echo 正在安装麦麦Bot...
+            git clone https://ghfast.top/https://github.com/SengokuCola/MaiMBot .
+        ) else (
+            echo 正在安装麦麦Bot...
+            git clone https://github.com/SengokuCola/MaiMBot .
+        )
+        echo 安装完成，正在安装依赖...
+        python -m pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
+        python -m pip install -r requirements.txt
+
+        echo 安装完成，要编辑配置文件吗？(Y/N)
+        set /p edit_confirm="继续？(Y/N): "
+        if /i "%edit_confirm%"=="Y" (
+            goto config_menu
+        ) else (
+            echo 取消编辑配置文件，按任意键返回主菜单...
+        )
+)
 
 
 @REM git获取当前分支名并保存在变量里
@@ -56,10 +192,10 @@ for /f "delims=" %%b in ('git symbolic-ref --short HEAD 2^>nul') do (
 echo 分支名: %BRANCH%
 if "%BRANCH%"=="main" (
     set "BRANCH_COLOR=[92m"
-) else if "%BRANCH%"=="debug" (
+) else if "%BRANCH%"=="main-fix" (
     set "BRANCH_COLOR=[91m"
-) else if "%BRANCH%"=="stable-dev" (
-    set "BRANCH_COLOR=[96m"
+@REM ) else if "%BRANCH%"=="stable-dev" (
+@REM     set "BRANCH_COLOR=[96m"
 ) else (
     set "BRANCH_COLOR=[93m"
 )
@@ -68,14 +204,14 @@ if "%BRANCH%"=="main" (
 
 
 :menu
-@chcp 65001
+@chcp 936
 cls
 echo 麦麦Bot控制台 v%VERSION%  当前分支: %BRANCH_COLOR%%BRANCH%[0m
 echo ======================
 echo 1. 更新并启动麦麦Bot (默认)
 echo 2. 直接启动麦麦Bot
-echo 3. 麦麦配置菜单
-echo 4. 麦麦神奇工具箱
+echo 3. 启动麦麦配置界面
+echo 4. 打开麦麦神奇工具箱
 echo 5. 退出
 echo ======================
 
@@ -94,38 +230,31 @@ timeout /t 2 >nul
 goto menu
 
 :config_menu
-@chcp 65001
+@chcp 936
 cls
-echo 配置菜单
-echo ======================
-echo 1. 编辑配置文件 (config.toml)
-echo 2. 编辑环境变量 (.env.prod)
-echo 3. 打开安装目录
-echo 4. 返回主菜单
-echo ======================
+if not exist config/bot_config.toml (
+    copy template/bot_config_template.toml config/bot_config.toml
+)
+if not exist .env.prod (
+    copy template.env .env.prod
+)
 
-set /p choice="请输入选项数字: "
+python webui.py
 
-if "%choice%"=="1" goto edit_config
-if "%choice%"=="2" goto edit_env
-if "%choice%"=="3" goto open_dir
-if "%choice%"=="4" goto menu
-
-echo 无效的输入，请输入1-4之间的数字
-timeout /t 2 >nul
-goto config_menu
+goto menu
 
 :tools_menu
-@chcp 65001
+@chcp 936
 cls
 echo 麦麦时尚工具箱  当前分支: %BRANCH_COLOR%%BRANCH%[0m
 echo ======================
 echo 1. 更新依赖
 echo 2. 切换分支
-echo 3. 更新配置文件
-echo 4. 学习新的知识库
-echo 5. 打开知识库文件夹
-echo 6. 返回主菜单
+echo 3. 重置当前分支
+echo 4. 更新配置文件
+echo 5. 学习新的知识库
+echo 6. 打开知识库文件夹
+echo 7. 返回主菜单
 echo ======================
 
 set /p choice="请输入选项数字: "
@@ -135,6 +264,7 @@ if "%choice%"=="3" goto update_config
 if "%choice%"=="4" goto learn_new_knowledge
 if "%choice%"=="5" goto open_knowledge_folder
 if "%choice%"=="6" goto menu
+if "%choice%"=="3" goto open_dir
 
 echo 无效的输入，请输入1-6之间的数字
 timeout /t 2 >nul
@@ -154,16 +284,24 @@ goto tools_menu
 cls
 echo 正在切换分支...
 echo 当前分支: %BRANCH%
-echo 可用分支: main, debug, stable-dev
-echo 请输入要切换到的分支名 ([92mmain/[91mdebug/[96mstable-dev[0m):
+@REM echo 可用分支: main, debug, stable-dev
+echo 1. 切换到[92mmain[0m
+echo 2. 切换到[91mmain-fix[0m
+echo 请输入要切换到的分支:
 set /p branch_name="分支名: "
 if "%branch_name%"=="" set branch_name=main
 if "%branch_name%"=="main" (
     set "BRANCH_COLOR=[92m"
-) else if "%branch_name%"=="debug" (
+) else if "%branch_name%"=="main-fix" (
     set "BRANCH_COLOR=[91m"
-) else if "%branch_name%"=="stable-dev" (
-    set "BRANCH_COLOR=[96m"
+@REM ) else if "%branch_name%"=="stable-dev" (
+@REM     set "BRANCH_COLOR=[96m"
+) else if "%branch_name%"=="1" (
+    set "BRANCH_COLOR=[92m"
+    set "branch_name=main"
+) else if "%branch_name%"=="2" (
+    set "BRANCH_COLOR=[91m"
+    set "branch_name=main-fix"
 ) else (
     echo 无效的分支名, 请重新输入
     timeout /t 2 >nul
@@ -280,23 +418,6 @@ echo Bot已停止运行，按任意键返回主菜单...
 pause >nul
 goto menu
 
-:edit_config
-if exist config/bot_config.toml (
-    start notepad config/bot_config.toml
-) else (
-    echo 配置文件 bot_config.toml 不存在！
-    timeout /t 2 >nul
-)
-goto menu
-
-:edit_env
-if exist .env.prod (
-    start notepad .env.prod
-) else (
-    echo 环境文件 .env.prod 不存在！
-    timeout /t 2 >nul
-)
-goto menu
 
 :open_dir
 start explorer "%cd%"
