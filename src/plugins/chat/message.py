@@ -328,6 +328,7 @@ class MessageSending(MessageProcessBase):
                     self.message_segment,
                 ],
             )
+        return self
 
     async def process(self) -> None:
         """处理消息内容，生成纯文本和详细文本"""
