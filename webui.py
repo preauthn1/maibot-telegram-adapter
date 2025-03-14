@@ -165,7 +165,10 @@ def format_list_to_str_alias(lst):
     format_list_to_str([1, "two", 3.0])
     '[1, "two", 3.0]'
     """
-    resarr = lst.split(", ")
+    resarr = []
+    if len(lst) != 0:
+        resarr = lst.split(", ")
+
     return resarr
 
 def format_list_to_int(lst):
@@ -208,7 +211,18 @@ def save_trigger(server_address, server_port, final_result_list,t_mongodb_host,t
 #==============================================
 #主要配置文件保存函数
 def save_config_to_file(t_config_data):
-    with open("config/bot_config.toml", "w", encoding="utf-8") as f:
+    filename = "config/bot_config.toml"
+    backup_filename = f"{filename}.bak"
+    if not os.path.exists(backup_filename):
+        if os.path.exists(filename):
+            logger.info(f"{filename} 已存在，正在备份到 {backup_filename}...")
+            shutil.copy(filename, backup_filename)  # 备份文件
+            logger.success(f"文件已备份到 {backup_filename}")
+        else:
+            logger.warning(f"{filename} 不存在，无法进行备份。")
+
+
+    with open(filename, "w", encoding="utf-8") as f:
         toml.dump(t_config_data, f)
     logger.success("配置已保存到 bot_config.toml 文件中")
 def save_bot_config(t_qqbot_qq, t_nickname,t_nickname_final_result):
@@ -376,7 +390,7 @@ def save_group_config(t_talk_allowed_final_result,
     logger.info("群聊设置已保存到 bot_config.toml 文件中")
     return "群聊设置已保存"
 
-with (gr.Blocks(title="MaimBot配置文件编辑") as app):
+with gr.Blocks(title="MaimBot配置文件编辑") as app:
     gr.Markdown(
         value="""
         欢迎使用由墨梓柒MotricSeven编写的MaimBot配置文件编辑器\n
@@ -729,24 +743,24 @@ with (gr.Blocks(title="MaimBot配置文件编辑") as app):
                         with gr.Row():
                             ban_msgs_regex_list_display = gr.TextArea(
                                 value="\n".join(ban_msgs_regex_list),
-                                label="违禁词列表",
+                                label="违禁消息正则列表",
                                 interactive=False,
                                 lines=5
                             )
                         with gr.Row():
                             with gr.Column(scale=3):
-                                ban_msgs_regex_new_item_input = gr.Textbox(label="添加新违禁词")
+                                ban_msgs_regex_new_item_input = gr.Textbox(label="添加新违禁消息正则")
                                 ban_msgs_regex_add_btn = gr.Button("添加", scale=1)
 
                         with gr.Row():
                             with gr.Column(scale=3):
                                 ban_msgs_regex_item_to_delete = gr.Dropdown(
                                     choices=ban_msgs_regex_list,
-                                    label="选择要删除的违禁词"
+                                    label="选择要删除的违禁消息正则"
                                 )
                             ban_msgs_regex_delete_btn = gr.Button("删除", scale=1)
 
-                        ban_msgs_regex_final_result = gr.Text(label="修改后的违禁词")
+                        ban_msgs_regex_final_result = gr.Text(label="修改后的违禁消息正则")
                         ban_msgs_regex_add_btn.click(
                             add_item,
                             inputs=[ban_msgs_regex_new_item_input, ban_msgs_regex_list_state],
@@ -834,9 +848,9 @@ with (gr.Blocks(title="MaimBot配置文件编辑") as app):
                             with gr.Row():
                                 model1_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_reasoning']['provider'], label="模型1（主要回复模型）提供商")
                             with gr.Row():
-                                model1_pri_in = gr.Textbox(value=config_data['model']['llm_reasoning']['pri_in'], label="模型1（主要回复模型）的输入价格（非必填，可以记录消耗）")
+                                model1_pri_in = gr.Number(value=config_data['model']['llm_reasoning']['pri_in'], label="模型1（主要回复模型）的输入价格（非必填，可以记录消耗）")
                             with gr.Row():
-                                model1_pri_out = gr.Textbox(value=config_data['model']['llm_reasoning']['pri_out'], label="模型1（主要回复模型）的输出价格（非必填，可以记录消耗）")
+                                model1_pri_out = gr.Number(value=config_data['model']['llm_reasoning']['pri_out'], label="模型1（主要回复模型）的输出价格（非必填，可以记录消耗）")
                         with gr.TabItem("2-次要回复模型"):
                             with gr.Row():
                                 model2_name = gr.Textbox(value=config_data['model']['llm_normal']['name'], label="模型2的名称")
