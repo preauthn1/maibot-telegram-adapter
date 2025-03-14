@@ -18,9 +18,15 @@ from ..chat.utils import get_embedding
 from ..chat.utils_image import ImageManager, image_path_to_base64
 from ..models.utils_model import LLM_request
 
+from ..utils.logger_config import setup_logger, LogModule
+
+# 配置日志
+logger = setup_logger(LogModule.EMOJI)
+
 driver = get_driver()
 config = driver.config
 image_manager = ImageManager()
+
 
 
 class EmojiManager:
@@ -154,20 +160,20 @@ class EmojiManager:
                     # 更新使用次数
                     db.emoji.update_one({"_id": selected_emoji["_id"]}, {"$inc": {"usage_count": 1}})
 
-                    logger.success(
-                        f"找到匹配的表情包: {selected_emoji.get('description', '无描述')} (相似度: {similarity:.4f})"
+                    logger.info(
+                        f"[匹配] 找到表情包: {selected_emoji.get('description', '无描述')} (相似度: {similarity:.4f})"
                     )
                     # 稍微改一下文本描述，不然容易产生幻觉，描述已经包含 表情包 了
                     return selected_emoji["path"], "[ %s ]" % selected_emoji.get("description", "无描述")
 
             except Exception as search_error:
-                logger.error(f"搜索表情包失败: {str(search_error)}")
+                logger.error(f"[错误] 搜索表情包失败: {str(search_error)}")
                 return None
 
             return None
 
         except Exception as e:
-            logger.error(f"获取表情包失败: {str(e)}")
+            logger.error(f"[错误] 获取表情包失败: {str(e)}")
             return None
 
     async def _get_emoji_discription(self, image_base64: str) -> str:
@@ -181,7 +187,7 @@ class EmojiManager:
             return description
 
         except Exception as e:
-            logger.error(f"获取标签失败: {str(e)}")
+            logger.error(f"[错误] 获取表情包描述失败: {str(e)}")
             return None
 
     async def _check_emoji(self, image_base64: str, image_format: str) -> str:
@@ -189,11 +195,11 @@ class EmojiManager:
             prompt = f'这是一个表情包，请回答这个表情包是否满足"{global_config.EMOJI_CHECK_PROMPT}"的要求，是则回答是，否则回答否，不要出现任何其他内容'
 
             content, _ = await self.vlm.generate_response_for_image(prompt, image_base64, image_format)
-            logger.debug(f"输出描述: {content}")
+            logger.debug(f"[检查] 表情包检查结果: {content}")
             return content
 
         except Exception as e:
-            logger.error(f"获取标签失败: {str(e)}")
+            logger.error(f"[错误] 表情包检查失败: {str(e)}")
             return None
 
     async def _get_kimoji_for_text(self, text: str):
@@ -201,11 +207,11 @@ class EmojiManager:
             prompt = f'这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，注意不要输出任何对消息内容的分析内容，只输出"一种什么样的感觉"中间的形容词部分。'
 
             content, _ = await self.llm_emotion_judge.generate_response_async(prompt, temperature=1.5)
-            logger.info(f"输出描述: {content}")
+            logger.info(f"[情感] 表情包情感描述: {content}")
             return content
 
         except Exception as e:
-            logger.error(f"获取标签失败: {str(e)}")
+            logger.error(f"[错误] 获取表情包情感失败: {str(e)}")
             return None
 
     async def scan_new_emojis(self):
@@ -252,7 +258,7 @@ class EmojiManager:
                         db.images.update_one({"hash": image_hash}, {"$set": image_doc}, upsert=True)
                         # 保存描述到image_descriptions集合
                         image_manager._save_description_to_db(image_hash, description, "emoji")
-                        logger.success(f"同步已存在的表情包到images集合: {filename}")
+                        logger.success(f"[同步] 已同步表情包到images集合: {filename}")
                     continue
 
                 # 检查是否在images集合中已有描述
@@ -268,15 +274,10 @@ class EmojiManager:
                     check = await self._check_emoji(image_base64, image_format)
                     if "是" not in check:
                         os.remove(image_path)
-                        logger.info(f"描述: {description}")
-
-                        logger.info(f"描述: {description}")
-                        logger.info(f"其不满足过滤规则，被剔除 {check}")
+                        logger.info(f"[过滤] 表情包描述: {description}")
+                        logger.info(f"[过滤] 表情包不满足规则，已移除: {check}")
                         continue
-                    logger.info(f"check通过 {check}")
-
-                if description is not None:
-                    embedding = await get_embedding(description)
+                    logger.info(f"[检查] 表情包检查通过: {check}")
 
                     # 准备数据库记录
                     emoji_record = {
@@ -290,8 +291,8 @@ class EmojiManager:
 
                     # 保存到emoji数据库
                     db["emoji"].insert_one(emoji_record)
-                    logger.success(f"注册新表情包: {filename}")
-                    logger.info(f"描述: {description}")
+                    logger.success(f"[注册] 新表情包: {filename}")
+                    logger.info(f"[描述] {description}")
 
                     # 保存到images数据库
                     image_doc = {
@@ -304,17 +305,17 @@ class EmojiManager:
                     db.images.update_one({"hash": image_hash}, {"$set": image_doc}, upsert=True)
                     # 保存描述到image_descriptions集合
                     image_manager._save_description_to_db(image_hash, description, "emoji")
-                    logger.success(f"同步保存到images集合: {filename}")
+                    logger.success(f"[同步] 已保存到images集合: {filename}")
                 else:
-                    logger.warning(f"跳过表情包: {filename}")
+                    logger.warning(f"[跳过] 表情包: {filename}")
 
         except Exception:
-            logger.exception("扫描表情包失败")
+            logger.exception("[错误] 扫描表情包失败")
 
     async def _periodic_scan(self, interval_MINS: int = 10):
         """定期扫描新表情包"""
         while True:
-            logger.info("开始扫描新表情包...")
+            logger.info("[扫描] 开始扫描新表情包...")
             await self.scan_new_emojis()
             await asyncio.sleep(interval_MINS * 60)  # 每600秒扫描一次
 
@@ -332,48 +333,48 @@ class EmojiManager:
             for emoji in all_emojis:
                 try:
                     if "path" not in emoji:
-                        logger.warning(f"发现无效记录（缺少path字段），ID: {emoji.get('_id', 'unknown')}")
+                        logger.warning(f"[检查] 发现无效记录（缺少path字段），ID: {emoji.get('_id', 'unknown')}")
                         db.emoji.delete_one({"_id": emoji["_id"]})
                         removed_count += 1
                         continue
 
                     if "embedding" not in emoji:
-                        logger.warning(f"发现过时记录（缺少embedding字段），ID: {emoji.get('_id', 'unknown')}")
+                        logger.warning(f"[检查] 发现过时记录（缺少embedding字段），ID: {emoji.get('_id', 'unknown')}")
                         db.emoji.delete_one({"_id": emoji["_id"]})
                         removed_count += 1
                         continue
 
                     # 检查文件是否存在
                     if not os.path.exists(emoji["path"]):
-                        logger.warning(f"表情包文件已被删除: {emoji['path']}")
+                        logger.warning(f"[检查] 表情包文件已被删除: {emoji['path']}")
                         # 从数据库中删除记录
                         result = db.emoji.delete_one({"_id": emoji["_id"]})
                         if result.deleted_count > 0:
-                            logger.debug(f"成功删除数据库记录: {emoji['_id']}")
+                            logger.debug(f"[清理] 成功删除数据库记录: {emoji['_id']}")
                             removed_count += 1
                         else:
-                            logger.error(f"删除数据库记录失败: {emoji['_id']}")
+                            logger.error(f"[错误] 删除数据库记录失败: {emoji['_id']}")
                         continue
 
                     if "hash" not in emoji:
-                        logger.warning(f"发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
+                        logger.warning(f"[检查] 发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
                         hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
                         db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
 
                 except Exception as item_error:
-                    logger.error(f"处理表情包记录时出错: {str(item_error)}")
+                    logger.error(f"[错误] 处理表情包记录时出错: {str(item_error)}")
                     continue
 
             # 验证清理结果
             remaining_count = db.emoji.count_documents({})
             if removed_count > 0:
-                logger.success(f"已清理 {removed_count} 个失效的表情包记录")
-                logger.info(f"清理前总数: {total_count} | 清理后总数: {remaining_count}")
+                logger.success(f"[清理] 已清理 {removed_count} 个失效的表情包记录")
+                logger.info(f"[统计] 清理前: {total_count} | 清理后: {remaining_count}")
             else:
-                logger.info(f"已检查 {total_count} 个表情包记录")
+                logger.info(f"[检查] 已检查 {total_count} 个表情包记录")
 
         except Exception as e:
-            logger.error(f"检查表情包完整性失败: {str(e)}")
+            logger.error(f"[错误] 检查表情包完整性失败: {str(e)}")
             logger.error(traceback.format_exc())
 
     async def start_periodic_check(self, interval_MINS: int = 120):

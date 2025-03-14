@@ -27,6 +27,7 @@ class Message(MessageBase):
     reply: Optional["Message"] = None
     detailed_plain_text: str = ""
     processed_plain_text: str = ""
+    memorized_times: int = 0
 
     def __init__(
         self,

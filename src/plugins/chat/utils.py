@@ -104,10 +104,13 @@ def get_closest_chat_from_db(length: int, timestamp: str):
         # 转换记录格式
         formatted_records = []
         for record in chat_records:
+            # 兼容行为，前向兼容老数据
             formatted_records.append({
+                '_id': record["_id"],
                 'time': record["time"],
                 'chat_id': record["chat_id"],
-                'detailed_plain_text': record.get("detailed_plain_text", "")  # 添加文本内容
+                'detailed_plain_text': record.get("detailed_plain_text", ""),  # 添加文本内容
+                'memorized_times': record.get("memorized_times", 0)  # 添加记忆次数
             })
             
         return formatted_records
