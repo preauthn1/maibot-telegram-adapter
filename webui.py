@@ -181,7 +181,7 @@ def save_bot_config(t_qqbot_qq, t_nickname,t_nickname_final_result):
 def adjust_greater_probabilities(t_personality_1, t_personality_2, t_personality_3):
     total = t_personality_1 + t_personality_2 + t_personality_3
     if total > 1.0:
-        warning_message = f"警告: 人格1、人格2和人格3的概率总和为 {total:.2f}，超过了 1.0！请调整滑块使总和不超过 1.0。"
+        warning_message = f"警告: 人格1、人格2和人格3的概率总和为 {total:.2f}，超过了 1.0！请调整滑块使总和等于 1.0。"
         return warning_message
     else:
         return ""  # 没有警告时返回空字符串
@@ -189,7 +189,23 @@ def adjust_greater_probabilities(t_personality_1, t_personality_2, t_personality
 def adjust_less_probabilities(t_personality_1, t_personality_2, t_personality_3):
     total = t_personality_1 + t_personality_2 + t_personality_3
     if total < 1.0:
-        warning_message = f"警告: 人格1、人格2和人格3的概率总和为 {total:.2f}，小于 1.0！请调整滑块使总和不超过 1.0。"
+        warning_message = f"警告: 人格1、人格2和人格3的概率总和为 {total:.2f}，小于 1.0！请调整滑块使总和等于 1.0。"
+        return warning_message
+    else:
+        return ""  # 没有警告时返回空字符串
+
+def adjust_model_greater_probabilities(t_personality_1, t_personality_2, t_personality_3):
+    total = t_personality_1 + t_personality_2 + t_personality_3
+    if total > 1.0:
+        warning_message = f"警告: 选择模型1、模型2和模型3的概率总和为 {total:.2f}，超过了 1.0！请调整滑块使总和等于 1.0。"
+        return warning_message
+    else:
+        return ""  # 没有警告时返回空字符串
+
+def adjust_model_less_probabilities(t_personality_1, t_personality_2, t_personality_3):
+    total = t_personality_1 + t_personality_2 + t_personality_3
+    if total > 1.0:
+        warning_message = f"警告: 选择模型1、模型2和模型3的概率总和为 {total:.2f}，小于了 1.0！请调整滑块使总和等于 1.0。"
         return warning_message
     else:
         return ""  # 没有警告时返回空字符串
@@ -236,6 +252,47 @@ def save_message_and_emoji_config(t_min_text_length,
     save_config_to_file(config_data)
     logger.info("消息和表情配置已保存到 bot_config.toml 文件中")
     return "消息和表情配置已保存"
+
+def save_response_model_config(t_model_r1_probability,
+                               t_model_r2_probability,
+                               t_model_r3_probability,
+                               t_max_response_length,
+                               t_model1_name,
+                               t_model1_provider,
+                               t_model1_pri_in,
+                               t_model1_pri_out,
+                               t_model2_name,
+                               t_model2_provider,
+                               t_model3_name,
+                               t_model3_provider,
+                               t_emotion_model_name,
+                               t_emotion_model_provider,
+                               t_topic_judge_model_name,
+                               t_topic_judge_model_provider,
+                               t_summary_by_topic_model_name,
+                               t_summary_by_topic_model_provider):
+    config_data["response"]["model_r1_probability"] = t_model_r1_probability
+    config_data["response"]["model_r2_probability"] = t_model_r2_probability
+    config_data["response"]["model_r3_probability"] = t_model_r3_probability
+    config_data["response"]["max_response_length"] = t_max_response_length
+    config_data['model']['llm_reasoning']['name'] = t_model1_name
+    config_data['model']['llm_reasoning']['provider'] = t_model1_provider
+    config_data['model']['llm_reasoning']['pri_in'] = t_model1_pri_in
+    config_data['model']['llm_reasoning']['pri_out'] = t_model1_pri_out
+    config_data['model']['llm_normal']['name'] = t_model2_name
+    config_data['model']['llm_normal']['provider'] = t_model2_provider
+    config_data['model']['llm_reasoning_minor']['name'] = t_model3_name
+    config_data['model']['llm_normal']['provider'] = t_model3_provider
+    config_data['model']['llm_emotion_judge']['name'] = t_emotion_model_name
+    config_data['model']['llm_emotion_judge']['provider'] = t_emotion_model_provider
+    config_data['model']['llm_topic_judge']['name'] = t_topic_judge_model_name
+    config_data['model']['llm_topic_judge']['provider'] = t_topic_judge_model_provider
+    config_data['model']['llm_summary_by_topic']['name'] = t_summary_by_topic_model_name
+    config_data['model']['llm_summary_by_topic']['provider'] = t_summary_by_topic_model_provider
+    save_config_to_file(config_data)
+    logger.info("回复&模型设置已保存到 bot_config.toml 文件中")
+    return "回复&模型设置已保存"
+
 
 with (gr.Blocks(title="MaimBot配置文件编辑") as app):
     gr.Markdown(
@@ -297,7 +354,7 @@ with (gr.Blocks(title="MaimBot配置文件编辑") as app):
                         final_result = gr.Text(label="修改后的列表")
                         add_btn.click(
                             add_item,
-                            inputs=[new_item_input, list_state],
+                           inputs=[new_item_input, list_state],
                             outputs=[list_state, list_display, item_to_delete, final_result]
                         )
 
@@ -305,7 +362,7 @@ with (gr.Blocks(title="MaimBot配置文件编辑") as app):
                             delete_item,
                             inputs=[item_to_delete, list_state],
                             outputs=[list_state, list_display, item_to_delete, final_result]
-                        )
+                            )
                     with gr.Row():
                         gr.Markdown(
                             '''MongoDB设置项\n
@@ -657,6 +714,99 @@ with (gr.Blocks(title="MaimBot配置文件编辑") as app):
                                 label="消息&表情包设置保存结果"
                             )]
                         )
+        with gr.TabItem("4-回复&模型设置"):
+            with gr.Row():
+                with gr.Column(scale=3):
+                    with gr.Row():
+                        gr.Markdown(
+                            """### 回复设置"""
+                        )
+                    with gr.Row():
+                        model_r1_probability = gr.Slider(minimum=0, maximum=1, step=0.01, value=config_data['response']['model_r1_probability'], label="麦麦回答时选择主要回复模型1 模型的概率")
+                    with gr.Row():
+                        model_r2_probability = gr.Slider(minimum=0, maximum=1, step=0.01, value=config_data['response']['model_r1_probability'], label="麦麦回答时选择主要回复模型2 模型的概率")
+                    with gr.Row():
+                        model_r3_probability = gr.Slider(minimum=0, maximum=1, step=0.01, value=config_data['response']['model_r1_probability'], label="麦麦回答时选择主要回复模型3 模型的概率")
+                        # 用于显示警告消息
+                    with gr.Row():
+                        model_warning_greater_text = gr.Markdown()
+                        model_warning_less_text = gr.Markdown()
+
+                        # 绑定滑块的值变化事件，确保总和必须等于 1.0
+                        model_r1_probability.change(adjust_model_greater_probabilities, inputs=[model_r1_probability, model_r2_probability, model_r3_probability], outputs=[model_warning_greater_text])
+                        model_r2_probability.change(adjust_model_greater_probabilities, inputs=[model_r1_probability, model_r2_probability, model_r3_probability], outputs=[model_warning_greater_text])
+                        model_r3_probability.change(adjust_model_greater_probabilities, inputs=[model_r1_probability, model_r2_probability, model_r3_probability], outputs=[model_warning_greater_text])
+                        model_r1_probability.change(adjust_model_less_probabilities, inputs=[model_r1_probability, model_r2_probability, model_r3_probability], outputs=[model_warning_less_text])
+                        model_r2_probability.change(adjust_model_less_probabilities, inputs=[model_r1_probability, model_r2_probability, model_r3_probability], outputs=[model_warning_less_text])
+                        model_r3_probability.change(adjust_model_less_probabilities, inputs=[model_r1_probability, model_r2_probability, model_r3_probability], outputs=[model_warning_less_text])
+                    with gr.Row():
+                        max_response_length = gr.Number(value=config_data['response']['max_response_length'], label="麦麦回答的最大token数")
+                    with gr.Row():
+                        gr.Markdown(
+                            """### 模型设置"""
+                        )
+                    with gr.Tabs():
+                        with gr.TabItem("1-主要回复模型"):
+                            with gr.Row():
+                                model1_name = gr.Textbox(value=config_data['model']['llm_reasoning']['name'], label="模型1的名称")
+                            with gr.Row():
+                                model1_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_reasoning']['provider'], label="模型1（主要回复模型）提供商")
+                            with gr.Row():
+                                model1_pri_in = gr.Textbox(value=config_data['model']['llm_reasoning']['pri_in'], label="模型1（主要回复模型）的输入价格（非必填，可以记录消耗）")
+                            with gr.Row():
+                                model1_pri_out = gr.Textbox(value=config_data['model']['llm_reasoning']['pri_out'], label="模型1（主要回复模型）的输出价格（非必填，可以记录消耗）")
+                        with gr.TabItem("2-次要回复模型"):
+                            with gr.Row():
+                                model2_name = gr.Textbox(value=config_data['model']['llm_normal']['name'], label="模型2的名称")
+                            with gr.Row():
+                                model2_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_normal']['provider'], label="模型2提供商")
+                        with gr.TabItem("3-次要模型"):
+                            with gr.Row():
+                                model3_name = gr.Textbox(value=config_data['model']['llm_reasoning_minor']['name'], label="模型3的名称")
+                            with gr.Row():
+                                model3_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_reasoning_minor']['provider'], label="模型3提供商")
+                        with gr.TabItem("4-情感&主题模型"):
+                            with gr.Row():
+                                gr.Markdown(
+                                    """### 情感模型设置"""
+                                )
+                            with gr.Row():
+                                emotion_model_name = gr.Textbox(value=config_data['model']['llm_emotion_judge']['name'], label="情感模型名称")
+                            with gr.Row():
+                                emotion_model_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_emotion_judge']['provider'], label="情感模型提供商")
+                            with gr.Row():
+                                gr.Markdown(
+                                    """### 主题模型设置"""
+                                )
+                            with gr.Row():
+                                topic_judge_model_name = gr.Textbox(value=config_data['model']['llm_topic_judge']['name'], label="主题判断模型名称")
+                            with gr.Row():
+                                topic_judge_model_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_topic_judge']['provider'], label="主题判断模型提供商")
+                            with gr.Row():
+                                summary_by_topic_model_name = gr.Textbox(value=config_data['model']['llm_summary_by_topic']['name'], label="主题总结模型名称")
+                            with gr.Row():
+                                summary_by_topic_model_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_summary_by_topic']['provider'], label="主题总结模型提供商")
+                    with gr.Row():
+                        save_model_btn = gr.Button("保存 [模型] 配置")
+                    with gr.Row():
+                        save_btn_message = gr.Textbox()
+                        save_model_btn.click(
+                            save_response_model_config,
+                            inputs=[model_r1_probability,model_r2_probability,model_r3_probability,max_response_length,model1_name, model1_provider, model1_pri_in, model1_pri_out, model2_name, model2_provider, model3_name, model3_provider, emotion_model_name, emotion_model_provider, topic_judge_model_name, topic_judge_model_provider, summary_by_topic_model_name,summary_by_topic_model_provider],
+                            outputs=[save_btn_message]
+                        )
+
+
+
+        with gr.TabItem("5-记忆&心情设置"):
+            with gr.Row():
+                with gr.Column(scale=3):
+                    with gr.Row():
+                        gr.Markdown(
+                            """### 记忆设置"""
+                        )
+                    with gr.Row():
+                        build_memory_interval = gr.Number(value=config_data['memory']['build_memory_interval'], label="记忆构建间隔 单位秒,间隔越低，麦麦学习越多，但是冗余信息也会增多")
 
 
 
