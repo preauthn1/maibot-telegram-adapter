@@ -25,30 +25,19 @@ class ResponseGenerator:
             max_tokens=1000,
             stream=True,
         )
-        self.model_v3 = LLM_request(
-            model=global_config.llm_normal, temperature=0.7, max_tokens=1000
-        )
-        self.model_r1_distill = LLM_request(
-            model=global_config.llm_reasoning_minor, temperature=0.7, max_tokens=1000
-        )
-        self.model_v25 = LLM_request(
-            model=global_config.llm_normal_minor, temperature=0.7, max_tokens=1000
-        )
+        self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7, max_tokens=3000)
+        self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7, max_tokens=3000)
+        self.model_v25 = LLM_request(model=global_config.llm_normal_minor, temperature=0.7, max_tokens=3000)
         self.current_model_type = "r1"  # 默认使用 R1
 
-    async def generate_response(
-        self, message: MessageThinking
-    ) -> Optional[Union[str, List[str]]]:
+    async def generate_response(self, message: MessageThinking) -> Optional[Union[str, List[str]]]:
         """根据当前模型类型选择对应的生成函数"""
         # 从global_config中获取模型概率值并选择模型
         rand = random.random()
         if rand < global_config.MODEL_R1_PROBABILITY:
             self.current_model_type = "r1"
             current_model = self.model_r1
-        elif (
-            rand
-            < global_config.MODEL_R1_PROBABILITY + global_config.MODEL_V3_PROBABILITY
-        ):
+        elif rand < global_config.MODEL_R1_PROBABILITY + global_config.MODEL_V3_PROBABILITY:
             self.current_model_type = "v3"
             current_model = self.model_v3
         else:
@@ -57,24 +46,20 @@ class ResponseGenerator:
 
         logger.info(f"{global_config.BOT_NICKNAME}{self.current_model_type}思考中")
 
-        model_response = await self._generate_response_with_model(
-            message, current_model
-        )
+        model_response = await self._generate_response_with_model(message, current_model)
         raw_content = model_response
 
         # print(f"raw_content: {raw_content}")
         # print(f"model_response: {model_response}")
-        
+
         if model_response:
-            logger.info(f'{global_config.BOT_NICKNAME}的回复是：{model_response}')
+            logger.info(f"{global_config.BOT_NICKNAME}的回复是：{model_response}")
             model_response = await self._process_response(model_response)
             if model_response:
                 return model_response, raw_content
         return None, raw_content
 
-    async def _generate_response_with_model(
-        self, message: MessageThinking, model: LLM_request
-    ) -> Optional[str]:
+    async def _generate_response_with_model(self, message: MessageThinking, model: LLM_request) -> Optional[str]:
         """使用指定的模型生成回复"""
         sender_name = ""
         if message.chat_stream.user_info.user_cardname and message.chat_stream.user_info.user_nickname:
@@ -219,7 +204,7 @@ class ResponseGenerator:
             return None, []
 
         processed_response = process_llm_response(content)
-        
+
         # print(f"得到了处理后的llm返回{processed_response}")
 
         return processed_response
@@ -229,13 +214,11 @@ class InitiativeMessageGenerate:
     def __init__(self):
         self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7)
         self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7)
-        self.model_r1_distill = LLM_request(
-            model=global_config.llm_reasoning_minor, temperature=0.7
-        )
+        self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7)
 
     def gen_response(self, message: Message):
-        topic_select_prompt, dots_for_select, prompt_template = (
-            prompt_builder._build_initiative_prompt_select(message.group_id)
+        topic_select_prompt, dots_for_select, prompt_template = prompt_builder._build_initiative_prompt_select(
+            message.group_id
         )
         content_select, reasoning = self.model_v3.generate_response(topic_select_prompt)
         logger.debug(f"{content_select} {reasoning}")
@@ -247,16 +230,12 @@ class InitiativeMessageGenerate:
                 return None
         else:
             return None
-        prompt_check, memory = prompt_builder._build_initiative_prompt_check(
-            select_dot[1], prompt_template
-        )
+        prompt_check, memory = prompt_builder._build_initiative_prompt_check(select_dot[1], prompt_template)
         content_check, reasoning_check = self.model_v3.generate_response(prompt_check)
         logger.info(f"{content_check} {reasoning_check}")
         if "yes" not in content_check.lower():
             return None
-        prompt = prompt_builder._build_initiative_prompt(
-            select_dot, prompt_template, memory
-        )
+        prompt = prompt_builder._build_initiative_prompt(select_dot, prompt_template, memory)
         content, reasoning = self.model_r1.generate_response_async(prompt)
         logger.debug(f"[DEBUG] {content} {reasoning}")
         return content

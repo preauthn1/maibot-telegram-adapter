@@ -10,7 +10,6 @@ from nonebot.adapters.onebot.v11 import (
     PokeNotifyEvent,
     GroupRecallNoticeEvent,
     FriendRecallNoticeEvent,
-
 )
 
 from ..memory_system.memory import hippocampus
@@ -32,10 +31,11 @@ from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname, get_groupname
 from .willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
-from ..utils.logger_config import setup_logger, LogModule
+from ..utils.logger_config import LogClassification, LogModule
 
 # 配置日志
-logger = setup_logger(LogModule.CHAT)
+log_module = LogModule()
+logger = log_module.setup_logger(LogClassification.CHAT)
 
 
 class ChatBot:
@@ -92,10 +92,8 @@ class ChatBot:
             chat = await chat_manager.get_or_create_stream(
                 platform=user_info.platform, user_info=user_info, group_info=group_info
             )
-            
-            await self.storage.store_recalled_message(event.message_id, time.time(), chat)
-            
 
+            await self.storage.store_recalled_message(event.message_id, time.time(), chat)
 
     async def handle_message(self, event: MessageEvent, bot: Bot) -> None:
         """处理收到的消息"""
@@ -161,6 +159,7 @@ class ChatBot:
             reply_message=event.reply,
             platform="qq",
         )
+        await message_cq.initialize()
         message_json = message_cq.to_dict()
 
         # 进入maimbot
@@ -387,6 +386,7 @@ class ChatBot:
             reply_message=None,
             platform="qq",
         )
+        await message_cq.initialize()
         message_json = message_cq.to_dict()
 
         message = MessageRecv(message_json)
