@@ -74,6 +74,7 @@ class ChatBot:
                     reply_message=None,
                     platform="qq",
                 )
+                await message_cq.initialize()
                 message_json = message_cq.to_dict()
 
                 # 进入maimbot
@@ -120,8 +121,13 @@ class ChatBot:
         # 用户屏蔽,不区分私聊/群聊
         if event.user_id in global_config.ban_user_id:
             return
-        
-        if event.reply and hasattr(event.reply, 'sender') and hasattr(event.reply.sender, 'user_id') and event.reply.sender.user_id in global_config.ban_user_id:
+
+        if (
+            event.reply
+            and hasattr(event.reply, "sender")
+            and hasattr(event.reply.sender, "user_id")
+            and event.reply.sender.user_id in global_config.ban_user_id
+        ):
             logger.debug(f"跳过处理回复来自被ban用户 {event.reply.sender.user_id} 的消息")
             return
         # 处理私聊消息
@@ -171,6 +177,7 @@ class ChatBot:
             reply_message=event.reply,
             platform="qq",
         )
+        await message_cq.initialize()
         message_json = message_cq.to_dict()
 
         # 进入maimbot
