@@ -15,7 +15,7 @@ from .bot import chat_bot
 from .config import global_config
 from .emoji_manager import emoji_manager
 from .relationship_manager import relationship_manager
-from .willing_manager import willing_manager
+from ..willing.willing_manager import willing_manager
 from .chat_stream import chat_manager
 from ..memory_system.memory import hippocampus, memory_graph
 from .bot import ChatBot

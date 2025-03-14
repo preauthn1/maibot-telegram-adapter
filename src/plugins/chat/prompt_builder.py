@@ -1,7 +1,6 @@
 import random
 import time
 from typing import Optional
-from loguru import logger
 
 from ...common.database import db
 from ..memory_system.memory import hippocampus, memory_graph
@@ -10,6 +9,13 @@ from ..schedule.schedule_generator import bot_schedule
 from .config import global_config
 from .utils import get_embedding, get_recent_group_detailed_plain_text
 from .chat_stream import chat_manager
+
+from ..utils.logger_config import LogClassification, LogModule
+
+log_module = LogModule()
+logger = log_module.setup_logger(LogClassification.PBUILDER)
+
+logger.info("初始化Prompt系统")
 
 
 class PromptBuilder:
@@ -185,18 +191,17 @@ class PromptBuilder:
 `</MainRule>`"""
 
         """读空气prompt处理"""
-        # activate_prompt_check = f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"
-        # prompt_personality_check = ""
-        # extra_check_info = f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
-        # if personality_choice < probability_1:  # 第一种人格
-        #     prompt_personality_check = f"""你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}"""
-        # elif personality_choice < probability_1 + probability_2:  # 第二种人格
-        #     prompt_personality_check = f"""你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}"""
-        # else:  # 第三种人格
-        #     prompt_personality_check = f"""你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}"""
-        #
-        # prompt_check_if_response = f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
-        prompt_check_if_response = ""
+        activate_prompt_check = f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"
+        prompt_personality_check = ""
+        extra_check_info = f"请注意把握群里的聊天内容的基础上，综合群内的氛围，例如，和{global_config.BOT_NICKNAME}相关的话题要积极回复,如果是at自己的消息一定要回复，如果自己正在和别人聊天一定要回复，其他话题如果合适搭话也可以回复，如果认为应该回复请输出yes，否则输出no，请注意是决定是否需要回复，而不是编写回复内容，除了yes和no不要输出任何回复内容。"
+        if personality_choice < probability_1:  # 第一种人格
+            prompt_personality_check = f"""你的网名叫{global_config.BOT_NICKNAME}，{personality[0]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}"""
+        elif personality_choice < probability_1 + probability_2:  # 第二种人格
+            prompt_personality_check = f"""你的网名叫{global_config.BOT_NICKNAME}，{personality[1]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}"""
+        else:  # 第三种人格
+            prompt_personality_check = f"""你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}"""
+
+        prompt_check_if_response = f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
 
         return prompt, prompt_check_if_response
 
@@ -250,7 +255,7 @@ class PromptBuilder:
         return prompt_for_check, memory
 
     def _build_initiative_prompt(self, selected_node, prompt_regular, memory):
-        prompt_for_initiative = f"{prompt_regular}你现在想在群里发言，回忆了一下，想到一个话题,是{selected_node['concept']}，关于这个话题的记忆有\n{memory}\n，请在把握群里的聊天内容的基础上，综合群内的氛围，以日常且口语化的口吻，简短且随意一点进行发言，不要说的太有条理，可以有个性。记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)"
+        prompt_for_initiative = f"{prompt_regular}你现在想在群里发言，回忆了一下，想到一个话题,是{selected_node['concept']}，关于这个话题的记忆有\n{memory}\n，请在把握群里的聊天内容的基础上，综合群内的氛围，以日常且口语化的口吻，简短且随意一点进行发言，不要说的太有条理，可以有个性。记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情,@等)"
         return prompt_for_initiative
 
     async def get_prompt_info(self, message: str, threshold: float):
