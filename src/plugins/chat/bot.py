@@ -10,7 +10,6 @@ from nonebot.adapters.onebot.v11 import (
     PokeNotifyEvent,
     GroupRecallNoticeEvent,
     FriendRecallNoticeEvent,
-
 )
 
 from ..memory_system.memory import hippocampus
@@ -92,10 +91,8 @@ class ChatBot:
             chat = await chat_manager.get_or_create_stream(
                 platform=user_info.platform, user_info=user_info, group_info=group_info
             )
-            
-            await self.storage.store_recalled_message(event.message_id, time.time(), chat)
-            
 
+            await self.storage.store_recalled_message(event.message_id, time.time(), chat)
 
     async def handle_message(self, event: MessageEvent, bot: Bot) -> None:
         """处理收到的消息"""
@@ -161,6 +158,7 @@ class ChatBot:
             reply_message=event.reply,
             platform="qq",
         )
+        await message_cq.initialize()
         message_json = message_cq.to_dict()
 
         # 进入maimbot
@@ -383,6 +381,7 @@ class ChatBot:
             reply_message=None,
             platform="qq",
         )
+        await message_cq.initialize()
         message_json = message_cq.to_dict()
 
         message = MessageRecv(message_json)
