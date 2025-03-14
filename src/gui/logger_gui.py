@@ -5,7 +5,7 @@ import queue
 import re
 import os
 import signal
-from collections import defaultdict
+from collections import deque
 
 # 设置应用的外观模式和默认颜色主题
 ctk.set_appearance_mode("dark")
@@ -24,7 +24,7 @@ class LogViewerApp(ctk.CTk):
         # 初始化进程、日志队列、日志数据等变量
         self.process = None
         self.log_queue = queue.Queue()
-        self.log_data = []
+        self.log_data = deque(maxlen=10000)  # 使用固定长度队列
         self.available_levels = set()
         self.available_modules = set()
         self.sorted_modules = []
@@ -142,28 +142,24 @@ class LogViewerApp(ctk.CTk):
         """在指定父组件中添加复选框"""
 
         def update_filter():
+            current = cb.get()
             if type_ == "level":
-                if cb.get():
-                    self.selected_levels.add(text)
-                else:
-                    self.selected_levels.discard(text)
-            elif type_ == "module":
-                if cb.get():
-                    self.selected_modules.add(text)
-                else:
-                    self.selected_modules.discard(text)
+                (self.selected_levels.add if current else self.selected_levels.discard)(text)
+            else:
+                (self.selected_modules.add if current else self.selected_modules.discard)(text)
             self.refresh_logs()
 
         cb = ctk.CTkCheckBox(parent, text=text, command=update_filter)
-        cb.select()  # 默认选中
+        cb.select()  # 初始选中
 
-        # 记录初始选中状态
+        # 手动同步初始状态到集合（关键修复）
         if type_ == "level":
             self.selected_levels.add(text)
-        elif type_ == "module":
+        else:
             self.selected_modules.add(text)
-            self.module_checkboxes[text] = cb  # 存储模块复选框引用
 
+        if type_ == "module":
+            self.module_checkboxes[text] = cb
         cb.pack(anchor="w", padx=5, pady=2)
         return cb
 
@@ -199,29 +195,34 @@ class LogViewerApp(ctk.CTk):
         """停止日志进程并清理相关资源"""
         if self.process:
             try:
-                # 终止整个进程组（Windows需要特殊处理）
                 if hasattr(self.process, "pid"):
                     if os.name == "nt":
-                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.process.pid)], check=True)
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(self.process.pid)], check=True, capture_output=True
+                        )
                     else:
                         os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
-            except Exception as e:
-                print(f"Error terminating process: {e}")
+            except (subprocess.CalledProcessError, ProcessLookupError, OSError) as e:
+                print(f"终止进程失败: {e}")
             finally:
                 self.process = None
-        # 清理队列和重置界面状态
         self.log_queue.queue.clear()
         self.start_btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
-        # 强制刷新日志显示
         self.refresh_logs()
 
     def read_output(self):
         """读取日志进程的输出并放入队列"""
-        while self.process and self.process.poll() is None:
-            line = self.process.stdout.readline()
-            if line:
-                self.log_queue.put(line)
+        try:
+            while self.process and self.process.poll() is None:
+                line = self.process.stdout.readline()
+                if line:
+                    self.log_queue.put(line)
+                else:
+                    break  # 避免空循环
+            self.process.stdout.close()  # 确保关闭文件描述符
+        except ValueError:  # 处理可能的I/O操作异常
+            pass
 
     def process_log_queue(self):
         """处理日志队列中的日志条目"""
@@ -258,8 +259,6 @@ class LogViewerApp(ctk.CTk):
         self.update_filters(level, module)
         log_entry = {"raw": raw_line, "time": time, "level": level, "module": module, "message": message}
         self.log_data.append(log_entry)
-        if len(self.log_data) > 10000:
-            self.log_data.pop(0)
 
         if self.check_filter(log_entry):
             self.display_log(log_entry)
