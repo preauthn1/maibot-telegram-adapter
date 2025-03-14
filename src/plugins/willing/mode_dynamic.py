@@ -5,9 +5,8 @@ from typing import Dict
 from loguru import logger
 
 
-from .config import global_config
-from .chat_stream import ChatStream
-
+from ..chat.config import global_config
+from ..chat.chat_stream import ChatStream
 
 class WillingManager:
     def __init__(self):
