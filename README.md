@@ -54,13 +54,15 @@
 
 - (由 [CabLate](https://github.com/cablate) 贡献) [Telegram 与其他平台(未来可能会有)的版本](https://github.com/cablate/MaiMBot/tree/telegram) - [集中讨论串](https://github.com/SengokuCola/MaiMBot/discussions/149)
 
-<div align="left">
-<h2>📚 文档        ⬇️ 快速开始使用麦麦 ⬇️</h2>
-</div>
+
 
 ## 📝 注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意
 **如果你有想法想要提交pr** 
-由于本项目在快速迭代和功能调整，并且有重构计划，目前不接受任何未经过核心开发组讨论的pr合并，谢谢！如您仍旧希望提交pr，可以详情请看置顶issue
+- 由于本项目在快速迭代和功能调整，并且有重构计划，目前不接受任何未经过核心开发组讨论的pr合并，谢谢！如您仍旧希望提交pr，可以详情请看置顶issue
+
+<div align="left">
+<h2>📚 文档        ⬇️ 快速开始使用麦麦 ⬇️</h2>
+</div>
 
 ### 部署方式(忙于开发，部分内容可能过时)
 
