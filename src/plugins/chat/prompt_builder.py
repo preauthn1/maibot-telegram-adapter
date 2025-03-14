@@ -70,10 +70,10 @@ class PromptBuilder:
                 logger.debug("relationship_value 超出有效范围 (-1000 到 1000)")
             if person.user_info.user_cardname:
                 relation_prompt += f"你对昵称为'[({person.user_info.user_id}){person.user_info.user_nickname}]{person.user_info.user_cardname}'的用户的态度为{relationship_level[relationship_level_num]}，"
-                relation_prompt += f"回复态度为{relation_prompt2_list[relationship_level_num]}，"
+                relation_prompt += f"回复态度为{relation_prompt2_list[relationship_level_num]}。"
             else:
                 relation_prompt += f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的态度为{relationship_level[relationship_level_num]}，"
-                relation_prompt += f"回复态度为{relation_prompt2_list[relationship_level_num]}，"
+                relation_prompt += f"回复态度为{relation_prompt2_list[relationship_level_num]}。"
 
         # 开始构建prompt
 
@@ -213,8 +213,6 @@ class PromptBuilder:
         #     prompt_personality_check = f'''你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}'''
 
         # prompt_check_if_response = f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
-
-        logger.info(prompt)
 
         prompt_check_if_response = ""
         return prompt, prompt_check_if_response

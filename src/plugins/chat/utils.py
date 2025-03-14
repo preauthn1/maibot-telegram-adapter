@@ -216,7 +216,7 @@ def get_recent_group_speaker(chat_stream_id: int, sender, limit: int = 12) -> li
         if (user_info.user_id, user_info.platform) != sender \
                 and (user_info.user_id, user_info.platform) != (global_config.BOT_QQ, "qq") \
                 and (user_info.user_id, user_info.platform) not in duplicate_removal \
-                and duplicate_removal.count < 5:  # 排除重复，排除消息发送者，排除bot(此处bot的平台强制为了qq，可能需要更改)，限制加载的关系数目
+                and len(duplicate_removal) < 5:  # 排除重复，排除消息发送者，排除bot(此处bot的平台强制为了qq，可能需要更改)，限制加载的关系数目
 
             duplicate_removal.append((user_info.user_id, user_info.platform))
             chat_info = msg_db_data.get("chat_info", {})
