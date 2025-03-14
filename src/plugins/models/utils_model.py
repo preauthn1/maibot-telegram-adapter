@@ -185,9 +185,9 @@ class LLM_request:
                         elif response.status in policy["abort_codes"]:
                             logger.error(f"错误码: {response.status} - {error_code_mapping.get(response.status)}")
                             if response.status == 403:
-                                #只针对硅基流动的V3和R1进行降级处理
-                                if self.model_name.startswith( 
-                                        "Pro/deepseek-ai") and self.base_url == "https://api.siliconflow.cn/v1/": 
+                                # 只针对硅基流动的V3和R1进行降级处理
+                                if self.model_name.startswith(
+                                        "Pro/deepseek-ai") and self.base_url == "https://api.siliconflow.cn/v1/":
                                     old_model_name = self.model_name
                                     self.model_name = self.model_name[4:]  # 移除"Pro/"前缀
                                     logger.warning(f"检测到403错误，模型从 {old_model_name} 降级为 {self.model_name}")
@@ -228,7 +228,7 @@ class LLM_request:
                                     try:
                                         chunk = json.loads(data_str)
                                         if flag_delta_content_finished:
-                                            usage = chunk.get("usage", None) # 获取tokn用量
+                                            usage = chunk.get("usage", None)  # 获取tokn用量
                                         else:
                                             delta = chunk["choices"][0]["delta"]
                                             delta_content = delta.get("content")
@@ -236,14 +236,14 @@ class LLM_request:
                                                 delta_content = ""
                                             accumulated_content += delta_content
                                             # 检测流式输出文本是否结束
-                                            finish_reason =  chunk["choices"][0].get("finish_reason")
+                                            finish_reason = chunk["choices"][0].get("finish_reason")
                                             if finish_reason == "stop":
                                                 usage = chunk.get("usage", None)
                                                 if usage:
                                                     break
                                                 # 部分平台在文本输出结束前不会返回token用量，此时需要再获取一次chunk
                                                 flag_delta_content_finished = True
-                                            
+
                                     except Exception:
                                         logger.exception("解析流式输出错误")
                             content = accumulated_content
@@ -254,7 +254,8 @@ class LLM_request:
                             content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
                             # 构造一个伪result以便调用自定义响应处理器或默认处理器
                             result = {
-                                "choices": [{"message": {"content": content, "reasoning_content": reasoning_content}}],  "usage": usage}
+                                "choices": [{"message": {"content": content, "reasoning_content": reasoning_content}}],
+                                "usage": usage}
                             return response_handler(result) if response_handler else self._default_response_handler(
                                 result, user_id, request_type, endpoint)
                         else:
@@ -270,6 +271,9 @@ class LLM_request:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.critical(f"请求失败: {str(e)}")
+                    if image_base64:
+                        payload["messages"][0]["content"][1]["image_url"][
+                            "url"] = f"data:image/{image_format.lower()};base64,{image_base64[:10]}...{image_base64[-10:]}"
                     logger.critical(f"请求头: {await self._build_headers(no_key=True)} 请求体: {payload}")
                     raise RuntimeError(f"API请求失败: {str(e)}")
 
@@ -307,7 +311,8 @@ class LLM_request:
                         "role": "user",
                         "content": [
                             {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": f"data:image/{image_format.lower()};base64,{image_base64}"}}
+                            {"type": "image_url",
+                             "image_url": {"url": f"data:image/{image_format.lower()};base64,{image_base64}"}}
                         ]
                     }
                 ],
@@ -452,6 +457,7 @@ class LLM_request:
         )
         return embedding
 
+
 def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 1024 * 1024) -> str:
     """压缩base64格式的图片到指定大小
     Args:
@@ -463,36 +469,36 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
     try:
         # 将base64转换为字节数据
         image_data = base64.b64decode(base64_data)
-        
+
         # 如果已经小于目标大小，直接返回原图
-        if len(image_data) <= 2*1024*1024:
+        if len(image_data) <= 2 * 1024 * 1024:
             return base64_data
-            
+
         # 将字节数据转换为图片对象
         img = Image.open(io.BytesIO(image_data))
-        
+
         # 获取原始尺寸
         original_width, original_height = img.size
-        
+
         # 计算缩放比例
         scale = min(1.0, (target_size / len(image_data)) ** 0.5)
-        
+
         # 计算新的尺寸
         new_width = int(original_width * scale)
         new_height = int(original_height * scale)
-        
+
         # 创建内存缓冲区
         output_buffer = io.BytesIO()
-        
+
         # 如果是GIF，处理所有帧
         if getattr(img, "is_animated", False):
             frames = []
             for frame_idx in range(img.n_frames):
                 img.seek(frame_idx)
                 new_frame = img.copy()
-                new_frame = new_frame.resize((new_width//2, new_height//2), Image.Resampling.LANCZOS) # 动图折上折
+                new_frame = new_frame.resize((new_width // 2, new_height // 2), Image.Resampling.LANCZOS)  # 动图折上折
                 frames.append(new_frame)
-            
+
             # 保存到缓冲区
             frames[0].save(
                 output_buffer,
@@ -506,23 +512,22 @@ def compress_base64_image_by_scale(base64_data: str, target_size: int = 0.8 * 10
         else:
             # 处理静态图片
             resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            
+
             # 保存到缓冲区，保持原始格式
             if img.format == 'PNG' and img.mode in ('RGBA', 'LA'):
                 resized_img.save(output_buffer, format='PNG', optimize=True)
             else:
                 resized_img.save(output_buffer, format='JPEG', quality=95, optimize=True)
-        
+
         # 获取压缩后的数据并转换为base64
         compressed_data = output_buffer.getvalue()
         logger.success(f"压缩图片: {original_width}x{original_height} -> {new_width}x{new_height}")
-        logger.info(f"压缩前大小: {len(image_data)/1024:.1f}KB, 压缩后大小: {len(compressed_data)/1024:.1f}KB")
-        
+        logger.info(f"压缩前大小: {len(image_data) / 1024:.1f}KB, 压缩后大小: {len(compressed_data) / 1024:.1f}KB")
+
         return base64.b64encode(compressed_data).decode('utf-8')
-        
+
     except Exception as e:
         logger.error(f"压缩图片失败: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
-        return base64_data 
-
+        return base64_data
