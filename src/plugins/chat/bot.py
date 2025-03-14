@@ -63,6 +63,7 @@ class ChatBot:
         5. 更新关系
         6. 更新情绪
         """
+        await message_cq.initialize()
         message_json = message_cq.to_dict()
 
         # 进入maimbot
@@ -331,6 +332,7 @@ class ChatBot:
             )
 
             await self.message_process(message_cq)
+            
         elif isinstance(event, GroupRecallNoticeEvent) or isinstance(
             event, FriendRecallNoticeEvent
         ):
@@ -427,75 +429,6 @@ class ChatBot:
         )
 
         await self.message_process(message_cq)
-
-    async def directly_reply(self, raw_message: str, user_id: int, group_id: int):
-        """
-        直接回复发来的消息，不经过意愿管理器
-        """
-
-        # 构造用户信息和群组信息
-        user_info = UserInfo(
-            user_id=user_id,
-            user_nickname=get_user_nickname(user_id) or None,
-            user_cardname=get_user_cardname(user_id) or None,
-            platform="qq",
-        )
-        group_info = GroupInfo(group_id=group_id, group_name=None, platform="qq")
-
-        message_cq = MessageRecvCQ(
-            message_id=None,
-            user_info=user_info,
-            raw_message=raw_message,
-            group_info=group_info,
-            reply_message=None,
-            platform="qq",
-        )
-        message_json = message_cq.to_dict()
-
-        message = MessageRecv(message_json)
-        groupinfo = message.message_info.group_info
-        userinfo = message.message_info.user_info
-        messageinfo = message.message_info
-
-        chat = await chat_manager.get_or_create_stream(
-            platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo
-        )
-        message.update_chat_stream(chat)
-        await message.process()
-
-        bot_user_info = UserInfo(
-            user_id=global_config.BOT_QQ,
-            user_nickname=global_config.BOT_NICKNAME,
-            platform=messageinfo.platform,
-        )
-
-        current_time = time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time)
-        )
-        logger.info(
-            f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]{chat.user_info.user_nickname}:"
-            f"{message.processed_plain_text}"
-        )
-
-        # 使用大模型生成回复
-        response, raw_content = await self.gpt.generate_response(message)
-
-        if response:
-            for msg in response:
-                message_segment = Seg(type="text", data=msg)
-
-                bot_message = MessageSending(
-                    message_id=None,
-                    chat_stream=chat,
-                    bot_user_info=bot_user_info,
-                    sender_info=userinfo,
-                    message_segment=message_segment,
-                    reply=None,
-                    is_head=False,
-                    is_emoji=False,
-                )
-                message_manager.add_message(bot_message)
-
 
 # 创建全局ChatBot实例
 chat_bot = ChatBot()
