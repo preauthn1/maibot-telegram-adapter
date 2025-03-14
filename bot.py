@@ -8,14 +8,21 @@ import time
 
 import uvicorn
 from dotenv import load_dotenv
-from loguru import logger
 from nonebot.adapters.onebot.v11 import Adapter
 import platform
+from src.plugins.utils.logger_config import setup_logger
+
+from loguru import logger
+
+# 配置日志格式
 
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}
 
 uvicorn_server = None
+driver = None
+app = None
+loop = None
 
 
 def easter_egg():
@@ -95,43 +102,7 @@ def load_env():
 
 
 def load_logger():
-    logger.remove()
-
-    # 配置日志基础路径
-    log_path = os.path.join(os.getcwd(), "logs")
-    if not os.path.exists(log_path):
-        os.makedirs(log_path)
-
-    current_env = os.getenv("ENVIRONMENT", "dev")
-
-    # 公共配置参数
-    log_level = os.getenv("LOG_LEVEL", "INFO" if current_env == "prod" else "DEBUG")
-    log_filter = lambda record: (
-        ("nonebot" not in record["name"] or record["level"].no >= logger.level("ERROR").no)
-        if current_env == "prod"
-        else True
-    )
-    log_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> "
-        "<fg #777777>|</> <level>{level: <7}</level> "
-        "<fg #777777>|</> <cyan>{name:.<8}</cyan>:<cyan>{function:.<8}</cyan>:<cyan>{line: >4}</cyan> "
-        "<fg #777777>-</> <level>{message}</level>"
-    )
-
-    # 日志文件储存至/logs
-    logger.add(
-        os.path.join(log_path, "maimbot_{time:YYYY-MM-DD}.log"),
-        rotation="00:00",
-        retention="30 days",
-        format=log_format,
-        colorize=False,
-        level=log_level,
-        filter=log_filter,
-        encoding="utf-8",
-    )
-
-    # 终端输出
-    logger.add(sys.stderr, format=log_format, colorize=True, level=log_level, filter=log_filter)
+    setup_logger()
 
 
 def scan_provider(env_config: dict):
@@ -203,11 +174,14 @@ def raw_main():
     if platform.system().lower() != "windows":
         time.tzset()
 
+    # 配置日志
+    load_logger()
     easter_egg()
     init_config()
     init_env()
     load_env()
-    load_logger()
+    
+    # load_logger()
 
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
@@ -235,17 +209,21 @@ if __name__ == "__main__":
     try:
         raw_main()
 
-        global app
         app = nonebot.get_asgi()
-
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(uvicorn_main())
-    except KeyboardInterrupt:
-        logger.warning("麦麦会努力做的更好的！正在停止中......")
+        
+        try:
+            loop.run_until_complete(uvicorn_main())
+        except KeyboardInterrupt:
+            logger.warning("收到中断信号，正在优雅关闭...")
+            loop.run_until_complete(graceful_shutdown())
+        finally:
+            loop.close()
+            
     except Exception as e:
-        logger.error(f"主程序异常: {e}")
-    finally:
-        loop.run_until_complete(graceful_shutdown())
-        loop.close()
-        logger.info("进程终止完毕，麦麦开始休眠......下次再见哦！")
+        logger.error(f"主程序异常: {str(e)}")
+        if loop and not loop.is_closed():
+            loop.run_until_complete(graceful_shutdown())
+            loop.close()
+        sys.exit(1)
