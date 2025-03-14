@@ -55,7 +55,15 @@ class ChatBot:
         if not self._started:
             self._started = True
 
-    async def message_process(self, message_cq:MessageRecvCQ):
+    async def message_process(self, message_cq: MessageRecvCQ) -> None:
+        """处理转化后的统一格式消息
+        1. 过滤消息
+        2. 记忆激活
+        3. 意愿激活
+        4. 生成回复并发送
+        5. 更新关系
+        6. 更新情绪
+        """
         await message_cq.initialize()
         message_json = message_cq.to_dict()
         # 哦我嘞个json
@@ -76,7 +84,9 @@ class ChatBot:
         await relationship_manager.update_relationship(
             chat_stream=chat,
         )
-        await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=0.5)
+        await relationship_manager.update_relationship_value(
+            chat_stream=chat, relationship_value=0.5
+        )
 
         await message.process()
         
@@ -98,11 +108,15 @@ class ChatBot:
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
 
-        current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
+        current_time = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time)
+        )
 
         #根据话题计算激活度
         topic = ""
-        interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
+        interested_rate = (
+            await hippocampus.memory_activate_value(message.processed_plain_text) / 100
+        )
         logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
 
@@ -159,7 +173,10 @@ class ChatBot:
             # 找到message,删除
             # print(f"开始找思考消息")
             for msg in container.messages:
-                if isinstance(msg, MessageThinking) and msg.message_info.message_id == think_id:
+                if (
+                    isinstance(msg, MessageThinking)
+                    and msg.message_info.message_id == think_id
+                ):
                     # print(f"找到思考消息: {msg}")
                     thinking_message = msg
                     container.messages.remove(msg)
@@ -253,7 +270,9 @@ class ChatBot:
                 chat_stream=chat, relationship_value=valuedict[emotion[0]]
             )
             # 使用情绪管理器更新情绪
-            self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
+            self.mood_manager.update_mood_from_emotion(
+                emotion[0], global_config.mood_intensity_factor
+            )
 
             # willing_manager.change_reply_willing_after_sent(
             #     chat_stream=chat
@@ -316,7 +335,7 @@ class ChatBot:
             )
 
             await self.message_process(message_cq)
-
+            
         elif isinstance(event, GroupRecallNoticeEvent) or isinstance(
             event, FriendRecallNoticeEvent
         ):
@@ -413,7 +432,6 @@ class ChatBot:
         )
 
         await self.message_process(message_cq)
-
 
 # 创建全局ChatBot实例
 chat_bot = ChatBot()
