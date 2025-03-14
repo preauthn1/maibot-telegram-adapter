@@ -195,6 +195,34 @@ def get_recent_group_detailed_plain_text(chat_stream_id: int, limit: int = 12, c
         return message_detailed_plain_text_list
 
 
+def get_recent_group_speaker(chat_stream_id: int, sender, limit: int = 12) -> list:
+    # 获取当前群聊记录内发言的人
+    recent_messages = list(db.messages.find(
+        {"chat_id": chat_stream_id},
+        {
+            "chat_info": 1,
+            "user_info": 1,
+        }
+    ).sort("time", -1).limit(limit))
+
+    if not recent_messages:
+        return []
+
+    who_chat_in_group = []
+
+    duplicate_removal = []
+    for msg_db_data in recent_messages:
+        user_info = UserInfo.from_dict(msg_db_data["user_info"])
+        if (user_info.user_id, user_info.platform) != sender \
+                and (user_info.user_id, user_info.platform) != (global_config.BOT_QQ, "qq") \
+                and (user_info.user_id, user_info.platform) not in duplicate_removal:
+
+            duplicate_removal.append((user_info.user_id, user_info.platform))
+            chat_info = msg_db_data.get("chat_info", {})
+            who_chat_in_group.append(ChatStream.from_dict(chat_info))
+    return who_chat_in_group
+
+
 def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     """将文本分割成句子，但保持书名号中的内容完整
     Args:

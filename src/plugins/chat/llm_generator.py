@@ -76,30 +76,31 @@ class ResponseGenerator:
         self, message: MessageThinking, model: LLM_request
     ) -> Optional[str]:
         """使用指定的模型生成回复"""
-        sender_name = (
-            message.chat_stream.user_info.user_nickname
-            or f"用户{message.chat_stream.user_info.user_id}"
-        )
-        if message.chat_stream.user_info.user_cardname:
+        sender_name = ""
+        if message.chat_stream.user_info.user_cardname and message.chat_stream.user_info.user_nickname:
             sender_name = f"[({message.chat_stream.user_info.user_id}){message.chat_stream.user_info.user_nickname}]{message.chat_stream.user_info.user_cardname}"
+        elif message.chat_stream.user_info.user_nickname:
+            sender_name = f"({message.chat_stream.user_info.user_id}){message.chat_stream.user_info.user_nickname}"
+        else:
+            f"用户({message.chat_stream.user_info.user_id})"
 
-        # 获取关系值
-        relationship_value = (
-            relationship_manager.get_relationship(
-                message.chat_stream
-            ).relationship_value
-            if relationship_manager.get_relationship(message.chat_stream)
-            else 0.0
-        )
-        if relationship_value != 0.0:
-            # print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
-            pass
+        # # 获取关系值
+        # relationship_value = (
+        #     relationship_manager.get_relationship(
+        #         message.chat_stream
+        #     ).relationship_value
+        #     if relationship_manager.get_relationship(message.chat_stream)
+        #     else 0.0
+        # )
+        # if relationship_value != 0.0:
+        #     # print(f"\033[1;32m[关系管理]\033[0m 回复中_当前关系值: {relationship_value}")
+        #     pass
 
         # 构建prompt
         prompt, prompt_check = await prompt_builder._build_prompt(
+            message.chat_stream,
             message_txt=message.processed_plain_text,
             sender_name=sender_name,
-            relationship_value=relationship_value,
             stream_id=message.chat_stream.stream_id,
         )
 
