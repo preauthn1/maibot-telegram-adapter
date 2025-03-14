@@ -28,7 +28,6 @@ config = driver.config
 image_manager = ImageManager()
 
 
-
 class EmojiManager:
     _instance = None
     EMOJI_DIR = os.path.join("data", "emoji")  # 表情包存储目录
@@ -279,6 +278,8 @@ class EmojiManager:
                         continue
                     logger.info(f"[检查] 表情包检查通过: {check}")
 
+                if description is not None:
+                    embedding = await get_embedding(description)
                     # 准备数据库记录
                     emoji_record = {
                         "filename": filename,
