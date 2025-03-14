@@ -376,7 +376,7 @@ def save_group_config(t_talk_allowed_final_result,
     logger.info("群聊设置已保存到 bot_config.toml 文件中")
     return "群聊设置已保存"
 
-with (gr.Blocks(title="MaimBot配置文件编辑") as app):
+with gr.Blocks(title="MaimBot配置文件编辑") as app:
     gr.Markdown(
         value="""
         欢迎使用由墨梓柒MotricSeven编写的MaimBot配置文件编辑器\n
@@ -834,9 +834,9 @@ with (gr.Blocks(title="MaimBot配置文件编辑") as app):
                             with gr.Row():
                                 model1_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_reasoning']['provider'], label="模型1（主要回复模型）提供商")
                             with gr.Row():
-                                model1_pri_in = gr.Textbox(value=config_data['model']['llm_reasoning']['pri_in'], label="模型1（主要回复模型）的输入价格（非必填，可以记录消耗）")
+                                model1_pri_in = gr.Number(value=config_data['model']['llm_reasoning']['pri_in'], label="模型1（主要回复模型）的输入价格（非必填，可以记录消耗）")
                             with gr.Row():
-                                model1_pri_out = gr.Textbox(value=config_data['model']['llm_reasoning']['pri_out'], label="模型1（主要回复模型）的输出价格（非必填，可以记录消耗）")
+                                model1_pri_out = gr.Number(value=config_data['model']['llm_reasoning']['pri_out'], label="模型1（主要回复模型）的输出价格（非必填，可以记录消耗）")
                         with gr.TabItem("2-次要回复模型"):
                             with gr.Row():
                                 model2_name = gr.Textbox(value=config_data['model']['llm_normal']['name'], label="模型2的名称")
