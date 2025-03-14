@@ -1,9 +1,10 @@
 from loguru import logger
-from typing import Dict, Optional, Union, List, Any
+from typing import Dict, Optional, Union, List
 import sys
 from types import ModuleType
 from pathlib import Path
 
+# logger.remove()
 
 # 类型别名
 LoguruLogger = logger.__class__
@@ -13,22 +14,20 @@ _handler_registry: Dict[str, List[int]] = {}
 
 # 获取日志存储根地址
 current_file_path = Path(__file__).resolve()
-PROJECT_ROOT = current_file_path.parent.parent.parent
-LOG_ROOT = str(PROJECT_ROOT / "logs")
+LOG_ROOT = "logs"
 
 # 默认全局配置
 DEFAULT_CONFIG = {
 
     # 日志级别配置
-    "level": "INFO",  # 全局基础日志级别（若未指定console/file_level则生效）
-    "console_level": "INFO",  # 控制台默认级别（可覆盖）
+    "console_level": "DEBUG",  # 控制台默认级别（可覆盖）
     "file_level": "DEBUG",  # 文件默认级别（可覆盖）
 
     # 格式配置
     "console_format": (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
-        "<cyan>{extra[module]: <20}</cyan> | "
+        "<cyan>{extra[module]: <4}</cyan> | "
         "<level>{message}</level>"
     ),
     "file_format": (
