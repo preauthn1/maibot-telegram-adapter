@@ -29,7 +29,7 @@ from .storage import MessageStorage
 from .utils import calculate_typing_time, is_mentioned_bot_in_message
 from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname, get_groupname
-from .willing_manager import willing_manager  # 导入意愿管理器
+from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
 from ..utils.logger_config import LogClassification, LogModule
 
@@ -113,6 +113,8 @@ class ChatBot:
             logger.debug(f"跳过处理回复来自被ban用户 {event.reply.sender.user_id} 的消息")
             return
         # 处理私聊消息
+        
+        
         if isinstance(event, PrivateMessageEvent):
             if not global_config.enable_friend_chat:  # 私聊过滤
                 return
@@ -161,6 +163,7 @@ class ChatBot:
         )
         await message_cq.initialize()
         message_json = message_cq.to_dict()
+        # 哦我嘞个json
 
         # 进入maimbot
         message = MessageRecv(message_json)
@@ -170,8 +173,9 @@ class ChatBot:
 
         # 消息过滤，涉及到config有待更新
 
+        # 创建聊天流
         chat = await chat_manager.get_or_create_stream(
-            platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo
+            platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo #我嘞个gourp_info
         )
         message.update_chat_stream(chat)
         await relationship_manager.update_relationship(
@@ -180,6 +184,7 @@ class ChatBot:
         await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=0.5)
 
         await message.process()
+        
         # 过滤词
         for word in global_config.ban_words:
             if word in message.processed_plain_text:
@@ -200,8 +205,7 @@ class ChatBot:
 
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
 
-        # topic=await topic_identifier.identify_topic_llm(message.processed_plain_text)
-
+        #根据话题计算激活度
         topic = ""
         interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
         logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
