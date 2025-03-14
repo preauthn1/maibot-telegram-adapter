@@ -376,7 +376,7 @@ def save_group_config(t_talk_allowed_final_result,
     logger.info("群聊设置已保存到 bot_config.toml 文件中")
     return "群聊设置已保存"
 
-with (gr.Blocks(title="MaimBot配置文件编辑") as app):
+with gr.Blocks(title="MaimBot配置文件编辑") as app:
     gr.Markdown(
         value="""
         欢迎使用由墨梓柒MotricSeven编写的MaimBot配置文件编辑器\n
