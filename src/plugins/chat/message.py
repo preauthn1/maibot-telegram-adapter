@@ -160,7 +160,7 @@ class MessageRecv(Message):
         user_info = self.message_info.user_info
         name = (
             f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
-            if user_info.user_cardname != ""
+            if user_info.user_cardname != None
             else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
         )
         return f"[{time_str}] {name}: {self.processed_plain_text}\n"
@@ -256,7 +256,7 @@ class MessageProcessBase(Message):
         user_info = self.message_info.user_info
         name = (
             f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
-            if user_info.user_cardname != ""
+            if user_info.user_cardname != None
             else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
         )
         return f"[{time_str}] {name}: {self.processed_plain_text}\n"
