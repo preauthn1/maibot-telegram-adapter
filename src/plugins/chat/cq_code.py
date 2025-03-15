@@ -249,11 +249,8 @@ class CQCode:
 
         if self.reply_message is None:
             return None
-
         if hasattr(self.reply_message, "group_id"):
-            group_info = GroupInfo(
-                platform="qq", group_id=self.reply_message.group_id, group_name=""
-            )
+            group_info = GroupInfo(platform="qq", group_id=self.reply_message.group_id, group_name="")
         else:
             group_info = None
 
