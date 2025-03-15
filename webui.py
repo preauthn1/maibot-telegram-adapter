@@ -13,6 +13,9 @@ is_share = False
 debug = True
 config_data = toml.load("config/bot_config.toml")
 
+CONFIG_VERSION = config_data["inner"]["version"]
+PARSED_CONFIG_VERSION = float(CONFIG_VERSION[2:])
+
 #==============================================
 #env环境配置文件读取部分
 def parse_env_config(config_file):
@@ -70,8 +73,29 @@ def save_to_env_file(env_variables, filename=".env.prod"):
             f.write(f"{var[4:]}={value}\n")  # 移除env_前缀
     logger.info(f"配置已保存到 {filename}")
 
+
+#载入env文件并解析
 env_config_file = ".env.prod"  # 配置文件路径
 env_config_data = parse_env_config(env_config_file)
+if "env_VOLCENGINE_BASE_URL" in env_config_data:
+    logger.info("VOLCENGINE_BASE_URL 已存在，使用默认值")
+    env_config_data["env_VOLCENGINE_BASE_URL"] = "https://ark.cn-beijing.volces.com/api/v3"
+else:
+    logger.info("VOLCENGINE_BASE_URL 不存在，已创建并使用默认值")
+    env_config_data["env_VOLCENGINE_BASE_URL"] = "https://ark.cn-beijing.volces.com/api/v3"
+
+if "env_VOLCENGINE_KEY" in env_config_data:
+    logger.info("VOLCENGINE_KEY 已存在，保持不变")
+else:
+    logger.info("VOLCENGINE_KEY 不存在，已创建并使用默认值")
+    env_config_data["env_VOLCENGINE_KEY"] = "volc_key"
+save_to_env_file(env_config_data, env_config_file)
+MODEL_PROVIDER_LIST = [
+    "VOLCENGINE",
+    "CHAT_ANY_WHERE",
+    "SILICONFLOW",
+    "DEEP_SEEK"
+]
 #env读取保存结束
 #==============================================
 
@@ -160,7 +184,7 @@ def format_list_to_str(lst):
 
 
 #env保存函数
-def save_trigger(server_address, server_port, final_result_list,t_mongodb_host,t_mongodb_port,t_mongodb_database_name,t_chatanywhere_base_url,t_chatanywhere_key,t_siliconflow_base_url,t_siliconflow_key,t_deepseek_base_url,t_deepseek_key):
+def save_trigger(server_address, server_port, final_result_list,t_mongodb_host,t_mongodb_port,t_mongodb_database_name,t_chatanywhere_base_url,t_chatanywhere_key,t_siliconflow_base_url,t_siliconflow_key,t_deepseek_base_url,t_deepseek_key,t_volcengine_base_url,t_volcengine_key):
     final_result_lists = format_list_to_str(final_result_list)
     env_config_data["env_HOST"] = server_address
     env_config_data["env_PORT"] = server_port
@@ -174,6 +198,8 @@ def save_trigger(server_address, server_port, final_result_list,t_mongodb_host,t
     env_config_data["env_SILICONFLOW_KEY"] = t_siliconflow_key
     env_config_data["env_DEEP_SEEK_BASE_URL"] = t_deepseek_base_url
     env_config_data["env_DEEP_SEEK_KEY"] = t_deepseek_key
+    env_config_data["env_VOLCENGINE_BASE_URL"] = t_volcengine_base_url
+    env_config_data["env_VOLCENGINE_KEY"] = t_volcengine_key
     save_to_env_file(env_config_data)
     logger.success("配置已保存到 .env.prod 文件中")
     return "配置已保存"
@@ -339,16 +365,19 @@ def save_memory_mood_config(t_build_memory_interval, t_memory_compress_rate, t_f
     logger.info("记忆和心情设置已保存到 bot_config.toml 文件中")
     return "记忆和心情设置已保存"
 
-def save_other_config(t_keywords_reaction_enabled,t_enable_advance_output, t_enable_kuuki_read, t_enable_debug_output, t_enable_friend_chat, t_chinese_typo_enabled, t_error_rate, t_min_freq, t_tone_error_rate, t_word_replace_rate):
+def save_other_config(t_keywords_reaction_enabled,t_enable_advance_output, t_enable_kuuki_read, t_enable_debug_output, t_enable_friend_chat, t_chinese_typo_enabled, t_error_rate, t_min_freq, t_tone_error_rate, t_word_replace_rate,t_remote_status):
     config_data['keywords_reaction']['enable'] = t_keywords_reaction_enabled
     config_data['others']['enable_advance_output'] = t_enable_advance_output
     config_data['others']['enable_kuuki_read'] = t_enable_kuuki_read
     config_data['others']['enable_debug_output'] = t_enable_debug_output
+    config_data['others']['enable_friend_chat'] = t_enable_friend_chat
     config_data["chinese_typo"]["enable"] = t_chinese_typo_enabled
     config_data["chinese_typo"]["error_rate"] = t_error_rate
     config_data["chinese_typo"]["min_freq"] = t_min_freq
     config_data["chinese_typo"]["tone_error_rate"] = t_tone_error_rate
     config_data["chinese_typo"]["word_replace_rate"] = t_word_replace_rate
+    if PARSED_CONFIG_VERSION > 0.8:
+        config_data["remote"]["enable"] = t_remote_status
     save_config_to_file(config_data)
     logger.info("其他设置已保存到 bot_config.toml 文件中")
     return "其他设置已保存"
@@ -512,11 +541,23 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                             interactive=True
                         )
                     with gr.Row():
+                        volcengine_base_url = gr.Textbox(
+                            label="VolcEngine的BaseURL",
+                            value=env_config_data["env_VOLCENGINE_BASE_URL"],
+                            interactive=True
+                        )
+                    with gr.Row():
+                        volcengine_key = gr.Textbox(
+                            label="VolcEngine的key",
+                            value=env_config_data["env_VOLCENGINE_KEY"],
+                            interactive=True
+                        )
+                    with gr.Row():
                         save_env_btn = gr.Button("保存环境配置",variant="primary")
                     with gr.Row():
                         save_env_btn.click(
                             save_trigger,
-                            inputs=[server_address,server_port,final_result,mongodb_host,mongodb_port,mongodb_database_name,chatanywhere_base_url,chatanywhere_key,siliconflow_base_url,siliconflow_key,deepseek_base_url,deepseek_key],
+                            inputs=[server_address,server_port,final_result,mongodb_host,mongodb_port,mongodb_database_name,chatanywhere_base_url,chatanywhere_key,siliconflow_base_url,siliconflow_key,deepseek_base_url,deepseek_key,volcengine_base_url,volcengine_key],
                             outputs=[gr.Textbox(
                                 label="保存结果",
                                 interactive=False
@@ -818,12 +859,20 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                         gr.Markdown(
                             """### 模型设置"""
                         )
+                    with gr.Row():
+                        gr.Markdown(
+                            """### 注意\n
+                            如果你是用的是火山引擎的API，建议查看[这篇文档](https://zxmucttizt8.feishu.cn/wiki/MQj7wp6dki6X8rkplApc2v6Enkd)中的修改火山API部分\n
+                            因为修改至火山API涉及到修改源码部分，由于自己修改源码造成的问题MaiMBot官方并不因此负责！\n
+                            感谢理解，感谢你使用MaiMBot
+                            """
+                        )
                     with gr.Tabs():
                         with gr.TabItem("1-主要回复模型"):
                             with gr.Row():
                                 model1_name = gr.Textbox(value=config_data['model']['llm_reasoning']['name'], label="模型1的名称")
                             with gr.Row():
-                                model1_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_reasoning']['provider'], label="模型1（主要回复模型）提供商")
+                                model1_provider = gr.Dropdown(choices=MODEL_PROVIDER_LIST, value=config_data['model']['llm_reasoning']['provider'], label="模型1（主要回复模型）提供商")
                             with gr.Row():
                                 model1_pri_in = gr.Number(value=config_data['model']['llm_reasoning']['pri_in'], label="模型1（主要回复模型）的输入价格（非必填，可以记录消耗）")
                             with gr.Row():
@@ -832,12 +881,12 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                             with gr.Row():
                                 model2_name = gr.Textbox(value=config_data['model']['llm_normal']['name'], label="模型2的名称")
                             with gr.Row():
-                                model2_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_normal']['provider'], label="模型2提供商")
+                                model2_provider = gr.Dropdown(choices=MODEL_PROVIDER_LIST, value=config_data['model']['llm_normal']['provider'], label="模型2提供商")
                         with gr.TabItem("3-次要模型"):
                             with gr.Row():
                                 model3_name = gr.Textbox(value=config_data['model']['llm_reasoning_minor']['name'], label="模型3的名称")
                             with gr.Row():
-                                model3_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_reasoning_minor']['provider'], label="模型3提供商")
+                                model3_provider = gr.Dropdown(choices=MODEL_PROVIDER_LIST, value=config_data['model']['llm_reasoning_minor']['provider'], label="模型3提供商")
                         with gr.TabItem("4-情感&主题模型"):
                             with gr.Row():
                                 gr.Markdown(
@@ -846,7 +895,7 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                             with gr.Row():
                                 emotion_model_name = gr.Textbox(value=config_data['model']['llm_emotion_judge']['name'], label="情感模型名称")
                             with gr.Row():
-                                emotion_model_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_emotion_judge']['provider'], label="情感模型提供商")
+                                emotion_model_provider = gr.Dropdown(choices=MODEL_PROVIDER_LIST, value=config_data['model']['llm_emotion_judge']['provider'], label="情感模型提供商")
                             with gr.Row():
                                 gr.Markdown(
                                     """### 主题模型设置"""
@@ -854,11 +903,11 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                             with gr.Row():
                                 topic_judge_model_name = gr.Textbox(value=config_data['model']['llm_topic_judge']['name'], label="主题判断模型名称")
                             with gr.Row():
-                                topic_judge_model_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_topic_judge']['provider'], label="主题判断模型提供商")
+                                topic_judge_model_provider = gr.Dropdown(choices=MODEL_PROVIDER_LIST, value=config_data['model']['llm_topic_judge']['provider'], label="主题判断模型提供商")
                             with gr.Row():
                                 summary_by_topic_model_name = gr.Textbox(value=config_data['model']['llm_summary_by_topic']['name'], label="主题总结模型名称")
                             with gr.Row():
-                                summary_by_topic_model_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['llm_summary_by_topic']['provider'], label="主题总结模型提供商")
+                                summary_by_topic_model_provider = gr.Dropdown(choices=MODEL_PROVIDER_LIST, value=config_data['model']['llm_summary_by_topic']['provider'], label="主题总结模型提供商")
                         with gr.TabItem("5-识图模型"):
                             with gr.Row():
                                 gr.Markdown(
@@ -867,7 +916,7 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                             with gr.Row():
                                 vlm_model_name = gr.Textbox(value=config_data['model']['vlm']['name'], label="识图模型名称")
                             with gr.Row():
-                                vlm_model_provider = gr.Dropdown(choices=["SILICONFLOW","DEEP_SEEK", "CHAT_ANY_WHERE"], value=config_data['model']['vlm']['provider'], label="识图模型提供商")
+                                vlm_model_provider = gr.Dropdown(choices=MODEL_PROVIDER_LIST, value=config_data['model']['vlm']['provider'], label="识图模型提供商")
                     with gr.Row():
                         save_model_btn = gr.Button("保存回复&模型设置",variant="primary", elem_id="save_model_btn")
                     with gr.Row():
@@ -1100,6 +1149,17 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                         enable_debug_output = gr.Checkbox(value=config_data['others']['enable_debug_output'], label="是否开启调试输出")
                     with gr.Row():
                         enable_friend_chat = gr.Checkbox(value=config_data['others']['enable_friend_chat'], label="是否开启好友聊天")
+                    if PARSED_CONFIG_VERSION > 0.8:
+                        with gr.Row():
+                            gr.Markdown(
+                                """### 远程统计设置\n
+                                测试功能，发送统计信息，主要是看全球有多少只麦麦
+                                """
+                            )
+                        with gr.Row():
+                            remote_status = gr.Checkbox(value=config_data['remote']['enable'], label="是否开启麦麦在线全球统计")
+
+
                     with gr.Row():
                         gr.Markdown(
                             """### 中文错别字设置"""
@@ -1119,9 +1179,11 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                     with gr.Row():
                         save_other_config_message = gr.Textbox()
                     with gr.Row():
+                        if PARSED_CONFIG_VERSION <= 0.8:
+                            remote_status = gr.Checkbox(value=False,visible=False)
                         save_other_config_btn.click(
                             save_other_config,
-                            inputs=[keywords_reaction_enabled,enable_advance_output, enable_kuuki_read, enable_debug_output, enable_friend_chat, chinese_typo_enabled, error_rate, min_freq, tone_error_rate, word_replace_rate],
+                            inputs=[keywords_reaction_enabled,enable_advance_output, enable_kuuki_read, enable_debug_output, enable_friend_chat, chinese_typo_enabled, error_rate, min_freq, tone_error_rate, word_replace_rate,remote_status],
                             outputs=[save_other_config_message]
                         )
     app.queue().launch(#concurrency_count=511, max_size=1022
