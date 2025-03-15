@@ -1,8 +1,12 @@
 from loguru import logger
 from typing import Dict, Optional, Union, List
 import sys
+import os
 from types import ModuleType
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 保存原生处理器ID
 default_handler_id = None
@@ -110,7 +114,7 @@ def get_module_logger(
     # 控制台处理器
     console_id = logger.add(
         sink=sys.stderr,
-        level=console_level or current_config["console_level"],
+        level=os.getenv("CONSOLE_LOG_LEVEL", console_level or current_config["console_level"]),
         format=current_config["console_format"],
         filter=lambda record: record["extra"].get("module") == module_name,
         enqueue=True,
@@ -125,7 +129,7 @@ def get_module_logger(
 
     file_id = logger.add(
         sink=str(log_file),
-        level=file_level or current_config["file_level"],
+        level=os.getenv("FILE_LOG_LEVEL", file_level or current_config["file_level"]),
         format=current_config["file_format"],
         rotation=current_config["rotation"],
         retention=current_config["retention"],
@@ -159,7 +163,7 @@ def remove_module_logger(module_name: str) -> None:
 # 添加全局默认处理器（只处理未注册模块的日志--->控制台）
 DEFAULT_GLOBAL_HANDLER = logger.add(
     sink=sys.stderr,
-    level="SUCCESS",
+    level=os.getenv("DEFAULT_CONSOLE_LOG_LEVEL", "SUCCESS"),
     format=(
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
@@ -178,7 +182,7 @@ other_log_dir.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_FILE_HANDLER = logger.add(
     sink=str(other_log_dir / f"{{time:YYYY-MM-DD}}.log"),
-    level="DEBUG",
+    level=os.getenv("DEFAULT_FILE_LOG_LEVEL", "DEBUG"),
     format=(
         "{time:YYYY-MM-DD HH:mm:ss} | "
         "{level: <8} | "
