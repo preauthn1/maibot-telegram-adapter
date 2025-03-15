@@ -341,16 +341,19 @@ def save_memory_mood_config(t_build_memory_interval, t_memory_compress_rate, t_f
     logger.info("记忆和心情设置已保存到 bot_config.toml 文件中")
     return "记忆和心情设置已保存"
 
-def save_other_config(t_keywords_reaction_enabled,t_enable_advance_output, t_enable_kuuki_read, t_enable_debug_output, t_enable_friend_chat, t_chinese_typo_enabled, t_error_rate, t_min_freq, t_tone_error_rate, t_word_replace_rate):
+def save_other_config(t_keywords_reaction_enabled,t_enable_advance_output, t_enable_kuuki_read, t_enable_debug_output, t_enable_friend_chat, t_chinese_typo_enabled, t_error_rate, t_min_freq, t_tone_error_rate, t_word_replace_rate,t_remote_status):
     config_data['keywords_reaction']['enable'] = t_keywords_reaction_enabled
     config_data['others']['enable_advance_output'] = t_enable_advance_output
     config_data['others']['enable_kuuki_read'] = t_enable_kuuki_read
     config_data['others']['enable_debug_output'] = t_enable_debug_output
+    config_data['others']['enable_friend_chat'] = t_enable_friend_chat
     config_data["chinese_typo"]["enable"] = t_chinese_typo_enabled
     config_data["chinese_typo"]["error_rate"] = t_error_rate
     config_data["chinese_typo"]["min_freq"] = t_min_freq
     config_data["chinese_typo"]["tone_error_rate"] = t_tone_error_rate
     config_data["chinese_typo"]["word_replace_rate"] = t_word_replace_rate
+    if PARSED_CONFIG_VERSION > 0.8:
+        config_data["remote"]["enable"] = t_remote_status
     save_config_to_file(config_data)
     logger.info("其他设置已保存到 bot_config.toml 文件中")
     return "其他设置已保存"
@@ -1112,6 +1115,7 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                         with gr.Row():
                             remote_status = gr.Checkbox(value=config_data['remote']['enable'], label="是否开启麦麦在线全球统计")
 
+
                     with gr.Row():
                         gr.Markdown(
                             """### 中文错别字设置"""
@@ -1133,7 +1137,7 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                     with gr.Row():
                         save_other_config_btn.click(
                             save_other_config,
-                            inputs=[keywords_reaction_enabled,enable_advance_output, enable_kuuki_read, enable_debug_output, enable_friend_chat, chinese_typo_enabled, error_rate, min_freq, tone_error_rate, word_replace_rate],
+                            inputs=[keywords_reaction_enabled,enable_advance_output, enable_kuuki_read, enable_debug_output, enable_friend_chat, chinese_typo_enabled, error_rate, min_freq, tone_error_rate, word_replace_rate,remote_status],
                             outputs=[save_other_config_message]
                         )
     app.queue().launch(#concurrency_count=511, max_size=1022
