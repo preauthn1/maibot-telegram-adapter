@@ -3,7 +3,7 @@
 @chcp 936
 
 @REM 设置版本号
-set "VERSION=0.3"
+set "VERSION=1.0"
 
 title 麦麦Bot控制台 v%VERSION%
 
