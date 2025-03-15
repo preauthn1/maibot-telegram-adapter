@@ -48,6 +48,7 @@
 
 
 **📚 有热心网友创作的wiki:** https://maimbot.pages.dev/
+
 **📚 由SLAPQ制作的B站教程:** https://www.bilibili.com/opus/1041609335464001545
 
 
