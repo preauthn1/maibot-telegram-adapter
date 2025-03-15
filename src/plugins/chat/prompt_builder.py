@@ -95,10 +95,10 @@ class PromptBuilder:
             )
             chat_stream = chat_manager.get_stream(stream_id)
             if chat_stream.group_info:
-                chat_talking_prompt = f"以下是群里正在聊天的内容：\n{chat_talking_prompt}"
+                chat_talking_prompt = chat_talking_prompt
             else:
                 chat_in_group = False
-                chat_talking_prompt = f"以下是你正在和{sender_name}私聊的内容：\n{chat_talking_prompt}"
+                chat_talking_prompt = chat_talking_prompt
                 # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
 
         # 使用新的记忆获取方法
