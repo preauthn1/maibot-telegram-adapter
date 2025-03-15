@@ -1,13 +1,12 @@
 #!/bin/bash
 
-# Maimbot 一键安装脚本 by Cookie987
-# 适用于Debian系
+# Maimbot 一键安装脚本 by Cookie_987
+# 适用于Debian12
 # 请小心使用任何一键脚本！
-
-# 如无法访问GitHub请修改此处镜像地址
 
 LANG=C.UTF-8
 
+# 如无法访问GitHub请修改此处镜像地址
 GITHUB_REPO="https://ghfast.top/https://github.com/SengokuCola/MaiMBot.git"
 
 # 颜色输出
@@ -201,7 +200,11 @@ install_napcat() {
 }
 
 # 运行安装步骤
-whiptail --title "⚠️ 警告：安装前详阅" --msgbox "项目处于活跃开发阶段，代码可能随时更改\n文档未完善，有问题可以提交 Issue 或者 Discussion\nQQ机器人存在被限制风险，请自行了解，谨慎使用\n由于持续迭代，可能存在一些已知或未知的bug\n由于开发中，可能消耗较多token\n\n本脚本可能更新不及时，如遇到bug请优先尝试手动部署以确定是否为脚本问题" 14 60
+if (whiptail --title "ℹ️ [1/6] 使用协议" --yes-button "我同意" --no-button "我拒绝" --yesno "使用MaiMBot及此脚本前请先阅读ELUA协议\nhttps://github.com/SengokuCola/MaiMBot/blob/main/EULA.md\n\n您是否同意此协议？" 10 70) then
+    whiptail --title "[2/6] 欢迎使用麦麦Bot一键安装脚本 by Cookie987" --msgbox "项目处于活跃开发阶段，代码可能随时更改\n文档未完善，有问题可以提交 Issue 或者 Discussion\nQQ机器人存在被限制风险，请自行了解，谨慎使用\n由于持续迭代，可能存在一些已知或未知的bug\n由于开发中，可能消耗较多token\n\n本脚本可能更新不及时，如遇到bug请优先尝试手动部署以确定是否为脚本问题" 14 60
+else
+    exit 5
+fi
 
 check_system
 check_mongodb
@@ -253,6 +256,9 @@ git clone -b "$BRANCH" $GITHUB_REPO .
 echo -e "${GREEN}安装 Python 依赖...${RESET}"
 pip install -r requirements.txt
 
+echo -e "${GREEN}同意协议...${RESET}"
+touch elua.confirmed
+
 echo -e "${GREEN}设置服务...${RESET}"
 
 # 设置 Maimbot 服务
@@ -264,7 +270,7 @@ After=network.target mongod.service
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR/repo/
-ExecStart=$INSTALL_DIR/venv/bin/python3 bot.py
+ExecStart=/bin/bash -c "source $INSTALL_DIR/venv/bin/activate && nb run"
 ExecStop=/bin/kill -2 $MAINPID
 Restart=always
 RestartSec=10s
