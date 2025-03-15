@@ -10,7 +10,11 @@ import json
 
 is_share = False
 debug = True
-config_data = toml.load("config/bot_config.toml")
+try:
+    config_data = toml.load("config/bot_config.toml")
+except Exception as e:
+    logger.error(f"读取配置文件失败，请检查配置文件是否存在，错误信息为：{e}")
+    sys.exit(1)
 
 CONFIG_VERSION = config_data["inner"]["version"]
 PARSED_CONFIG_VERSION = float(CONFIG_VERSION[2:])
