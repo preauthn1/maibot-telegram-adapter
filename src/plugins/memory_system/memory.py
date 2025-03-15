@@ -878,8 +878,8 @@ class Hippocampus:
                     matched_topics.add(input_topic)
                     adjusted_sim = sim * penalty
                     topic_similarities[input_topic] = max(topic_similarities.get(input_topic, 0), adjusted_sim)
-                    logger.debug(
-                        f"[激活] 主题「{input_topic}」-> 「{memory_topic}」(内容数: {content_count}, 相似度: {adjusted_sim:.3f})")
+                    # logger.debug(
+                        # f"[激活] 主题「{input_topic}」-> 「{memory_topic}」(内容数: {content_count}, 相似度: {adjusted_sim:.3f})")
 
         # 计算主题匹配率和平均相似度
         topic_match = len(matched_topics) / len(identified_topics)

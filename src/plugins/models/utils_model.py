@@ -167,8 +167,8 @@ class LLM_request:
         # 判断是否为流式
         stream_mode = self.params.get("stream", False)
         logger_msg = "进入流式输出模式，" if stream_mode else ""
-        logger.debug(f"{logger_msg}发送请求到URL: {api_url}")
-        logger.info(f"使用模型: {self.model_name}")
+        # logger.debug(f"{logger_msg}发送请求到URL: {api_url}")
+        # logger.info(f"使用模型: {self.model_name}")
 
         # 构建请求体
         if image_base64:
