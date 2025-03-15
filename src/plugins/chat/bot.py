@@ -85,7 +85,7 @@ class ChatBot:
             chat_stream=chat,
         )
         await relationship_manager.update_relationship_value(
-            chat_stream=chat, relationship_value=0.5
+            chat_stream=chat, relationship_value=0
         )
 
         await message.process()
