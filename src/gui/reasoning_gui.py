@@ -31,8 +31,6 @@ else:
     logger.error("未找到环境配置文件")
     sys.exit(1)
 
-logger = get_module_logger("gui")
-
 class ReasoningGUI:
     def __init__(self):
         # 记录启动时间戳，转换为Unix时间戳
