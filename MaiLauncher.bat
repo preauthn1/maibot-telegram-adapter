@@ -286,7 +286,6 @@ goto menu
 cls
 if not exist config/bot_config.toml (
     copy /Y "template\bot_config_template.toml" "config\bot_config.toml"
-    re
 
 )
 if not exist .env.prod (
