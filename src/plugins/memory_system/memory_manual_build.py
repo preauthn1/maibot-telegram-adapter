@@ -29,7 +29,7 @@ project_root = current_dir.parent.parent.parent
 # env.dev文件路径
 env_path = project_root / ".env.dev"
 
-logger = get_module_logger("mem_build")
+logger = get_module_logger("mem_manual_bd")
 
 # 加载环境变量
 if env_path.exists():
