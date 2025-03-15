@@ -1,10 +1,12 @@
 from typing import Optional
-from loguru import logger
+from src.common.logger import get_module_logger
 
 from ..chat.config import global_config
 from .mode_classical import WillingManager as ClassicalWillingManager
 from .mode_dynamic import WillingManager as DynamicWillingManager
 from .mode_custom import WillingManager as CustomWillingManager
+
+logger = get_module_logger("willing")
 
 def init_willing_manager() -> Optional[object]:
     """

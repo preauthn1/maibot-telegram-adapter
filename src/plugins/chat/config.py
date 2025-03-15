@@ -4,10 +4,13 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import tomli
-from loguru import logger
 from packaging import version
 from packaging.version import Version, InvalidVersion
 from packaging.specifiers import SpecifierSet, InvalidSpecifier
+
+from src.common.logger import get_module_logger
+
+logger = get_module_logger("config")
 
 
 @dataclass
@@ -440,10 +443,3 @@ else:
 
 global_config = BotConfig.load_config(config_path=bot_config_path)
 
-if not global_config.enable_advance_output:
-    logger.remove()
-    
-# 调试输出功能
-if global_config.enable_debug_output:
-    logger.remove()
-    logger.add(sys.stdout, level="DEBUG")
