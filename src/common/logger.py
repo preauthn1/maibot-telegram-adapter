@@ -159,7 +159,7 @@ def remove_module_logger(module_name: str) -> None:
 # 添加全局默认处理器（只处理未注册模块的日志--->控制台）
 DEFAULT_GLOBAL_HANDLER = logger.add(
     sink=sys.stderr,
-    level="INFO",
+    level="SUCCESS",
     format=(
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
