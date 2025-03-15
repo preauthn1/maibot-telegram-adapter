@@ -249,6 +249,13 @@ class CQCode:
         if self.reply_message is None:
             return None
 
+        if hasattr(self.reply_message, "group_id"):
+            group_info = GroupInfo(
+                platform="qq", group_id=self.reply_message.group_id, group_name=""
+            )
+        else:
+            group_info = None
+
         if self.reply_message.sender.user_id:
             message_obj = MessageRecvCQ(
                 user_info=UserInfo(
@@ -256,7 +263,7 @@ class CQCode:
                 ),
                 message_id=self.reply_message.message_id,
                 raw_message=str(self.reply_message.message),
-                group_info=GroupInfo(group_id=self.reply_message.group_id),
+                group_info=group_info,
             )
             await message_obj.initialize()
 
