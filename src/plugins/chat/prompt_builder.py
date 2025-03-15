@@ -42,8 +42,8 @@ class PromptBuilder:
         """
         # 关系（载入当前聊天记录里所以人的关系）
         relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "爱慕"]
-        relation_prompt2_list = ["极度厌恶，冷漠回应或直接辱骂", "关系较差，冷淡回复，保持距离", "关系一般，保持理性", \
-                                 "关系较好，友善回复，积极互动", "关系很好，积极回复，关心对方", "关系暧昧，热情回复，无条件支持", ]
+        relation_prompt2_list = ["极度厌恶，冷漠回应或直接辱骂", "关系较差，冷淡回复", "关系一般，保持理性",
+                                 "关系较好，愿意回复", "关系很好，积极回复", "关系暧昧，无条件支持", ]
         relation_prompt = ""
         who_chat_in_group = [chat_stream]
         who_chat_in_group += get_recent_group_speaker(stream_id, (chat_stream.user_info.user_id, chat_stream.user_info.platform), limit=global_config.MAX_CONTEXT_SIZE)
