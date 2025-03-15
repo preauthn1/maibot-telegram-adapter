@@ -12,6 +12,7 @@ from nonebot.adapters.onebot.v11 import (
     FriendRecallNoticeEvent,
 )
 
+from src.common.logger import get_module_logger
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
@@ -31,11 +32,8 @@ from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname, get_groupname
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
-from ..utils.logger_config import LogClassification, LogModule
 
-# 配置日志
-log_module = LogModule()
-logger = log_module.setup_logger(LogClassification.CHAT)
+logger = get_module_logger("chat_bot")
 
 
 class ChatBot:

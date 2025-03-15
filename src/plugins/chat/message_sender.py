@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Union
 
-from loguru import logger
+from src.common.logger import get_module_logger
 from nonebot.adapters.onebot.v11 import Bot
 from ...common.database import db
 from .message_cq import MessageSendCQ
@@ -12,6 +12,7 @@ from .storage import MessageStorage
 from .config import global_config
 from .utils import truncate_message
 
+logger = get_module_logger("msg_sender")
 
 class Message_Sender:
     """发送器"""
