@@ -299,11 +299,15 @@ class RelationshipManager:
                     value *= 3/(high_value_count + 3)
             elif valuedict[label] < 0 and stancedict[stance] != 0:
                 value = value*math.exp(old_value/1000)
+            else:
+                value = 0
         elif old_value < 0:
             if valuedict[label] >= 0 and stancedict[stance] != 2:
                 value = value*math.exp(old_value/1000)
             elif valuedict[label] < 0 and stancedict[stance] != 0:
                 value = value*math.cos(math.pi*old_value/2000)
+            else:
+                value = 0
         
         logger.debug(f"[关系变更调试] 立场：{stance}  标签：{label}  关系值：{value} 原值：{old_value}")
 
