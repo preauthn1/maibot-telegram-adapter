@@ -75,6 +75,8 @@ class PromptBuilder:
                 relation_prompt += f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的态度为{relationship_level[relationship_level_num]}，"
                 relation_prompt += f"回复态度为{relation_prompt2_list[relationship_level_num]}，关系等级为{relationship_level_num}。"
 
+        relation_prompt_all = f"{relation_prompt}，关系等级越大，关系越好，请分析聊天记录，根据你和{sender_name}的关系和态度进行回复，明确你的立场和情感。"
+
         # 开始构建prompt
 
         # 心情
@@ -144,9 +146,9 @@ class PromptBuilder:
         activate_prompt = ""
         if chat_in_group:
             activate_prompt = f"以上是群里正在进行的聊天，{memory_prompt}，\
-            {relation_prompt}{mood_prompt}现在昵称为 '{sender_name}' 的用户说的:'{message_txt}'。引起了你的注意。请分析聊天记录，根据你和他的关系和态度进行回复，明确你的立场和情感。"
+            现在昵称为 '{sender_name}' 的用户说的:'{message_txt}'。引起了你的注意。"
         else:
-            activate_prompt = f"以上是你正在和{sender_name}私聊的内容，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:'{message_txt}'。引起了你的注意，{relation_prompt}{mood_prompt}，"
+            activate_prompt = f"以上是你正在和{sender_name}私聊的内容，{memory_prompt} 现在昵称为 '{sender_name}' 的用户说的:'{message_txt}',引起了你的注意。"
 
         # 关键词检测与反应
         keywords_reaction_prompt = ""
@@ -169,15 +171,15 @@ class PromptBuilder:
 
         if personality_choice < probability_1:  # 第一种人格
             prompt_personality += f'''{personality[0]}, 你正在浏览qq群,{promt_info_prompt},
-            现在请你给出日常且口语化的回复，根据关系明确你的立场，表现你自己的见解，尽量简短一些。{keywords_reaction_prompt}
+            现在请你给出日常且口语化的回复，表现你自己的见解，尽量简短一些。{keywords_reaction_prompt}
             请注意把握群里的聊天内容，不要刻意突出自身学科背景，不要回复的太有条理，可以有个性。'''
         elif personality_choice < probability_1 + probability_2:  # 第二种人格
             prompt_personality += f'''{personality[1]}, 你正在浏览qq群，{promt_info_prompt},
-            现在请你给出日常且口语化的回复，根据关系明确你的立场，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
+            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
             请你表达自己的见解和观点。可以有个性。'''
         else:  # 第三种人格
             prompt_personality += f'''{personality[2]}, 你正在浏览qq群，{promt_info_prompt},
-            现在请你给出日常且口语化的回复，根据关系明确你的立场，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
+            现在请你给出日常且口语化的回复，请表现你自己的见解，不要一昧迎合，尽量简短一些。{keywords_reaction_prompt}
             请你表达自己的见解和观点。可以有个性。'''
 
         # 中文高手(新加的好玩功能)
@@ -190,7 +192,7 @@ class PromptBuilder:
             prompt_ger += "你喜欢用文言文"
 
         # 额外信息要求
-        extra_info = f'''但是注意你的回复态度和你的立场，关系等级越大，关系越好，切记你回复的人是{sender_name}，记得不要输出你的思考过程，只需要输出最终的回复，务必简短一些，尤其注意在没明确提到时不要过多提及自身的背景, 不要直接回复别人发的表情包，记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只需要输出回复内容就好，不要输出其他任何内容'''
+        extra_info = f'''你{mood_prompt}记得不要输出你的思考过程，只需要输出最终的回复，务必简短一些，尤其注意在没明确提到时不要过多提及自身的背景, 不要直接回复别人发的表情包，记住不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只需要输出回复内容就好，不要输出其他任何内容'''
 
         # 合并prompt
         prompt = ""
@@ -199,7 +201,10 @@ class PromptBuilder:
         prompt += f"{chat_talking_prompt}\n"
         prompt += f"{prompt_personality}\n"
         prompt += f"{prompt_ger}\n"
+        prompt += f"{relation_prompt_all}\n"
         prompt += f"{extra_info}\n"
+
+        logger.info(prompt)
 
         # '''读空气prompt处理'''
         # activate_prompt_check = f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"
