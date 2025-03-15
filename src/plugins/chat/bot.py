@@ -345,9 +345,12 @@ class ChatBot:
                 platform="qq",
             )
 
-            group_info = GroupInfo(
-                group_id=event.group_id, group_name=None, platform="qq"
-            )
+            if isinstance(event, GroupRecallNoticeEvent):
+                group_info = GroupInfo(
+                    group_id=event.group_id, group_name=None, platform="qq"
+                )
+            else:
+                group_info = None
 
             chat = await chat_manager.get_or_create_stream(
                 platform=user_info.platform, user_info=user_info, group_info=group_info
