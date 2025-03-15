@@ -2,6 +2,7 @@ import asyncio
 import os
 import shutil
 import sys
+from pathlib import Path
 
 import nonebot
 import time
@@ -164,13 +165,35 @@ async def uvicorn_main():
     uvicorn_server = server
     await server.serve()
 
+def check_eula():
+    eula_file = Path("elua.confirmed")
+    
+    # 如果已经确认过EULA，直接返回
+    if eula_file.exists():
+        return
+        
+    print("使用MaiMBot前请先阅读ELUA协议，继续运行视为同意协议")
+    print("协议内容：https://github.com/SengokuCola/MaiMBot/blob/main/EULA.md")
+    print('输入"同意"或"confirmed"继续运行')
+    
+    while True:
+        user_input = input().strip().lower()  # 转换为小写以忽略大小写
+        if user_input in ['同意', 'confirmed']:
+            # 创建确认文件
+            eula_file.touch()
+            break
+        else:
+            print('请输入"同意"或"confirmed"以继续运行')
+
 
 def raw_main():
     # 利用 TZ 环境变量设定程序工作的时区
     # 仅保证行为一致，不依赖 localtime()，实际对生产环境几乎没有作用
     if platform.system().lower() != "windows":
         time.tzset()
-
+        
+    check_eula()
+    
     easter_egg()
     init_config()
     init_env()
