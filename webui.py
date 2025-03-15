@@ -12,6 +12,9 @@ is_share = False
 debug = True
 config_data = toml.load("config/bot_config.toml")
 
+CONFIG_VERSION = config_data["inner"]["version"]
+PARSED_CONFIG_VERSION = float(CONFIG_VERSION[2:])
+
 #==============================================
 #env环境配置文件读取部分
 def parse_env_config(config_file):
@@ -1099,6 +1102,16 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                         enable_debug_output = gr.Checkbox(value=config_data['others']['enable_debug_output'], label="是否开启调试输出")
                     with gr.Row():
                         enable_friend_chat = gr.Checkbox(value=config_data['others']['enable_friend_chat'], label="是否开启好友聊天")
+                    if PARSED_CONFIG_VERSION > 0.8:
+                        with gr.Row():
+                            gr.Markdown(
+                                """### 远程统计设置\n
+                                测试功能，发送统计信息，主要是看全球有多少只麦麦
+                                """
+                            )
+                        with gr.Row():
+                            remote_status = gr.Checkbox(value=config_data['remote']['enable'], label="是否开启麦麦在线全球统计")
+
                     with gr.Row():
                         gr.Markdown(
                             """### 中文错别字设置"""
