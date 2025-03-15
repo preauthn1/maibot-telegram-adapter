@@ -204,8 +204,6 @@ class PromptBuilder:
         prompt += f"{relation_prompt_all}\n"
         prompt += f"{extra_info}\n"
 
-        logger.info(prompt)
-
         # '''读空气prompt处理'''
         # activate_prompt_check = f"以上是群里正在进行的聊天，昵称为 '{sender_name}' 的用户说的:{message_txt}。引起了你的注意,你和他{relation_prompt}，你想要{relation_prompt_2}，但是这不一定是合适的时机，请你决定是否要回应这条消息。"
         # prompt_personality_check = ''
