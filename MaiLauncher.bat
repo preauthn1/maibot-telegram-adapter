@@ -169,10 +169,14 @@ if exist "%_root%\tools\git\bin" (
 :search_mongodb
 cls
 sc query | findstr /i "MongoDB" >nul
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo MongoDB服务未运行，正在尝试启动...
-    net start MongoDB >nul 2>&1
-    if %errorlevel% neq 0 (
+    powershell -Command "Start-Process -Verb RunAs cmd -ArgumentList '/c net start MongoDB'"
+    echo 正在等待MongoDB服务启动...
+    echo 按下任意键跳过等待...
+    timeout /t 30 >nul
+    sc query | findstr /i "MongoDB" >nul
+    if !errorlevel! neq 0 (
         echo MongoDB服务启动失败，可能是没有安装，要安装吗？
         set /p confirm="继续？(Y/N): "
         if /i "!confirm!"=="Y" (
