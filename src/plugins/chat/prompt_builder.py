@@ -9,11 +9,9 @@ from ..schedule.schedule_generator import bot_schedule
 from .config import global_config
 from .utils import get_embedding, get_recent_group_detailed_plain_text
 from .chat_stream import chat_manager
+from src.common.logger import get_module_logger
 
-from ..utils.logger_config import LogClassification, LogModule
-
-log_module = LogModule()
-logger = log_module.setup_logger(LogClassification.PBUILDER)
+logger = get_module_logger("prompt")
 
 logger.info("初始化Prompt系统")
 

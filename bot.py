@@ -15,7 +15,7 @@ from src.common.logger import get_module_logger
 
 
 # 配置主程序日志格式
-logger = get_module_logger("主程序")
+logger = get_module_logger("main_bot")
 
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}

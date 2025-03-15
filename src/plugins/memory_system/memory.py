@@ -3,7 +3,6 @@ import datetime
 import math
 import random
 import time
-import os
 
 import jieba
 import networkx as nx
@@ -18,14 +17,9 @@ from ..chat.utils import (
     text_to_vector,
 )
 from ..models.utils_model import LLM_request
+from src.common.logger import get_module_logger
 
-from ..utils.logger_config import LogClassification, LogModule
-
-# 配置日志
-log_module = LogModule()
-logger = log_module.setup_logger(LogClassification.MEMORY)
-
-logger.info("初始化记忆系统")
+logger = get_module_logger("memory_sys")
 
 
 class Memory_graph:

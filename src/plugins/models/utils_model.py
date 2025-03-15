@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Tuple, Union
 
 import aiohttp
-from loguru import logger
+from src.common.logger import get_module_logger
 from nonebot import get_driver
 import base64
 from PIL import Image
@@ -15,6 +15,8 @@ from ..chat.config import global_config
 
 driver = get_driver()
 config = driver.config
+
+logger = get_module_logger("model_utils")
 
 
 class LLM_request:
