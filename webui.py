@@ -1178,6 +1178,8 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                     with gr.Row():
                         save_other_config_message = gr.Textbox()
                     with gr.Row():
+                        if PARSED_CONFIG_VERSION <= 0.8:
+                            remote_status = gr.Checkbox(value=False,visible=False)
                         save_other_config_btn.click(
                             save_other_config,
                             inputs=[keywords_reaction_enabled,enable_advance_output, enable_kuuki_read, enable_debug_output, enable_friend_chat, chinese_typo_enabled, error_rate, min_freq, tone_error_rate, word_replace_rate,remote_status],
