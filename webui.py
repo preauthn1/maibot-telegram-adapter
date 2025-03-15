@@ -2,11 +2,12 @@ import gradio as gr
 import os
 import sys
 import toml
-from loguru import logger
+from src.common.logger import get_module_logger
 import shutil
 import ast
 import json
 
+logger = get_module_logger("webui")
 
 is_share = False
 debug = True
