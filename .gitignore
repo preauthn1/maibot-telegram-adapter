@@ -25,7 +25,7 @@ llm_statistics.txt
 mongodb
 napcat
 run_dev.bat
-
+elua.confirmed
 # C extensions
 *.so
 
