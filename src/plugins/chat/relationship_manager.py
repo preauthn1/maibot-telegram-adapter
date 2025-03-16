@@ -271,13 +271,13 @@ class RelationshipManager:
             }
 
         valuedict = {
-                "happy": 1.0,
-                "angry": -2.0,
-                "sad": -1.0,
-                "surprised": 0.4,
-                "disgusted": -3,
-                "fearful": -1.4,
-                "neutral": 0.2,
+                "happy": 1.5,
+                "angry": -3.0,
+                "sad": -1.5,
+                "surprised": 0.6,
+                "disgusted": -4.5,
+                "fearful": -2.1,
+                "neutral": 0.3,
             }
         if self.get_relationship(chat_stream):
             old_value = self.get_relationship(chat_stream).relationship_value
@@ -296,7 +296,7 @@ class RelationshipManager:
                 if old_value > 500:
                     high_value_count = 0
                     for key, relationship in self.relationships.items():
-                        if relationship.relationship_value >= 900:
+                        if relationship.relationship_value >= 850:
                             high_value_count += 1
                     value *= 3/(high_value_count + 3)
             elif valuedict[label] < 0 and stancedict[stance] != 0:
@@ -311,11 +311,41 @@ class RelationshipManager:
             else:
                 value = 0
         
-        logger.debug(f"[关系变更调试] 立场：{stance}  标签：{label}  关系值：{value} 原值：{old_value}")
+        logger.info(f"[关系变更] 立场：{stance}  标签：{label}  关系值：{value}")
 
         await self.update_relationship_value(
                 chat_stream=chat_stream, relationship_value=value
             )
+
+    def build_relationship_info(person) -> str:
+        relationship_value = relationship_manager.get_relationship(person).relationship_value
+        if -1000 <= relationship_value < -227:
+            level_num = 0
+        elif -227 <= relationship_value < -73:
+            level_num = 1
+        elif -76 <= relationship_value < 227:
+            level_num = 2
+        elif 227 <= relationship_value < 587:
+            level_num = 3
+        elif 587 <= relationship_value < 900:
+            level_num = 4
+        elif 900 <= relationship_value <= 1000:
+            level_num = 5
+        else:
+            level_num = 5 if relationship_value > 1000 else 0
+
+        relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "暧昧"]
+        relation_prompt2_list = [
+            "冷漠回应或直接辱骂", "冷淡回复",
+            "保持理性", "愿意回复",
+            "积极回复", "无条件支持",
+        ]
+        if person.user_info.user_cardname:
+            return (f"你对昵称为'[({person.user_info.user_id}){person.user_info.user_nickname}]{person.user_info.user_cardname}'的用户的态度为{relationship_level[level_num]}，"
+                    f"回复态度为{relation_prompt2_list[level_num]}，关系等级为{level_num}。")
+        else:
+            return (f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的态度为{relationship_level[level_num]}，"
+                    f"回复态度为{relation_prompt2_list[level_num]}，关系等级为{level_num}。")
 
 
 relationship_manager = RelationshipManager()
