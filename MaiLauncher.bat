@@ -375,14 +375,16 @@ goto activate_conda
 
 :activate_conda
 set /p "CONDA_ENV=请输入要激活的环境名称："
-conda activate !CONDA_ENV! || (
+call conda activate !CONDA_ENV! || (
     echo 激活失败，可能原因：
     echo 1. 环境不存在
     echo 2. conda配置异常
+    timeout /t >nul
     pause
     goto conda_menu
 )
 echo 成功激活conda环境：!CONDA_ENV!
+timeout /t 2 >nul
 
 :install_dependencies
 echo 是否需要安装项目依赖？
