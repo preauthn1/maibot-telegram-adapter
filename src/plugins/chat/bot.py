@@ -12,6 +12,7 @@ from nonebot.adapters.onebot.v11 import (
     FriendRecallNoticeEvent,
 )
 
+from src.common.logger import get_module_logger
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
@@ -31,11 +32,8 @@ from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname, get_groupname
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
-from ..utils.logger_config import LogClassification, LogModule
 
-# 配置日志
-log_module = LogModule()
-logger = log_module.setup_logger(LogClassification.CHAT)
+logger = get_module_logger("chat_bot")
 
 
 class ChatBot:
@@ -212,12 +210,15 @@ class ChatBot:
                     is_head=not mark_head,
                     is_emoji=False,
                 )
-                logger.debug(f"bot_message: {bot_message}")
                 if not mark_head:
                     mark_head = True
-                logger.debug(f"添加消息到message_set: {bot_message}")
                 message_set.add_message(bot_message)
-
+                if len(str(bot_message)) < 1000:
+                    logger.debug(f"bot_message: {bot_message}")
+                    logger.debug(f"添加消息到message_set: {bot_message}")
+                else:
+                    logger.debug(f"bot_message: {str(bot_message)[:1000]}...{str(bot_message)[-10:]}")
+                    logger.debug(f"添加消息到message_set: {str(bot_message)[:1000]}...{str(bot_message)[-10:]}")
             # message_set 可以直接加入 message_manager
             # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
 
