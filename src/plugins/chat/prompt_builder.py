@@ -50,7 +50,7 @@ class PromptBuilder:
             relation_prompt += relationship_manager.build_relationship_info(person)
 
         relation_prompt_all = (
-            f"{relation_prompt}，关系等级越大，关系越好，请分析聊天记录，根据你和说话者{sender_name}的关系和态度进行回复，明确你的立场和情感。"
+            f"{relation_prompt}关系等级越大，关系越好，请分析聊天记录，根据你和说话者{sender_name}的关系和态度进行回复，明确你的立场和情感。"
         )
 
         # 开始构建prompt
@@ -189,7 +189,7 @@ class PromptBuilder:
         #     prompt_personality_check = f"""你的网名叫{global_config.BOT_NICKNAME}，{personality[2]}, 你正在浏览qq群，{promt_info_prompt} {activate_prompt_check} {extra_check_info}"""
         #
         # prompt_check_if_response = f"{prompt_info}\n{prompt_date}\n{chat_talking_prompt}\n{prompt_personality_check}"
-
+        
         prompt_check_if_response = ""
         return prompt, prompt_check_if_response
 

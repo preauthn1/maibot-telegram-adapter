@@ -317,7 +317,7 @@ class RelationshipManager:
                 chat_stream=chat_stream, relationship_value=value
             )
 
-    def build_relationship_info(person) -> str:
+    def build_relationship_info(self,person) -> str:
         relationship_value = relationship_manager.get_relationship(person).relationship_value
         if -1000 <= relationship_value < -227:
             level_num = 0
