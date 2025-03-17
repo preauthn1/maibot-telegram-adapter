@@ -2,12 +2,12 @@
 @setlocal enabledelayedexpansion
 @chcp 936
 
-@REM ÉèÖÃ°æ±¾ºÅ
+@REM è®¾ç½®ç‰ˆæœ¬å·
 set "VERSION=1.0"
 
-title ÂóÂóBot¿ØÖÆÌ¨ v%VERSION%
+title éº¦éº¦BotæŽ§åˆ¶å° v%VERSION%
 
-@REM ÉèÖÃPythonºÍGit»·¾³±äÁ¿
+@REM è®¾ç½®Pythonå’ŒGitçŽ¯å¢ƒå˜é‡
 set "_root=%~dp0"
 set "_root=%_root:~0,-1%"
 cd "%_root%"
@@ -21,14 +21,14 @@ if exist "%_root%\python" (
     call "%_root%\venv\Scripts\activate.bat"
     set "PYTHON_HOME=%_root%\venv\Scripts"
 ) else (
-    echo ÕýÔÚ×Ô¶¯²éÕÒPython½âÊÍÆ÷...
+    echo æ­£åœ¨è‡ªåŠ¨æŸ¥æ‰¾Pythonè§£é‡Šå™¨...
 
     where python >nul 2>&1
     if %errorlevel% equ 0 (
         for /f "delims=" %%i in ('where python') do (
             echo %%i | findstr /i /c:"!LocalAppData!\Microsoft\WindowsApps\python.exe" >nul
             if errorlevel 1 (
-                echo ÕÒµ½Python½âÊÍÆ÷£º%%i
+                echo æ‰¾åˆ°Pythonè§£é‡Šå™¨ï¼š%%i
                 set "py_path=%%i"
                 goto :validate_python
             )
@@ -41,46 +41,46 @@ if exist "%_root%\python" (
             goto :validate_python
         )
     )
-    echo Ã»ÓÐÕÒµ½Python½âÊÍÆ÷,Òª°²×°Âð?
-    set /p pyinstall_confirm="¼ÌÐø£¿(Y/n): "
+    echo æ²¡æœ‰æ‰¾åˆ°Pythonè§£é‡Šå™¨,è¦å®‰è£…å—?
+    set /p pyinstall_confirm="ç»§ç»­ï¼Ÿ(Y/n): "
     if /i "!pyinstall_confirm!"=="Y" (
         cls
-        echo ÕýÔÚ°²×°Python...
+        echo æ­£åœ¨å®‰è£…Python...
         winget install --id Python.Python.3.13 -e --accept-package-agreements --accept-source-agreements
         if %errorlevel% neq 0 (
-            echo °²×°Ê§°Ü£¬ÇëÊÖ¶¯°²×°Python
+            echo å®‰è£…å¤±è´¥ï¼Œè¯·æ‰‹åŠ¨å®‰è£…Python
             start https://www.python.org/downloads/
             exit /b
         )
-        echo °²×°Íê³É£¬ÕýÔÚÑéÖ¤Python...
+        echo å®‰è£…å®Œæˆï¼Œæ­£åœ¨éªŒè¯Python...
         goto search_python
 
     ) else (
-        echo È¡Ïû°²×°Python£¬°´ÈÎÒâ¼üÍË³ö...
+        echo å–æ¶ˆå®‰è£…Pythonï¼ŒæŒ‰ä»»æ„é”®é€€å‡º...
         pause >nul
         exit /b
     )
 
-    echo ´íÎó£ºÎ´ÕÒµ½¿ÉÓÃµÄPython½âÊÍÆ÷£¡
+    echo é”™è¯¯ï¼šæœªæ‰¾åˆ°å¯ç”¨çš„Pythonè§£é‡Šå™¨ï¼
     exit /b 1
 
     :validate_python
     "!py_path!" --version >nul 2>&1
     if %errorlevel% neq 0 (
-        echo ÎÞÐ§µÄPython½âÊÍÆ÷£º%py_path%
+        echo æ— æ•ˆçš„Pythonè§£é‡Šå™¨ï¼š%py_path%
         exit /b 1
     )
 
-    :: ÌáÈ¡°²×°Ä¿Â¼
+    :: æå–å®‰è£…ç›®å½•
     for %%i in ("%py_path%") do set "PYTHON_HOME=%%~dpi"
     set "PYTHON_HOME=%PYTHON_HOME:~0,-1%"
 )
 if not exist "%PYTHON_HOME%\python.exe" (
-    echo PythonÂ·¾¶ÑéÖ¤Ê§°Ü£º%PYTHON_HOME%
-    echo Çë¼ì²éPython°²×°Â·¾¶ÖÐÊÇ·ñÓÐpython.exeÎÄ¼þ
+    echo Pythonè·¯å¾„éªŒè¯å¤±è´¥ï¼š%PYTHON_HOME%
+    echo è¯·æ£€æŸ¥Pythonå®‰è£…è·¯å¾„ä¸­æ˜¯å¦æœ‰python.exeæ–‡ä»¶
     exit /b 1
 )
-echo ³É¹¦ÉèÖÃPythonÂ·¾¶£º%PYTHON_HOME%
+echo æˆåŠŸè®¾ç½®Pythonè·¯å¾„ï¼š%PYTHON_HOME%
 
 
 
@@ -89,7 +89,7 @@ cls
 if exist "%_root%\tools\git\bin" (
     set "GIT_HOME=%_root%\tools\git\bin"
 ) else (
-    echo ÕýÔÚ×Ô¶¯²éÕÒGit...
+    echo æ­£åœ¨è‡ªåŠ¨æŸ¥æ‰¾Git...
 
     where git >nul 2>&1
     if %errorlevel% equ 0 (
@@ -98,7 +98,7 @@ if exist "%_root%\tools\git\bin" (
             goto :validate_git
         )
     )
-    echo ÕýÔÚÉ¨Ãè³£¼û°²×°Â·¾¶...
+    echo æ­£åœ¨æ‰«æå¸¸è§å®‰è£…è·¯å¾„...
     set "search_paths=!ProgramFiles!\Git\cmd"
     for /f "tokens=*" %%d in ("!search_paths!") do (
         if exist "%%d\git.exe" (
@@ -106,31 +106,31 @@ if exist "%_root%\tools\git\bin" (
             goto :validate_git
         )
     )
-    echo Ã»ÓÐÕÒµ½Git£¬Òª°²×°Âð£¿
-    set /p confirm="¼ÌÐø£¿(Y/N): "
+    echo æ²¡æœ‰æ‰¾åˆ°Gitï¼Œè¦å®‰è£…å—ï¼Ÿ
+    set /p confirm="ç»§ç»­ï¼Ÿ(Y/N): "
     if /i "!confirm!"=="Y" (
         cls
-        echo ÕýÔÚ°²×°Git...
+        echo æ­£åœ¨å®‰è£…Git...
         set "custom_url=https://ghfast.top/https://github.com/git-for-windows/git/releases/download/v2.48.1.windows.1/Git-2.48.1-64-bit.exe"
 
         set "download_path=%TEMP%\Git-Installer.exe"
 
-        echo ÕýÔÚÏÂÔØGit°²×°°ü...
+        echo æ­£åœ¨ä¸‹è½½Gitå®‰è£…åŒ…...
         curl -L -o "!download_path!" "!custom_url!"
 
         if exist "!download_path!" (
-            echo ÏÂÔØ³É¹¦£¬¿ªÊ¼°²×°Git...
+            echo ä¸‹è½½æˆåŠŸï¼Œå¼€å§‹å®‰è£…Git...
             start /wait "" "!download_path!" /SILENT /NORESTART
         ) else (
-            echo ÏÂÔØÊ§°Ü£¬ÇëÊÖ¶¯°²×°Git
+            echo ä¸‹è½½å¤±è´¥ï¼Œè¯·æ‰‹åŠ¨å®‰è£…Git
             start https://git-scm.com/download/win
             exit /b
         )
 
         del "!download_path!"
-        echo ÁÙÊ±ÎÄ¼þÒÑÇåÀí¡£
+        echo ä¸´æ—¶æ–‡ä»¶å·²æ¸…ç†ã€‚
 
-        echo °²×°Íê³É£¬ÕýÔÚÑéÖ¤Git...
+        echo å®‰è£…å®Œæˆï¼Œæ­£åœ¨éªŒè¯Git...
         where git >nul 2>&1
         if %errorlevel% equ 0 (
             for /f "delims=" %%i in ('where git') do (
@@ -140,28 +140,28 @@ if exist "%_root%\tools\git\bin" (
             goto :search_git
 
         ) else (
-            echo °²×°Íê³É£¬µ«Î´ÕÒµ½Git£¬ÇëÊÖ¶¯°²×°Git
+            echo å®‰è£…å®Œæˆï¼Œä½†æœªæ‰¾åˆ°Gitï¼Œè¯·æ‰‹åŠ¨å®‰è£…Git
             start https://git-scm.com/download/win
             exit /b
         )
 
     ) else (
-        echo È¡Ïû°²×°Git£¬°´ÈÎÒâ¼üÍË³ö...
+        echo å–æ¶ˆå®‰è£…Gitï¼ŒæŒ‰ä»»æ„é”®é€€å‡º...
         pause >nul
         exit /b
     )
 
-    echo ´íÎó£ºÎ´ÕÒµ½¿ÉÓÃµÄGit£¡
+    echo é”™è¯¯ï¼šæœªæ‰¾åˆ°å¯ç”¨çš„Gitï¼
     exit /b 1
 
     :validate_git
     "%git_path%" --version >nul 2>&1
     if %errorlevel% neq 0 (
-        echo ÎÞÐ§µÄGit£º%git_path%
+        echo æ— æ•ˆçš„Gitï¼š%git_path%
         exit /b 1
     )
 
-    :: ÌáÈ¡°²×°Ä¿Â¼
+    :: æå–å®‰è£…ç›®å½•
     for %%i in ("%git_path%") do set "GIT_HOME=%%~dpi"
     set "GIT_HOME=%GIT_HOME:~0,-1%"
 )
@@ -170,40 +170,40 @@ if exist "%_root%\tools\git\bin" (
 cls
 sc query | findstr /i "MongoDB" >nul
 if !errorlevel! neq 0 (
-    echo MongoDB·þÎñÎ´ÔËÐÐ£¬ÊÇ·ñ³¢ÊÔÔËÐÐ·þÎñ£¿
-    set /p confirm="ÊÇ·ñÆô¶¯£¿(Y/N): "
+    echo MongoDBæœåŠ¡æœªè¿è¡Œï¼Œæ˜¯å¦å°è¯•è¿è¡ŒæœåŠ¡ï¼Ÿ
+    set /p confirm="æ˜¯å¦å¯åŠ¨ï¼Ÿ(Y/N): "
     if /i "!confirm!"=="Y" (
-        echo ÕýÔÚ³¢ÊÔÆô¶¯MongoDB·þÎñ...
+        echo æ­£åœ¨å°è¯•å¯åŠ¨MongoDBæœåŠ¡...
         powershell -Command "Start-Process -Verb RunAs cmd -ArgumentList '/c net start MongoDB'"
-        echo ÕýÔÚµÈ´ýMongoDB·þÎñÆô¶¯...
-		echo °´ÏÂÈÎÒâ¼üÌø¹ýµÈ´ý...
+        echo æ­£åœ¨ç­‰å¾…MongoDBæœåŠ¡å¯åŠ¨...
+		echo æŒ‰ä¸‹ä»»æ„é”®è·³è¿‡ç­‰å¾…...
 		timeout /t 30 >nul
         sc query | findstr /i "MongoDB" >nul
         if !errorlevel! neq 0 (
-            echo MongoDB·þÎñÆô¶¯Ê§°Ü£¬¿ÉÄÜÊÇÃ»ÓÐ°²×°£¬Òª°²×°Âð£¿
-            set /p install_confirm="¼ÌÐø°²×°£¿(Y/N): "
+            echo MongoDBæœåŠ¡å¯åŠ¨å¤±è´¥ï¼Œå¯èƒ½æ˜¯æ²¡æœ‰å®‰è£…ï¼Œè¦å®‰è£…å—ï¼Ÿ
+            set /p install_confirm="ç»§ç»­å®‰è£…ï¼Ÿ(Y/N): "
             if /i "!install_confirm!"=="Y" (
-                echo ÕýÔÚ°²×°MongoDB...
+                echo æ­£åœ¨å®‰è£…MongoDB...
                 winget install --id MongoDB.Server -e --accept-package-agreements --accept-source-agreements
-                echo °²×°Íê³É£¬ÕýÔÚÆô¶¯MongoDB·þÎñ...
+                echo å®‰è£…å®Œæˆï¼Œæ­£åœ¨å¯åŠ¨MongoDBæœåŠ¡...
                 net start MongoDB
                 if !errorlevel! neq 0 (
-                    echo Æô¶¯MongoDB·þÎñÊ§°Ü£¬ÇëÊÖ¶¯Æô¶¯
+                    echo å¯åŠ¨MongoDBæœåŠ¡å¤±è´¥ï¼Œè¯·æ‰‹åŠ¨å¯åŠ¨
                     exit /b
                 ) else (
-                    echo MongoDB·þÎñÒÑ³É¹¦Æô¶¯
+                    echo MongoDBæœåŠ¡å·²æˆåŠŸå¯åŠ¨
                 )
             ) else (
-                echo È¡Ïû°²×°MongoDB£¬°´ÈÎÒâ¼üÍË³ö...
+                echo å–æ¶ˆå®‰è£…MongoDBï¼ŒæŒ‰ä»»æ„é”®é€€å‡º...
                 pause >nul
 				exit /b
             )
         )
     ) else (
-        echo ¾¯¸æ£ºMongoDB·þÎñÎ´ÔËÐÐ£¬½«µ¼ÖÂMaiMBotÎÞ·¨·ÃÎÊÊý¾Ý¿â£¡
+        call :RED_WARNING "è­¦å‘Šï¼šMongoDBæœåŠ¡æœªè¿è¡Œï¼Œå°†å¯¼è‡´åº”ç”¨ç¨‹åºæ— æ³•è®¿é—®æ•°æ®åº“ï¼"
     )
 ) else (
-    echo MongoDB·þÎñÒÑÔËÐÐ
+    echo MongoDBæœåŠ¡å·²è¿è¡Œ
 )
 
 @REM set "GIT_HOME=%_root%\tools\git\bin"
@@ -212,47 +212,47 @@ set "PATH=%PYTHON_HOME%;%GIT_HOME%;%PATH%"
 :install_maim
 if not exist "!_root!\bot.py" (
     cls
-    echo ÄãËÆºõÃ»ÓÐ°²×°ÂóÂóBot£¬Òª°²×°ÔÚµ±Ç°Ä¿Â¼Âð£¿
-    set /p confirm="¼ÌÐø£¿(Y/N): "
+    echo ä½ ä¼¼ä¹Žæ²¡æœ‰å®‰è£…éº¦éº¦Botï¼Œè¦å®‰è£…åœ¨å½“å‰ç›®å½•å—ï¼Ÿ
+    set /p confirm="ç»§ç»­ï¼Ÿ(Y/N): "
     if /i "!confirm!"=="Y" (
-        echo ÒªÊ¹ÓÃGit´úÀíÏÂÔØÂð£¿
-        set /p proxy_confirm="¼ÌÐø£¿(Y/N): "
+        echo è¦ä½¿ç”¨Gitä»£ç†ä¸‹è½½å—ï¼Ÿ
+        set /p proxy_confirm="ç»§ç»­ï¼Ÿ(Y/N): "
         if /i "!proxy_confirm!"=="Y" (
-            echo ÕýÔÚ°²×°ÂóÂóBot...
+            echo æ­£åœ¨å®‰è£…éº¦éº¦Bot...
             git clone https://ghfast.top/https://github.com/SengokuCola/MaiMBot
         ) else (
-            echo ÕýÔÚ°²×°ÂóÂóBot...
+            echo æ­£åœ¨å®‰è£…éº¦éº¦Bot...
             git clone https://github.com/SengokuCola/MaiMBot
         )
         xcopy /E /H /I MaiMBot . >nul 2>&1
         rmdir /s /q MaiMBot
         git checkout main-fix
 
-        echo °²×°Íê³É£¬ÕýÔÚ°²×°ÒÀÀµ...
+        echo å®‰è£…å®Œæˆï¼Œæ­£åœ¨å®‰è£…ä¾èµ–...
         python -m pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
         python -m pip install virtualenv
         python -m virtualenv venv
         call venv\Scripts\activate.bat
         python -m pip install -r requirements.txt
 
-        echo °²×°Íê³É£¬Òª±à¼­ÅäÖÃÎÄ¼þÂð£¿
-        set /p edit_confirm="¼ÌÐø£¿(Y/N): "
+        echo å®‰è£…å®Œæˆï¼Œè¦ç¼–è¾‘é…ç½®æ–‡ä»¶å—ï¼Ÿ
+        set /p edit_confirm="ç»§ç»­ï¼Ÿ(Y/N): "
         if /i "!edit_confirm!"=="Y" (
             goto config_menu
         ) else (
-            echo È¡Ïû±à¼­ÅäÖÃÎÄ¼þ£¬°´ÈÎÒâ¼ü·µ»ØÖ÷²Ëµ¥...
+            echo å–æ¶ˆç¼–è¾‘é…ç½®æ–‡ä»¶ï¼ŒæŒ‰ä»»æ„é”®è¿”å›žä¸»èœå•...
         )
     )
 )
 
 
-@REM git»ñÈ¡µ±Ç°·ÖÖ§Ãû²¢±£´æÔÚ±äÁ¿Àï
+@REM gitèŽ·å–å½“å‰åˆ†æ”¯åå¹¶ä¿å­˜åœ¨å˜é‡é‡Œ
 for /f "delims=" %%b in ('git symbolic-ref --short HEAD 2^>nul') do (
     set "BRANCH=%%b"
 )
 
-@REM ¸ù¾Ý²»Í¬·ÖÖ§Ãû¸ø·ÖÖ§Ãû×Ö·û´®Ê¹ÓÃ²»Í¬ÑÕÉ«
-echo ·ÖÖ§Ãû: %BRANCH%
+@REM æ ¹æ®ä¸åŒåˆ†æ”¯åç»™åˆ†æ”¯åå­—ç¬¦ä¸²ä½¿ç”¨ä¸åŒé¢œè‰²
+echo åˆ†æ”¯å: %BRANCH%
 if "!BRANCH!"=="main" (
     set "BRANCH_COLOR=[92m"
 ) else if "!BRANCH!"=="main-fix" (
@@ -266,151 +266,158 @@ if "!BRANCH!"=="main" (
 @REM endlocal & set "BRANCH_COLOR=%BRANCH_COLOR%"
 
 :check_is_venv
-echo ÕýÔÚ¼ì²éÐéÄâ»·¾³×´Ì¬...
+echo æ­£åœ¨æ£€æŸ¥è™šæ‹ŸçŽ¯å¢ƒçŠ¶æ€...
 if exist "%_root%\config\no_venv" (
-    echo ¼ì²âµ½no_venv,Ìø¹ýÐéÄâ»·¾³¼ì²é
+    echo æ£€æµ‹åˆ°no_venv,è·³è¿‡è™šæ‹ŸçŽ¯å¢ƒæ£€æŸ¥
     goto menu
 )
 
-set "ENV_STATUS=Î´¼¤»î"
-set "ENV_TYPE=ÏµÍ³»·¾³"
-
-:: »·¾³¼ì²â
+:: çŽ¯å¢ƒæ£€æµ‹
 if defined VIRTUAL_ENV (
     goto menu
 )
 
 echo =====================================
-echo ÐéÄâ»·¾³¼ì²â¾¯¸æ£º
-echo µ±Ç°Ê¹ÓÃÏµÍ³PythonÂ·¾¶£º!PYTHON_HOME!
-echo Î´¼ì²âµ½¼¤»îµÄÐéÄâ»·¾³£¡
+echo è™šæ‹ŸçŽ¯å¢ƒæ£€æµ‹è­¦å‘Šï¼š
+echo å½“å‰ä½¿ç”¨ç³»ç»ŸPythonè·¯å¾„ï¼š!PYTHON_HOME!
+echo æœªæ£€æµ‹åˆ°æ¿€æ´»çš„è™šæ‹ŸçŽ¯å¢ƒï¼
 
 :env_interaction
 echo =====================================
-echo ÇëÑ¡Ôñ²Ù×÷£º
-echo 1 - ´´½¨²¢¼¤»îVenvÐéÄâ»·¾³
-echo 2 - ´´½¨/¼¤»îCondaÐéÄâ»·¾³
-echo 3 - ÁÙÊ±Ìø¹ý±¾´Î¼ì²é
-echo 4 - ÓÀ¾ÃÌø¹ýÐéÄâ»·¾³¼ì²é
-choice /c 1234 /n /m "ÇëÊäÈëÑ¡Ïî(1-4): "
+echo è¯·é€‰æ‹©æ“ä½œï¼š
+echo 1 - åˆ›å»ºå¹¶æ¿€æ´»Venvè™šæ‹ŸçŽ¯å¢ƒ
+echo 2 - åˆ›å»º/æ¿€æ´»Condaè™šæ‹ŸçŽ¯å¢ƒ
+echo 3 - ä¸´æ—¶è·³è¿‡æœ¬æ¬¡æ£€æŸ¥
+echo 4 - æ°¸ä¹…è·³è¿‡è™šæ‹ŸçŽ¯å¢ƒæ£€æŸ¥
+set /p choice="è¯·è¾“å…¥é€‰é¡¹(1-4): "
 
-if errorlevel 4 (
-	echo ÒªÓÀ¾ÃÌø¹ýÐéÄâ»·¾³¼ì²éÂð£¿
-    set /p no_venv_confirm="¼ÌÐø£¿(Y/N): ....."
+if "!choice!" =  "4" (
+	echo è¦æ°¸ä¹…è·³è¿‡è™šæ‹ŸçŽ¯å¢ƒæ£€æŸ¥å—ï¼Ÿ
+    set /p no_venv_confirm="ç»§ç»­ï¼Ÿ(Y/N): ....."
     if /i "!no_venv_confirm!"=="Y" (
 		echo 1 > "%_root%\config\no_venv"
-		echo ÒÑ´´½¨no_venvÎÄ¼þ
+		echo å·²åˆ›å»ºno_venvæ–‡ä»¶
 		pause >nul
 		goto menu
 	) else (
-        echo È¡ÏûÌø¹ýÐéÄâ»·¾³¼ì²é£¬°´ÈÎÒâ¼ü·µ»Ø...
+        echo å–æ¶ˆè·³è¿‡è™šæ‹ŸçŽ¯å¢ƒæ£€æŸ¥ï¼ŒæŒ‰ä»»æ„é”®è¿”å›ž...
+        pause >nul
         goto env_interaction
     )
 )
 
-if errorlevel 3 (
-    echo ¾¯¸æ£ºÊ¹ÓÃÏµÍ³»·¾³¿ÉÄÜµ¼ÖÂÒÀÀµ³åÍ»£¡
+if "!choice!" =  "3"(
+    echo è­¦å‘Šï¼šä½¿ç”¨ç³»ç»ŸçŽ¯å¢ƒå¯èƒ½å¯¼è‡´ä¾èµ–å†²çªï¼
     timeout /t 2 >nul
     goto menu
 )
 
-if errorlevel 2 goto handle_conda
-if errorlevel 1 goto handle_venv
+if "!choice!" =  "2" goto handle_conda
+if "!choice!" =  "1" goto handle_venv
+
+echo æ— æ•ˆçš„è¾“å…¥ï¼Œè¯·è¾“å…¥1-4ä¹‹é—´çš„æ•°å­—
+timeout /t 2 >nul
+goto env_interaction
 
 :handle_venv
-echo ÕýÔÚ³õÊ¼»¯Venv»·¾³...
-echo ´´½¨ÐéÄâ»·¾³µ½£ºvenv
+python -m pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
+echo æ­£åœ¨åˆå§‹åŒ–VenvçŽ¯å¢ƒ...
+python -m pip install virtualenv || (
+    echo å®‰è£…çŽ¯å¢ƒå¤±è´¥ï¼Œé”™è¯¯ç ï¼š!errorlevel!
+    pause
+    goto env_interaction
+)
+echo åˆ›å»ºè™šæ‹ŸçŽ¯å¢ƒåˆ°ï¼švenv
     python -m virtualenv venv || (
-    echo »·¾³´´½¨Ê§°Ü£¬´íÎóÂë£º!errorlevel!
+    echo çŽ¯å¢ƒåˆ›å»ºå¤±è´¥ï¼Œé”™è¯¯ç ï¼š!errorlevel!
     pause
     goto env_interaction
 )
 
 call venv\Scripts\activate.bat
-echo ÒÑ¼¤»îVenv»·¾³
-goto install_dependencies
+echo å·²æ¿€æ´»VenvçŽ¯å¢ƒ
+echo è¦å®‰è£…ä¾èµ–å—ï¼Ÿ
+set /p install_confirm="ç»§ç»­ï¼Ÿ(Y/N): "
+if /i "!install_confirm!"=="Y" (
+    goto update_dependencies
+)
+goto menu
 
 :handle_conda
 where conda >nul 2>&1 || (
-    echo Î´¼ì²âµ½conda£¬ÊÇ·ñÁ¢¼´°²×°Miniconda£¿
-    choice /c YN /n /m "ÇëÑ¡Ôñ(Y/N): "
-    if errorlevel 2 goto env_interaction
-    echo ÕýÔÚ°²×°Miniconda...
+    echo æœªæ£€æµ‹åˆ°condaï¼Œæ˜¯å¦å®‰è£…Minicondaï¼Ÿ
+    set /p conda_confirm="å®‰è£…ï¼Ÿ(Y/N): "
+    if /i "!conda_confirm!"=="N" (
+            goto env_interaction
+    )
+
+    echo æ­£åœ¨å®‰è£…Miniconda...
     winget install --id Anaconda.Miniconda3 -e || (
-        echo °²×°Ê§°Ü£¬´íÎóÂë£º!errorlevel!
+        echo å®‰è£…å¤±è´¥ï¼Œé”™è¯¯ç ï¼š!errorlevel!
         pause
         goto env_interaction
     )
     if exist "%UserProfile%\Miniconda3\Scripts\conda.exe" (
         call "%UserProfile%\Miniconda3\Scripts\conda.exe" init cmd.exe
-        echo °²×°Íê³ÉºóÇëÖØÆô½Å±¾
+        echo å®‰è£…å®ŒæˆåŽè¯·é‡å¯è„šæœ¬
         timeout /t 10 >nul
         exit /b
     )
 )
 
 :conda_menu
-echo ÇëÑ¡ÔñConda²Ù×÷£º
-echo 1 - ´´½¨ÐÂ»·¾³
-echo 2 - ¼¤»îÒÑÓÐ»·¾³
-echo 3 - ·µ»ØÉÏ¼¶²Ëµ¥
-choice /c 123 /n /m "ÇëÊäÈëÑ¡Ïî(1-3): "
+echo è¯·é€‰æ‹©Condaæ“ä½œï¼š
+echo 1 - åˆ›å»ºæ–°çŽ¯å¢ƒ
+echo 2 - æ¿€æ´»å·²æœ‰çŽ¯å¢ƒ
+echo 3 - è¿”å›žä¸Šçº§èœå•
+set /p choice="è¯·è¾“å…¥é€‰é¡¹(1-3): "
 
-if errorlevel 3 goto env_interaction
-if errorlevel 2 goto activate_conda
-if errorlevel 1 goto create_conda
+if "!choice!"=="3" goto env_interaction
+if "!choice!"=="2" goto activate_conda
+if "!choice!"=="1" goto create_conda
 
 :create_conda
-set /p "CONDA_ENV=ÇëÊäÈëÐÂ»·¾³Ãû³Æ£º"
+set /p "CONDA_ENV=è¯·è¾“å…¥æ–°çŽ¯å¢ƒåç§°ï¼š"
 if "!CONDA_ENV!"=="" (
-    echo »·¾³Ãû³Æ²»ÄÜÎª¿Õ£¡
+    echo çŽ¯å¢ƒåç§°ä¸èƒ½ä¸ºç©ºï¼
     goto create_conda
 )
 conda create -n !CONDA_ENV! python=3.13 -y || (
-    echo »·¾³´´½¨Ê§°Ü£¬´íÎóÂë£º!errorlevel!
+    echo çŽ¯å¢ƒåˆ›å»ºå¤±è´¥ï¼Œé”™è¯¯ç ï¼š!errorlevel!
     pause
     goto conda_menu
 )
 goto activate_conda
 
 :activate_conda
-set /p "CONDA_ENV=ÇëÊäÈëÒª¼¤»îµÄ»·¾³Ãû³Æ£º"
-call conda activate !CONDA_ENV! || (
-    echo ¼¤»îÊ§°Ü£¬¿ÉÄÜÔ­Òò£º
-    echo 1. »·¾³²»´æÔÚ
-    echo 2. condaÅäÖÃÒì³£
-    timeout /t >nul
+set /p "CONDA_ENV=è¯·è¾“å…¥è¦æ¿€æ´»çš„çŽ¯å¢ƒåç§°ï¼š"
+conda activate !CONDA_ENV! || (
+    echo æ¿€æ´»å¤±è´¥ï¼Œå¯èƒ½åŽŸå› ï¼š
+    echo 1. çŽ¯å¢ƒä¸å­˜åœ¨
+    echo 2. condaé…ç½®å¼‚å¸¸
     pause
     goto conda_menu
 )
-echo ³É¹¦¼¤»îconda»·¾³£º!CONDA_ENV!
-timeout /t 2 >nul
-
-:install_dependencies
-echo ÊÇ·ñÐèÒª°²×°ÏîÄ¿ÒÀÀµ£¿
-choice /c YN /n /m "ÇëÑ¡Ôñ(Y/N): "
-if errorlevel 2 goto menu
-echo ÕýÔÚ°²×°ÒÀÀµ...
-python -m pip install -r "%_root%\requirements.txt" || (
-    echo ÒÀÀµ°²×°Ê§°Ü£¬´íÎóÂë£º!errorlevel!
-    pause
+echo æˆåŠŸæ¿€æ´»condaçŽ¯å¢ƒï¼š!CONDA_ENV!
+echo è¦å®‰è£…ä¾èµ–å—ï¼Ÿ
+set /p install_confirm="ç»§ç»­ï¼Ÿ(Y/N): "
+if /i "!install_confirm!"=="Y" (
+    goto update_dependencies
 )
-goto menu
-
 :menu
 @chcp 936
 cls
-echo ÂóÂóBot¿ØÖÆÌ¨ v%VERSION%  µ±Ç°·ÖÖ§: %BRANCH_COLOR%%BRANCH%[0m
-echo µ±Ç°Python»·¾³: [96m!PYTHON_HOME![0m
+echo éº¦éº¦BotæŽ§åˆ¶å° v%VERSION%  å½“å‰åˆ†æ”¯: %BRANCH_COLOR%%BRANCH%[0m
+echo å½“å‰PythonçŽ¯å¢ƒ: [96m!PYTHON_HOME![0m
 echo ======================
-echo 1. ¸üÐÂ²¢Æô¶¯ÂóÂóBot (Ä¬ÈÏ)
-echo 2. Ö±½ÓÆô¶¯ÂóÂóBot
-echo 3. Æô¶¯ÂóÂóÅäÖÃ½çÃæ
-echo 4. ´ò¿ªÂóÂóÉñÆæ¹¤¾ßÏä
-echo 5. ÍË³ö
+echo 1. æ›´æ–°å¹¶å¯åŠ¨éº¦éº¦Bot (é»˜è®¤)
+echo 2. ç›´æŽ¥å¯åŠ¨éº¦éº¦Bot
+echo 3. å¯åŠ¨éº¦éº¦é…ç½®ç•Œé¢
+echo 4. æ‰“å¼€éº¦éº¦ç¥žå¥‡å·¥å…·ç®±
+echo 5. é€€å‡º
 echo ======================
 
-set /p choice="ÇëÊäÈëÑ¡ÏîÊý×Ö (1-5)²¢°´ÏÂ»Ø³µÒÔÑ¡Ôñ: "
+set /p choice="è¯·è¾“å…¥é€‰é¡¹æ•°å­— (1-5)å¹¶æŒ‰ä¸‹å›žè½¦ä»¥é€‰æ‹©: "
 
 if "!choice!"=="" set choice=1
 
@@ -420,7 +427,7 @@ if "!choice!"=="3" goto config_menu
 if "!choice!"=="4" goto tools_menu
 if "!choice!"=="5" exit /b
 
-echo ÎÞÐ§µÄÊäÈë£¬ÇëÊäÈë1-5Ö®¼äµÄÊý×Ö
+echo æ— æ•ˆçš„è¾“å…¥ï¼Œè¯·è¾“å…¥1-5ä¹‹é—´çš„æ•°å­—
 timeout /t 2 >nul
 goto menu
 
@@ -432,7 +439,7 @@ if not exist config/bot_config.toml (
 
 )
 if not exist .env.prod (
-    copy /Y "template.env" ".env.prod"
+    copy /Y "template\.env.prod" ".env.prod"
 )
 
 start python webui.py
@@ -443,18 +450,18 @@ goto menu
 :tools_menu
 @chcp 936
 cls
-echo ÂóÂóÊ±ÉÐ¹¤¾ßÏä  µ±Ç°·ÖÖ§: %BRANCH_COLOR%%BRANCH%[0m
+echo éº¦éº¦æ—¶å°šå·¥å…·ç®±  å½“å‰åˆ†æ”¯: %BRANCH_COLOR%%BRANCH%[0m
 echo ======================
-echo 1. ¸üÐÂÒÀÀµ
-echo 2. ÇÐ»»·ÖÖ§
-echo 3. ÖØÖÃµ±Ç°·ÖÖ§
-echo 4. ¸üÐÂÅäÖÃÎÄ¼þ
-echo 5. Ñ§Ï°ÐÂµÄÖªÊ¶¿â
-echo 6. ´ò¿ªÖªÊ¶¿âÎÄ¼þ¼Ð
-echo 7. ·µ»ØÖ÷²Ëµ¥
+echo 1. æ›´æ–°ä¾èµ–
+echo 2. åˆ‡æ¢åˆ†æ”¯
+echo 3. é‡ç½®å½“å‰åˆ†æ”¯
+echo 4. æ›´æ–°é…ç½®æ–‡ä»¶
+echo 5. å­¦ä¹ æ–°çš„çŸ¥è¯†åº“
+echo 6. æ‰“å¼€çŸ¥è¯†åº“æ–‡ä»¶å¤¹
+echo 7. è¿”å›žä¸»èœå•
 echo ======================
 
-set /p choice="ÇëÊäÈëÑ¡ÏîÊý×Ö: "
+set /p choice="è¯·è¾“å…¥é€‰é¡¹æ•°å­—: "
 if "!choice!"=="1" goto update_dependencies
 if "!choice!"=="2" goto switch_branch
 if "!choice!"=="3" goto reset_branch
@@ -463,29 +470,29 @@ if "!choice!"=="5" goto learn_new_knowledge
 if "!choice!"=="6" goto open_knowledge_folder
 if "!choice!"=="7" goto menu
 
-echo ÎÞÐ§µÄÊäÈë£¬ÇëÊäÈë1-6Ö®¼äµÄÊý×Ö
+echo æ— æ•ˆçš„è¾“å…¥ï¼Œè¯·è¾“å…¥1-6ä¹‹é—´çš„æ•°å­—
 timeout /t 2 >nul
 goto tools_menu
 
 :update_dependencies
 cls
-echo ÕýÔÚ¸üÐÂÒÀÀµ...
+echo æ­£åœ¨æ›´æ–°ä¾èµ–...
 python -m pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
 python.exe -m pip install -r requirements.txt
 
-echo ÒÀÀµ¸üÐÂÍê³É£¬°´ÈÎÒâ¼ü·µ»Ø¹¤¾ßÏä²Ëµ¥...
+echo ä¾èµ–æ›´æ–°å®Œæˆï¼ŒæŒ‰ä»»æ„é”®è¿”å›žå·¥å…·ç®±èœå•...
 pause
 goto tools_menu
 
 :switch_branch
 cls
-echo ÕýÔÚÇÐ»»·ÖÖ§...
-echo µ±Ç°·ÖÖ§: %BRANCH%
-@REM echo ¿ÉÓÃ·ÖÖ§: main, debug, stable-dev
-echo 1. ÇÐ»»µ½[92mmain[0m
-echo 2. ÇÐ»»µ½[91mmain-fix[0m
-echo ÇëÊäÈëÒªÇÐ»»µ½µÄ·ÖÖ§:
-set /p branch_name="·ÖÖ§Ãû: "
+echo æ­£åœ¨åˆ‡æ¢åˆ†æ”¯...
+echo å½“å‰åˆ†æ”¯: %BRANCH%
+@REM echo å¯ç”¨åˆ†æ”¯: main, debug, stable-dev
+echo 1. åˆ‡æ¢åˆ°[92mmain[0m
+echo 2. åˆ‡æ¢åˆ°[91mmain-fix[0m
+echo è¯·è¾“å…¥è¦åˆ‡æ¢åˆ°çš„åˆ†æ”¯:
+set /p branch_name="åˆ†æ”¯å: "
 if "%branch_name%"=="" set branch_name=main
 if "%branch_name%"=="main" (
     set "BRANCH_COLOR=[92m"
@@ -500,32 +507,32 @@ if "%branch_name%"=="main" (
     set "BRANCH_COLOR=[91m"
     set "branch_name=main-fix"
 ) else (
-    echo ÎÞÐ§µÄ·ÖÖ§Ãû, ÇëÖØÐÂÊäÈë
+    echo æ— æ•ˆçš„åˆ†æ”¯å, è¯·é‡æ–°è¾“å…¥
     timeout /t 2 >nul
     goto switch_branch
 )
 
-echo ÕýÔÚÇÐ»»µ½·ÖÖ§ %branch_name%...
+echo æ­£åœ¨åˆ‡æ¢åˆ°åˆ†æ”¯ %branch_name%...
 git checkout %branch_name%
-echo ·ÖÖ§ÇÐ»»Íê³É£¬µ±Ç°·ÖÖ§: %BRANCH_COLOR%%branch_name%[0m
+echo åˆ†æ”¯åˆ‡æ¢å®Œæˆï¼Œå½“å‰åˆ†æ”¯: %BRANCH_COLOR%%branch_name%[0m
 set "BRANCH=%branch_name%"
-echo °´ÈÎÒâ¼ü·µ»Ø¹¤¾ßÏä²Ëµ¥...
+echo æŒ‰ä»»æ„é”®è¿”å›žå·¥å…·ç®±èœå•...
 pause >nul
 goto tools_menu
 
 
 :reset_branch
 cls
-echo ÕýÔÚÖØÖÃµ±Ç°·ÖÖ§...
-echo µ±Ç°·ÖÖ§: !BRANCH!
-echo È·ÈÏÒªÖØÖÃµ±Ç°·ÖÖ§Âð£¿
-set /p confirm="¼ÌÐø£¿(Y/N): "
+echo æ­£åœ¨é‡ç½®å½“å‰åˆ†æ”¯...
+echo å½“å‰åˆ†æ”¯: !BRANCH!
+echo ç¡®è®¤è¦é‡ç½®å½“å‰åˆ†æ”¯å—ï¼Ÿ
+set /p confirm="ç»§ç»­ï¼Ÿ(Y/N): "
 if /i "!confirm!"=="Y" (
-    echo ÕýÔÚÖØÖÃµ±Ç°·ÖÖ§...
+    echo æ­£åœ¨é‡ç½®å½“å‰åˆ†æ”¯...
     git reset --hard !BRANCH!
-    echo ·ÖÖ§ÖØÖÃÍê³É£¬°´ÈÎÒâ¼ü·µ»Ø¹¤¾ßÏä²Ëµ¥...
+    echo åˆ†æ”¯é‡ç½®å®Œæˆï¼ŒæŒ‰ä»»æ„é”®è¿”å›žå·¥å…·ç®±èœå•...
 ) else (
-    echo È¡ÏûÖØÖÃµ±Ç°·ÖÖ§£¬°´ÈÎÒâ¼ü·µ»Ø¹¤¾ßÏä²Ëµ¥...
+    echo å–æ¶ˆé‡ç½®å½“å‰åˆ†æ”¯ï¼ŒæŒ‰ä»»æ„é”®è¿”å›žå·¥å…·ç®±èœå•...
 )
 pause >nul
 goto tools_menu
@@ -533,44 +540,44 @@ goto tools_menu
 
 :update_config
 cls
-echo ÕýÔÚ¸üÐÂÅäÖÃÎÄ¼þ...
-echo ÇëÈ·±£ÒÑ±¸·ÝÖØÒªÊý¾Ý£¬¼ÌÐø½«ÐÞ¸Äµ±Ç°ÅäÖÃÎÄ¼þ¡£
-echo ¼ÌÐøÇë°´Y£¬È¡ÏûÇë°´ÈÎÒâ¼ü...
-set /p confirm="¼ÌÐø£¿(Y/N): "
+echo æ­£åœ¨æ›´æ–°é…ç½®æ–‡ä»¶...
+echo è¯·ç¡®ä¿å·²å¤‡ä»½é‡è¦æ•°æ®ï¼Œç»§ç»­å°†ä¿®æ”¹å½“å‰é…ç½®æ–‡ä»¶ã€‚
+echo ç»§ç»­è¯·æŒ‰Yï¼Œå–æ¶ˆè¯·æŒ‰ä»»æ„é”®...
+set /p confirm="ç»§ç»­ï¼Ÿ(Y/N): "
 if /i "!confirm!"=="Y" (
-    echo ÕýÔÚ¸üÐÂÅäÖÃÎÄ¼þ...
+    echo æ­£åœ¨æ›´æ–°é…ç½®æ–‡ä»¶...
     python.exe config\auto_update.py
-    echo ÅäÖÃÎÄ¼þ¸üÐÂÍê³É£¬°´ÈÎÒâ¼ü·µ»Ø¹¤¾ßÏä²Ëµ¥...
+    echo é…ç½®æ–‡ä»¶æ›´æ–°å®Œæˆï¼ŒæŒ‰ä»»æ„é”®è¿”å›žå·¥å…·ç®±èœå•...
 ) else (
-    echo È¡Ïû¸üÐÂÅäÖÃÎÄ¼þ£¬°´ÈÎÒâ¼ü·µ»Ø¹¤¾ßÏä²Ëµ¥...
+    echo å–æ¶ˆæ›´æ–°é…ç½®æ–‡ä»¶ï¼ŒæŒ‰ä»»æ„é”®è¿”å›žå·¥å…·ç®±èœå•...
 )
 pause >nul
 goto tools_menu
 
 :learn_new_knowledge
 cls
-echo ÕýÔÚÑ§Ï°ÐÂµÄÖªÊ¶¿â...
-echo ÇëÈ·±£ÒÑ±¸·ÝÖØÒªÊý¾Ý£¬¼ÌÐø½«ÐÞ¸Äµ±Ç°ÖªÊ¶¿â¡£
-echo ¼ÌÐøÇë°´Y£¬È¡ÏûÇë°´ÈÎÒâ¼ü...
-set /p confirm="¼ÌÐø£¿(Y/N): "
+echo æ­£åœ¨å­¦ä¹ æ–°çš„çŸ¥è¯†åº“...
+echo è¯·ç¡®ä¿å·²å¤‡ä»½é‡è¦æ•°æ®ï¼Œç»§ç»­å°†ä¿®æ”¹å½“å‰çŸ¥è¯†åº“ã€‚
+echo ç»§ç»­è¯·æŒ‰Yï¼Œå–æ¶ˆè¯·æŒ‰ä»»æ„é”®...
+set /p confirm="ç»§ç»­ï¼Ÿ(Y/N): "
 if /i "!confirm!"=="Y" (
-    echo ÕýÔÚÑ§Ï°ÐÂµÄÖªÊ¶¿â...
+    echo æ­£åœ¨å­¦ä¹ æ–°çš„çŸ¥è¯†åº“...
     python.exe src\plugins\zhishi\knowledge_library.py
-    echo Ñ§Ï°Íê³É£¬°´ÈÎÒâ¼ü·µ»Ø¹¤¾ßÏä²Ëµ¥...
+    echo å­¦ä¹ å®Œæˆï¼ŒæŒ‰ä»»æ„é”®è¿”å›žå·¥å…·ç®±èœå•...
 ) else (
-    echo È¡ÏûÑ§Ï°ÐÂµÄÖªÊ¶¿â£¬°´ÈÎÒâ¼ü·µ»Ø¹¤¾ßÏä²Ëµ¥...
+    echo å–æ¶ˆå­¦ä¹ æ–°çš„çŸ¥è¯†åº“ï¼ŒæŒ‰ä»»æ„é”®è¿”å›žå·¥å…·ç®±èœå•...
 )
 pause >nul
 goto tools_menu
 
 :open_knowledge_folder
 cls
-echo ÕýÔÚ´ò¿ªÖªÊ¶¿âÎÄ¼þ¼Ð...
+echo æ­£åœ¨æ‰“å¼€çŸ¥è¯†åº“æ–‡ä»¶å¤¹...
 if exist data\raw_info (
     start explorer data\raw_info
 ) else (
-    echo ÖªÊ¶¿âÎÄ¼þ¼Ð²»´æÔÚ£¡
-    echo ÕýÔÚ´´½¨ÎÄ¼þ¼Ð...
+    echo çŸ¥è¯†åº“æ–‡ä»¶å¤¹ä¸å­˜åœ¨ï¼
+    echo æ­£åœ¨åˆ›å»ºæ–‡ä»¶å¤¹...
     mkdir data\raw_info
     timeout /t 2 >nul
 )
@@ -583,18 +590,18 @@ cls
 git pull > temp.log 2>&1
 findstr /C:"detected dubious ownership" temp.log >nul
 if %errorlevel% equ 0 (
-    echo ¼ì²âµ½²Ö¿âÈ¨ÏÞÎÊÌâ£¬ÕýÔÚ×Ô¶¯ÐÞ¸´...
+    echo æ£€æµ‹åˆ°ä»“åº“æƒé™é—®é¢˜ï¼Œæ­£åœ¨è‡ªåŠ¨ä¿®å¤...
     git config --global --add safe.directory "%cd%"
-    echo ÒÑÌí¼ÓÀýÍâ£¬ÕýÔÚÖØÊÔgit pull...
+    echo å·²æ·»åŠ ä¾‹å¤–ï¼Œæ­£åœ¨é‡è¯•git pull...
     del temp.log
     goto retry_git_pull
 )
 del temp.log
-echo ÕýÔÚ¸üÐÂÒÀÀµ...
+echo æ­£åœ¨æ›´æ–°ä¾èµ–...
 python -m pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
 python -m pip install -r requirements.txt && cls
 
-echo µ±Ç°´úÀíÉèÖÃ:
+echo å½“å‰ä»£ç†è®¾ç½®:
 echo HTTP_PROXY=%HTTP_PROXY%
 echo HTTPS_PROXY=%HTTPS_PROXY%
 
@@ -606,17 +613,17 @@ set no_proxy=0.0.0.0/32
 REM chcp 65001
 python bot.py
 echo.
-echo BotÒÑÍ£Ö¹ÔËÐÐ£¬°´ÈÎÒâ¼ü·µ»ØÖ÷²Ëµ¥...
+echo Botå·²åœæ­¢è¿è¡Œï¼ŒæŒ‰ä»»æ„é”®è¿”å›žä¸»èœå•...
 pause >nul
 goto menu
 
 :start_bot
 cls
-echo ÕýÔÚ¸üÐÂÒÀÀµ...
+echo æ­£åœ¨æ›´æ–°ä¾èµ–...
 python -m pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
 python -m pip install -r requirements.txt && cls
 
-echo µ±Ç°´úÀíÉèÖÃ:
+echo å½“å‰ä»£ç†è®¾ç½®:
 echo HTTP_PROXY=%HTTP_PROXY%
 echo HTTPS_PROXY=%HTTPS_PROXY%
 
@@ -628,7 +635,7 @@ set no_proxy=0.0.0.0/32
 REM chcp 65001
 python bot.py
 echo.
-echo BotÒÑÍ£Ö¹ÔËÐÐ£¬°´ÈÎÒâ¼ü·µ»ØÖ÷²Ëµ¥...
+echo Botå·²åœæ­¢è¿è¡Œï¼ŒæŒ‰ä»»æ„é”®è¿”å›žä¸»èœå•...
 pause >nul
 goto menu
 
