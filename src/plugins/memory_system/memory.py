@@ -3,35 +3,36 @@ import datetime
 import math
 import random
 import time
-import os
 
 import jieba
 import networkx as nx
 
-from loguru import logger
 from nonebot import get_driver
-from ...common.database import Database  # 使用正确的导入语法
+from ...common.database import db
 from ..chat.config import global_config
 from ..chat.utils import (
     calculate_information_content,
     cosine_similarity,
-    get_cloest_chat_from_db,
+    get_closest_chat_from_db,
     text_to_vector,
 )
 from ..models.utils_model import LLM_request
+from src.common.logger import get_module_logger
+
+logger = get_module_logger("memory_sys")
+
 
 class Memory_graph:
     def __init__(self):
         self.G = nx.Graph()  # 使用 networkx 的图结构
-        self.db = Database.get_instance()
 
     def connect_dot(self, concept1, concept2):
         # 避免自连接
         if concept1 == concept2:
             return
-        
+
         current_time = datetime.datetime.now().timestamp()
-        
+
         # 如果边已存在,增加 strength
         if self.G.has_edge(concept1, concept2):
             self.G[concept1][concept2]['strength'] = self.G[concept1][concept2].get('strength', 1) + 1
@@ -39,14 +40,14 @@ class Memory_graph:
             self.G[concept1][concept2]['last_modified'] = current_time
         else:
             # 如果是新边,初始化 strength 为 1
-            self.G.add_edge(concept1, concept2, 
-                          strength=1,
-                          created_time=current_time,  # 添加创建时间
-                          last_modified=current_time) # 添加最后修改时间
+            self.G.add_edge(concept1, concept2,
+                            strength=1,
+                            created_time=current_time,  # 添加创建时间
+                            last_modified=current_time)  # 添加最后修改时间
 
     def add_dot(self, concept, memory):
         current_time = datetime.datetime.now().timestamp()
-        
+
         if concept in self.G:
             if 'memory_items' in self.G.nodes[concept]:
                 if not isinstance(self.G.nodes[concept]['memory_items'], list):
@@ -62,10 +63,10 @@ class Memory_graph:
                 self.G.nodes[concept]['last_modified'] = current_time
         else:
             # 如果是新节点,创建新的记忆列表
-            self.G.add_node(concept, 
-                          memory_items=[memory],
-                          created_time=current_time,  # 添加创建时间
-                          last_modified=current_time) # 添加最后修改时间
+            self.G.add_node(concept,
+                            memory_items=[memory],
+                            created_time=current_time,  # 添加创建时间
+                            last_modified=current_time)  # 添加最后修改时间
 
     def get_dot(self, concept):
         # 检查节点是否存在于图中
@@ -155,8 +156,8 @@ class Memory_graph:
 class Hippocampus:
     def __init__(self, memory_graph: Memory_graph):
         self.memory_graph = memory_graph
-        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge, temperature=0.5)
-        self.llm_summary_by_topic = LLM_request(model=global_config.llm_summary_by_topic, temperature=0.5)
+        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge, temperature=0.5,request_type = 'topic')
+        self.llm_summary_by_topic = LLM_request(model=global_config.llm_summary_by_topic, temperature=0.5,request_type = 'topic')
 
     def get_all_node_names(self) -> list:
         """获取记忆图中所有节点的名字列表
@@ -179,33 +180,81 @@ class Hippocampus:
         nodes = sorted([source, target])
         return hash(f"{nodes[0]}:{nodes[1]}")
 
+    def random_get_msg_snippet(self, target_timestamp: float, chat_size: int, max_memorized_time_per_msg: int) -> list:
+        """随机抽取一段时间内的消息片段
+        Args:
+            - target_timestamp: 目标时间戳
+            - chat_size: 抽取的消息数量
+            - max_memorized_time_per_msg: 每条消息的最大记忆次数
+        
+        Returns:
+            - list: 抽取出的消息记录列表
+            
+        """
+        try_count = 0
+        # 最多尝试三次抽取
+        while try_count < 3:
+            messages = get_closest_chat_from_db(length=chat_size, timestamp=target_timestamp)
+            if messages:
+                # 检查messages是否均没有达到记忆次数限制
+                for message in messages:
+                    if message["memorized_times"] >= max_memorized_time_per_msg:
+                        messages = None
+                        break
+                if messages:
+                    # 成功抽取短期消息样本
+                    # 数据写回：增加记忆次数
+                    for message in messages:
+                        db.messages.update_one({"_id": message["_id"]},
+                                               {"$set": {"memorized_times": message["memorized_times"] + 1}})
+                    return messages
+            try_count += 1
+        # 三次尝试均失败
+        return None
+
     def get_memory_sample(self, chat_size=20, time_frequency: dict = {'near': 2, 'mid': 4, 'far': 3}):
         """获取记忆样本
         
         Returns:
             list: 消息记录列表，每个元素是一个消息记录字典列表
         """
+        # 硬编码：每条消息最大记忆次数
+        # 如有需求可写入global_config
+        max_memorized_time_per_msg = 3
+
         current_timestamp = datetime.datetime.now().timestamp()
         chat_samples = []
 
         # 短期：1h   中期：4h   长期：24h
-        for _ in range(time_frequency.get('near')):
+        logger.debug(f"正在抽取短期消息样本")
+        for i in range(time_frequency.get('near')):
             random_time = current_timestamp - random.randint(1, 3600)
-            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            messages = self.random_get_msg_snippet(random_time, chat_size, max_memorized_time_per_msg)
             if messages:
+                logger.debug(f"成功抽取短期消息样本{len(messages)}条")
                 chat_samples.append(messages)
+            else:
+                logger.warning(f"第{i}次短期消息样本抽取失败")
 
-        for _ in range(time_frequency.get('mid')):
+        logger.debug(f"正在抽取中期消息样本")
+        for i in range(time_frequency.get('mid')):
             random_time = current_timestamp - random.randint(3600, 3600 * 4)
-            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            messages = self.random_get_msg_snippet(random_time, chat_size, max_memorized_time_per_msg)
             if messages:
+                logger.debug(f"成功抽取中期消息样本{len(messages)}条")
                 chat_samples.append(messages)
+            else:
+                logger.warning(f"第{i}次中期消息样本抽取失败")
 
-        for _ in range(time_frequency.get('far')):
+        logger.debug(f"正在抽取长期消息样本")
+        for i in range(time_frequency.get('far')):
             random_time = current_timestamp - random.randint(3600 * 4, 3600 * 24)
-            messages = get_cloest_chat_from_db(db=self.memory_graph.db, length=chat_size, timestamp=random_time)
+            messages = self.random_get_msg_snippet(random_time, chat_size, max_memorized_time_per_msg)
             if messages:
+                logger.debug(f"成功抽取长期消息样本{len(messages)}条")
                 chat_samples.append(messages)
+            else:
+                logger.warning(f"第{i}次长期消息样本抽取失败")
 
         return chat_samples
 
@@ -271,20 +320,20 @@ class Hippocampus:
                 # 为每个话题查找相似的已存在主题
                 existing_topics = list(self.memory_graph.G.nodes())
                 similar_topics = []
-                
+
                 for existing_topic in existing_topics:
                     topic_words = set(jieba.cut(topic))
                     existing_words = set(jieba.cut(existing_topic))
-                    
+
                     all_words = topic_words | existing_words
                     v1 = [1 if word in topic_words else 0 for word in all_words]
                     v2 = [1 if word in existing_words else 0 for word in all_words]
-                    
+
                     similarity = cosine_similarity(v1, v2)
-                    
+
                     if similarity >= 0.6:
                         similar_topics.append((existing_topic, similarity))
-                
+
                 similar_topics.sort(key=lambda x: x[1], reverse=True)
                 similar_topics = similar_topics[:5]
                 similar_topics_dict[topic] = similar_topics
@@ -305,7 +354,7 @@ class Hippocampus:
     async def operation_build_memory(self, chat_size=20):
         time_frequency = {'near': 1, 'mid': 4, 'far': 4}
         memory_samples = self.get_memory_sample(chat_size, time_frequency)
-        
+
         for i, messages in enumerate(memory_samples, 1):
             all_topics = []
             # 加载进度可视化
@@ -318,14 +367,14 @@ class Hippocampus:
             compress_rate = global_config.memory_compress_rate
             compressed_memory, similar_topics_dict = await self.memory_compress(messages, compress_rate)
             logger.info(f"压缩后记忆数量: {len(compressed_memory)}，似曾相识的话题: {len(similar_topics_dict)}")
-            
+
             current_time = datetime.datetime.now().timestamp()
-            
+
             for topic, memory in compressed_memory:
                 logger.info(f"添加节点: {topic}")
                 self.memory_graph.add_dot(topic, memory)
                 all_topics.append(topic)
-                
+
                 # 连接相似的已存在主题
                 if topic in similar_topics_dict:
                     similar_topics = similar_topics_dict[topic]
@@ -333,11 +382,11 @@ class Hippocampus:
                         if topic != similar_topic:
                             strength = int(similarity * 10)
                             logger.info(f"连接相似节点: {topic} 和 {similar_topic} (强度: {strength})")
-                            self.memory_graph.G.add_edge(topic, similar_topic, 
-                                                       strength=strength,
-                                                       created_time=current_time,
-                                                       last_modified=current_time)
-            
+                            self.memory_graph.G.add_edge(topic, similar_topic,
+                                                         strength=strength,
+                                                         created_time=current_time,
+                                                         last_modified=current_time)
+
             # 连接同批次的相关话题
             for i in range(len(all_topics)):
                 for j in range(i + 1, len(all_topics)):
@@ -349,7 +398,7 @@ class Hippocampus:
     def sync_memory_to_db(self):
         """检查并同步内存中的图结构与数据库"""
         # 获取数据库中所有节点和内存中所有节点
-        db_nodes = list(self.memory_graph.db.db.graph_data.nodes.find())
+        db_nodes = list(db.graph_data.nodes.find())
         memory_nodes = list(self.memory_graph.G.nodes(data=True))
 
         # 转换数据库节点为字典格式,方便查找
@@ -363,7 +412,7 @@ class Hippocampus:
 
             # 计算内存中节点的特征值
             memory_hash = self.calculate_node_hash(concept, memory_items)
-            
+
             # 获取时间信息
             created_time = data.get('created_time', datetime.datetime.now().timestamp())
             last_modified = data.get('last_modified', datetime.datetime.now().timestamp())
@@ -377,7 +426,7 @@ class Hippocampus:
                     'created_time': created_time,
                     'last_modified': last_modified
                 }
-                self.memory_graph.db.db.graph_data.nodes.insert_one(node_data)
+                db.graph_data.nodes.insert_one(node_data)
             else:
                 # 获取数据库中节点的特征值
                 db_node = db_nodes_dict[concept]
@@ -385,7 +434,7 @@ class Hippocampus:
 
                 # 如果特征值不同,则更新节点
                 if db_hash != memory_hash:
-                    self.memory_graph.db.db.graph_data.nodes.update_one(
+                    db.graph_data.nodes.update_one(
                         {'concept': concept},
                         {'$set': {
                             'memory_items': memory_items,
@@ -396,7 +445,7 @@ class Hippocampus:
                     )
 
         # 处理边的信息
-        db_edges = list(self.memory_graph.db.db.graph_data.edges.find())
+        db_edges = list(db.graph_data.edges.find())
         memory_edges = list(self.memory_graph.G.edges(data=True))
 
         # 创建边的哈希值字典
@@ -413,7 +462,7 @@ class Hippocampus:
             edge_hash = self.calculate_edge_hash(source, target)
             edge_key = (source, target)
             strength = data.get('strength', 1)
-            
+
             # 获取边的时间信息
             created_time = data.get('created_time', datetime.datetime.now().timestamp())
             last_modified = data.get('last_modified', datetime.datetime.now().timestamp())
@@ -428,11 +477,11 @@ class Hippocampus:
                     'created_time': created_time,
                     'last_modified': last_modified
                 }
-                self.memory_graph.db.db.graph_data.edges.insert_one(edge_data)
+                db.graph_data.edges.insert_one(edge_data)
             else:
                 # 检查边的特征值是否变化
                 if db_edge_dict[edge_key]['hash'] != edge_hash:
-                    self.memory_graph.db.db.graph_data.edges.update_one(
+                    db.graph_data.edges.update_one(
                         {'source': source, 'target': target},
                         {'$set': {
                             'hash': edge_hash,
@@ -446,18 +495,18 @@ class Hippocampus:
         """从数据库同步数据到内存中的图结构"""
         current_time = datetime.datetime.now().timestamp()
         need_update = False
-        
+
         # 清空当前图
         self.memory_graph.G.clear()
 
         # 从数据库加载所有节点
-        nodes = list(self.memory_graph.db.db.graph_data.nodes.find())
+        nodes = list(db.graph_data.nodes.find())
         for node in nodes:
             concept = node['concept']
             memory_items = node.get('memory_items', [])
             if not isinstance(memory_items, list):
                 memory_items = [memory_items] if memory_items else []
-            
+
             # 检查时间字段是否存在
             if 'created_time' not in node or 'last_modified' not in node:
                 need_update = True
@@ -467,30 +516,30 @@ class Hippocampus:
                     update_data['created_time'] = current_time
                 if 'last_modified' not in node:
                     update_data['last_modified'] = current_time
-                
-                self.memory_graph.db.db.graph_data.nodes.update_one(
+
+                db.graph_data.nodes.update_one(
                     {'concept': concept},
                     {'$set': update_data}
                 )
-                logger.info(f"为节点 {concept} 添加缺失的时间字段")
-            
+                logger.info(f"[时间更新] 节点 {concept} 添加缺失的时间字段")
+
             # 获取时间信息(如果不存在则使用当前时间)
             created_time = node.get('created_time', current_time)
             last_modified = node.get('last_modified', current_time)
-            
+
             # 添加节点到图中
-            self.memory_graph.G.add_node(concept, 
-                                       memory_items=memory_items,
-                                       created_time=created_time,
-                                       last_modified=last_modified)
+            self.memory_graph.G.add_node(concept,
+                                         memory_items=memory_items,
+                                         created_time=created_time,
+                                         last_modified=last_modified)
 
         # 从数据库加载所有边
-        edges = list(self.memory_graph.db.db.graph_data.edges.find())
+        edges = list(db.graph_data.edges.find())
         for edge in edges:
             source = edge['source']
             target = edge['target']
             strength = edge.get('strength', 1)
-            
+
             # 检查时间字段是否存在
             if 'created_time' not in edge or 'last_modified' not in edge:
                 need_update = True
@@ -500,112 +549,115 @@ class Hippocampus:
                     update_data['created_time'] = current_time
                 if 'last_modified' not in edge:
                     update_data['last_modified'] = current_time
-                
-                self.memory_graph.db.db.graph_data.edges.update_one(
+
+                db.graph_data.edges.update_one(
                     {'source': source, 'target': target},
                     {'$set': update_data}
                 )
-                logger.info(f"为边 {source} - {target} 添加缺失的时间字段")
-            
+                logger.info(f"[时间更新] 边 {source} - {target} 添加缺失的时间字段")
+
             # 获取时间信息(如果不存在则使用当前时间)
             created_time = edge.get('created_time', current_time)
             last_modified = edge.get('last_modified', current_time)
-            
+
             # 只有当源节点和目标节点都存在时才添加边
             if source in self.memory_graph.G and target in self.memory_graph.G:
-                self.memory_graph.G.add_edge(source, target, 
-                                           strength=strength,
-                                           created_time=created_time,
-                                           last_modified=last_modified)
-        
+                self.memory_graph.G.add_edge(source, target,
+                                             strength=strength,
+                                             created_time=created_time,
+                                             last_modified=last_modified)
+
         if need_update:
-            logger.success("已为缺失的时间字段进行补充")
+            logger.success("[数据库] 已为缺失的时间字段进行补充")
 
     async def operation_forget_topic(self, percentage=0.1):
         """随机选择图中一定比例的节点和边进行检查,根据时间条件决定是否遗忘"""
         # 检查数据库是否为空
+        # logger.remove()
+
+        logger.info(f"[遗忘] 开始检查数据库... 当前Logger信息:")
+        # logger.info(f"- Logger名称: {logger.name}")
+        logger.info(f"- Logger等级: {logger.level}")
+        # logger.info(f"- Logger处理器: {[handler.__class__.__name__ for handler in logger.handlers]}")
+
+        # logger2 = setup_logger(LogModule.MEMORY)
+        # logger2.info(f"[遗忘] 开始检查数据库... 当前Logger信息:")
+        # logger.info(f"[遗忘] 开始检查数据库... 当前Logger信息:")
+
         all_nodes = list(self.memory_graph.G.nodes())
         all_edges = list(self.memory_graph.G.edges())
-        
+
         if not all_nodes and not all_edges:
-            logger.info("记忆图为空,无需进行遗忘操作")
+            logger.info("[遗忘] 记忆图为空,无需进行遗忘操作")
             return
-            
+
         check_nodes_count = max(1, int(len(all_nodes) * percentage))
         check_edges_count = max(1, int(len(all_edges) * percentage))
-        
+
         nodes_to_check = random.sample(all_nodes, check_nodes_count)
         edges_to_check = random.sample(all_edges, check_edges_count)
-        
+
         edge_changes = {'weakened': 0, 'removed': 0}
         node_changes = {'reduced': 0, 'removed': 0}
-        
+
         current_time = datetime.datetime.now().timestamp()
-        
+
         # 检查并遗忘连接
-        logger.info("开始检查连接...")
+        logger.info("[遗忘] 开始检查连接...")
         for source, target in edges_to_check:
             edge_data = self.memory_graph.G[source][target]
             last_modified = edge_data.get('last_modified')
-            # print(source,target)
-            # print(f"float(last_modified):{float(last_modified)}"    )
-            # print(f"current_time:{current_time}")
-            # print(f"current_time - last_modified:{current_time - last_modified}")
-            if current_time - last_modified > 3600*global_config.memory_forget_time:  # test
+
+            if current_time - last_modified > 3600 * global_config.memory_forget_time:
                 current_strength = edge_data.get('strength', 1)
                 new_strength = current_strength - 1
-                
+
                 if new_strength <= 0:
                     self.memory_graph.G.remove_edge(source, target)
                     edge_changes['removed'] += 1
-                    logger.info(f"\033[1;31m[连接移除]\033[0m {source} - {target}")
+                    logger.info(f"[遗忘] 连接移除: {source} -> {target}")
                 else:
                     edge_data['strength'] = new_strength
                     edge_data['last_modified'] = current_time
                     edge_changes['weakened'] += 1
-                    logger.info(f"\033[1;34m[连接减弱]\033[0m {source} - {target} (强度: {current_strength} -> {new_strength})")
-        
+                    logger.info(f"[遗忘] 连接减弱: {source} -> {target} (强度: {current_strength} -> {new_strength})")
+
         # 检查并遗忘话题
-        logger.info("开始检查节点...")
+        logger.info("[遗忘] 开始检查节点...")
         for node in nodes_to_check:
             node_data = self.memory_graph.G.nodes[node]
             last_modified = node_data.get('last_modified', current_time)
-            
-            if current_time - last_modified > 3600*24:  # test
+
+            if current_time - last_modified > 3600 * 24:
                 memory_items = node_data.get('memory_items', [])
                 if not isinstance(memory_items, list):
                     memory_items = [memory_items] if memory_items else []
-                
+
                 if memory_items:
                     current_count = len(memory_items)
                     removed_item = random.choice(memory_items)
                     memory_items.remove(removed_item)
-                    
+
                     if memory_items:
                         self.memory_graph.G.nodes[node]['memory_items'] = memory_items
                         self.memory_graph.G.nodes[node]['last_modified'] = current_time
                         node_changes['reduced'] += 1
-                        logger.info(f"\033[1;33m[记忆减少]\033[0m {node} (记忆数量: {current_count} -> {len(memory_items)})")
+                        logger.info(f"[遗忘] 记忆减少: {node} (数量: {current_count} -> {len(memory_items)})")
                     else:
                         self.memory_graph.G.remove_node(node)
                         node_changes['removed'] += 1
-                        logger.info(f"\033[1;31m[节点移除]\033[0m {node}")
-        
+                        logger.info(f"[遗忘] 节点移除: {node}")
+
         if any(count > 0 for count in edge_changes.values()) or any(count > 0 for count in node_changes.values()):
             self.sync_memory_to_db()
-            logger.info("\n遗忘操作统计:")
-            logger.info(f"连接变化: {edge_changes['weakened']} 个减弱, {edge_changes['removed']} 个移除")
-            logger.info(f"节点变化: {node_changes['reduced']} 个减少记忆, {node_changes['removed']} 个移除")
+            logger.info("[遗忘] 统计信息:")
+            logger.info(f"[遗忘] 连接变化: {edge_changes['weakened']} 个减弱, {edge_changes['removed']} 个移除")
+            logger.info(f"[遗忘] 节点变化: {node_changes['reduced']} 个减少记忆, {node_changes['removed']} 个移除")
         else:
-            logger.info("\n本次检查没有节点或连接满足遗忘条件")
+            logger.info("[遗忘] 本次检查没有节点或连接满足遗忘条件")
 
     async def merge_memory(self, topic):
-        """
-        对指定话题的记忆进行合并压缩
-        
-        Args:
-            topic: 要合并的话题节点
-        """
+        """对指定话题的记忆进行合并压缩"""
         # 获取节点的记忆项
         memory_items = self.memory_graph.G.nodes[topic].get('memory_items', [])
         if not isinstance(memory_items, list):
@@ -620,8 +672,8 @@ class Hippocampus:
 
         # 拼接成文本
         merged_text = "\n".join(selected_memories)
-        logger.debug(f"\n[合并记忆] 话题: {topic}")
-        logger.debug(f"选择的记忆:\n{merged_text}")
+        logger.debug(f"[合并] 话题: {topic}")
+        logger.debug(f"[合并] 选择的记忆:\n{merged_text}")
 
         # 使用memory_compress生成新的压缩记忆
         compressed_memories, _ = await self.memory_compress(selected_memories, 0.1)
@@ -633,11 +685,11 @@ class Hippocampus:
         # 添加新的压缩记忆
         for _, compressed_memory in compressed_memories:
             memory_items.append(compressed_memory)
-            logger.info(f"添加压缩记忆: {compressed_memory}")
+            logger.info(f"[合并] 添加压缩记忆: {compressed_memory}")
 
         # 更新节点的记忆项
         self.memory_graph.G.nodes[topic]['memory_items'] = memory_items
-        logger.debug(f"完成记忆合并，当前记忆数量: {len(memory_items)}")
+        logger.debug(f"[合并] 完成记忆合并，当前记忆数量: {len(memory_items)}")
 
     async def operation_merge_memory(self, percentage=0.1):
         """
@@ -767,7 +819,7 @@ class Hippocampus:
 
     async def memory_activate_value(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.3) -> int:
         """计算输入文本对记忆的激活程度"""
-        logger.info(f"识别主题: {await self._identify_topics(text)}")
+        logger.info(f"[激活] 识别主题: {await self._identify_topics(text)}")
 
         # 识别主题
         identified_topics = await self._identify_topics(text)
@@ -778,7 +830,7 @@ class Hippocampus:
         all_similar_topics = self._find_similar_topics(
             identified_topics,
             similarity_threshold=similarity_threshold,
-            debug_info="记忆激活"
+            debug_info="激活"
         )
 
         if not all_similar_topics:
@@ -799,7 +851,7 @@ class Hippocampus:
 
             activation = int(score * 50 * penalty)
             logger.info(
-                f"[记忆激活]单主题「{topic}」- 相似度: {score:.3f}, 内容数: {content_count}, 激活值: {activation}")
+                f"[激活] 单主题「{topic}」- 相似度: {score:.3f}, 内容数: {content_count}, 激活值: {activation}")
             return activation
 
         # 计算关键词匹配率，同时考虑内容数量
@@ -826,8 +878,8 @@ class Hippocampus:
                     matched_topics.add(input_topic)
                     adjusted_sim = sim * penalty
                     topic_similarities[input_topic] = max(topic_similarities.get(input_topic, 0), adjusted_sim)
-                    logger.info(
-                        f"[记忆激活]主题「{input_topic}」-> 「{memory_topic}」(内容数: {content_count}, 相似度: {adjusted_sim:.3f})")
+                    # logger.debug(
+                        # f"[激活] 主题「{input_topic}」-> 「{memory_topic}」(内容数: {content_count}, 相似度: {adjusted_sim:.3f})")
 
         # 计算主题匹配率和平均相似度
         topic_match = len(matched_topics) / len(identified_topics)
@@ -836,7 +888,7 @@ class Hippocampus:
         # 计算最终激活值
         activation = int((topic_match + average_similarities) / 2 * 100)
         logger.info(
-            f"[记忆激活]匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
+            f"[激活] 匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
 
         return activation
 
@@ -887,20 +939,12 @@ def segment_text(text):
     seg_text = list(jieba.cut(text))
     return seg_text
 
+
 driver = get_driver()
 config = driver.config
 
 start_time = time.time()
 
-Database.initialize(
-    uri=os.getenv("MONGODB_URI"),
-    host=os.getenv("MONGODB_HOST", "127.0.0.1"),
-    port=int(os.getenv("MONGODB_PORT", "27017")),
-    db_name=os.getenv("DATABASE_NAME", "MegBot"),
-    username=os.getenv("MONGODB_USERNAME"),
-    password=os.getenv("MONGODB_PASSWORD"),
-    auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
-)
 # 创建记忆图
 memory_graph = Memory_graph()
 # 创建海马体

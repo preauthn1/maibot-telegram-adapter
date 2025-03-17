@@ -4,10 +4,13 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import tomli
-from loguru import logger
 from packaging import version
 from packaging.version import Version, InvalidVersion
 from packaging.specifiers import SpecifierSet, InvalidSpecifier
+
+from src.common.logger import get_module_logger
+
+logger = get_module_logger("config")
 
 
 @dataclass
@@ -48,6 +51,8 @@ class BotConfig:
     ban_msgs_regex = set()
 
     max_response_length: int = 1024  # 最大回复长度
+    
+    remote_enable: bool = False  # 是否启用远程控制
 
     # 模型配置
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
@@ -73,6 +78,8 @@ class BotConfig:
     mood_update_interval: float = 1.0  # 情绪更新间隔 单位秒
     mood_decay_rate: float = 0.95  # 情绪衰减率
     mood_intensity_factor: float = 0.7  # 情绪强度因子
+    
+    willing_mode: str = "classical"  # 意愿模式
 
     keywords_reaction_rules = []  # 关键词回复规则
 
@@ -212,6 +219,10 @@ class BotConfig:
                 "model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY
             )
             config.max_response_length = response_config.get("max_response_length", config.max_response_length)
+            
+        def willing(parent: dict):
+            willing_config = parent["willing"]
+            config.willing_mode = willing_config.get("willing_mode", config.willing_mode)
 
         def model(parent: dict):
             # 加载模型配置
@@ -305,6 +316,10 @@ class BotConfig:
                 config.memory_forget_percentage = memory_config.get("memory_forget_percentage", config.memory_forget_percentage)
                 config.memory_compress_rate = memory_config.get("memory_compress_rate", config.memory_compress_rate)
 
+        def remote(parent: dict): 
+            remote_config = parent["remote"]
+            config.remote_enable = remote_config.get("enable", config.remote_enable)
+
         def mood(parent: dict):
             mood_config = parent["mood"]
             config.mood_update_interval = mood_config.get("mood_update_interval", config.mood_update_interval)
@@ -353,10 +368,12 @@ class BotConfig:
             "cq_code": {"func": cq_code, "support": ">=0.0.0"},
             "bot": {"func": bot, "support": ">=0.0.0"},
             "response": {"func": response, "support": ">=0.0.0"},
+            "willing": {"func": willing, "support": ">=0.0.9", "necessary": False},
             "model": {"func": model, "support": ">=0.0.0"},
             "message": {"func": message, "support": ">=0.0.0"},
             "memory": {"func": memory, "support": ">=0.0.0", "necessary": False},
             "mood": {"func": mood, "support": ">=0.0.0"},
+            "remote": {"func": remote, "support": ">=0.0.10", "necessary": False},
             "keywords_reaction": {"func": keywords_reaction, "support": ">=0.0.2", "necessary": False},
             "chinese_typo": {"func": chinese_typo, "support": ">=0.0.3", "necessary": False},
             "groups": {"func": groups, "support": ">=0.0.0"},
@@ -433,10 +450,3 @@ else:
 
 global_config = BotConfig.load_config(config_path=bot_config_path)
 
-if not global_config.enable_advance_output:
-    logger.remove()
-    
-# 调试输出功能
-if global_config.enable_debug_output:
-    logger.remove()
-    logger.add(sys.stdout, level="DEBUG")

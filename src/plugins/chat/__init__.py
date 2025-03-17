@@ -2,12 +2,11 @@ import asyncio
 import time
 import os
 
-from loguru import logger
-from nonebot import get_driver, on_message, require
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment,MessageEvent
+from nonebot import get_driver, on_message, on_notice, require
+from nonebot.rule import to_me
+from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment, MessageEvent, NoticeEvent
 from nonebot.typing import T_State
 
-from ...common.database import Database
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from ..schedule.schedule_generator import bot_schedule
 from ..utils.statistic import LLMStatistics
@@ -15,12 +14,15 @@ from .bot import chat_bot
 from .config import global_config
 from .emoji_manager import emoji_manager
 from .relationship_manager import relationship_manager
-from .willing_manager import willing_manager
+from ..willing.willing_manager import willing_manager
 from .chat_stream import chat_manager
 from ..memory_system.memory import hippocampus, memory_graph
 from .bot import ChatBot
 from .message_sender import message_manager, message_sender
+from .storage import MessageStorage
+from src.common.logger import get_module_logger
 
+logger = get_module_logger("chat_init")
 
 # 创建LLM统计实例
 llm_stats = LLMStatistics("llm_statistics.txt")
@@ -32,18 +34,6 @@ _message_manager_started = False
 driver = get_driver()
 config = driver.config
 
-Database.initialize(
-    uri=os.getenv("MONGODB_URI"),
-    host=os.getenv("MONGODB_HOST", "127.0.0.1"),
-    port=int(os.getenv("MONGODB_PORT", "27017")),
-    db_name=os.getenv("DATABASE_NAME", "MegBot"),
-    username=os.getenv("MONGODB_USERNAME"),
-    password=os.getenv("MONGODB_PASSWORD"),
-    auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
-)
-logger.success("初始化数据库成功")
-
-
 # 初始化表情管理器
 emoji_manager.initialize()
 
@@ -52,6 +42,8 @@ logger.debug(f"正在唤醒{global_config.BOT_NICKNAME}......")
 chat_bot = ChatBot()
 # 注册消息处理器
 msg_in = on_message(priority=5)
+# 注册和bot相关的通知处理器
+notice_matcher = on_notice(priority=1)
 # 创建定时任务
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
@@ -108,19 +100,24 @@ async def _(bot: Bot, event: MessageEvent, state: T_State):
     await chat_bot.handle_message(event, bot)
 
 
+@notice_matcher.handle()
+async def _(bot: Bot, event: NoticeEvent, state: T_State):
+    logger.debug(f"收到通知：{event}")
+    await chat_bot.handle_notice(event, bot)
+
+
 # 添加build_memory定时任务
 @scheduler.scheduled_job("interval", seconds=global_config.build_memory_interval, id="build_memory")
 async def build_memory_task():
     """每build_memory_interval秒执行一次记忆构建"""
-    logger.debug(
-        "[记忆构建]"
-        "------------------------------------开始构建记忆--------------------------------------")
+    logger.debug("[记忆构建]------------------------------------开始构建记忆--------------------------------------")
     start_time = time.time()
     await hippocampus.operation_build_memory(chat_size=20)
     end_time = time.time()
     logger.success(
         f"[记忆构建]--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} "
-        "秒-------------------------------------------")
+        "秒-------------------------------------------"
+    )
 
 
 @scheduler.scheduled_job("interval", seconds=global_config.forget_memory_interval, id="forget_memory")
@@ -144,3 +141,22 @@ async def print_mood_task():
     """每30秒打印一次情绪状态"""
     mood_manager = MoodManager.get_instance()
     mood_manager.print_mood_status()
+
+
+@scheduler.scheduled_job("interval", seconds=7200, id="generate_schedule")
+async def generate_schedule_task():
+    """每2小时尝试生成一次日程"""
+    logger.debug("尝试生成日程")
+    await bot_schedule.initialize()
+    if not bot_schedule.enable_output:
+        bot_schedule.print_schedule()
+
+@scheduler.scheduled_job("interval", seconds=3600, id="remove_recalled_message")
+
+async def remove_recalled_message() -> None:
+    """删除撤回消息"""
+    try:
+        storage = MessageStorage()
+        await storage.remove_recalled_message(time.time())
+    except Exception:
+        logger.exception("删除撤回消息失败")

@@ -5,17 +5,20 @@ import threading
 import time
 from datetime import datetime
 from typing import Dict, List
-from loguru import logger
 from typing import Optional
-from ..common.database import Database
+from src.common.logger import get_module_logger
 
 import customtkinter as ctk
 from dotenv import load_dotenv
+
+logger = get_module_logger("gui")
 
 # 获取当前文件的目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # 获取项目根目录
 root_dir = os.path.abspath(os.path.join(current_dir, '..', '..'))
+sys.path.insert(0, root_dir)
+from src.common.database import db
 
 # 加载环境变量
 if os.path.exists(os.path.join(root_dir, '.env.dev')):
@@ -27,6 +30,7 @@ elif os.path.exists(os.path.join(root_dir, '.env.prod')):
 else:
     logger.error("未找到环境配置文件")
     sys.exit(1)
+
 
 class ReasoningGUI:
     def __init__(self):
@@ -43,28 +47,6 @@ class ReasoningGUI:
         self.root.title('麦麦推理')
         self.root.geometry('800x600')
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
-
-        # 初始化数据库连接
-        try:
-            self.db = Database.get_instance().db
-            logger.success("数据库连接成功")
-        except RuntimeError:
-            logger.warning("数据库未初始化，正在尝试初始化...")
-            try:
-                Database.initialize(
-                    uri=os.getenv("MONGODB_URI"),
-                    host=os.getenv("MONGODB_HOST", "127.0.0.1"),
-                    port=int(os.getenv("MONGODB_PORT", "27017")),
-                    db_name=os.getenv("DATABASE_NAME", "MegBot"),
-                    username=os.getenv("MONGODB_USERNAME"),
-                    password=os.getenv("MONGODB_PASSWORD"),
-                    auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
-                )
-                self.db = Database.get_instance().db
-                logger.success("数据库初始化成功")
-            except Exception:
-                logger.exception("数据库初始化失败")
-                sys.exit(1)
 
         # 存储群组数据
         self.group_data: Dict[str, List[dict]] = {}
@@ -264,11 +246,11 @@ class ReasoningGUI:
                 logger.debug(f"查询条件: {query}")
 
                 # 先获取一条记录检查时间格式
-                sample = self.db.reasoning_logs.find_one()
+                sample = db.reasoning_logs.find_one()
                 if sample:
                     logger.debug(f"样本记录时间格式: {type(sample['time'])} 值: {sample['time']}")
 
-                cursor = self.db.reasoning_logs.find(query).sort("time", -1)
+                cursor = db.reasoning_logs.find(query).sort("time", -1)
                 new_data = {}
                 total_count = 0
 
@@ -333,17 +315,6 @@ class ReasoningGUI:
 
 
 def main():
-    """主函数"""
-    Database.initialize(
-        uri=os.getenv("MONGODB_URI"),
-        host=os.getenv("MONGODB_HOST", "127.0.0.1"),
-        port=int(os.getenv("MONGODB_PORT", "27017")),
-        db_name=os.getenv("DATABASE_NAME", "MegBot"),
-        username=os.getenv("MONGODB_USERNAME"),
-        password=os.getenv("MONGODB_PASSWORD"),
-        auth_source=os.getenv("MONGODB_AUTH_SOURCE"),
-    )
-
     app = ReasoningGUI()
     app.run()
 

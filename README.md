@@ -95,11 +95,9 @@
 - MongoDB 提供数据持久化支持
 - NapCat 作为QQ协议端支持
 
-**最新版本: v0.5.13**
+**最新版本: v0.5.14** ([查看更新日志](changelog.md))
 > [!WARNING]
 > 注意，3月12日的v0.5.13, 该版本更新较大，建议单独开文件夹部署，然后转移/data文件 和数据库，数据库可能需要删除messages下的内容（不需要删除记忆）
-
-
 
 <div align="center">
 <a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
@@ -121,24 +119,29 @@
 - [一群](https://qm.qq.com/q/VQ3XZrWgMs) 123456780 ，建议加下面的（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
 - [二群](https://qm.qq.com/q/RzmCiRtHEW) 123456782 （开发和建议相关讨论）不一定有空回复，会优先写文档和代码
 - [三群](https://qm.qq.com/q/wlH5eT8OmQ) 1035228475（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
-
-
+- [四群](https://qm.qq.com/q/wlH5eT8OmQ) 729957033（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
 
 **📚 有热心网友创作的wiki:** https://maimbot.pages.dev/
 
+**📚 由SLAPQ制作的B站教程:** https://www.bilibili.com/opus/1041609335464001545
 
 **😊 其他平台版本** 
 
 - (由 [CabLate](https://github.com/cablate) 贡献) [Telegram 与其他平台(未来可能会有)的版本](https://github.com/cablate/MaiMBot/tree/telegram) - [集中讨论串](https://github.com/SengokuCola/MaiMBot/discussions/149)
 
+## 📝 注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意
+**如果你有想法想要提交pr** 
+- 由于本项目在快速迭代和功能调整，并且有重构计划，目前不接受任何未经过核心开发组讨论的pr合并，谢谢！如您仍旧希望提交pr，可以详情请看置顶issue
+
 <div align="left">
 <h2>📚 文档        ⬇️ 快速开始使用麦麦 ⬇️</h2>
 </div>
 
-### 部署方式
+### 部署方式(忙于开发，部分内容可能过时)
 
 -  📦 **Windows 一键傻瓜式部署**：请运行项目根目录中的 `run.bat`，部署完成后请参照后续配置指南进行配置
 
+-  📦 Linux 自动部署（实验） ：请下载并运行项目根目录中的`run.sh`并按照提示安装，部署完成后请参照后续配置指南进行配置
 
 - [📦 Windows 手动部署指南 ](docs/manual_deploy_windows.md)
 
@@ -148,12 +151,14 @@
 
 - [🐳 Docker部署指南](docs/docker_deploy.md)
 
-
-
 ### 配置说明
 
 - [🎀 新手配置指南](docs/installation_cute.md) - 通俗易懂的配置教程，适合初次使用的猫娘
 - [⚙️ 标准配置指南](docs/installation_standard.md) - 简明专业的配置说明，适合有经验的用户
+
+### 常见问题
+
+- [❓ 快速 Q & A ](docs/fast_q_a.md) - 针对新手的疑难解答，适合完全没接触过编程的新手
 
 <div align="left">
 <h3>了解麦麦 </h3>

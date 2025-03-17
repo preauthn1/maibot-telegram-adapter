@@ -3,10 +3,11 @@ import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict
-from loguru import logger
+from src.common.logger import get_module_logger
 
-from ...common.database import Database
+from ...common.database import db
 
+logger = get_module_logger("llm_statistics")
 
 class LLMStatistics:
     def __init__(self, output_file: str = "llm_statistics.txt"):
@@ -15,7 +16,6 @@ class LLMStatistics:
         Args:
             output_file: 统计结果输出文件路径
         """
-        self.db = Database.get_instance()
         self.output_file = output_file
         self.running = False
         self.stats_thread = None
@@ -53,7 +53,7 @@ class LLMStatistics:
             "costs_by_model": defaultdict(float)
         }
         
-        cursor = self.db.db.llm_usage.find({
+        cursor = db.llm_usage.find({
             "timestamp": {"$gte": start_time}
         })
         

@@ -2,20 +2,28 @@ import asyncio
 import os
 import shutil
 import sys
+from pathlib import Path
 
 import nonebot
 import time
 
 import uvicorn
 from dotenv import load_dotenv
-from loguru import logger
 from nonebot.adapters.onebot.v11 import Adapter
 import platform
+from src.common.logger import get_module_logger
+
+
+# 配置主程序日志格式
+logger = get_module_logger("main_bot")
 
 # 获取没有加载env时的环境变量
 env_mask = {key: os.getenv(key) for key in os.environ}
 
 uvicorn_server = None
+driver = None
+app = None
+loop = None
 
 
 def easter_egg():
@@ -63,24 +71,21 @@ def init_env():
 
     # 首先加载基础环境变量.env
     if os.path.exists(".env"):
-        load_dotenv(".env",override=True)
+        load_dotenv(".env", override=True)
         logger.success("成功加载基础环境变量配置")
 
 
 def load_env():
     # 使用闭包实现对加载器的横向扩展，避免大量重复判断
     def prod():
-        logger.success("加载生产环境变量配置")
+        logger.success("成功加载生产环境变量配置")
         load_dotenv(".env.prod", override=True)  # override=True 允许覆盖已存在的环境变量
 
     def dev():
-        logger.success("加载开发环境变量配置")
+        logger.success("成功加载开发环境变量配置")
         load_dotenv(".env.dev", override=True)  # override=True 允许覆盖已存在的环境变量
 
-    fn_map = {
-        "prod": prod,
-        "dev": dev
-    }
+    fn_map = {"prod": prod, "dev": dev}
 
     env = os.getenv("ENVIRONMENT")
     logger.info(f"[load_env] 当前的 ENVIRONMENT 变量值：{env}")
@@ -95,29 +100,6 @@ def load_env():
     else:
         logger.error(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
         RuntimeError(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
-
-
-def load_logger():
-    logger.remove()  # 移除默认配置
-    if os.getenv("ENVIRONMENT") == "dev":
-        logger.add(
-            sys.stderr,
-            format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <fg #777777>|</> <level>{level: <7}</level> <fg "
-                   "#777777>|</> <cyan>{name:.<8}</cyan>:<cyan>{function:.<8}</cyan>:<cyan>{line: >4}</cyan> <fg "
-                   "#777777>-</> <level>{message}</level>",
-            colorize=True,
-            level=os.getenv("LOG_LEVEL", "DEBUG"),  # 根据环境设置日志级别，默认为DEBUG
-        )
-    else:
-        logger.add(
-            sys.stderr,
-            format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> <fg #777777>|</> <level>{level: <7}</level> <fg "
-                "#777777>|</> <cyan>{name:.<8}</cyan>:<cyan>{function:.<8}</cyan>:<cyan>{line: >4}</cyan> <fg "
-                "#777777>-</> <level>{message}</level>",
-            colorize=True,
-            level=os.getenv("LOG_LEVEL", "INFO"),  # 根据环境设置日志级别，默认为INFO
-            filter=lambda record: "nonebot" not in record["name"]
-        )
 
 
 
@@ -148,10 +130,7 @@ def scan_provider(env_config: dict):
     # 检查每个 provider 是否同时存在 url 和 key
     for provider_name, config in provider.items():
         if config["url"] is None or config["key"] is None:
-            logger.error(
-                f"provider 内容：{config}\n"
-                f"env_config 内容：{env_config}"
-            )
+            logger.error(f"provider 内容：{config}\nenv_config 内容：{env_config}")
             raise ValueError(f"请检查 '{provider_name}' 提供商配置是否丢失 BASE_URL 或 KEY 环境变量")
 
 
@@ -180,25 +159,47 @@ async def uvicorn_main():
         reload=os.getenv("ENVIRONMENT") == "dev",
         timeout_graceful_shutdown=5,
         log_config=None,
-        access_log=False
+        access_log=False,
     )
     server = uvicorn.Server(config)
     uvicorn_server = server
     await server.serve()
 
+def check_eula():
+    eula_file = Path("elua.confirmed")
+    
+    # 如果已经确认过EULA，直接返回
+    if eula_file.exists():
+        return
+        
+    print("使用MaiMBot前请先阅读ELUA协议，继续运行视为同意协议")
+    print("协议内容：https://github.com/SengokuCola/MaiMBot/blob/main/EULA.md")
+    print('输入"同意"或"confirmed"继续运行')
+    
+    while True:
+        user_input = input().strip().lower()  # 转换为小写以忽略大小写
+        if user_input in ['同意', 'confirmed']:
+            # 创建确认文件
+            eula_file.touch()
+            break
+        else:
+            print('请输入"同意"或"confirmed"以继续运行')
+
 
 def raw_main():
     # 利用 TZ 环境变量设定程序工作的时区
     # 仅保证行为一致，不依赖 localtime()，实际对生产环境几乎没有作用
-    if platform.system().lower() != 'windows':
+    if platform.system().lower() != "windows":
         time.tzset()
-
+        
+    check_eula()
+    
     easter_egg()
-    load_logger()
     init_config()
     init_env()
     load_env()
-    load_logger()
+    
+    # load_logger()
 
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
@@ -223,21 +224,24 @@ def raw_main():
 
 
 if __name__ == "__main__":
-
     try:
         raw_main()
 
-        global app
         app = nonebot.get_asgi()
-
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(uvicorn_main())
-    except KeyboardInterrupt:
-        logger.warning("麦麦会努力做的更好的！正在停止中......")
+        
+        try:
+            loop.run_until_complete(uvicorn_main())
+        except KeyboardInterrupt:
+            logger.warning("收到中断信号，正在优雅关闭...")
+            loop.run_until_complete(graceful_shutdown())
+        finally:
+            loop.close()
+            
     except Exception as e:
-        logger.error(f"主程序异常: {e}")
-    finally:
-        loop.run_until_complete(graceful_shutdown())
-        loop.close()
-        logger.info("进程终止完毕，麦麦开始休眠......下次再见哦！")
+        logger.error(f"主程序异常: {str(e)}")
+        if loop and not loop.is_closed():
+            loop.run_until_complete(graceful_shutdown())
+            loop.close()
+        sys.exit(1)

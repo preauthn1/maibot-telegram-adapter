@@ -2,15 +2,17 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Union
 
-from loguru import logger
+from src.common.logger import get_module_logger
 from nonebot.adapters.onebot.v11 import Bot
-
+from ...common.database import db
 from .message_cq import MessageSendCQ
 from .message import MessageSending, MessageThinking, MessageRecv, MessageSet
 
 from .storage import MessageStorage
 from .config import global_config
+from .utils import truncate_message
 
+logger = get_module_logger("msg_sender")
 
 class Message_Sender:
     """发送器"""
@@ -23,6 +25,14 @@ class Message_Sender:
     def set_bot(self, bot: Bot):
         """设置当前bot实例"""
         self._current_bot = bot
+    
+    def get_recalled_messages(self, stream_id: str) -> list:
+        """获取所有撤回的消息"""
+        recalled_messages = []
+
+        recalled_messages = list(db.recalled_messages.find({"stream_id": stream_id}, {"message_id": 1}))
+        # 按thinking_start_time排序，时间早的在前面
+        return recalled_messages
 
     async def send_message(
         self,
@@ -31,35 +41,40 @@ class Message_Sender:
         """发送消息"""
 
         if isinstance(message, MessageSending):
-            message_json = message.to_dict()
-            message_send = MessageSendCQ(data=message_json)
-            # logger.debug(message_send.message_info,message_send.raw_message)
-            if (
-                message_send.message_info.group_info
-                and message_send.message_info.group_info.group_id
-            ):
-                try:
-                    await self._current_bot.send_group_msg(
-                        group_id=message.message_info.group_info.group_id,
-                        message=message_send.raw_message,
-                        auto_escape=False,
-                    )
-                    logger.success(f"[调试] 发送消息{message.processed_plain_text}成功")
-                except Exception as e:
-                    logger.error(f"[调试] 发生错误 {e}")
-                    logger.error(f"[调试] 发送消息{message.processed_plain_text}失败")
-            else:
-                try:
-                    logger.debug(message.message_info.user_info)
-                    await self._current_bot.send_private_msg(
-                        user_id=message.sender_info.user_id,
-                        message=message_send.raw_message,
-                        auto_escape=False,
-                    )
-                    logger.success(f"[调试] 发送消息{message.processed_plain_text}成功")
-                except Exception as e:
-                    logger.error(f"发生错误 {e}")
-                    logger.error(f"[调试] 发送消息{message.processed_plain_text}失败")
+            recalled_messages = self.get_recalled_messages(message.chat_stream.stream_id)
+            is_recalled = False
+            for recalled_message in recalled_messages:
+                if message.reply_to_message_id == recalled_message["message_id"]:
+                    is_recalled = True
+                    logger.warning(f"消息“{message.processed_plain_text}”已被撤回，不发送")
+                    break
+            if not is_recalled:
+                message_json = message.to_dict()
+                message_send = MessageSendCQ(data=message_json)
+                message_preview = truncate_message(message.processed_plain_text)
+                if message_send.message_info.group_info and message_send.message_info.group_info.group_id:
+                    try:
+                        await self._current_bot.send_group_msg(
+                            group_id=message.message_info.group_info.group_id,
+                            message=message_send.raw_message,
+                            auto_escape=False,
+                        )
+                        logger.success(f"[调试] 发送消息“{message_preview}”成功")
+                    except Exception as e:
+                        logger.error(f"[调试] 发生错误 {e}")
+                        logger.error(f"[调试] 发送消息“{message_preview}”失败")
+                else:
+                    try:
+                        logger.debug(message.message_info.user_info)
+                        await self._current_bot.send_private_msg(
+                            user_id=message.sender_info.user_id,
+                            message=message_send.raw_message,
+                            auto_escape=False,
+                        )
+                        logger.success(f"[调试] 发送消息“{message_preview}”成功")
+                    except Exception as e:
+                        logger.error(f"[调试] 发生错误 {e}")
+                        logger.error(f"[调试] 发送消息“{message_preview}”失败")
 
 
 class MessageContainer:
@@ -142,9 +157,7 @@ class MessageManager:
             self.containers[chat_id] = MessageContainer(chat_id)
         return self.containers[chat_id]
 
-    def add_message(
-        self, message: Union[MessageThinking, MessageSending, MessageSet]
-    ) -> None:
+    def add_message(self, message: Union[MessageThinking, MessageSending, MessageSet]) -> None:
         chat_stream = message.chat_stream
         if not chat_stream:
             raise ValueError("无法找到对应的聊天流")
@@ -171,25 +184,23 @@ class MessageManager:
                 if thinking_time > global_config.thinking_timeout:
                     logger.warning(f"消息思考超时({thinking_time}秒)，移除该消息")
                     container.remove_message(message_earliest)
-            else:
 
+            else:
                 if (
                     message_earliest.is_head
-                    and message_earliest.update_thinking_time() > 30
+                    and message_earliest.update_thinking_time() > 10
                     and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                 ):
-                    await message_sender.send_message(message_earliest.set_reply())
-                else:
-                    await message_sender.send_message(message_earliest)
+                    message_earliest.set_reply()
+                        
                 await message_earliest.process()
+                
+                await message_sender.send_message(message_earliest)
+                
 
-                print(
-                    f"\033[1;34m[调试]\033[0m 消息'{message_earliest.processed_plain_text}'正在发送中"
-                )
 
-                await self.storage.store_message(
-                    message_earliest, message_earliest.chat_stream, None
-                )
+
+                await self.storage.store_message(message_earliest, message_earliest.chat_stream, None)
 
                 container.remove_message(message_earliest)
 
@@ -203,16 +214,15 @@ class MessageManager:
                     try:
                         if (
                             msg.is_head
-                            and msg.update_thinking_time() > 30
+                            and msg.update_thinking_time() > 10
                             and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                         ):
-                            await message_sender.send_message(msg.set_reply())
-                        else:
-                            await message_sender.send_message(msg)
-
-                        # if msg.is_emoji:
-                        #     msg.processed_plain_text = "[表情包]"
-                        await msg.process()
+                            msg.set_reply()
+                            
+                        await msg.process()    
+                        
+                        await message_sender.send_message(msg)
+                        
                         await self.storage.store_message(msg, msg.chat_stream, None)
 
                         if not container.remove_message(msg):

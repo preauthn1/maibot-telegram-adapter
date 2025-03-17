@@ -7,7 +7,7 @@ from typing import Dict, List
 import jieba
 import numpy as np
 from nonebot import get_driver
-from loguru import logger
+from src.common.logger import get_module_logger
 
 from ..models.utils_model import LLM_request
 from ..utils.typo_generator import ChineseTypoGenerator
@@ -16,9 +16,12 @@ from .message import MessageRecv,Message
 from .message_base import UserInfo
 from .chat_stream import ChatStream
 from ..moods.moods import MoodManager
+from ...common.database import db
 
 driver = get_driver()
 config = driver.config
+
+logger = get_module_logger("chat_utils")
 
 
 
@@ -51,7 +54,7 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
 
 async def get_embedding(text):
     """获取文本的embedding向量"""
-    llm = LLM_request(model=global_config.embedding)
+    llm = LLM_request(model=global_config.embedding,request_type = 'embedding')
     # return llm.get_embedding_sync(text)
     return await llm.get_embedding(text)
 
@@ -76,11 +79,10 @@ def calculate_information_content(text):
     return entropy
 
 
-def get_cloest_chat_from_db(db, length: int, timestamp: str):
+def get_closest_chat_from_db(length: int, timestamp: str):
     """从数据库中获取最接近指定时间戳的聊天记录
     
     Args:
-        db: 数据库实例
         length: 要获取的消息数量
         timestamp: 时间戳
         
@@ -88,13 +90,13 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
         list: 消息记录列表，每个记录包含时间和文本信息
     """
     chat_records = []
-    closest_record = db.db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
+    closest_record = db.messages.find_one({"time": {"$lte": timestamp}}, sort=[('time', -1)])
     
     if closest_record:            
         closest_time = closest_record['time']
         chat_id = closest_record['chat_id']  # 获取chat_id
         # 获取该时间戳之后的length条消息，保持相同的chat_id
-        chat_records = list(db.db.messages.find(
+        chat_records = list(db.messages.find(
             {
                 "time": {"$gt": closest_time},
                 "chat_id": chat_id  # 添加chat_id过滤
@@ -104,10 +106,13 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
         # 转换记录格式
         formatted_records = []
         for record in chat_records:
+            # 兼容行为，前向兼容老数据
             formatted_records.append({
+                '_id': record["_id"],
                 'time': record["time"],
                 'chat_id': record["chat_id"],
-                'detailed_plain_text': record.get("detailed_plain_text", "")  # 添加文本内容
+                'detailed_plain_text': record.get("detailed_plain_text", ""),  # 添加文本内容
+                'memorized_times': record.get("memorized_times", 0)  # 添加记忆次数
             })
             
         return formatted_records
@@ -115,11 +120,10 @@ def get_cloest_chat_from_db(db, length: int, timestamp: str):
     return []
 
 
-async def get_recent_group_messages(db, chat_id:str, limit: int = 12) -> list:
+async def get_recent_group_messages(chat_id:str, limit: int = 12) -> list:
     """从数据库获取群组最近的消息记录
     
     Args:
-        db: Database实例
         group_id: 群组ID
         limit: 获取消息数量，默认12条
         
@@ -128,7 +132,7 @@ async def get_recent_group_messages(db, chat_id:str, limit: int = 12) -> list:
     """
 
     # 从数据库获取最近消息
-    recent_messages = list(db.db.messages.find(
+    recent_messages = list(db.messages.find(
         {"chat_id": chat_id},
     ).sort("time", -1).limit(limit))
 
@@ -161,8 +165,8 @@ async def get_recent_group_messages(db, chat_id:str, limit: int = 12) -> list:
     return message_objects
 
 
-def get_recent_group_detailed_plain_text(db, chat_stream_id: int, limit: int = 12, combine=False):
-    recent_messages = list(db.db.messages.find(
+def get_recent_group_detailed_plain_text(chat_stream_id: int, limit: int = 12, combine=False):
+    recent_messages = list(db.messages.find(
         {"chat_id": chat_stream_id},
         {
             "time": 1,  # 返回时间字段
@@ -191,6 +195,35 @@ def get_recent_group_detailed_plain_text(db, chat_stream_id: int, limit: int = 1
         for msg_db_data in recent_messages:
             message_detailed_plain_text_list.append(msg_db_data["detailed_plain_text"])
         return message_detailed_plain_text_list
+
+
+def get_recent_group_speaker(chat_stream_id: int, sender, limit: int = 12) -> list:
+    # 获取当前群聊记录内发言的人
+    recent_messages = list(db.messages.find(
+        {"chat_id": chat_stream_id},
+        {
+            "chat_info": 1,
+            "user_info": 1,
+        }
+    ).sort("time", -1).limit(limit))
+
+    if not recent_messages:
+        return []
+
+    who_chat_in_group = []  # ChatStream列表
+
+    duplicate_removal = []
+    for msg_db_data in recent_messages:
+        user_info = UserInfo.from_dict(msg_db_data["user_info"])
+        if (user_info.user_id, user_info.platform) != sender \
+                and (user_info.user_id, user_info.platform) != (global_config.BOT_QQ, "qq") \
+                and (user_info.user_id, user_info.platform) not in duplicate_removal \
+                and len(duplicate_removal) < 5:  # 排除重复，排除消息发送者，排除bot(此处bot的平台强制为了qq，可能需要更改)，限制加载的关系数目
+
+            duplicate_removal.append((user_info.user_id, user_info.platform))
+            chat_info = msg_db_data.get("chat_info", {})
+            who_chat_in_group.append(ChatStream.from_dict(chat_info))
+    return who_chat_in_group
 
 
 def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
@@ -406,3 +439,10 @@ def find_similar_topics_simple(text: str, topics: list, top_k: int = 5) -> list:
 
     # 按相似度降序排序并返回前k个
     return sorted(similarities, key=lambda x: x[1], reverse=True)[:top_k]
+
+
+def truncate_message(message: str, max_length=20) -> str:
+    """截断消息，使其不超过指定长度"""
+    if len(message) > max_length:
+        return message[:max_length] + "..."
+    return message
