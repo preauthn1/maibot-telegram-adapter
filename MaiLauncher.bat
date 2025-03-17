@@ -200,7 +200,7 @@ if !errorlevel! neq 0 (
             )
         )
     ) else (
-        call :RED_WARNING "警告：MongoDB服务未运行，将导致应用程序无法访问数据库！"
+        echo "警告：MongoDB服务未运行，将导致MaiMBot无法访问数据库！"
     )
 ) else (
     echo MongoDB服务已运行
@@ -345,24 +345,11 @@ goto menu
 
 :handle_conda
 where conda >nul 2>&1 || (
-    echo 未检测到conda，是否安装Miniconda？
-    set /p conda_confirm="安装？(Y/N): "
-    if /i "!conda_confirm!"=="N" (
-            goto env_interaction
-    )
-
-    echo 正在安装Miniconda...
-    winget install --id Anaconda.Miniconda3 -e || (
-        echo 安装失败，错误码：!errorlevel!
-        pause
-        goto env_interaction
-    )
-    if exist "%UserProfile%\Miniconda3\Scripts\conda.exe" (
-        call "%UserProfile%\Miniconda3\Scripts\conda.exe" init cmd.exe
-        echo 安装完成后请重启脚本
-        timeout /t 10 >nul
-        exit /b
-    )
+    echo 未检测到conda，可能原因：
+    echo 1. 未安装Miniconda
+    echo 2. conda配置异常
+    timeout /t 10 >nul
+    goto env_interaction
 )
 
 :conda_menu
