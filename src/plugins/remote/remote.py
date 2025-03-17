@@ -5,7 +5,10 @@ import platform
 import os
 import json
 import threading
-from loguru import logger
+from src.common.logger import get_module_logger
+from src.plugins.chat.config import global_config
+
+logger = get_module_logger("remote")
 
 # UUID文件路径
 UUID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "client_uuid.json")
@@ -30,9 +33,9 @@ def get_unique_id():
     try:
         with open(UUID_FILE, "w") as f:
             json.dump({"client_id": client_id}, f)
-        print("已保存新生成的客户端ID到本地文件")
+        logger.info("已保存新生成的客户端ID到本地文件")
     except IOError as e:
-        print(f"保存UUID时出错: {e}")
+        logger.error(f"保存UUID时出错: {e}")
 
     return client_id
 
@@ -90,13 +93,14 @@ class HeartbeatThread(threading.Thread):
         self.running = False
 
 def main():
-    """主函数，启动心跳线程"""
-    # 配置
-    SERVER_URL = "http://hyybuth.xyz:10058"
-    HEARTBEAT_INTERVAL = 300  # 5分钟（秒）
-    
-    # 创建并启动心跳线程
-    heartbeat_thread = HeartbeatThread(SERVER_URL, HEARTBEAT_INTERVAL)
-    heartbeat_thread.start()
-    
-    return heartbeat_thread  # 返回线程对象，便于外部控制
+    if global_config.remote_enable:
+        """主函数，启动心跳线程"""
+        # 配置
+        SERVER_URL = "http://hyybuth.xyz:10058"
+        HEARTBEAT_INTERVAL = 300  # 5分钟（秒）
+        
+        # 创建并启动心跳线程
+        heartbeat_thread = HeartbeatThread(SERVER_URL, HEARTBEAT_INTERVAL)
+        heartbeat_thread.start()
+        
+        return heartbeat_thread  # 返回线程对象，便于外部控制
