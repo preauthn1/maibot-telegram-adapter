@@ -100,6 +100,44 @@ MODEL_PROVIDER_LIST = [
 #env读取保存结束
 #==============================================
 
+#获取在线麦麦数量
+import requests
+
+def get_online_maimbot(url="http://hyybuth.xyz:10058/api/clients/details", timeout=10):
+    """
+    获取在线客户端详细信息。
+
+    参数:
+        url (str): API 请求地址，默认值为 "http://hyybuth.xyz:10058/api/clients/details"。
+        timeout (int): 请求超时时间，默认值为 10 秒。
+
+    返回:
+        dict: 解析后的 JSON 数据。
+
+    异常:
+        如果请求失败或数据格式不正确，将返回 None 并记录错误信息。
+    """
+    try:
+        response = requests.get(url, timeout=timeout)
+        # 检查 HTTP 响应状态码是否为 200
+        if response.status_code == 200:
+            # 尝试解析 JSON 数据
+            return response.json()
+        else:
+            logger.error(f"请求失败，状态码: {response.status_code}")
+            return None
+    except requests.exceptions.Timeout:
+        logger.error("请求超时，请检查网络连接或增加超时时间。")
+        return None
+    except requests.exceptions.ConnectionError:
+        logger.error("连接错误，请检查网络或API地址是否正确。")
+        return None
+    except ValueError:  # 包括 json.JSONDecodeError
+        logger.error("无法解析返回的JSON数据，请检查API返回内容。")
+        return None
+
+online_maimbot_data = get_online_maimbot()
+
 #==============================================
 #env环境文件中插件修改更新函数
 def add_item(new_item, current_list):
@@ -399,6 +437,10 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
         ### 欢迎使用由墨梓柒MotricSeven编写的MaimBot配置文件编辑器\n
         """
     )
+    gr.Markdown(
+        value="## 全球在线MaiMBot数量: " + str(online_maimbot_data['online_clients'])
+    )
+
     gr.Markdown(
         value="### 配置文件版本：" + config_data["inner"]["version"]
     )
