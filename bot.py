@@ -183,9 +183,9 @@ def check_eula():
     # 检查EULA确认文件是否存在
     if eula_confirm_file.exists():
         # 检查EULA文件版本是否更新（对比哈希）
-        with open(eula_file, "r") as f:
+        with open(eula_file, "r", encoding="utf-8") as f:
             eula_content = f.read()
-        with open(eula_confirm_file, "r") as f:
+        with open(eula_confirm_file, "r", encoding="utf-8") as f:
             confirmed_content = f.read()
         # 计算EULA文件的md5值
         eula_new_hash = hashlib.md5(eula_content.encode("utf-8")).hexdigest()
@@ -197,9 +197,9 @@ def check_eula():
     # 检查隐私条款确认文件是否存在
     if privacy_confirm_file.exists():
         # 检查隐私条款文件版本是否更新（对比哈希）
-        with open(privacy_file, "r") as f:
+        with open(privacy_file, "r", encoding="utf-8") as f:
             privacy_content = f.read()
-        with open(privacy_confirm_file, "r") as f:
+        with open(privacy_confirm_file, "r", encoding="utf-8") as f:
             confirmed_content = f.read()
         # 计算隐私条款文件的md5值
         privacy_new_hash = hashlib.md5(privacy_content.encode("utf-8")).hexdigest()
