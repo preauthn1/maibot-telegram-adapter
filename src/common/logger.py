@@ -119,6 +119,75 @@ MEMORY_STYLE_CONFIG = {
     }
 }
 
+# 海马体日志样式配置
+SENDER_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{extra[module]: <12}</cyan> | "
+            "<light-yellow>消息发送</light-yellow> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": (
+            "{time:YYYY-MM-DD HH:mm:ss} | "
+            "{level: <8} | "
+            "{extra[module]: <15} | "
+            "消息发送 | "
+            "{message}"
+        )
+    },
+    "simple": {
+        "console_format": (
+            "<green>{time:MM-DD HH:mm}</green> | "
+            "<green>消息发送</green> | "
+            "{message}"
+        ),
+        "file_format": (
+            "{time:YYYY-MM-DD HH:mm:ss} | "
+            "{level: <8} | "
+            "{extra[module]: <15} | "
+            "消息发送 | "
+            "{message}"
+        )
+    }
+}
+
+LLM_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{extra[module]: <12}</cyan> | "
+            "<light-yellow>麦麦组织语言</light-yellow> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": (
+            "{time:YYYY-MM-DD HH:mm:ss} | "
+            "{level: <8} | "
+            "{extra[module]: <15} | "
+            "麦麦组织语言 | "
+            "{message}"
+        )
+    },
+    "simple": {
+        "console_format": (
+            "<green>{time:MM-DD HH:mm}</green> | "
+            "<light-green>麦麦组织语言</light-green> | "
+            "{message}"
+        ),
+        "file_format": (
+            "{time:YYYY-MM-DD HH:mm:ss} | "
+            "{level: <8} | "
+            "{extra[module]: <15} | "
+            "麦麦组织语言 | "
+            "{message}"
+        )
+    }
+}
+            
+
+
 # Topic日志样式配置
 TOPIC_STYLE_CONFIG = {
     "advanced": {
@@ -156,6 +225,8 @@ TOPIC_STYLE_CONFIG = {
 # 根据ENABLE_ADVANCE_OUTPUT选择配置
 MEMORY_STYLE_CONFIG = MEMORY_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else MEMORY_STYLE_CONFIG["simple"]
 TOPIC_STYLE_CONFIG = TOPIC_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else TOPIC_STYLE_CONFIG["simple"]
+SENDER_STYLE_CONFIG = SENDER_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else SENDER_STYLE_CONFIG["simple"]
+LLM_STYLE_CONFIG = LLM_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else LLM_STYLE_CONFIG["simple"]
 
 def filter_nonebot(record: dict) -> bool:
     """过滤nonebot的日志"""
