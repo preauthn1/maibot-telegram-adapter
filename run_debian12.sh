@@ -194,7 +194,7 @@ check_eula() {
     current_md5_privacy=$(md5sum ${INSTALL_DIR}/repo/PRIVACY.md | awk '{print $1}')
 
     # 检查eula.confirmed文件是否存在
-    if [[ -f repo/elua.confirmed ]]; then
+    if [[ -f ${INSTALL_DIR}/repo/elua.confirmed ]]; then
         # 如果存在则检查其中包含的md5与current_md5是否一致
         confirmed_md5=$(cat ${INSTALL_DIR}/repo/elua.confirmed)
     else
@@ -202,7 +202,7 @@ check_eula() {
     fi
 
     # 检查privacy.confirmed文件是否存在
-    if [[ -f repo/privacy ]]; then
+    if [[ -f ${INSTALL_DIR}/repo/privacy.confirmed ]]; then
         # 如果存在则检查其中包含的md5与current_md5是否一致
         confirmed_md5_privacy=$(cat ${INSTALL_DIR}/repo/privacy.confirmed)
     else
