@@ -208,9 +208,9 @@ def check_eula():
             user_input = input().strip().lower()
             if user_input in ['同意', 'confirmed']:
                 if eula_updated:
-                    eula_confirm_file.write_text(eula_file.read_text())
+                    eula_confirm_file.write_text(eula_file.read_text(encoding="utf-8"),encoding="utf-8")
                 if privacy_updated:
-                    privacy_confirm_file.write_text(privacy_file.read_text())
+                    privacy_confirm_file.write_text(privacy_file.read_text(encoding="utf-8"),encoding="utf-8")
                 break
             else:
                 print('请输入"同意"或"confirmed"以继续运行')
