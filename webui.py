@@ -6,6 +6,7 @@ import shutil
 import ast
 import json
 from packaging import version
+from decimal import Decimal, ROUND_DOWN
 
 logger = get_module_logger("webui")
 
@@ -337,30 +338,30 @@ def save_bot_config(t_qqbot_qq, t_nickname,t_nickname_final_result):
 
 # 监听滑块的值变化，确保总和不超过 1，并显示警告
 def adjust_personality_greater_probabilities(t_personality_1_probability, t_personality_2_probability, t_personality_3_probability):
-    total = t_personality_1_probability + t_personality_2_probability + t_personality_3_probability
-    if total > 1.0:
-        warning_message = f"警告: 人格1、人格2和人格3的概率总和为 {total:.2f}，超过了 1.0！请调整滑块使总和等于 1.0。"
+    total = Decimal(str(t_personality_1_probability)) + Decimal(str(t_personality_2_probability)) + Decimal(str(t_personality_3_probability))
+    if total > Decimal('1.0'):
+        warning_message = f"警告: 人格1、人格2和人格3的概率总和为 {float(total):.2f}，超过了 1.0！请调整滑块使总和等于 1.0。"
         return warning_message
     return ""  # 没有警告时返回空字符串
 
 def adjust_personality_less_probabilities(t_personality_1_probability, t_personality_2_probability, t_personality_3_probability):
-    total = t_personality_1_probability + t_personality_2_probability + t_personality_3_probability
-    if total < 1.0:
-        warning_message = f"警告: 人格1、人格2和人格3的概率总和为 {total:.2f}，小于 1.0！请调整滑块使总和等于 1.0。"
+    total = Decimal(str(t_personality_1_probability)) + Decimal(str(t_personality_2_probability)) + Decimal(str(t_personality_3_probability))
+    if total < Decimal('1.0'):
+        warning_message = f"警告: 人格1、人格2和人格3的概率总和为 {float(total):.2f}，小于 1.0！请调整滑块使总和等于 1.0。"
         return warning_message
     return ""  # 没有警告时返回空字符串
 
 def adjust_model_greater_probabilities(t_model_1_probability, t_model_2_probability, t_model_3_probability):
-    total = t_model_1_probability + t_model_2_probability + t_model_3_probability
-    if total > 1.0:
-        warning_message = f"警告: 选择模型1、模型2和模型3的概率总和为 {total:.2f}，超过了 1.0！请调整滑块使总和等于 1.0。"
+    total = Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
+    if total > Decimal('1.0'):
+        warning_message = f"警告: 选择模型1、模型2和模型3的概率总和为 {float(total):.2f}，超过了 1.0！请调整滑块使总和等于 1.0。"
         return warning_message
     return ""  # 没有警告时返回空字符串
 
 def adjust_model_less_probabilities(t_model_1_probability, t_model_2_probability, t_model_3_probability):
-    total = t_model_1_probability + t_model_2_probability + t_model_3_probability
-    if total > 1.0:
-        warning_message = f"警告: 选择模型1、模型2和模型3的概率总和为 {total:.2f}，小于了 1.0！请调整滑块使总和等于 1.0。"
+    total = Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
+    if total < Decimal('1.0'):
+        warning_message = f"警告: 选择模型1、模型2和模型3的概率总和为 {float(total):.2f}，小于了 1.0！请调整滑块使总和等于 1.0。"
         return warning_message
     return ""  # 没有警告时返回空字符串
 
@@ -929,7 +930,7 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                                     choices=ban_words_list,
                                     label="选择要删除的违禁词"
                                 )
-                            ban_words_delete_btn = gr.Button("删除", scale=1)
+                                ban_words_delete_btn = gr.Button("删除", scale=1)
 
                         ban_words_final_result = gr.Text(label="修改后的违禁词")
                         ban_words_add_btn.click(
