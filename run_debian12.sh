@@ -161,8 +161,8 @@ switch_branch() {
 
     sed -i "s/^BRANCH=.*/BRANCH=${new_branch}/" /etc/maimbot_install.conf
     BRANCH="${new_branch}"
+    check_eula
     systemctl restart ${SERVICE_NAME}
-    touch "${INSTALL_DIR}/repo/elua.confirmed"
     whiptail --msgbox "✅ 已切换到分支 ${new_branch} 并重启服务！" 10 60
 }
 
@@ -194,9 +194,9 @@ check_eula() {
     current_md5_privacy=$(md5sum ${INSTALL_DIR}/repo/PRIVACY.md | awk '{print $1}')
 
     # 检查eula.confirmed文件是否存在
-    if [[ -f ${INSTALL_DIR}/repo/elua.confirmed ]]; then
+    if [[ -f ${INSTALL_DIR}/repo/eula.confirmed ]]; then
         # 如果存在则检查其中包含的md5与current_md5是否一致
-        confirmed_md5=$(cat ${INSTALL_DIR}/repo/elua.confirmed)
+        confirmed_md5=$(cat ${INSTALL_DIR}/repo/eula.confirmed)
     else
         confirmed_md5=""
     fi
@@ -213,7 +213,7 @@ check_eula() {
     if [[ $current_md5 != $confirmed_md5 || $current_md5_privacy != $confirmed_md5_privacy ]]; then
         whiptail --title "📜 使用协议更新" --yesno "检测到麦麦Bot EULA或隐私条款已更新。\nhttps://github.com/SengokuCola/MaiMBot/blob/main/EULA.md\nhttps://github.com/SengokuCola/MaiMBot/blob/main/PRIVACY.md\n\n您是否同意上述协议？ \n\n " 12 70
         if [[ $? -eq 0 ]]; then
-            echo $current_md5 > ${INSTALL_DIR}/repo/elua.confirmed
+            echo $current_md5 > ${INSTALL_DIR}/repo/eula.confirmed
             echo $current_md5_privacy > ${INSTALL_DIR}/repo/privacy.confirmed
         else
             exit 1
@@ -231,7 +231,7 @@ run_installation() {
     fi
 
     # 协议确认
-    if ! (whiptail --title "ℹ️ [1/6] 使用协议" --yes-button "我同意" --no-button "我拒绝" --yesno "使用麦麦Bot及此脚本前请先阅读ELUA协议及隐私协议\nhttps://github.com/SengokuCola/MaiMBot/blob/main/EULA.md\nhttps://github.com/SengokuCola/MaiMBot/blob/main/PRIVACY.md\n\n您是否同意上述协议？" 12 70); then
+    if ! (whiptail --title "ℹ️ [1/6] 使用协议" --yes-button "我同意" --no-button "我拒绝" --yesno "使用麦麦Bot及此脚本前请先阅读EULA协议及隐私协议\nhttps://github.com/SengokuCola/MaiMBot/blob/main/EULA.md\nhttps://github.com/SengokuCola/MaiMBot/blob/main/PRIVACY.md\n\n您是否同意上述协议？" 12 70); then
         exit 1
     fi
 
@@ -398,7 +398,7 @@ run_installation() {
     # 首先计算当前隐私条款文件的哈希值
     current_md5_privacy=$(md5sum repo/PRIVACY.md | awk '{print $1}')
 
-    echo $current_md5 > repo/elua.confirmed
+    echo $current_md5 > repo/eula.confirmed
     echo $current_md5_privacy > repo/privacy.confirmed
 
     echo -e "${GREEN}创建系统服务...${RESET}"
