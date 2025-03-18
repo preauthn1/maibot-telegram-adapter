@@ -12,6 +12,7 @@ from nonebot.adapters.onebot.v11 import (
     FriendRecallNoticeEvent,
 )
 
+from src.common.logger import get_module_logger
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
@@ -31,11 +32,8 @@ from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname, get_groupname
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
-from ..utils.logger_config import LogClassification, LogModule
 
-# 配置日志
-log_module = LogModule()
-logger = log_module.setup_logger(LogClassification.CHAT)
+logger = get_module_logger("chat_bot")
 
 
 class ChatBot:
@@ -85,7 +83,7 @@ class ChatBot:
             chat_stream=chat,
         )
         await relationship_manager.update_relationship_value(
-            chat_stream=chat, relationship_value=0.5
+            chat_stream=chat, relationship_value=0
         )
 
         await message.process()
@@ -139,20 +137,23 @@ class ChatBot:
         )
 
         response = None
-
+        # 开始组织语言
         if random() < reply_probability:
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ,
                 user_nickname=global_config.BOT_NICKNAME,
                 platform=messageinfo.platform,
             )
+            #开始思考的时间点
             thinking_time_point = round(time.time(), 2)
+            logger.info(f"开始思考的时间点: {thinking_time_point}")
             think_id = "mt" + str(thinking_time_point)
             thinking_message = MessageThinking(
                 message_id=think_id,
                 chat_stream=chat,
                 bot_user_info=bot_user_info,
                 reply=message,
+                thinking_start_time=thinking_time_point,
             )
 
             message_manager.add_message(thinking_message)
@@ -190,16 +191,16 @@ class ChatBot:
             thinking_start_time = thinking_message.thinking_start_time
             message_set = MessageSet(chat, think_id)
             # 计算打字时间，1是为了模拟打字，2是避免多条回复乱序
-            accu_typing_time = 0
+            # accu_typing_time = 0
 
             mark_head = False
             for msg in response:
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 # 通过时间改变时间戳
-                typing_time = calculate_typing_time(msg)
-                logger.debug(f"typing_time: {typing_time}")
-                accu_typing_time += typing_time
-                timepoint = thinking_time_point + accu_typing_time
+                # typing_time = calculate_typing_time(msg)
+                # logger.debug(f"typing_time: {typing_time}")
+                # accu_typing_time += typing_time
+                # timepoint = thinking_time_point + accu_typing_time
                 message_segment = Seg(type="text", data=msg)
                 # logger.debug(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
@@ -211,13 +212,17 @@ class ChatBot:
                     reply=message,
                     is_head=not mark_head,
                     is_emoji=False,
+                    thinking_start_time=thinking_start_time,
                 )
-                logger.debug(f"bot_message: {bot_message}")
                 if not mark_head:
                     mark_head = True
-                logger.debug(f"添加消息到message_set: {bot_message}")
                 message_set.add_message(bot_message)
-
+                if len(str(bot_message)) < 1000:
+                    logger.debug(f"bot_message: {bot_message}")
+                    logger.debug(f"添加消息到message_set: {bot_message}")
+                else:
+                    logger.debug(f"bot_message: {str(bot_message)[:1000]}...{str(bot_message)[-10:]}")
+                    logger.debug(f"添加消息到message_set: {str(bot_message)[:1000]}...{str(bot_message)[-10:]}")
             # message_set 可以直接加入 message_manager
             # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
 
@@ -254,20 +259,11 @@ class ChatBot:
                     )
                     message_manager.add_message(bot_message)
 
-            emotion = await self.gpt._get_emotion_tags(raw_content)
-            logger.debug(f"为 '{response}' 获取到的情感标签为：{emotion}")
-            valuedict = {
-                "happy": 0.5,
-                "angry": -1,
-                "sad": -0.5,
-                "surprised": 0.2,
-                "disgusted": -1.5,
-                "fearful": -0.7,
-                "neutral": 0.1,
-            }
-            await relationship_manager.update_relationship_value(
-                chat_stream=chat, relationship_value=valuedict[emotion[0]]
-            )
+            # 获取立场和情感标签，更新关系值
+            stance, emotion = await self.gpt._get_emotion_tags(raw_content, message.processed_plain_text)
+            logger.debug(f"为 '{response}' 立场为：{stance} 获取到的情感标签为：{emotion}")
+            await relationship_manager.calculate_update_relationship_value(chat_stream=chat, label=emotion, stance=stance)
+
             # 使用情绪管理器更新情绪
             self.mood_manager.update_mood_from_emotion(
                 emotion[0], global_config.mood_intensity_factor

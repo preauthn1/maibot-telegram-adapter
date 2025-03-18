@@ -1,5 +1,5 @@
 [inner]
-version = "0.0.9"
+version = "0.0.10"
 
 #以下是给开发人员阅读的，一般用户不需要阅读
 #如果你想要修改配置文件，请在修改后将version的值进行变更
@@ -109,7 +109,7 @@ tone_error_rate=0.2 # 声调错误概率
 word_replace_rate=0.006 # 整词替换概率
 
 [others]
-enable_advance_output = true # 是否启用高级输出
+enable_advance_output = false # 是否启用高级输出
 enable_kuuki_read = true # 是否启用读空气功能
 enable_debug_output = false # 是否启用调试输出
 enable_friend_chat = false # 是否启用好友聊天
@@ -123,7 +123,7 @@ talk_frequency_down = []  #降低回复频率的群
 ban_user_id = []  #禁止回复消息的QQ号
 
 [remote] #测试功能，发送统计信息，主要是看全球有多少只麦麦
-enable = false #默认关闭
+enable = true
 
 
 #V3

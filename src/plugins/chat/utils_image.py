@@ -7,12 +7,15 @@ from typing import Optional, Union
 from PIL import Image
 import io
 
-from loguru import logger
 from nonebot import get_driver
 
 from ...common.database import db
 from ..chat.config import global_config
 from ..models.utils_model import LLM_request
+
+from src.common.logger import get_module_logger
+
+logger = get_module_logger("chat_image")
 
 driver = get_driver()
 config = driver.config
@@ -34,7 +37,7 @@ class ImageManager:
             self._ensure_description_collection()
             self._ensure_image_dir()
             self._initialized = True
-            self._llm = LLM_request(model=global_config.vlm, temperature=0.4, max_tokens=1000)
+            self._llm = LLM_request(model=global_config.vlm, temperature=0.4, max_tokens=1000,request_type = 'image')
 
     def _ensure_image_dir(self):
         """确保图像存储目录存在"""

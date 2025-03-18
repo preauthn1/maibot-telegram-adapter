@@ -1,13 +1,14 @@
 import math
 import random
 import time
+import re
 from collections import Counter
 from typing import Dict, List
 
 import jieba
 import numpy as np
 from nonebot import get_driver
-from loguru import logger
+from src.common.logger import get_module_logger
 
 from ..models.utils_model import LLM_request
 from ..utils.typo_generator import ChineseTypoGenerator
@@ -20,6 +21,8 @@ from ...common.database import db
 
 driver = get_driver()
 config = driver.config
+
+logger = get_module_logger("chat_utils")
 
 
 
@@ -52,7 +55,7 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
 
 async def get_embedding(text):
     """获取文本的embedding向量"""
-    llm = LLM_request(model=global_config.embedding)
+    llm = LLM_request(model=global_config.embedding,request_type = 'embedding')
     # return llm.get_embedding_sync(text)
     return await llm.get_embedding(text)
 
@@ -195,6 +198,35 @@ def get_recent_group_detailed_plain_text(chat_stream_id: int, limit: int = 12, c
         return message_detailed_plain_text_list
 
 
+def get_recent_group_speaker(chat_stream_id: int, sender, limit: int = 12) -> list:
+    # 获取当前群聊记录内发言的人
+    recent_messages = list(db.messages.find(
+        {"chat_id": chat_stream_id},
+        {
+            "chat_info": 1,
+            "user_info": 1,
+        }
+    ).sort("time", -1).limit(limit))
+
+    if not recent_messages:
+        return []
+
+    who_chat_in_group = []  # ChatStream列表
+
+    duplicate_removal = []
+    for msg_db_data in recent_messages:
+        user_info = UserInfo.from_dict(msg_db_data["user_info"])
+        if (user_info.user_id, user_info.platform) != sender \
+                and (user_info.user_id, user_info.platform) != (global_config.BOT_QQ, "qq") \
+                and (user_info.user_id, user_info.platform) not in duplicate_removal \
+                and len(duplicate_removal) < 5:  # 排除重复，排除消息发送者，排除bot(此处bot的平台强制为了qq，可能需要更改)，限制加载的关系数目
+
+            duplicate_removal.append((user_info.user_id, user_info.platform))
+            chat_info = msg_db_data.get("chat_info", {})
+            who_chat_in_group.append(ChatStream.from_dict(chat_info))
+    return who_chat_in_group
+
+
 def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     """将文本分割成句子，但保持书名号中的内容完整
     Args:
@@ -222,7 +254,7 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     # 统一将英文逗号转换为中文逗号
     text = text.replace(',', '，')
     text = text.replace('\n', ' ')
-
+    text, mapping = protect_kaomoji(text)
     # print(f"处理前的文本: {text}")
 
     text_no_1 = ''
@@ -261,6 +293,7 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
                 current_sentence += ' ' + part
         new_sentences.append(current_sentence.strip())
     sentences = [s for s in new_sentences if s]  # 移除空字符串
+    sentences = recover_kaomoji(sentences, mapping)
 
     # print(f"分割后的句子: {sentences}")
     sentences_done = []
@@ -305,7 +338,7 @@ def random_remove_punctuation(text: str) -> str:
 
 def process_llm_response(text: str) -> List[str]:
     # processed_response = process_text_with_typos(content)
-    if len(text) > 200:
+    if len(text) > 100:
         logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
         return ['懒得说']
     # 处理长消息
@@ -327,7 +360,7 @@ def process_llm_response(text: str) -> List[str]:
             sentences.append(sentence)
     # 检查分割后的消息数量是否过多（超过3条）
 
-    if len(sentences) > 5:
+    if len(sentences) > 3:
         logger.warning(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
         return [f'{global_config.BOT_NICKNAME}不知道哦']
 
@@ -415,3 +448,55 @@ def truncate_message(message: str, max_length=20) -> str:
     if len(message) > max_length:
         return message[:max_length] + "..."
     return message
+
+
+def protect_kaomoji(sentence):
+    """"
+    识别并保护句子中的颜文字（含括号与无括号），将其替换为占位符，
+    并返回替换后的句子和占位符到颜文字的映射表。
+    Args:
+        sentence (str): 输入的原始句子
+    Returns:
+        tuple: (处理后的句子, {占位符: 颜文字})
+    """
+    kaomoji_pattern = re.compile(
+        r'('
+        r'[\(\[（【]'             # 左括号
+        r'[^()\[\]（）【】]*?'   # 非括号字符（惰性匹配）
+        r'[^\u4e00-\u9fa5a-zA-Z0-9\s]'  # 非中文、非英文、非数字、非空格字符（必须包含至少一个）
+        r'[^()\[\]（）【】]*?'   # 非括号字符（惰性匹配）
+        r'[\)\]）】]'             # 右括号
+        r')'
+        r'|'
+        r'('
+        r'[▼▽・ᴥω･﹏^><≧≦￣｀´∀ヮДд︿﹀へ｡ﾟ╥╯╰︶︹•⁄]{2,15}'
+        r')'
+    )
+
+    kaomoji_matches = kaomoji_pattern.findall(sentence)
+    placeholder_to_kaomoji = {}
+
+    for idx, match in enumerate(kaomoji_matches):
+        kaomoji = match[0] if match[0] else match[1]
+        placeholder = f'__KAOMOJI_{idx}__'
+        sentence = sentence.replace(kaomoji, placeholder, 1)
+        placeholder_to_kaomoji[placeholder] = kaomoji
+
+    return sentence, placeholder_to_kaomoji
+
+
+def recover_kaomoji(sentences, placeholder_to_kaomoji):
+    """
+    根据映射表恢复句子中的颜文字。
+    Args:
+        sentences (list): 含有占位符的句子列表
+        placeholder_to_kaomoji (dict): 占位符到颜文字的映射表
+    Returns:
+        list: 恢复颜文字后的句子列表
+    """
+    recovered_sentences = []
+    for sentence in sentences:
+        for placeholder, kaomoji in placeholder_to_kaomoji.items():
+            sentence = sentence.replace(placeholder, kaomoji)
+        recovered_sentences.append(sentence)
+    return recovered_sentences

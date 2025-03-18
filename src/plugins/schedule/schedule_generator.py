@@ -3,13 +3,15 @@ import json
 import re
 from typing import Dict, Union
 
-from loguru import logger
 from nonebot import get_driver
 
 from src.plugins.chat.config import global_config
 
 from ...common.database import db  # 使用正确的导入语法
 from ..models.utils_model import LLM_request
+from src.common.logger import get_module_logger
+
+logger = get_module_logger("scheduler")
 
 driver = get_driver()
 config = driver.config
@@ -21,7 +23,7 @@ class ScheduleGenerator:
     def __init__(self):
         # 根据global_config.llm_normal这一字典配置指定模型
         # self.llm_scheduler = LLMModel(model = global_config.llm_normal,temperature=0.9)
-        self.llm_scheduler = LLM_request(model=global_config.llm_normal, temperature=0.9)
+        self.llm_scheduler = LLM_request(model=global_config.llm_normal, temperature=0.9,request_type = 'scheduler')
         self.today_schedule_text = ""
         self.today_schedule = {}
         self.tomorrow_schedule_text = ""

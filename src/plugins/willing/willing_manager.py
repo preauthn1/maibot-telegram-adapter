@@ -1,10 +1,22 @@
 from typing import Optional
-from loguru import logger
+from src.common.logger import get_module_logger
 
 from ..chat.config import global_config
 from .mode_classical import WillingManager as ClassicalWillingManager
 from .mode_dynamic import WillingManager as DynamicWillingManager
 from .mode_custom import WillingManager as CustomWillingManager
+from src.common.logger import LogConfig
+
+willing_config = LogConfig(
+    console_format=(
+        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+        "<level>{level: <8}</level> | "
+        "<red>{extra[module]: <12}</red> | "
+        "<level>{message}</level>"
+    ),
+)
+
+logger = get_module_logger("willing",config=willing_config)
 
 def init_willing_manager() -> Optional[object]:
     """

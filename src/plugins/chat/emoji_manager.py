@@ -9,7 +9,6 @@ from typing import Optional, Tuple
 from PIL import Image
 import io
 
-from loguru import logger
 from nonebot import get_driver
 
 from ...common.database import db
@@ -17,12 +16,10 @@ from ..chat.config import global_config
 from ..chat.utils import get_embedding
 from ..chat.utils_image import ImageManager, image_path_to_base64
 from ..models.utils_model import LLM_request
+from src.common.logger import get_module_logger
 
-from ..utils.logger_config import LogClassification, LogModule
+logger = get_module_logger("emoji")
 
-# 配置日志
-log_module = LogModule()
-logger = log_module.setup_logger(LogClassification.EMOJI)
 
 driver = get_driver()
 config = driver.config
@@ -41,9 +38,9 @@ class EmojiManager:
 
     def __init__(self):
         self._scan_task = None
-        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000)
+        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000,request_type = 'image')
         self.llm_emotion_judge = LLM_request(
-            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8
+            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8,request_type = 'image'
         )  # 更高的温度，更少的token（后续可以根据情绪来调整温度）
 
     def _ensure_emoji_dir(self):
