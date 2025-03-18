@@ -453,7 +453,7 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
         """
     )
     gr.Markdown(
-        value="## 全球在线MaiMBot数量: " + str(online_maimbot_data['online_clients'])
+        value="## 全球在线MaiMBot数量: " + str((online_maimbot_data or {}).get('online_clients', 0))
     )
 
     gr.Markdown(
