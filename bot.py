@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os
 import shutil
 import sys
@@ -172,31 +173,37 @@ def check_eula():
     privacy_file = Path("PRIVACY.md")
     
     eula_updated = True
+    eula_new_hash = None
     privacy_updated = True
+    privacy_new_hash = None
 
     eula_confirmed = False
     privacy_confirmed = False
 
     # 检查EULA确认文件是否存在
     if eula_confirm_file.exists():
-        # 检查EULA文件版本是否更新（与elua.confirmed文件对比）
-        with open(eula_file, "r") as f:
+        # 检查EULA文件版本是否更新（对比哈希）
+        with open(eula_file, "r", encoding="utf-8") as f:
             eula_content = f.read()
-        with open(eula_confirm_file, "r") as f:
+        with open(eula_confirm_file, "r", encoding="utf-8") as f:
             confirmed_content = f.read()
-        if eula_content == confirmed_content:
+        # 计算EULA文件的md5值
+        eula_new_hash = hashlib.md5(eula_content.encode("utf-8")).hexdigest()
+        if eula_new_hash == confirmed_content:
             eula_confirmed = True
             eula_updated = False
         
 
     # 检查隐私条款确认文件是否存在
     if privacy_confirm_file.exists():
-        # 检查隐私条款文件版本是否更新（与privacy.confirmed文件对比）
-        with open(privacy_file, "r") as f:
+        # 检查隐私条款文件版本是否更新（对比哈希）
+        with open(privacy_file, "r", encoding="utf-8") as f:
             privacy_content = f.read()
-        with open(privacy_confirm_file, "r") as f:
+        with open(privacy_confirm_file, "r", encoding="utf-8") as f:
             confirmed_content = f.read()
-        if privacy_content == confirmed_content:
+        # 计算隐私条款文件的md5值
+        privacy_new_hash = hashlib.md5(privacy_content.encode("utf-8")).hexdigest()
+        if privacy_new_hash == confirmed_content:
             privacy_confirmed = True
             privacy_updated = False
             
@@ -208,9 +215,9 @@ def check_eula():
             user_input = input().strip().lower()
             if user_input in ['同意', 'confirmed']:
                 if eula_updated:
-                    eula_confirm_file.write_text(eula_file.read_text(encoding="utf-8"),encoding="utf-8")
+                    eula_confirm_file.write_text(eula_new_hash,encoding="utf-8")
                 if privacy_updated:
-                    privacy_confirm_file.write_text(privacy_file.read_text(encoding="utf-8"),encoding="utf-8")
+                    privacy_confirm_file.write_text(privacy_new_hash,encoding="utf-8")
                 break
             else:
                 print('请输入"同意"或"confirmed"以继续运行')
