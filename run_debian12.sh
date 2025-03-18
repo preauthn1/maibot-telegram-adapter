@@ -188,10 +188,10 @@ update_config() {
 
 check_eula() {
     # 首先计算当前EULA的MD5值
-    current_md5=$(md5sum ${INSTALL_DIR}/repo/EULA.md | awk '{print $1}')
+    current_md5=$(md5sum "${INSTALL_DIR}/repo/EULA.md" | awk '{print $1}')
 
     # 首先计算当前隐私条款文件的哈希值
-    current_md5_privacy=$(md5sum ${INSTALL_DIR}/repo/PRIVACY.md | awk '{print $1}')
+    current_md5_privacy=$(md5sum "${INSTALL_DIR}/repo/PRIVACY.md" | awk '{print $1}')
 
     # 检查eula.confirmed文件是否存在
     if [[ -f ${INSTALL_DIR}/repo/eula.confirmed ]]; then
@@ -393,10 +393,10 @@ run_installation() {
     echo -e "${GREEN}同意协议...${RESET}"
 
     # 首先计算当前EULA的MD5值
-    current_md5=$(md5sum repo/EULA.md | awk '{print $1}')
+    current_md5=$(md5sum "repo/EULA.md" | awk '{print $1}')
 
     # 首先计算当前隐私条款文件的哈希值
-    current_md5_privacy=$(md5sum repo/PRIVACY.md | awk '{print $1}')
+    current_md5_privacy=$(md5sum "repo/PRIVACY.md" | awk '{print $1}')
 
     echo $current_md5 > repo/eula.confirmed
     echo $current_md5_privacy > repo/privacy.confirmed
