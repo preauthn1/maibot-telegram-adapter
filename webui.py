@@ -28,7 +28,7 @@ PARSED_CONFIG_VERSION = version.parse(CONFIG_VERSION)
 HAVE_ONLINE_STATUS_VERSION = version.parse("0.0.9")
 
 #添加WebUI配置文件版本
-WEBUI_VERSION = version.parse("0.0.7")
+WEBUI_VERSION = version.parse("0.0.8")
 
 # ==============================================
 # env环境配置文件读取部分
