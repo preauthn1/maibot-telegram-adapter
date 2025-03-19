@@ -1,14 +1,35 @@
 import gradio as gr
 import os
 import toml
-from src.common.logger import get_module_logger
+import signal
+import sys
+try:
+    from src.common.logger import get_module_logger
+    logger = get_module_logger("webui")
+except ImportError:
+    from loguru import logger
+    # 检查并创建日志目录
+    log_dir = "logs/webui"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+    # 配置控制台输出格式
+    logger.remove()  # 移除默认的处理器
+    logger.add(sys.stderr, format="{time:MM-DD HH:mm} | webui | {message}")  # 添加控制台输出
+    logger.add("logs/webui/{time:YYYY-MM-DD}.log", rotation="00:00", format="{time:MM-DD HH:mm} | webui | {message}")  # 添加文件输出
+    logger.warning("检测到src.common.logger并未导入，将使用默认loguru作为日志记录器")
+    logger.warning("如果你是用的是低版本(0.5.13)麦麦，请忽略此警告")
 import shutil
 import ast
-import json
 from packaging import version
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal
 
-logger = get_module_logger("webui")
+def signal_handler(signum, frame):
+    """处理 Ctrl+C 信号"""
+    logger.info("收到终止信号，正在关闭 Gradio 服务器...")
+    sys.exit(0)
+
+# 注册信号处理器
+signal.signal(signal.SIGINT, signal_handler)
 
 is_share = False
 debug = True
@@ -22,13 +43,30 @@ if not os.path.exists(".env.prod"):
     raise FileNotFoundError("环境配置文件 .env.prod 不存在，请检查配置文件路径")
 
 config_data = toml.load("config/bot_config.toml")
+#增加对老版本配置文件支持
+LEGACY_CONFIG_VERSION = version.parse("0.0.1")
 
-CONFIG_VERSION = config_data["inner"]["version"]
-PARSED_CONFIG_VERSION = version.parse(CONFIG_VERSION)
+#增加最低支持版本
+MIN_SUPPORT_VERSION = version.parse("0.0.8")
+MIN_SUPPORT_MAIMAI_VERSION = version.parse("0.5.13")
+
+if "inner" in config_data:
+    CONFIG_VERSION = config_data["inner"]["version"]
+    PARSED_CONFIG_VERSION = version.parse(CONFIG_VERSION)
+    if PARSED_CONFIG_VERSION < MIN_SUPPORT_VERSION:
+        logger.error("您的麦麦版本过低！！已经不再支持，请更新到最新版本！！")
+        logger.error("最低支持的麦麦版本：" + str(MIN_SUPPORT_MAIMAI_VERSION))
+        raise Exception("您的麦麦版本过低！！已经不再支持，请更新到最新版本！！")
+else:
+    logger.error("您的麦麦版本过低！！已经不再支持，请更新到最新版本！！")
+    logger.error("最低支持的麦麦版本：" + str(MIN_SUPPORT_MAIMAI_VERSION))
+    raise Exception("您的麦麦版本过低！！已经不再支持，请更新到最新版本！！")
+
+
 HAVE_ONLINE_STATUS_VERSION = version.parse("0.0.9")
 
 #添加WebUI配置文件版本
-WEBUI_VERSION = version.parse("0.0.8")
+WEBUI_VERSION = version.parse("0.0.9")
 
 # ==============================================
 # env环境配置文件读取部分
@@ -522,9 +560,14 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
     gr.Markdown(
         value="## 当前WebUI版本: " + str(WEBUI_VERSION)
     )
-    gr.Markdown(
-        value="### 配置文件版本：" + config_data["inner"]["version"]
-    )
+    if PARSED_CONFIG_VERSION > LEGACY_CONFIG_VERSION:
+        gr.Markdown(
+            value="### 配置文件版本：" + config_data["inner"]["version"]
+        )
+    else:
+        gr.Markdown(
+            value="### 配置文件版本：" + "LEGACY(旧版本)"
+        )
     with gr.Tabs():
         with gr.TabItem("0-环境设置"):
             with gr.Row():
@@ -1362,6 +1405,8 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                             )
                         with gr.Row():
                             remote_status = gr.Checkbox(value=config_data['remote']['enable'], label="是否开启麦麦在线全球统计")
+                    else:
+                        remote_status = gr.Checkbox(value=False,visible=False)
 
 
                     with gr.Row():
