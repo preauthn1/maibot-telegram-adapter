@@ -255,10 +255,11 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     if not is_western_paragraph(text):
         # 当语言为中文时，统一将英文逗号转换为中文逗号
         text = text.replace(',', '，')
+        text = text.replace('\n', ' ')
     else:
         # 用"|seg|"作为分割符分开
         text = re.sub(r'([.!?]) +', r'\1\|seg\|', text)
-    text = text.replace('\n', ' ')
+        text = text.replace('\n', '\|seg\|')
     text, mapping = protect_kaomoji(text)
     # print(f"处理前的文本: {text}")
 
@@ -312,10 +313,12 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     sentences_done = []
     for sentence in sentences:
         sentence = sentence.rstrip('，,')
-        if random.random() < split_strength * 0.5:
-            sentence = sentence.replace('，', '').replace(',', '')
-        elif random.random() < split_strength:
-            sentence = sentence.replace('，', ' ').replace(',', ' ')
+        # 西文字符句子不进行随机合并
+        if  not is_western_paragraph(current_sentence):
+            if random.random() < split_strength * 0.5:
+                sentence = sentence.replace('，', '').replace(',', '')
+            elif random.random() < split_strength:
+                sentence = sentence.replace('，', ' ').replace(',', ' ')
         sentences_done.append(sentence)
 
     logger.info(f"处理后的句子: {sentences_done}")
