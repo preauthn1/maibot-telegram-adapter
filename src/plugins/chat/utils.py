@@ -226,13 +226,6 @@ def get_recent_group_speaker(chat_stream_id: int, sender, limit: int = 12) -> li
             who_chat_in_group.append(ChatStream.from_dict(chat_info))
     return who_chat_in_group
 
-def is_western_char(char):
-    """检测是否为西文字符"""
-    return len(char.encode('utf-8')) <= 2
-
-def is_western_paragraph(paragraph):
-    """检测是否为西文字符段落"""
-    return all(is_western_char(char) for char in paragraph if char.isalnum())
 
 def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     """将文本分割成句子，但保持书名号中的内容完整
@@ -524,3 +517,11 @@ def recover_kaomoji(sentences, placeholder_to_kaomoji):
             sentence = sentence.replace(placeholder, kaomoji)
         recovered_sentences.append(sentence)
     return recovered_sentences
+
+def is_western_char(char):
+    """检测是否为西文字符"""
+    return len(char.encode('utf-8')) <= 2
+
+def is_western_paragraph(paragraph):
+    """检测是否为西文字符段落"""
+    return all(is_western_char(char) for char in paragraph if char.isalnum())
