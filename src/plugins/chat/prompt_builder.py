@@ -27,17 +27,6 @@ class PromptBuilder:
                             message_txt: str,
                             sender_name: str = "某人",
                             stream_id: Optional[int] = None) -> tuple[str, str]:
-        """构建prompt
-
-        Args:
-            message_txt: 消息文本
-            sender_name: 发送者昵称
-            # relationship_value: 关系值
-            group_id: 群组ID
-
-        Returns:
-            str: 构建好的prompt
-        """
         # 关系（载入当前聊天记录里部分人的关系）
         who_chat_in_group = [chat_stream]
         who_chat_in_group += get_recent_group_speaker(
