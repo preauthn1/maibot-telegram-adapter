@@ -336,7 +336,7 @@ class RelationshipManager:
 
         relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "暧昧"]
         relation_prompt2_list = [
-            "冷漠回应或直接辱骂", "冷淡回复",
+            "冷漠回应", "冷淡回复",
             "保持理性", "愿意回复",
             "积极回复", "无条件支持",
         ]
