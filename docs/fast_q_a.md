@@ -144,6 +144,35 @@
 >
 ><br>
 >
-> 2. 待完成
+> 2. 环境变量添加完之后，可以按下`WIN+R`,在弹出的小框中输入`powershell`，回车，进入到powershell界面后，输入`mongod --version`如果有输出信息，就说明你的环境变量添加成功了。
+>     接下来，直接输入`mongod --port 27017`命令(`--port`指定了端口，方便在可视化界面中连接)，如果连不上，很大可能会出现
+>```
+>"error":"NonExistentPath: Data directory \\data\\db not found. Create the missing directory or specify another path using (1) the --dbpath command line option, or (2) by adding the 'storage.dbPath' option in the configuration file."
+>```
+>这是因为你的C盘下没有`data\db`文件夹，mongo不知道将数据库文件存放在哪，不过不建议在C盘中添加,因为这样你的C盘负担会很大，可以通过`mongod --dbpath=PATH --port 27017`来执行，将`PATH`替换成你的自定义文件夹，但是不要放在mongodb的bin文件夹下！例如，你可以在D盘中创建一个mongodata文件夹，然后命令这样写
+>```mongod --dbpath=D:\mongodata --port 27017```
 >
+>
+>如果还是不行，有可能是因为你的27017端口被占用了
+>通过命令
+>```
+> netstat -ano | findstr :27017
+>```
+>可以查看当前端口是否被占用，如果有输出,其一般的格式是这样的
+>``` 
+>TCP    127.0.0.1:27017        0.0.0.0:0              LISTENING       5764
+>TCP     127.0.0.1:27017        127.0.0.1:63387        ESTABLISHED     5764
+> TCP    127.0.0.1:27017        127.0.0.1:63388        ESTABLISHED     5764
+> TCP    127.0.0.1:27017        127.0.0.1:63389        ESTABLISHED     5764
+>```
+>最后那个数字就是PID,通过以下命令查看是哪些进程正在占用
+>```tasklist /FI "PID eq 5764"```
+>如果是无关紧要的进程，可以通过`taskkill`命令关闭掉它，例如`Taskkill /F /PID 5764`
+>如果你对命令行实在不熟悉，可以通过`Ctrl+Shift+Esc`调出任务管理器，在搜索框中输入PID，也可以找到相应的进程。
+>如果你害怕关掉重要进程，可以修改`.env.dev`中的`MONGODB_PORT`为其它值，并在启动时同时修改`--port`参数为一样的值
+>```
+>MONGODB_HOST=127.0.0.1
+>MONGODB_PORT=27017 #修改这里
+>DATABASE_NAME=MegBot
+>```
 ><br>
