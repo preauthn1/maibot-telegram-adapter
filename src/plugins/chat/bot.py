@@ -5,6 +5,7 @@ from nonebot.adapters.onebot.v11 import (
     Bot,
     MessageEvent,
     PrivateMessageEvent,
+    GroupMessageEvent,
     NoticeEvent,
     PokeNotifyEvent,
     GroupRecallNoticeEvent,
@@ -411,6 +412,69 @@ class ChatBot:
 
         await self.message_process(message_cq)
 
+    async def handle_forward_message(self, event: MessageEvent, bot: Bot) -> None:
+        """专用于处理合并转发的消息处理器"""
+
+        # 获取合并转发消息的详细信息
+        forward_info = await bot.get_forward_msg(message_id=event.message_id)
+        messages = forward_info["messages"]
+
+        # 构建合并转发消息的文本表示
+        processed_messages = []
+        for node in messages:
+            # 提取发送者昵称
+            nickname = node["sender"].get("nickname", "未知用户")
+            
+            # 处理消息内容
+            message_content = []
+            for seg in node["message"]: 
+                if seg["type"] == "text":
+                    message_content.append(seg["data"]["text"])
+                elif seg["type"] == "image":
+                    message_content.append("[图片]")
+                elif seg["type"] =="face":
+                    message_content.append("[表情]")
+                elif seg["type"] == "at":
+                    message_content.append(f"@{seg['data'].get('qq', '未知用户')}")
+                else:
+                    message_content.append(f"[{seg['type']}]")
+            
+            # 拼接为【昵称】+ 内容
+            processed_messages.append(f"【{nickname}】{''.join(message_content)}")
+
+        # 组合所有消息
+        combined_message = "\n".join(processed_messages)
+        combined_message = f"合并转发消息内容：\n{combined_message}"
+        
+        # 构建用户信息（使用转发消息的发送者）
+        user_info = UserInfo(
+            user_id=event.user_id,
+            user_nickname=event.sender.nickname,
+            user_cardname=event.sender.card if hasattr(event.sender, "card") else None,
+            platform="qq",
+        )
+
+        # 构建群聊信息（如果是群聊）
+        group_info = None
+        if isinstance(event, GroupMessageEvent):
+            group_info = GroupInfo(
+                group_id=event.group_id,
+                group_name= None,
+                platform="qq"
+            )
+
+        # 创建消息对象
+        message_cq = MessageRecvCQ(
+            message_id=event.message_id,
+            user_info=user_info,
+            raw_message=combined_message,
+            group_info=group_info,
+            reply_message=event.reply,
+            platform="qq",
+        )
+
+        # 进入标准消息处理流程
+        await self.message_process(message_cq)
 
 # 创建全局ChatBot实例
 chat_bot = ChatBot()
