@@ -291,7 +291,7 @@ echo 3 - 临时跳过本次检查
 echo 4 - 永久跳过虚拟环境检查
 set /p choice="请输入选项(1-4): "
 
-if "!choice!" =  "4" (
+if "!choice!"=="4" (
 	echo 要永久跳过虚拟环境检查吗？
     set /p no_venv_confirm="继续？(Y/N): ....."
     if /i "!no_venv_confirm!"=="Y" (
@@ -306,14 +306,14 @@ if "!choice!" =  "4" (
     )
 )
 
-if "!choice!" =  "3"(
+if "!choice!"=="3" (
     echo 警告：使用系统环境可能导致依赖冲突！
     timeout /t 2 >nul
     goto menu
 )
 
-if "!choice!" =  "2" goto handle_conda
-if "!choice!" =  "1" goto handle_venv
+if "!choice!"=="2" goto handle_conda
+if "!choice!"=="1" goto handle_venv
 
 echo 无效的输入，请输入1-4之间的数字
 timeout /t 2 >nul
@@ -363,6 +363,10 @@ if "!choice!"=="3" goto env_interaction
 if "!choice!"=="2" goto activate_conda
 if "!choice!"=="1" goto create_conda
 
+echo 无效的输入，请输入1-3之间的数字
+timeout /t 2 >nul
+goto conda_menu
+
 :create_conda
 set /p "CONDA_ENV=请输入新环境名称："
 if "!CONDA_ENV!"=="" (
@@ -371,14 +375,14 @@ if "!CONDA_ENV!"=="" (
 )
 conda create -n !CONDA_ENV! python=3.13 -y || (
     echo 环境创建失败，错误码：!errorlevel!
-    pause
+    timeout /t 10 >nul
     goto conda_menu
 )
 goto activate_conda
 
 :activate_conda
 set /p "CONDA_ENV=请输入要激活的环境名称："
-conda activate !CONDA_ENV! || (
+call conda activate !CONDA_ENV! || (
     echo 激活失败，可能原因：
     echo 1. 环境不存在
     echo 2. conda配置异常
@@ -426,7 +430,7 @@ if not exist config/bot_config.toml (
 
 )
 if not exist .env.prod (
-    copy /Y "template\.env.prod" ".env.prod"
+    copy /Y "template.env" ".env.prod"
 )
 
 start python webui.py

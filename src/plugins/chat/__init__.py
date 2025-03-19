@@ -1,10 +1,8 @@
 import asyncio
 import time
-import os
 
 from nonebot import get_driver, on_message, on_notice, require
-from nonebot.rule import to_me
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment, MessageEvent, NoticeEvent
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, NoticeEvent
 from nonebot.typing import T_State
 
 from ..moods.moods import MoodManager  # 导入情绪管理器
@@ -16,8 +14,7 @@ from .emoji_manager import emoji_manager
 from .relationship_manager import relationship_manager
 from ..willing.willing_manager import willing_manager
 from .chat_stream import chat_manager
-from ..memory_system.memory import hippocampus, memory_graph
-from .bot import ChatBot
+from ..memory_system.memory import hippocampus
 from .message_sender import message_manager, message_sender
 from .storage import MessageStorage
 from src.common.logger import get_module_logger
@@ -38,8 +35,6 @@ config = driver.config
 emoji_manager.initialize()
 
 logger.debug(f"正在唤醒{global_config.BOT_NICKNAME}......")
-# 创建机器人实例
-chat_bot = ChatBot()
 # 注册消息处理器
 msg_in = on_message(priority=5)
 # 注册和bot相关的通知处理器
@@ -151,8 +146,8 @@ async def generate_schedule_task():
     if not bot_schedule.enable_output:
         bot_schedule.print_schedule()
 
-@scheduler.scheduled_job("interval", seconds=3600, id="remove_recalled_message")
 
+@scheduler.scheduled_job("interval", seconds=3600, id="remove_recalled_message")
 async def remove_recalled_message() -> None:
     """删除撤回消息"""
     try:
