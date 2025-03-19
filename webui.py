@@ -3,6 +3,7 @@ import os
 import toml
 import signal
 import sys
+import requests
 try:
     from src.common.logger import get_module_logger
     logger = get_module_logger("webui")
@@ -15,7 +16,7 @@ except ImportError:
     # 配置控制台输出格式
     logger.remove()  # 移除默认的处理器
     logger.add(sys.stderr, format="{time:MM-DD HH:mm} | webui | {message}")  # 添加控制台输出
-    logger.add("logs/webui/{time:YYYY-MM-DD}.log", rotation="00:00", format="{time:MM-DD HH:mm} | webui | {message}")  # 添加文件输出
+    logger.add("logs/webui/{time:YYYY-MM-DD}.log", rotation="00:00", format="{time:MM-DD HH:mm} | webui | {message}")
     logger.warning("检测到src.common.logger并未导入，将使用默认loguru作为日志记录器")
     logger.warning("如果你是用的是低版本(0.5.13)麦麦，请忽略此警告")
 import shutil
@@ -194,7 +195,7 @@ MODEL_PROVIDER_LIST = parse_model_providers(env_config_data)
 # ==============================================
 
 #获取在线麦麦数量
-import requests
+
 
 def get_online_maimbot(url="http://hyybuth.xyz:10058/api/clients/details", timeout=10):
     """
