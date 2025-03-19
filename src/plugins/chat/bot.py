@@ -5,6 +5,7 @@ from nonebot.adapters.onebot.v11 import (
     Bot,
     MessageEvent,
     PrivateMessageEvent,
+    GroupMessageEvent,
     NoticeEvent,
     PokeNotifyEvent,
     GroupRecallNoticeEvent,
@@ -474,6 +475,6 @@ class ChatBot:
 
         # 进入标准消息处理流程
         await self.message_process(message_cq)
-        
+
 # 创建全局ChatBot实例
 chat_bot = ChatBot()
