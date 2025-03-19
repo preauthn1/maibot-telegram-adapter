@@ -1,14 +1,36 @@
 import gradio as gr
 import os
 import toml
+import signal
+import sys
 import requests
-from src.common.logger import get_module_logger
+try:
+    from src.common.logger import get_module_logger
+    logger = get_module_logger("webui")
+except ImportError:
+    from loguru import logger
+    # 检查并创建日志目录
+    log_dir = "logs/webui"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+    # 配置控制台输出格式
+    logger.remove()  # 移除默认的处理器
+    logger.add(sys.stderr, format="{time:MM-DD HH:mm} | webui | {message}")  # 添加控制台输出
+    logger.add("logs/webui/{time:YYYY-MM-DD}.log", rotation="00:00", format="{time:MM-DD HH:mm} | webui | {message}")
+    logger.warning("检测到src.common.logger并未导入，将使用默认loguru作为日志记录器")
+    logger.warning("如果你是用的是低版本(0.5.13)麦麦，请忽略此警告")
 import shutil
 import ast
 from packaging import version
 from decimal import Decimal
 
-logger = get_module_logger("webui")
+def signal_handler(signum, frame):
+    """处理 Ctrl+C 信号"""
+    logger.info("收到终止信号，正在关闭 Gradio 服务器...")
+    sys.exit(0)
+
+# 注册信号处理器
+signal.signal(signal.SIGINT, signal_handler)
 
 is_share = False
 debug = True
@@ -22,14 +44,30 @@ if not os.path.exists(".env.prod"):
     raise FileNotFoundError("环境配置文件 .env.prod 不存在，请检查配置文件路径")
 
 config_data = toml.load("config/bot_config.toml")
+#增加对老版本配置文件支持
+LEGACY_CONFIG_VERSION = version.parse("0.0.1")
 
-CONFIG_VERSION = config_data["inner"]["version"]
-PARSED_CONFIG_VERSION = version.parse(CONFIG_VERSION)
+#增加最低支持版本
+MIN_SUPPORT_VERSION = version.parse("0.0.8")
+MIN_SUPPORT_MAIMAI_VERSION = version.parse("0.5.13")
+
+if "inner" in config_data:
+    CONFIG_VERSION = config_data["inner"]["version"]
+    PARSED_CONFIG_VERSION = version.parse(CONFIG_VERSION)
+    if PARSED_CONFIG_VERSION < MIN_SUPPORT_VERSION:
+        logger.error("您的麦麦版本过低！！已经不再支持，请更新到最新版本！！")
+        logger.error("最低支持的麦麦版本：" + str(MIN_SUPPORT_MAIMAI_VERSION))
+        raise Exception("您的麦麦版本过低！！已经不再支持，请更新到最新版本！！")
+else:
+    logger.error("您的麦麦版本过低！！已经不再支持，请更新到最新版本！！")
+    logger.error("最低支持的麦麦版本：" + str(MIN_SUPPORT_MAIMAI_VERSION))
+    raise Exception("您的麦麦版本过低！！已经不再支持，请更新到最新版本！！")
+
+
 HAVE_ONLINE_STATUS_VERSION = version.parse("0.0.9")
 
-# 添加WebUI配置文件版本
-WEBUI_VERSION = version.parse("0.0.8")
-
+#添加WebUI配置文件版本
+WEBUI_VERSION = version.parse("0.0.9")
 
 # ==============================================
 # env环境配置文件读取部分
@@ -156,7 +194,7 @@ MODEL_PROVIDER_LIST = parse_model_providers(env_config_data)
 # env读取保存结束
 # ==============================================
 
-# 获取在线麦麦数量
+#获取在线麦麦数量
 
 
 def get_online_maimbot(url="http://hyybuth.xyz:10058/api/clients/details", timeout=10):
