@@ -85,13 +85,13 @@ class PromptBuilder:
 
         # 调用 hippocampus 的 get_relevant_memories 方法
         relevant_memories = await hippocampus.get_relevant_memories(
-            text=message_txt, max_topics=5, similarity_threshold=0.4, max_memory_num=5
+            text=message_txt, max_topics=3, similarity_threshold=0.5, max_memory_num=4
         )
 
         if relevant_memories:
             # 格式化记忆内容
-            memory_str = '\n'.join(f"关于「{m['topic']}」的记忆：{m['content']}" for m in relevant_memories)
-            memory_prompt = f"看到这些聊天，你想起来：\n{memory_str}\n"
+            memory_str = '\n'.join(m['content'] for m in relevant_memories)
+            memory_prompt = f"你回忆起：\n{memory_str}\n"
 
             # 打印调试信息
             logger.debug("[记忆检索]找到以下相关记忆：")
@@ -155,13 +155,14 @@ class PromptBuilder:
 
         prompt = f"""
 今天是{current_date}，现在是{current_time}，你今天的日程是：\
-`<schedule>`
-{bot_schedule.today_schedule}
-`</schedule>`\
-{prompt_info}
+`<schedule>`\n
+{bot_schedule.today_schedule}\n
+`</schedule>`\n
+{prompt_info}\n
+{memory_prompt}\n
 {chat_target}\n
 {chat_talking_prompt}\n
-{memory_prompt} 现在"{sender_name}"说的:\n
+现在"{sender_name}"说的:\n
 `<UserMessage>`\n
 {message_txt}\n
 `</UserMessage>`\n
