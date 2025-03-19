@@ -14,8 +14,6 @@ from nonebot.adapters.onebot.v11 import Adapter
 import platform
 from src.common.logger import get_module_logger
 
-
-# 配置主程序日志格式
 logger = get_module_logger("main_bot")
 
 # 获取没有加载env时的环境变量

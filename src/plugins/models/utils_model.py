@@ -103,7 +103,7 @@ class LLM_request:
                 "timestamp": datetime.now(),
             }
             db.llm_usage.insert_one(usage_data)
-            logger.info(
+            logger.debug(
                 f"Token使用情况 - 模型: {self.model_name}, "
                 f"用户: {user_id}, 类型: {request_type}, "
                 f"提示词: {prompt_tokens}, 完成: {completion_tokens}, "

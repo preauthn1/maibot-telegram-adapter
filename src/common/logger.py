@@ -7,7 +7,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 # from ..plugins.chat.config import global_config
 
-load_dotenv()
+# 加载 .env.prod 文件
+env_path = Path(__file__).resolve().parent.parent.parent / '.env.prod'
+load_dotenv(dotenv_path=env_path)
 
 # 保存原生处理器ID
 default_handler_id = None
@@ -29,8 +31,6 @@ _handler_registry: Dict[str, List[int]] = {}
 current_file_path = Path(__file__).resolve()
 LOG_ROOT = "logs"
 
-# 从环境变量获取是否启用高级输出
-# ENABLE_ADVANCE_OUTPUT = True
 ENABLE_ADVANCE_OUTPUT = False
 
 if ENABLE_ADVANCE_OUTPUT:
@@ -82,8 +82,6 @@ else:
         "compression": "zip",
     }
 
-# 控制nonebot日志输出的环境变量
-NONEBOT_LOG_ENABLED = False
 
 # 海马体日志样式配置
 MEMORY_STYLE_CONFIG = {
@@ -185,8 +183,7 @@ LLM_STYLE_CONFIG = {
         )
     }
 }
-            
-
+    
 
 # Topic日志样式配置
 TOPIC_STYLE_CONFIG = {
@@ -222,15 +219,47 @@ TOPIC_STYLE_CONFIG = {
     }
 }
 
+# Topic日志样式配置
+CHAT_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{extra[module]: <12}</cyan> | "
+            "<light-blue>见闻</light-blue> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": (
+            "{time:YYYY-MM-DD HH:mm:ss} | "
+            "{level: <8} | "
+            "{extra[module]: <15} | "
+            "见闻 | "
+            "{message}"
+        )
+    },
+    "simple": {
+        "console_format": (
+            "<green>{time:MM-DD HH:mm}</green> | "
+            "<light-blue>见闻</light-blue> | "
+            "{message}"
+        ),
+        "file_format": (
+            "{time:YYYY-MM-DD HH:mm:ss} | "
+            "{level: <8} | "
+            "{extra[module]: <15} | "
+            "见闻 | "
+            "{message}"
+        )
+    }
+}
+
 # 根据ENABLE_ADVANCE_OUTPUT选择配置
 MEMORY_STYLE_CONFIG = MEMORY_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else MEMORY_STYLE_CONFIG["simple"]
 TOPIC_STYLE_CONFIG = TOPIC_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else TOPIC_STYLE_CONFIG["simple"]
 SENDER_STYLE_CONFIG = SENDER_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else SENDER_STYLE_CONFIG["simple"]
 LLM_STYLE_CONFIG = LLM_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else LLM_STYLE_CONFIG["simple"]
+CHAT_STYLE_CONFIG = CHAT_STYLE_CONFIG["advanced"] if ENABLE_ADVANCE_OUTPUT else CHAT_STYLE_CONFIG["simple"]
 
-def filter_nonebot(record: dict) -> bool:
-    """过滤nonebot的日志"""
-    return record["extra"].get("module") != "nonebot"
 
 def is_registered_module(record: dict) -> bool:
     """检查是否为已注册的模块"""
@@ -335,6 +364,7 @@ def remove_module_logger(module_name: str) -> None:
 
 
 # 添加全局默认处理器（只处理未注册模块的日志--->控制台）
+# print(os.getenv("DEFAULT_CONSOLE_LOG_LEVEL", "SUCCESS"))
 DEFAULT_GLOBAL_HANDLER = logger.add(
     sink=sys.stderr,
     level=os.getenv("DEFAULT_CONSOLE_LOG_LEVEL", "SUCCESS"),
@@ -344,7 +374,7 @@ DEFAULT_GLOBAL_HANDLER = logger.add(
         "<cyan>{name: <12}</cyan> | "
         "<level>{message}</level>"
     ),
-    filter=lambda record: is_unregistered_module(record) and filter_nonebot(record),  # 只处理未注册模块的日志，并过滤nonebot
+    filter=lambda record: is_unregistered_module(record),  # 只处理未注册模块的日志，并过滤nonebot
     enqueue=True,
 )
 
@@ -367,6 +397,6 @@ DEFAULT_FILE_HANDLER = logger.add(
     retention=DEFAULT_CONFIG["retention"],
     compression=DEFAULT_CONFIG["compression"],
     encoding="utf-8",
-    filter=lambda record: is_unregistered_module(record) and filter_nonebot(record),  # 只处理未注册模块的日志，并过滤nonebot
+    filter=lambda record: is_unregistered_module(record),  # 只处理未注册模块的日志，并过滤nonebot
     enqueue=True,
 )

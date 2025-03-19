@@ -69,7 +69,7 @@ class Message_Sender:
                             message=message_send.raw_message,
                             auto_escape=False,
                         )
-                        logger.success(f"[调试] 发送消息“{message_preview}”成功")
+                        logger.success(f"发送消息“{message_preview}”成功")
                     except Exception as e:
                         logger.error(f"[调试] 发生错误 {e}")
                         logger.error(f"[调试] 发送消息“{message_preview}”失败")
@@ -81,7 +81,7 @@ class Message_Sender:
                             message=message_send.raw_message,
                             auto_escape=False,
                         )
-                        logger.success(f"[调试] 发送消息“{message_preview}”成功")
+                        logger.success(f"发送消息“{message_preview}”成功")
                     except Exception as e:
                         logger.error(f"[调试] 发生错误 {e}")
                         logger.error(f"[调试] 发送消息“{message_preview}”失败")

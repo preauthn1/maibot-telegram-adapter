@@ -826,7 +826,7 @@ class Hippocampus:
 
     async def memory_activate_value(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.3) -> int:
         """计算输入文本对记忆的激活程度"""
-        logger.info(f"[激活] 识别主题: {await self._identify_topics(text)}")
+        logger.info(f"识别主题: {await self._identify_topics(text)}")
 
         # 识别主题
         identified_topics = await self._identify_topics(text)
@@ -858,7 +858,7 @@ class Hippocampus:
 
             activation = int(score * 50 * penalty)
             logger.info(
-                f"[激活] 单主题「{topic}」- 相似度: {score:.3f}, 内容数: {content_count}, 激活值: {activation}")
+                f"单主题「{topic}」- 相似度: {score:.3f}, 内容数: {content_count}, 激活值: {activation}")
             return activation
 
         # 计算关键词匹配率，同时考虑内容数量
@@ -895,7 +895,7 @@ class Hippocampus:
         # 计算最终激活值
         activation = int((topic_match + average_similarities) / 2 * 100)
         logger.info(
-            f"[激活] 匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
+            f"匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
 
         return activation
 
