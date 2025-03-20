@@ -1,3 +1,11 @@
+'''
+The definition of artificial personality in this paper follows the dispositional para-digm and adapts a definition of personality developed for humans [17]: 
+Personality for a human is the "whole and organisation of relatively stable tendencies and patterns of experience and 
+behaviour within one person (distinguishing it from other persons)". This definition is modified for artificial personality: 
+Artificial personality describes the relatively stable tendencies and patterns of behav-iour of an AI-based machine that 
+can be designed by developers and designers via different modalities, such as language, creating the impression 
+of individuality of a humanized social agent when users interact with the machine.'''
+
 from typing import Dict, List
 import json
 import os
@@ -35,17 +43,28 @@ class PersonalityEvaluator_direct:
         
         # 为每个人格特质获取对应的场景
         for trait in PERSONALITY_SCENES:
-            scene = get_scene_by_factor(trait)
-            # 为每个场景添加评估维度
-            # 主维度是当前特质，次维度随机选择一个其他特质
-            other_traits = [t for t in PERSONALITY_SCENES if t != trait]
+            scenes = get_scene_by_factor(trait)
+            if not scenes:
+                continue
+                
+            # 从每个维度选择3个场景
             import random
-            secondary_trait = random.choice(other_traits)
+            scene_keys = list(scenes.keys())
+            selected_scenes = random.sample(scene_keys, min(3, len(scene_keys)))
             
-            self.scenarios.append({
-                "场景": scene["scenario"],
-                "评估维度": [trait, secondary_trait]
-            })
+            for scene_key in selected_scenes:
+                scene = scenes[scene_key]
+                
+                # 为每个场景添加评估维度
+                # 主维度是当前特质，次维度随机选择一个其他特质
+                other_traits = [t for t in PERSONALITY_SCENES if t != trait]
+                secondary_trait = random.choice(other_traits)
+                
+                self.scenarios.append({
+                    "场景": scene["scenario"],
+                    "评估维度": [trait, secondary_trait],
+                    "场景编号": scene_key
+                })
             
         self.llm = LLMModel()
 
@@ -53,34 +72,41 @@ class PersonalityEvaluator_direct:
         """
         使用 DeepSeek AI 评估用户对特定场景的反应
         """
+        # 构建维度描述
+        dimension_descriptions = []
+        for dim in dimensions:
+            desc = FACTOR_DESCRIPTIONS.get(dim, "")
+            if desc:
+                dimension_descriptions.append(f"- {dim}：{desc}")
+        
+        dimensions_text = "\n".join(dimension_descriptions)
+        
         prompt = f"""请根据以下场景和用户描述，评估用户在大五人格模型中的相关维度得分（1-6分）。
-场景：{scenario}
-用户描述：{response}
 
-需要评估的维度：{", ".join(dimensions)}
+场景描述：
+{scenario}
+
+用户回应：
+{response}
+
+需要评估的维度说明：
+{dimensions_text}
 
 请按照以下格式输出评估结果（仅输出JSON格式）：
 {{
-    "维度1": 分数,
-    "维度2": 分数
+    "{dimensions[0]}": 分数,
+    "{dimensions[1]}": 分数
 }}
 
 评分标准：
-1 = 非常不符合
-2 = 比较不符合
-3 = 有点不符合
-4 = 有点符合
-5 = 比较符合
-6 = 非常符合
+1 = 非常不符合该维度特征
+2 = 比较不符合该维度特征
+3 = 有点不符合该维度特征
+4 = 有点符合该维度特征
+5 = 比较符合该维度特征
+6 = 非常符合该维度特征
 
-评估维度说明：
-- 开放性：对新事物的接受程度和创造性思维
-- 严谨性：计划性、组织性和责任感
-- 外向性：社交倾向和能量水平
-- 宜人性：同理心、合作性和友善程度
-- 神经质：情绪稳定性和压力应对能力
-
-请确保分数在1-6之间，并给出合理的评估理由。"""
+请根据用户的回应，结合场景和维度说明进行评分。确保分数在1-6之间，并给出合理的评估。"""
 
         try:
             ai_response, _ = self.llm.generate_response(prompt)
@@ -102,7 +128,7 @@ class PersonalityEvaluator_direct:
 
 def main():
     print("欢迎使用人格形象创建程序！")
-    print("接下来，您将面对一系列场景。请根据您想要创建的角色形象，描述在该场景下可能的反应。")
+    print("接下来，您将面对一系列场景（共15个）。请根据您想要创建的角色形象，描述在该场景下可能的反应。")
     print("每个场景都会评估不同的人格维度，最终得出完整的人格特征评估。")
     print("评分标准：1=非常不符合，2=比较不符合，3=有点不符合，4=有点符合，5=比较符合，6=非常符合")
     print("\n准备好了吗？按回车键开始...")
@@ -113,7 +139,7 @@ def main():
     dimension_counts = {trait: 0 for trait in final_scores.keys()}
 
     for i, scenario_data in enumerate(evaluator.scenarios, 1):
-        print(f"\n场景 {i}/{len(evaluator.scenarios)}:")
+        print(f"\n场景 {i}/{len(evaluator.scenarios)} - {scenario_data['场景编号']}:")
         print("-" * 50)
         print(scenario_data["场景"])
         print("\n请描述您的角色在这种情况下会如何反应：")
@@ -149,9 +175,14 @@ def main():
     print("-" * 30)
     for trait, score in final_scores.items():
         print(f"{trait}: {score}/6")
+        print(f"测试场景数：{dimension_counts[trait]}")
 
     # 保存结果
-    result = {"final_scores": final_scores, "scenarios": evaluator.scenarios}
+    result = {
+        "final_scores": final_scores, 
+        "dimension_counts": dimension_counts,
+        "scenarios": evaluator.scenarios
+    }
 
     # 确保目录存在
     os.makedirs("results", exist_ok=True)

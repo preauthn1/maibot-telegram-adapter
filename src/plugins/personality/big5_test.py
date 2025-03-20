@@ -6,6 +6,7 @@
 import os
 import sys
 from pathlib import Path
+import random
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent.parent
@@ -37,14 +38,24 @@ class BigFiveTest:
         print("6 = 完全符合")
         print("\n请认真阅读每个描述，选择最符合您实际情况的选项。\n")
         
+        # 创建题目序号到题目的映射
+        questions_map = {q['id']: q for q in self.questions}
+        
+        # 获取所有题目ID并随机打乱顺序
+        question_ids = list(questions_map.keys())
+        random.shuffle(question_ids)
+        
         answers = {}
-        for question in self.questions:
+        total_questions = len(question_ids)
+        
+        for i, question_id in enumerate(question_ids, 1):
+            question = questions_map[question_id]
             while True:
                 try:
-                    print(f"\n{question['id']}. {question['content']}")
+                    print(f"\n[{i}/{total_questions}] {question['content']}")
                     score = int(input("您的评分（1-6）: "))
                     if 1 <= score <= 6:
-                        answers[question['id']] = score
+                        answers[question_id] = score
                         break
                     else:
                         print("请输入1-6之间的数字！")
