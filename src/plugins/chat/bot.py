@@ -491,7 +491,7 @@ class ChatBot:
             # 递归处理嵌套的合并转发消息
             nested_nodes = seg["data"].get("content", [])
             nested_messages = []
-            nested_messages.append(f"合并转发消息内容：")
+            nested_messages.append("合并转发消息内容：")
             for node in nested_nodes:
                 nickname = node["sender"].get("nickname", "未知用户")
                 content = await self.process_message_segments(node["message"],layer=layer)
