@@ -95,9 +95,9 @@
 - MongoDB 提供数据持久化支持
 - NapCat 作为QQ协议端支持
 
-**最新版本: v0.5.14** ([查看更新日志](changelog.md))
+**最新版本: v0.5.15** ([查看更新日志](changelog.md))
 > [!WARNING]
-> 注意，3月12日的v0.5.13, 该版本更新较大，建议单独开文件夹部署，然后转移/data文件 和数据库，数据库可能需要删除messages下的内容（不需要删除记忆）
+> 该版本更新较大，建议单独开文件夹部署，然后转移/data文件，数据库可能需要删除messages下的内容（不需要删除记忆）
 
 <div align="center">
 <a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
@@ -128,11 +128,11 @@
 MaiMBot是一个开源项目，我们非常欢迎你的参与。你的贡献，无论是提交bug报告、功能需求还是代码pr，都对项目非常宝贵。我们非常感谢你的支持！🎉 但无序的讨论会降低沟通效率，进而影响问题的解决速度，因此在提交任何贡献前，请务必先阅读本项目的[贡献指南](CONTRIBUTE.md)
 
 ### 💬交流群
-- [一群](https://qm.qq.com/q/VQ3XZrWgMs) 123456780 ，建议加下面的（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
-- [二群](https://qm.qq.com/q/RzmCiRtHEW) 123456782 （开发和建议相关讨论）不一定有空回复，会优先写文档和代码
-- [三群](https://qm.qq.com/q/wlH5eT8OmQ) 1035228475（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
-- [四群](https://qm.qq.com/q/wlH5eT8OmQ) 729957033（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
-
+- [五群](https://qm.qq.com/q/JxvHZnxyec) 1022489779（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
+- [一群](https://qm.qq.com/q/VQ3XZrWgMs) 123456780 【已满】（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
+- [二群](https://qm.qq.com/q/RzmCiRtHEW) 123456782 【已满】（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
+- [三群](https://qm.qq.com/q/wlH5eT8OmQ) 1035228475【已满】（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
+- [四群](https://qm.qq.com/q/wlH5eT8OmQ) 729957033【已满】（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
 
 
 <div align="left">
@@ -251,10 +251,12 @@ SengokuCola~~纯编程外行，面向cursor编程，很多代码写得不好多�
 
 感谢各位大佬！
 
-<a href="https://github.com/SengokuCola/MaiMBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=SengokuCola/MaiMBot" />
+<a href="https://github.com/MaiM-with-u/MaiBot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=MaiM-with-u/MaiBot" />
 </a>
+
+**也感谢每一位给麦麦发展提出宝贵意见与建议的用户，感谢陪伴麦麦走到现在的你们**
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/SengokuCola/MaiMBot.svg?variant=adaptive)](https://starchart.cc/SengokuCola/MaiMBot)
+[![Stargazers over time](https://starchart.cc/MaiM-with-u/MaiBot.svg?variant=adaptive)](https://starchart.cc/MaiM-with-u/MaiBot)
