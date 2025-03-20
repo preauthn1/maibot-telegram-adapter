@@ -95,9 +95,9 @@
 - MongoDB 提供数据持久化支持
 - NapCat 作为QQ协议端支持
 
-**最新版本: v0.5.14** ([查看更新日志](changelog.md))
+**最新版本: v0.5.15** ([查看更新日志](changelog.md))
 > [!WARNING]
-> 注意，3月12日的v0.5.13, 该版本更新较大，建议单独开文件夹部署，然后转移/data文件 和数据库，数据库可能需要删除messages下的内容（不需要删除记忆）
+> 该版本更新较大，建议单独开文件夹部署，然后转移/data文件，数据库可能需要删除messages下的内容（不需要删除记忆）
 
 <div align="center">
 <a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
