@@ -242,7 +242,33 @@ class EmojiManager:
                 image_hash = hashlib.md5(image_bytes).hexdigest()
                 image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
                 # 检查是否已经注册过
-                existing_emoji = db["emoji"].find_one({"hash": image_hash})
+                existing_emoji_by_path = db["emoji"].find_one({"filename": filename})
+                existing_emoji_by_hash = db["emoji"].find_one({"hash": image_hash})
+                if existing_emoji_by_path and existing_emoji_by_hash:
+                    if existing_emoji_by_path["_id"] != existing_emoji_by_hash["_id"]:
+                        logger.error(f"[错误] 表情包已存在但记录不一致: {filename}")
+                        db.emoji.delete_one({"_id": existing_emoji_by_path["_id"]})
+                        db.emoji.update_one(
+                            {"_id": existing_emoji_by_hash["_id"]}, {"$set": {"path": image_path, "filename": filename}}
+                        )
+                        existing_emoji_by_hash["path"] = image_path
+                        existing_emoji_by_hash["filename"] = filename
+                    existing_emoji = existing_emoji_by_hash
+                elif existing_emoji_by_hash:
+                    logger.error(f"[错误] 表情包hash已存在但path不存在: {filename}")
+                    db.emoji.update_one(
+                        {"_id": existing_emoji_by_hash["_id"]}, {"$set": {"path": image_path, "filename": filename}}
+                    )
+                    existing_emoji_by_hash["path"] = image_path
+                    existing_emoji_by_hash["filename"] = filename
+                    existing_emoji = existing_emoji_by_hash
+                elif existing_emoji_by_path:
+                    logger.error(f"[错误] 表情包path已存在但hash不存在: {filename}")
+                    db.emoji.delete_one({"_id": existing_emoji_by_path["_id"]})
+                    existing_emoji = None
+                else:
+                    existing_emoji = None
+
                 description = None
 
                 if existing_emoji:
@@ -366,6 +392,12 @@ class EmojiManager:
                         logger.warning(f"[检查] 发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
                         hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
                         db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
+                    else:
+                        file_hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
+                        if emoji["hash"] != file_hash:
+                            logger.warning(f"[检查] 表情包文件hash不匹配，ID: {emoji.get('_id', 'unknown')}")
+                            db.emoji.delete_one({"_id": emoji["_id"]})
+                            removed_count += 1
 
                 except Exception as item_error:
                     logger.error(f"[错误] 处理表情包记录时出错: {str(item_error)}")
