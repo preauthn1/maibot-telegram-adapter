@@ -445,7 +445,9 @@ def adjust_personality_less_probabilities(
 
 def adjust_model_greater_probabilities(t_model_1_probability, t_model_2_probability, t_model_3_probability):
     total = (
-            Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
+            Decimal(str(t_model_1_probability)) +
+            Decimal(str(t_model_2_probability)) +
+            Decimal(str(t_model_3_probability))
     )
     if total > Decimal("1.0"):
         warning_message = (
@@ -457,7 +459,9 @@ def adjust_model_greater_probabilities(t_model_1_probability, t_model_2_probabil
 
 def adjust_model_less_probabilities(t_model_1_probability, t_model_2_probability, t_model_3_probability):
     total = (
-            Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
+            Decimal(str(t_model_1_probability))
+            + Decimal(str(t_model_2_probability))
+            + Decimal(str(t_model_3_probability))
     )
     if total < Decimal("1.0"):
         warning_message = (
