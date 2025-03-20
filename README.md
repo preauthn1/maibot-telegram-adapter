@@ -149,6 +149,8 @@ MaiMBot是一个开源项目，我们非常欢迎你的参与。你的贡献，�
 
 - [📦 Linux 手动部署指南 ](docs/manual_deploy_linux.md)
 
+- [📦 macOS 手动部署指南 ](docs/manual_deploy_macos.md)
+
 如果你不知道Docker是什么，建议寻找相关教程或使用手动部署 **（现在不建议使用docker，更新慢，可能不适配）**
 
 - [🐳 Docker部署指南](docs/docker_deploy.md)
