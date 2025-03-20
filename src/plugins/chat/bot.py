@@ -1,5 +1,6 @@
 import re
 import time
+import asyncio
 from random import random
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -44,7 +45,9 @@ class ChatBot:
         self._started = False
         self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
         self.mood_manager.start_mood_update()  # 启动情绪更新
-
+        
+        self.group_message_dict = {}
+        
         self.emoji_chance = 0.2  # 发送表情包的基础概率
         # self.message_streams = MessageStreamContainer()
 
@@ -88,6 +91,20 @@ class ChatBot:
 
         await message.process()
         
+        await relationship_manager.update_relationship(
+            chat_stream=chat,
+        )
+        await relationship_manager.update_relationship_value(
+            chat_stream=chat, relationship_value=0
+        )
+        groupid = groupinfo.group_id if groupinfo is not None else -1
+        await self.message_process_onto_group(message, chat, groupid)
+
+    async def message_process_onto_group(self, message: MessageRecvCQ, chat, groupID: int) -> None:
+        groupinfo = message.message_info.group_info
+        userinfo = message.message_info.user_info
+        messageinfo = message.message_info
+
         # 过滤词
         for word in global_config.ban_words:
             if word in message.processed_plain_text:
@@ -120,7 +137,15 @@ class ChatBot:
 
         await self.storage.store_message(message, chat, topic[0] if topic else None)
 
-        is_mentioned = is_mentioned_bot_in_message(message)
+        is_mentioned = is_mentioned_bot_in_message(message) or groupID == -1
+        if is_mentioned:
+            relationship_value = relationship_manager.get_relationship(chat).relationship_value if relationship_manager.get_relationship(chat) else 0.0
+            await relationship_manager.update_relationship(
+                chat_stream=chat,
+            )
+            await relationship_manager.update_relationship_value(
+                chat_stream=chat, relationship_value = min(max(40 - relationship_value, 2)/2, 10000)
+            )
         reply_probability = await willing_manager.change_reply_willing_received(
             chat_stream=chat,
             is_mentioned_bot=is_mentioned,
@@ -130,15 +155,27 @@ class ChatBot:
             sender_id=str(message.message_info.user_info.user_id),
         )
         current_willing = willing_manager.get_willing(chat_stream=chat)
-
+        actual_prob = random()
         logger.info(
             f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]{chat.user_info.user_nickname}:"
             f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
         )
-
+        reply_probability = 1 if is_mentioned else reply_probability
+        logger.info("!!!决定回复!!!" if actual_prob < reply_probability else "===不理===")
+        
         response = None
         # 开始组织语言
-        if random() < reply_probability:
+        if groupID not in self.group_message_dict:
+            self.group_message_dict[groupID] = {}
+        this_msg_time = time.time()
+        if userinfo.user_id not in self.group_message_dict[groupID].keys():
+            self.group_message_dict[groupID][userinfo.user_id] = -1
+
+        if (actual_prob < reply_probability) or (self.group_message_dict[groupID][userinfo.user_id] != -1):
+            self.group_message_dict[groupID][userinfo.user_id] = this_msg_time
+            await asyncio.sleep(30)
+            if this_msg_time != self.group_message_dict[groupID][userinfo.user_id]:
+                return            
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ,
                 user_nickname=global_config.BOT_NICKNAME,
@@ -168,6 +205,8 @@ class ChatBot:
         # print(f"response: {response}")
         if response:
             # print(f"有response: {response}")
+            if this_msg_time == self.group_message_dict[groupID][userinfo.user_id]:
+                self.group_message_dict[groupID][userinfo.user_id] = -1
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None
             # 找到message,删除
