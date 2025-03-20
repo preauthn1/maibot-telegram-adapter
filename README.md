@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/d275bda7-84cc-474d-a18d-265819c64687)# 关于项目分支调整与贡献指南的重要通知
+# 关于项目分支调整与贡献指南的重要通知
 <details>
   <summary>
       - 📂 致所有为麦麦提交过贡献，以及想要为麦麦提交贡献的朋友们！</summary>
