@@ -415,6 +415,16 @@ class ChatBot:
     async def handle_forward_message(self, event: MessageEvent, bot: Bot) -> None:
         """专用于处理合并转发的消息处理器"""
 
+        # 用户屏蔽,不区分私聊/群聊
+        if event.user_id in global_config.ban_user_id:
+            return
+        
+        if isinstance(event, GroupMessageEvent):
+            if event.group_id:
+                if event.group_id not in global_config.talk_allowed_groups:
+                    return
+
+
         # 获取合并转发消息的详细信息
         forward_info = await bot.get_forward_msg(message_id=event.message_id)
         messages = forward_info["messages"]
