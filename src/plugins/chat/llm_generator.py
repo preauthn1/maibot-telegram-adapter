@@ -37,6 +37,7 @@ class ResponseGenerator:
         self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7, max_tokens=3000)
         self.model_v25 = LLM_request(model=global_config.llm_normal_minor, temperature=0.7, max_tokens=3000)
         self.current_model_type = "r1"  # 默认使用 R1
+        self.current_model_name = "unknown model"
 
     async def generate_response(self, message: MessageThinking) -> Optional[Union[str, List[str]]]:
         """根据当前模型类型选择对应的生成函数"""
@@ -107,7 +108,7 @@ class ResponseGenerator:
 
         # 生成回复
         try:
-            content, reasoning_content = await model.generate_response(prompt)
+            content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
         except Exception:
             logger.exception("生成回复时出错")
             return None
@@ -144,7 +145,7 @@ class ResponseGenerator:
                 "chat_id": message.chat_stream.stream_id,
                 "user": sender_name,
                 "message": message.processed_plain_text,
-                "model": self.current_model_type,
+                "model": self.current_model_name,
                 # 'reasoning_check': reasoning_content_check,
                 # 'response_check': content_check,
                 "reasoning": reasoning_content,
