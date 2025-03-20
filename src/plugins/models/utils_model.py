@@ -522,7 +522,7 @@ class LLM_request:
             return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
             # 防止小朋友们截图自己的key
 
-    async def generate_response(self, prompt: str) -> Tuple[str, str]:
+    async def generate_response(self, prompt: str) -> Tuple[str, str, str]:
         """根据输入的提示生成模型的异步响应"""
 
         content, reasoning_content = await self._execute_request(endpoint="/chat/completions", prompt=prompt)

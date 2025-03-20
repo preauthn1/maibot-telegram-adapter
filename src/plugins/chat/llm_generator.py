@@ -175,7 +175,7 @@ class ResponseGenerator:
             """
 
             # 调用模型生成结果
-            result, _ = await self.model_v25.generate_response(prompt)
+            result, _, _ = await self.model_v25.generate_response(prompt)
             result = result.strip()
 
             # 解析模型输出的结果
@@ -216,7 +216,7 @@ class InitiativeMessageGenerate:
         topic_select_prompt, dots_for_select, prompt_template = prompt_builder._build_initiative_prompt_select(
             message.group_id
         )
-        content_select, reasoning = self.model_v3.generate_response(topic_select_prompt)
+        content_select, reasoning, _ = self.model_v3.generate_response(topic_select_prompt)
         logger.debug(f"{content_select} {reasoning}")
         topics_list = [dot[0] for dot in dots_for_select]
         if content_select:
@@ -227,7 +227,7 @@ class InitiativeMessageGenerate:
         else:
             return None
         prompt_check, memory = prompt_builder._build_initiative_prompt_check(select_dot[1], prompt_template)
-        content_check, reasoning_check = self.model_v3.generate_response(prompt_check)
+        content_check, reasoning_check, _ = self.model_v3.generate_response(prompt_check)
         logger.info(f"{content_check} {reasoning_check}")
         if "yes" not in content_check.lower():
             return None
