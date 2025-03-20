@@ -66,6 +66,16 @@ else:
 
 HAVE_ONLINE_STATUS_VERSION = version.parse("0.0.9")
 
+#定义意愿模式可选项
+WILLING_MODE_CHOICES = [
+    "classical",
+    "dynamic",
+    "custom",
+]
+
+
+
+
 #添加WebUI配置文件版本
 WEBUI_VERSION = version.parse("0.0.9")
 
@@ -321,19 +331,19 @@ def format_list_to_str(lst):
 
 # env保存函数
 def save_trigger(
-    server_address,
-    server_port,
-    final_result_list,
-    t_mongodb_host,
-    t_mongodb_port,
-    t_mongodb_database_name,
-    t_console_log_level,
-    t_file_log_level,
-    t_default_console_log_level,
-    t_default_file_log_level,
-    t_api_provider,
-    t_api_base_url,
-    t_api_key,
+        server_address,
+        server_port,
+        final_result_list,
+        t_mongodb_host,
+        t_mongodb_port,
+        t_mongodb_database_name,
+        t_console_log_level,
+        t_file_log_level,
+        t_default_console_log_level,
+        t_default_file_log_level,
+        t_api_provider,
+        t_api_base_url,
+        t_api_key,
 ):
     final_result_lists = format_list_to_str(final_result_list)
     env_config_data["env_HOST"] = server_address
@@ -402,12 +412,12 @@ def save_bot_config(t_qqbot_qq, t_nickname, t_nickname_final_result):
 
 # 监听滑块的值变化，确保总和不超过 1，并显示警告
 def adjust_personality_greater_probabilities(
-    t_personality_1_probability, t_personality_2_probability, t_personality_3_probability
+        t_personality_1_probability, t_personality_2_probability, t_personality_3_probability
 ):
     total = (
-        Decimal(str(t_personality_1_probability))
-        + Decimal(str(t_personality_2_probability))
-        + Decimal(str(t_personality_3_probability))
+            Decimal(str(t_personality_1_probability))
+            + Decimal(str(t_personality_2_probability))
+            + Decimal(str(t_personality_3_probability))
     )
     if total > Decimal("1.0"):
         warning_message = (
@@ -418,12 +428,12 @@ def adjust_personality_greater_probabilities(
 
 
 def adjust_personality_less_probabilities(
-    t_personality_1_probability, t_personality_2_probability, t_personality_3_probability
+        t_personality_1_probability, t_personality_2_probability, t_personality_3_probability
 ):
     total = (
-        Decimal(str(t_personality_1_probability))
-        + Decimal(str(t_personality_2_probability))
-        + Decimal(str(t_personality_3_probability))
+            Decimal(str(t_personality_1_probability))
+            + Decimal(str(t_personality_2_probability))
+            + Decimal(str(t_personality_3_probability))
     )
     if total < Decimal("1.0"):
         warning_message = (
@@ -435,7 +445,7 @@ def adjust_personality_less_probabilities(
 
 def adjust_model_greater_probabilities(t_model_1_probability, t_model_2_probability, t_model_3_probability):
     total = (
-        Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
+            Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
     )
     if total > Decimal("1.0"):
         warning_message = (
@@ -447,7 +457,7 @@ def adjust_model_greater_probabilities(t_model_1_probability, t_model_2_probabil
 
 def adjust_model_less_probabilities(t_model_1_probability, t_model_2_probability, t_model_3_probability):
     total = (
-        Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
+            Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
     )
     if total < Decimal("1.0"):
         warning_message = (
@@ -460,13 +470,13 @@ def adjust_model_less_probabilities(t_model_1_probability, t_model_2_probability
 # ==============================================
 # 人格保存函数
 def save_personality_config(
-    t_prompt_personality_1,
-    t_prompt_personality_2,
-    t_prompt_personality_3,
-    t_prompt_schedule,
-    t_personality_1_probability,
-    t_personality_2_probability,
-    t_personality_3_probability,
+        t_prompt_personality_1,
+        t_prompt_personality_2,
+        t_prompt_personality_3,
+        t_prompt_schedule,
+        t_personality_1_probability,
+        t_personality_2_probability,
+        t_personality_3_probability,
 ):
     # 保存人格提示词
     config_data["personality"]["prompt_personality"][0] = t_prompt_personality_1
@@ -487,20 +497,20 @@ def save_personality_config(
 
 
 def save_message_and_emoji_config(
-    t_min_text_length,
-    t_max_context_size,
-    t_emoji_chance,
-    t_thinking_timeout,
-    t_response_willing_amplifier,
-    t_response_interested_rate_amplifier,
-    t_down_frequency_rate,
-    t_ban_words_final_result,
-    t_ban_msgs_regex_final_result,
-    t_check_interval,
-    t_register_interval,
-    t_auto_save,
-    t_enable_check,
-    t_check_prompt,
+        t_min_text_length,
+        t_max_context_size,
+        t_emoji_chance,
+        t_thinking_timeout,
+        t_response_willing_amplifier,
+        t_response_interested_rate_amplifier,
+        t_down_frequency_rate,
+        t_ban_words_final_result,
+        t_ban_msgs_regex_final_result,
+        t_check_interval,
+        t_register_interval,
+        t_auto_save,
+        t_enable_check,
+        t_check_prompt,
 ):
     config_data["message"]["min_text_length"] = t_min_text_length
     config_data["message"]["max_context_size"] = t_max_context_size
@@ -522,27 +532,30 @@ def save_message_and_emoji_config(
 
 
 def save_response_model_config(
-    t_model_r1_probability,
-    t_model_r2_probability,
-    t_model_r3_probability,
-    t_max_response_length,
-    t_model1_name,
-    t_model1_provider,
-    t_model1_pri_in,
-    t_model1_pri_out,
-    t_model2_name,
-    t_model2_provider,
-    t_model3_name,
-    t_model3_provider,
-    t_emotion_model_name,
-    t_emotion_model_provider,
-    t_topic_judge_model_name,
-    t_topic_judge_model_provider,
-    t_summary_by_topic_model_name,
-    t_summary_by_topic_model_provider,
-    t_vlm_model_name,
-    t_vlm_model_provider,
+        t_willing_mode,
+        t_model_r1_probability,
+        t_model_r2_probability,
+        t_model_r3_probability,
+        t_max_response_length,
+        t_model1_name,
+        t_model1_provider,
+        t_model1_pri_in,
+        t_model1_pri_out,
+        t_model2_name,
+        t_model2_provider,
+        t_model3_name,
+        t_model3_provider,
+        t_emotion_model_name,
+        t_emotion_model_provider,
+        t_topic_judge_model_name,
+        t_topic_judge_model_provider,
+        t_summary_by_topic_model_name,
+        t_summary_by_topic_model_provider,
+        t_vlm_model_name,
+        t_vlm_model_provider,
 ):
+    if PARSED_CONFIG_VERSION >= version.parse("0.0.10"):
+        config_data["willing"]["willing_mode"] = t_willing_mode
     config_data["response"]["model_r1_probability"] = t_model_r1_probability
     config_data["response"]["model_v3_probability"] = t_model_r2_probability
     config_data["response"]["model_r1_distill_probability"] = t_model_r3_probability
@@ -569,15 +582,15 @@ def save_response_model_config(
 
 
 def save_memory_mood_config(
-    t_build_memory_interval,
-    t_memory_compress_rate,
-    t_forget_memory_interval,
-    t_memory_forget_time,
-    t_memory_forget_percentage,
-    t_memory_ban_words_final_result,
-    t_mood_update_interval,
-    t_mood_decay_rate,
-    t_mood_intensity_factor,
+        t_build_memory_interval,
+        t_memory_compress_rate,
+        t_forget_memory_interval,
+        t_memory_forget_time,
+        t_memory_forget_percentage,
+        t_memory_ban_words_final_result,
+        t_mood_update_interval,
+        t_mood_decay_rate,
+        t_mood_intensity_factor,
 ):
     config_data["memory"]["build_memory_interval"] = t_build_memory_interval
     config_data["memory"]["memory_compress_rate"] = t_memory_compress_rate
@@ -594,17 +607,17 @@ def save_memory_mood_config(
 
 
 def save_other_config(
-    t_keywords_reaction_enabled,
-    t_enable_advance_output,
-    t_enable_kuuki_read,
-    t_enable_debug_output,
-    t_enable_friend_chat,
-    t_chinese_typo_enabled,
-    t_error_rate,
-    t_min_freq,
-    t_tone_error_rate,
-    t_word_replace_rate,
-    t_remote_status,
+        t_keywords_reaction_enabled,
+        t_enable_advance_output,
+        t_enable_kuuki_read,
+        t_enable_debug_output,
+        t_enable_friend_chat,
+        t_chinese_typo_enabled,
+        t_error_rate,
+        t_min_freq,
+        t_tone_error_rate,
+        t_word_replace_rate,
+        t_remote_status,
 ):
     config_data["keywords_reaction"]["enable"] = t_keywords_reaction_enabled
     config_data["others"]["enable_advance_output"] = t_enable_advance_output
@@ -624,9 +637,9 @@ def save_other_config(
 
 
 def save_group_config(
-    t_talk_allowed_final_result,
-    t_talk_frequency_down_final_result,
-    t_ban_user_id_final_result,
+        t_talk_allowed_final_result,
+        t_talk_frequency_down_final_result,
+        t_ban_user_id_final_result,
 ):
     config_data["groups"]["talk_allowed"] = t_talk_allowed_final_result
     config_data["groups"]["talk_frequency_down"] = t_talk_frequency_down_final_result
@@ -1182,6 +1195,23 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                 with gr.Column(scale=3):
                     with gr.Row():
                         gr.Markdown("""### 回复设置""")
+                    if PARSED_CONFIG_VERSION >= version.parse("0.0.10"):
+                        with gr.Row():
+                            gr.Markdown("""#### 回复意愿模式""")
+                        with gr.Row():
+                            gr.Markdown("""回复意愿模式说明：\n
+                                        classical为经典回复意愿管理器\n
+                                        dynamic为动态意愿管理器\n
+                                        custom为自定义意愿管理器
+                                        """)
+                        with gr.Row():
+                            willing_mode = gr.Dropdown(
+                                choices=WILLING_MODE_CHOICES,
+                                value=config_data["willing"]["willing_mode"],
+                                label="回复意愿模式"
+                            )
+                    else:
+                        willing_mode = gr.Textbox(visible=False,value="disabled")
                     with gr.Row():
                         model_r1_probability = gr.Slider(
                             minimum=0,
@@ -1355,6 +1385,7 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                         save_model_btn.click(
                             save_response_model_config,
                             inputs=[
+                                willing_mode,
                                 model_r1_probability,
                                 model_r2_probability,
                                 model_r3_probability,
