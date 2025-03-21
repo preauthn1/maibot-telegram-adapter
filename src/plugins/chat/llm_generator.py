@@ -37,6 +37,7 @@ class ResponseGenerator:
         self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7, max_tokens=3000)
         self.model_v25 = LLM_request(model=global_config.llm_normal_minor, temperature=0.7, max_tokens=3000)
         self.current_model_type = "r1"  # 默认使用 R1
+        self.current_model_name = "unknown model"
 
     async def generate_response(self, message: MessageThinking) -> Optional[Union[str, List[str]]]:
         """根据当前模型类型选择对应的生成函数"""
@@ -107,7 +108,7 @@ class ResponseGenerator:
 
         # 生成回复
         try:
-            content, reasoning_content = await model.generate_response(prompt)
+            content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
         except Exception:
             logger.exception("生成回复时出错")
             return None
@@ -144,7 +145,7 @@ class ResponseGenerator:
                 "chat_id": message.chat_stream.stream_id,
                 "user": sender_name,
                 "message": message.processed_plain_text,
-                "model": self.current_model_type,
+                "model": self.current_model_name,
                 # 'reasoning_check': reasoning_content_check,
                 # 'response_check': content_check,
                 "reasoning": reasoning_content,
@@ -174,7 +175,7 @@ class ResponseGenerator:
             """
 
             # 调用模型生成结果
-            result, _ = await self.model_v25.generate_response(prompt)
+            result, _, _ = await self.model_v25.generate_response(prompt)
             result = result.strip()
 
             # 解析模型输出的结果
@@ -215,7 +216,7 @@ class InitiativeMessageGenerate:
         topic_select_prompt, dots_for_select, prompt_template = prompt_builder._build_initiative_prompt_select(
             message.group_id
         )
-        content_select, reasoning = self.model_v3.generate_response(topic_select_prompt)
+        content_select, reasoning, _ = self.model_v3.generate_response(topic_select_prompt)
         logger.debug(f"{content_select} {reasoning}")
         topics_list = [dot[0] for dot in dots_for_select]
         if content_select:
@@ -226,7 +227,7 @@ class InitiativeMessageGenerate:
         else:
             return None
         prompt_check, memory = prompt_builder._build_initiative_prompt_check(select_dot[1], prompt_template)
-        content_check, reasoning_check = self.model_v3.generate_response(prompt_check)
+        content_check, reasoning_check, _ = self.model_v3.generate_response(prompt_check)
         logger.info(f"{content_check} {reasoning_check}")
         if "yes" not in content_check.lower():
             return None

@@ -73,7 +73,7 @@ class ScheduleGenerator:
             )
 
             try:
-                schedule_text, _ = await self.llm_scheduler.generate_response(prompt)
+                schedule_text, _, _ = await self.llm_scheduler.generate_response(prompt)
                 db.schedule.insert_one({"date": date_str, "schedule": schedule_text})
                 self.enable_output = True
             except Exception as e:
