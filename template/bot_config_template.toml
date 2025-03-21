@@ -1,5 +1,5 @@
 [inner]
-version = "0.0.10"
+version = "0.0.11"
 
 #以下是给开发人员阅读的，一般用户不需要阅读
 #如果你想要修改配置文件，请在修改后将version的值进行变更
@@ -66,12 +66,15 @@ model_r1_distill_probability = 0.1 # 麦麦回答时选择次要回复模型3 �
 max_response_length = 1024 # 麦麦回答的最大token数
 
 [willing]
-willing_mode = "classical"
-# willing_mode = "dynamic"
-# willing_mode = "custom"
+willing_mode = "classical" # 回复意愿模式 经典模式
+# willing_mode = "dynamic" # 动态模式(可能不兼容)
+# willing_mode = "custom" # 自定义模式（可自行调整
 
 [memory]
 build_memory_interval = 2000 # 记忆构建间隔 单位秒   间隔越低，麦麦学习越多，但是冗余信息也会增多
+build_memory_distribution = [4,2,0.6,24,8,0.4] # 记忆构建分布，参数：分布1均值，标准差，权重，分布2均值，标准差，权重
+build_memory_sample_num = 10 # 采样数量，数值越高记忆采样次数越多
+build_memory_sample_length = 20 # 采样长度，数值越高一段记忆内容越丰富
 memory_compress_rate = 0.1 # 记忆压缩率 控制记忆精简程度 建议保持默认,调高可以获得更多信息，但是冗余信息也会增多
 
 forget_memory_interval = 1000 # 记忆遗忘间隔 单位秒   间隔越低，麦麦遗忘越频繁，记忆更精简，但更难学习
@@ -109,9 +112,7 @@ tone_error_rate=0.2 # 声调错误概率
 word_replace_rate=0.006 # 整词替换概率
 
 [others]
-enable_advance_output = false # 是否启用高级输出
 enable_kuuki_read = true # 是否启用读空气功能
-enable_debug_output = false # 是否启用调试输出
 enable_friend_chat = false # 是否启用好友聊天
 
 [groups]
@@ -120,9 +121,9 @@ talk_allowed = [
     123,
 ]  #可以回复消息的群
 talk_frequency_down = []  #降低回复频率的群
-ban_user_id = []  #禁止回复消息的QQ号
+ban_user_id = []  #禁止回复和读取消息的QQ号
 
-[remote] #测试功能，发送统计信息，主要是看全球有多少只麦麦
+[remote] #发送统计信息，主要是看全球有多少只麦麦
 enable = true
 
 

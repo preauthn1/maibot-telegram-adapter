@@ -76,18 +76,11 @@ def calculate_information_content(text):
 
 
 def get_closest_chat_from_db(length: int, timestamp: str):
-    """从数据库中获取最接近指定时间戳的聊天记录
-
-    Args:
-        length: 要获取的消息数量
-        timestamp: 时间戳
-
-    Returns:
-        list: 消息记录列表，每个记录包含时间和文本信息
-    """
+    # print(f"获取最接近指定时间戳的聊天记录，长度: {length}, 时间戳: {timestamp}")
+    # print(f"当前时间: {timestamp},转换后时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))}")
     chat_records = []
     closest_record = db.messages.find_one({"time": {"$lte": timestamp}}, sort=[("time", -1)])
-
+    # print(f"最接近的记录: {closest_record}")
     if closest_record:
         closest_time = closest_record["time"]
         chat_id = closest_record["chat_id"]  # 获取chat_id
@@ -102,7 +95,9 @@ def get_closest_chat_from_db(length: int, timestamp: str):
             .sort("time", 1)
             .limit(length)
         )
-
+        # print(f"获取到的记录: {chat_records}")
+        length = len(chat_records)
+        # print(f"获取到的记录长度: {length}")
         # 转换记录格式
         formatted_records = []
         for record in chat_records:
