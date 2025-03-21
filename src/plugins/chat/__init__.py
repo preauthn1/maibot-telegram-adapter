@@ -92,11 +92,12 @@ async def _(bot: Bot):
 
 @msg_in.handle()
 async def _(bot: Bot, event: MessageEvent, state: T_State):
-    #处理合并转发消息
+    # 处理合并转发消息
     if "forward" in event.message:
-        await chat_bot.handle_forward_message(event , bot)
-    else :
+        await chat_bot.handle_forward_message(event, bot)
+    else:
         await chat_bot.handle_message(event, bot)
+
 
 @notice_matcher.handle()
 async def _(bot: Bot, event: NoticeEvent, state: T_State):
