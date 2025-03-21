@@ -4,9 +4,10 @@
 # from .questionnaire import PERSONALITY_QUESTIONS, FACTOR_DESCRIPTIONS
 
 import os
+import random
 import sys
 from pathlib import Path
-import random
+from src.plugins.personality.questionnaire import PERSONALITY_QUESTIONS,FACTOR_DESCRIPTIONS
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent.parent
@@ -15,9 +16,6 @@ env_path = project_root / ".env.prod"
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(root_path)
 
-from src.plugins.personality.scene import get_scene_by_factor,get_all_scenes,PERSONALITY_SCENES
-from src.plugins.personality.questionnaire import PERSONALITY_QUESTIONS,FACTOR_DESCRIPTIONS
-from src.plugins.personality.offline_llm import LLMModel 
 
 
 

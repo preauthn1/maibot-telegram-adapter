@@ -1,17 +1,25 @@
 '''
-The definition of artificial personality in this paper follows the dispositional para-digm and adapts a definition of personality developed for humans [17]: 
+The definition of artificial personality in this paper follows the dispositional para-digm and adapts a definition of
+personality developed for humans [17]:
 Personality for a human is the "whole and organisation of relatively stable tendencies and patterns of experience and 
-behaviour within one person (distinguishing it from other persons)". This definition is modified for artificial personality: 
-Artificial personality describes the relatively stable tendencies and patterns of behav-iour of an AI-based machine that 
+behaviour within one person (distinguishing it from other persons)".
+This definition is modified for artificial personality:
+Artificial personality describes the relatively stable tendencies
+and patterns of behav-iour of an AI-based machine that
 can be designed by developers and designers via different modalities, such as language, creating the impression 
 of individuality of a humanized social agent when users interact with the machine.'''
 
-from typing import Dict, List
 import json
 import os
-from pathlib import Path
-from dotenv import load_dotenv
 import sys
+from pathlib import Path
+from typing import Dict, List
+
+from dotenv import load_dotenv
+
+from src.plugins.personality.offline_llm import LLMModel
+from src.plugins.personality.questionnaire import FACTOR_DESCRIPTIONS
+from src.plugins.personality.scene import get_scene_by_factor, PERSONALITY_SCENES
 
 '''
 第一种方案：基于情景评估的人格测定
@@ -23,9 +31,6 @@ env_path = project_root / ".env.prod"
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(root_path)
 
-from src.plugins.personality.scene import get_scene_by_factor,get_all_scenes,PERSONALITY_SCENES
-from src.plugins.personality.questionnaire import PERSONALITY_QUESTIONS,FACTOR_DESCRIPTIONS
-from src.plugins.personality.offline_llm import LLMModel 
 
 # 加载环境变量
 if env_path.exists():

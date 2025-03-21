@@ -1,11 +1,14 @@
-from typing import Dict, List
 import json
 import os
-from pathlib import Path
+import random
 import sys
 from datetime import datetime
-import random
+from pathlib import Path
+from typing import Dict
 from scipy import stats  # 添加scipy导入用于t检验
+from src.plugins.personality.big5_test import BigFiveTest
+from src.plugins.personality.renqingziji import PersonalityEvaluator_direct
+from src.plugins.personality.questionnaire import FACTOR_DESCRIPTIONS, PERSONALITY_QUESTIONS
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent.parent
@@ -14,9 +17,7 @@ env_path = project_root / ".env.prod"
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(root_path)
 
-from src.plugins.personality.big5_test import BigFiveTest
-from src.plugins.personality.renqingziji import PersonalityEvaluator_direct
-from src.plugins.personality.questionnaire import FACTOR_DESCRIPTIONS, PERSONALITY_QUESTIONS
+
 
 class CombinedPersonalityTest:
     def __init__(self):
