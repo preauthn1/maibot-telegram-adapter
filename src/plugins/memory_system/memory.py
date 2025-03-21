@@ -3,6 +3,7 @@ import datetime
 import math
 import random
 import time
+import re
 
 import jieba
 import networkx as nx
@@ -174,9 +175,9 @@ class Memory_graph:
 class Hippocampus:
     def __init__(self, memory_graph: Memory_graph):
         self.memory_graph = memory_graph
-        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge, temperature=0.5, request_type="topic")
+        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge, temperature=0.5, request_type="memory")
         self.llm_summary_by_topic = LLM_request(
-            model=global_config.llm_summary_by_topic, temperature=0.5, request_type="topic"
+            model=global_config.llm_summary_by_topic, temperature=0.5, request_type="memory"
         )
 
     def get_all_node_names(self) -> list:
@@ -295,22 +296,27 @@ class Hippocampus:
         topic_num = self.calculate_topic_num(input_text, compress_rate)
         topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(input_text, topic_num))
 
-        # 过滤topics
-        # 从配置文件获取需要过滤的关键词列表
-        filter_keywords = global_config.memory_ban_words
+        # 使用正则表达式提取<>中的内容
+        topics = re.findall(r'<([^>]+)>', topics_response[0])
         
-        # 将topics_response[0]中的中文逗号、顿号、空格都替换成英文逗号
-        # 然后按逗号分割成列表,并去除每个topic前后的空白字符
-        topics = [
-            topic.strip()
-            for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
-            if topic.strip()
-        ]
-        
+        # 如果没有找到<>包裹的内容，返回['none']
+        if not topics:
+            topics = ['none']
+        else:
+            # 处理提取出的话题
+            topics = [
+                topic.strip()
+                for topic in ','.join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                if topic.strip()
+            ]
+
         # 过滤掉包含禁用关键词的topic
         # any()检查topic中是否包含任何一个filter_keywords中的关键词
         # 只保留不包含禁用关键词的topic
-        filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
+        filtered_topics = [
+            topic for topic in topics 
+            if not any(keyword in topic for keyword in global_config.memory_ban_words)
+        ]
 
         logger.debug(f"过滤后话题: {filtered_topics}")
 
@@ -375,8 +381,11 @@ class Hippocampus:
         return topic_num
 
     async def operation_build_memory(self):
+        logger.debug("------------------------------------开始构建记忆--------------------------------------")
+        start_time = time.time()
         memory_samples = self.get_memory_sample()
         all_added_nodes = []
+        all_connected_nodes = []
         all_added_edges = []
         for i, messages in enumerate(memory_samples, 1):
             all_topics = []
@@ -394,6 +403,7 @@ class Hippocampus:
             current_time = datetime.datetime.now().timestamp()
             logger.debug(f"添加节点: {', '.join(topic for topic, _ in compressed_memory)}")
             all_added_nodes.extend(topic for topic, _ in compressed_memory)
+            # all_connected_nodes.extend(topic for topic, _ in similar_topics_dict)
             
             for topic, memory in compressed_memory:
                 self.memory_graph.add_dot(topic, memory)
@@ -405,8 +415,13 @@ class Hippocampus:
                     for similar_topic, similarity in similar_topics:
                         if topic != similar_topic:
                             strength = int(similarity * 10)
+                            
                             logger.debug(f"连接相似节点: {topic} 和 {similar_topic} (强度: {strength})")
                             all_added_edges.append(f"{topic}-{similar_topic}")
+                            
+                            all_connected_nodes.append(topic)
+                            all_connected_nodes.append(similar_topic)
+                            
                             self.memory_graph.G.add_edge(
                                 topic,
                                 similar_topic,
@@ -423,9 +438,16 @@ class Hippocampus:
                     self.memory_graph.connect_dot(all_topics[i], all_topics[j])
 
         logger.success(f"更新记忆: {', '.join(all_added_nodes)}")
-        logger.success(f"强化连接: {', '.join(all_added_edges)}")
+        logger.debug(f"强化连接: {', '.join(all_added_edges)}")
+        logger.info(f"强化连接节点: {', '.join(all_connected_nodes)}")
         # logger.success(f"强化连接: {', '.join(all_added_edges)}")
         self.sync_memory_to_db()
+        
+        end_time = time.time()
+        logger.success(
+            f"--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} "
+            "秒--------------------------"
+        )
 
     def sync_memory_to_db(self):
         """检查并同步内存中的图结构与数据库"""
@@ -753,8 +775,9 @@ class Hippocampus:
 
     def find_topic_llm(self, text, topic_num):
         prompt = (
-            f"这是一段文字：{text}。请你从这段话中总结出{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
-            f"用逗号,隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要有序号，不要告诉我其他内容。"
+            f"这是一段文字：{text}。请你从这段话中总结出最多{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
+            f"将主题用逗号隔开，并加上<>,例如<主题1>,<主题2>......尽可能精简。只需要列举最多{topic_num}个话题就好，不要有序号，不要告诉我其他内容。"
+            f"如果找不出主题或者没有明显主题，返回<none>。"
         )
         return prompt
 
@@ -774,14 +797,21 @@ class Hippocampus:
         Returns:
             list: 识别出的主题列表
         """
-        topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, 5))
-        # print(f"话题: {topics_response[0]}")
-        topics = [
-            topic.strip()
-            for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
-            if topic.strip()
-        ]
-        # print(f"话题: {topics}")
+        topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, 4))
+        # 使用正则表达式提取<>中的内容
+        print(f"话题: {topics_response[0]}")
+        topics = re.findall(r'<([^>]+)>', topics_response[0])
+        
+        # 如果没有找到<>包裹的内容，返回['none']
+        if not topics:
+            topics = ['none']
+        else:
+            # 处理提取出的话题
+            topics = [
+                topic.strip()
+                for topic in ','.join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                if topic.strip()
+            ]
 
         return topics
 
@@ -852,11 +882,11 @@ class Hippocampus:
 
     async def memory_activate_value(self, text: str, max_topics: int = 5, similarity_threshold: float = 0.3) -> int:
         """计算输入文本对记忆的激活程度"""
-        logger.info(f"识别主题: {await self._identify_topics(text)}")
-
         # 识别主题
         identified_topics = await self._identify_topics(text)
-        if not identified_topics:
+        print(f"识别主题: {identified_topics}")
+        
+        if identified_topics[0] == "none":
             return 0
 
         # 查找相似主题
@@ -916,7 +946,8 @@ class Hippocampus:
 
         # 计算最终激活值
         activation = int((topic_match + average_similarities) / 2 * 100)
-        logger.info(f"匹配率: {topic_match:.3f}, 平均相似度: {average_similarities:.3f}, 激活值: {activation}")
+        
+        logger.info(f"识别<{text[:15]}...>主题: {identified_topics}, 匹配率: {topic_match:.3f}, 激活值: {activation}")
 
         return activation
 

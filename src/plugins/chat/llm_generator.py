@@ -32,10 +32,17 @@ class ResponseGenerator:
             temperature=0.7,
             max_tokens=1000,
             stream=True,
+            request_type="response",
         )
-        self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7, max_tokens=3000)
-        self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7, max_tokens=3000)
-        self.model_v25 = LLM_request(model=global_config.llm_normal_minor, temperature=0.7, max_tokens=3000)
+        self.model_v3 = LLM_request(
+            model=global_config.llm_normal, temperature=0.7, max_tokens=3000, request_type="response"
+        )
+        self.model_r1_distill = LLM_request(
+            model=global_config.llm_reasoning_minor, temperature=0.7, max_tokens=3000, request_type="response"
+        )
+        self.model_sum = LLM_request(
+            model=global_config.llm_summary_by_topic, temperature=0.7, max_tokens=3000, request_type="relation"
+        )
         self.current_model_type = "r1"  # 默认使用 R1
         self.current_model_name = "unknown model"
 
@@ -175,7 +182,7 @@ class ResponseGenerator:
             """
 
             # 调用模型生成结果
-            result, _, _ = await self.model_v25.generate_response(prompt)
+            result, _, _ = await self.model_sum.generate_response(prompt)
             result = result.strip()
 
             # 解析模型输出的结果
