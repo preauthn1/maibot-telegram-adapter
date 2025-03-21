@@ -98,9 +98,13 @@ def parse_env_config(config_file):
     # 逐行处理配置
     for line in lines:
         line = line.strip()
-        # 忽略空行和注释
+        # 忽略空行和注释行
         if not line or line.startswith("#"):
             continue
+
+        # 处理行尾注释
+        if "#" in line:
+            line = line.split("#")[0].strip()
 
         # 拆分键值对
         key, value = line.split("=", 1)
