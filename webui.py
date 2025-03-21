@@ -1,10 +1,10 @@
+import warnings
 import gradio as gr
 import os
 import toml
 import signal
 import sys
 import requests
-
 try:
     from src.common.logger import get_module_logger
 
@@ -26,7 +26,8 @@ import shutil
 import ast
 from packaging import version
 from decimal import Decimal
-
+# 忽略 gradio 版本警告
+warnings.filterwarnings("ignore", message="IMPORTANT: You are using gradio version.*")
 
 def signal_handler(signum, frame):
     """处理 Ctrl+C 信号"""
@@ -80,7 +81,7 @@ WILLING_MODE_CHOICES = [
 
 
 # 添加WebUI配置文件版本
-WEBUI_VERSION = version.parse("0.0.9")
+WEBUI_VERSION = version.parse("0.0.10")
 
 
 # ==============================================
@@ -660,13 +661,21 @@ def save_group_config(
 with gr.Blocks(title="MaimBot配置文件编辑") as app:
     gr.Markdown(
         value="""
-        ### 欢迎使用由墨梓柒MotricSeven编写的MaimBot配置文件编辑器\n
+        # 欢迎使用由墨梓柒MotricSeven编写的MaimBot配置文件编辑器\n
         感谢ZureTz大佬提供的人格保存部分修复！
         """
     )
+    gr.Markdown(value="---")  # 添加分割线
+    gr.Markdown(value="""
+        ## 注意！！！\n
+        由于Gradio的限制，在保存配置文件时，请不要刷新浏览器窗口！！\n
+        您的配置文件在点击保存按钮的时候就已经成功保存！！
+        """)
+    gr.Markdown(value="---")  # 添加分割线
     gr.Markdown(value="## 全球在线MaiMBot数量: " + str((online_maimbot_data or {}).get("online_clients", 0)))
     gr.Markdown(value="## 当前WebUI版本: " + str(WEBUI_VERSION))
-    gr.Markdown(value="### 配置文件版本：" + config_data["inner"]["version"])
+    gr.Markdown(value="## 配置文件版本：" + config_data["inner"]["version"])
+    gr.Markdown(value="---")  # 添加分割线
     with gr.Tabs():
         with gr.TabItem("0-环境设置"):
             with gr.Row():
