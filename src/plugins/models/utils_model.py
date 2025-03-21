@@ -581,7 +581,8 @@ class LLM_request:
                         completion_tokens=completion_tokens,
                         total_tokens=total_tokens,
                         user_id="system",  # 可以根据需要修改 user_id
-                        request_type="embedding",  # 请求类型为 embedding
+                        # request_type="embedding",  # 请求类型为 embedding
+                        request_type=self.request_type,  # 请求类型为 text
                         endpoint="/embeddings",  # API 端点
                     )
                     return result["data"][0].get("embedding", None)

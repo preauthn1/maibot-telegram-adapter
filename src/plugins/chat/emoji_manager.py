@@ -38,9 +38,9 @@ class EmojiManager:
 
     def __init__(self):
         self._scan_task = None
-        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000, request_type="image")
+        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000, request_type="emoji")
         self.llm_emotion_judge = LLM_request(
-            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8, request_type="image"
+            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8, request_type="emoji"
         )  # 更高的温度，更少的token（后续可以根据情绪来调整温度）
 
     def _ensure_emoji_dir(self):
@@ -111,7 +111,7 @@ class EmojiManager:
             if not text_for_search:
                 logger.error("无法获取文本的情绪")
                 return None
-            text_embedding = await get_embedding(text_for_search)
+            text_embedding = await get_embedding(text_for_search, request_type="emoji")
             if not text_embedding:
                 logger.error("无法获取文本的embedding")
                 return None
@@ -310,7 +310,7 @@ class EmojiManager:
                     logger.info(f"[检查] 表情包检查通过: {check}")
 
                 if description is not None:
-                    embedding = await get_embedding(description)
+                    embedding = await get_embedding(description, request_type="emoji")
                     # 准备数据库记录
                     emoji_record = {
                         "filename": filename,

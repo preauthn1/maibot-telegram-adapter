@@ -55,9 +55,9 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
     return False
 
 
-async def get_embedding(text):
+async def get_embedding(text, request_type="embedding"):
     """获取文本的embedding向量"""
-    llm = LLM_request(model=global_config.embedding, request_type="embedding")
+    llm = LLM_request(model=global_config.embedding, request_type=request_type)
     # return llm.get_embedding_sync(text)
     return await llm.get_embedding(text)
 

@@ -56,7 +56,6 @@ class BotConfig:
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
     llm_reasoning_minor: Dict[str, str] = field(default_factory=lambda: {})
     llm_normal: Dict[str, str] = field(default_factory=lambda: {})
-    llm_normal_minor: Dict[str, str] = field(default_factory=lambda: {})
     llm_topic_judge: Dict[str, str] = field(default_factory=lambda: {})
     llm_summary_by_topic: Dict[str, str] = field(default_factory=lambda: {})
     llm_emotion_judge: Dict[str, str] = field(default_factory=lambda: {})
@@ -235,7 +234,6 @@ class BotConfig:
                 "llm_reasoning",
                 "llm_reasoning_minor",
                 "llm_normal",
-                "llm_normal_minor",
                 "llm_topic_judge",
                 "llm_summary_by_topic",
                 "llm_emotion_judge",

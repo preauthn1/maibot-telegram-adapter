@@ -174,9 +174,9 @@ class Memory_graph:
 class Hippocampus:
     def __init__(self, memory_graph: Memory_graph):
         self.memory_graph = memory_graph
-        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge, temperature=0.5, request_type="topic")
+        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge, temperature=0.5, request_type="memory")
         self.llm_summary_by_topic = LLM_request(
-            model=global_config.llm_summary_by_topic, temperature=0.5, request_type="topic"
+            model=global_config.llm_summary_by_topic, temperature=0.5, request_type="memory"
         )
 
     def get_all_node_names(self) -> list:
@@ -375,6 +375,8 @@ class Hippocampus:
         return topic_num
 
     async def operation_build_memory(self):
+        logger.debug("------------------------------------开始构建记忆--------------------------------------")
+        start_time = time.time()
         memory_samples = self.get_memory_sample()
         all_added_nodes = []
         all_added_edges = []
@@ -426,6 +428,12 @@ class Hippocampus:
         logger.success(f"强化连接: {', '.join(all_added_edges)}")
         # logger.success(f"强化连接: {', '.join(all_added_edges)}")
         self.sync_memory_to_db()
+        
+        end_time = time.time()
+        logger.success(
+            f"--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} "
+            "秒--------------------------"
+        )
 
     def sync_memory_to_db(self):
         """检查并同步内存中的图结构与数据库"""
