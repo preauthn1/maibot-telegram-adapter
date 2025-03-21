@@ -245,7 +245,7 @@ class CombinedPersonalityTest:
         
         # 对所有维度进行整体t检验
         t_stat, p_value = stats.ttest_rel(questionnaire_values, scenario_values)
-        print(f"\n整体统计分析:")
+        print("\n整体统计分析:")
         print(f"平均差异: {mean_diff:.3f}")
         print(f"差异标准差: {std_diff:.3f}")
         print(f"效应量(Cohen's d): {cohens_d:.3f}")
