@@ -5,9 +5,6 @@ import toml
 import signal
 import sys
 import requests
-
-# 忽略 gradio 版本警告
-warnings.filterwarnings("ignore", message="IMPORTANT: You are using gradio version.*")
 try:
     from src.common.logger import get_module_logger
 
@@ -29,7 +26,8 @@ import shutil
 import ast
 from packaging import version
 from decimal import Decimal
-
+# 忽略 gradio 版本警告
+warnings.filterwarnings("ignore", message="IMPORTANT: You are using gradio version.*")
 
 def signal_handler(signum, frame):
     """处理 Ctrl+C 信号"""
