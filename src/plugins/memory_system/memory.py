@@ -26,6 +26,11 @@ memory_config = LogConfig(
     console_format=MEMORY_STYLE_CONFIG["console_format"],
     file_format=MEMORY_STYLE_CONFIG["file_format"],
 )
+# print(f"memory_config: {memory_config}")
+# print(f"MEMORY_STYLE_CONFIG: {MEMORY_STYLE_CONFIG}")
+# print(f"MEMORY_STYLE_CONFIG['console_format']: {MEMORY_STYLE_CONFIG['console_format']}")
+# print(f"MEMORY_STYLE_CONFIG['file_format']: {MEMORY_STYLE_CONFIG['file_format']}")
+
 
 logger = get_module_logger("memory_system", config=memory_config)
 
@@ -198,13 +203,15 @@ class Hippocampus:
     def random_get_msg_snippet(self, target_timestamp: float, chat_size: int, max_memorized_time_per_msg: int) -> list:
         try_count = 0
         # 最多尝试2次抽取
-        while try_count < 2:
+        while try_count < 3:
             messages = get_closest_chat_from_db(length=chat_size, timestamp=target_timestamp)
             if messages:
+                # print(f"抽取到的消息: {messages}")
                 # 检查messages是否均没有达到记忆次数限制
                 for message in messages:
                     if message["memorized_times"] >= max_memorized_time_per_msg:
                         messages = None
+                        # print(f"抽取到的消息提取次数达到限制，跳过")
                         break
                 if messages:
                     # 成功抽取短期消息样本
@@ -235,8 +242,10 @@ class Hippocampus:
 
         # 生成时间戳数组
         timestamps = scheduler.get_timestamp_array()
-        logger.debug(f"生成的时间戳数组: {timestamps}")
-
+        # logger.debug(f"生成的时间戳数组: {timestamps}")
+        # print(f"生成的时间戳数组: {timestamps}")
+        # print(f"时间戳的实际时间: {[time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts)) for ts in timestamps]}")
+        logger.info(f"回忆往事: {[time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts)) for ts in timestamps]}")
         chat_samples = []
         for timestamp in timestamps:
             messages = self.random_get_msg_snippet(
@@ -247,18 +256,14 @@ class Hippocampus:
             if messages:
                 time_diff = (datetime.datetime.now().timestamp() - timestamp) / 3600
                 logger.debug(f"成功抽取 {time_diff:.1f} 小时前的消息样本，共{len(messages)}条")
+                # print(f"成功抽取 {time_diff:.1f} 小时前的消息样本，共{len(messages)}条")
                 chat_samples.append(messages)
             else:
-                logger.warning(f"时间戳 {timestamp} 的消息样本抽取失败")
+                logger.debug(f"时间戳 {timestamp} 的消息样本抽取失败")
 
         return chat_samples
 
     async def memory_compress(self, messages: list, compress_rate=0.1):
-        """压缩消息记录为记忆
-
-        Returns:
-            tuple: (压缩记忆集合, 相似主题字典)
-        """
         if not messages:
             return set(), {}
 
@@ -291,15 +296,23 @@ class Hippocampus:
         topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(input_text, topic_num))
 
         # 过滤topics
+        # 从配置文件获取需要过滤的关键词列表
         filter_keywords = global_config.memory_ban_words
+        
+        # 将topics_response[0]中的中文逗号、顿号、空格都替换成英文逗号
+        # 然后按逗号分割成列表,并去除每个topic前后的空白字符
         topics = [
             topic.strip()
             for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
             if topic.strip()
         ]
+        
+        # 过滤掉包含禁用关键词的topic
+        # any()检查topic中是否包含任何一个filter_keywords中的关键词
+        # 只保留不包含禁用关键词的topic
         filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
 
-        logger.info(f"过滤后话题: {filtered_topics}")
+        logger.debug(f"过滤后话题: {filtered_topics}")
 
         # 创建所有话题的请求任务
         tasks = []
@@ -309,31 +322,42 @@ class Hippocampus:
             tasks.append((topic.strip(), task))
 
         # 等待所有任务完成
-        compressed_memory = set()
+        # 初始化压缩后的记忆集合和相似主题字典
+        compressed_memory = set()  # 存储压缩后的(主题,内容)元组
         similar_topics_dict = {}  # 存储每个话题的相似主题列表
+        
+        # 遍历每个主题及其对应的LLM任务
         for topic, task in tasks:
             response = await task
             if response:
+                # 将主题和LLM生成的内容添加到压缩记忆中
                 compressed_memory.add((topic, response[0]))
-                # 为每个话题查找相似的已存在主题
+                
+                # 为当前主题寻找相似的已存在主题
                 existing_topics = list(self.memory_graph.G.nodes())
                 similar_topics = []
 
+                # 计算当前主题与每个已存在主题的相似度
                 for existing_topic in existing_topics:
+                    # 使用jieba分词,将主题转换为词集合
                     topic_words = set(jieba.cut(topic))
                     existing_words = set(jieba.cut(existing_topic))
 
-                    all_words = topic_words | existing_words
-                    v1 = [1 if word in topic_words else 0 for word in all_words]
-                    v2 = [1 if word in existing_words else 0 for word in all_words]
+                    # 构建词向量用于计算余弦相似度
+                    all_words = topic_words | existing_words  # 所有不重复的词
+                    v1 = [1 if word in topic_words else 0 for word in all_words]  # 当前主题的词向量
+                    v2 = [1 if word in existing_words else 0 for word in all_words]  # 已存在主题的词向量
 
+                    # 计算余弦相似度
                     similarity = cosine_similarity(v1, v2)
 
-                    if similarity >= 0.6:
+                    # 如果相似度超过阈值,添加到相似主题列表
+                    if similarity >= 0.7:
                         similar_topics.append((existing_topic, similarity))
 
+                # 按相似度降序排序,只保留前3个最相似的主题
                 similar_topics.sort(key=lambda x: x[1], reverse=True)
-                similar_topics = similar_topics[:5]
+                similar_topics = similar_topics[:3]
                 similar_topics_dict[topic] = similar_topics
 
         return compressed_memory, similar_topics_dict
@@ -352,7 +376,8 @@ class Hippocampus:
 
     async def operation_build_memory(self):
         memory_samples = self.get_memory_sample()
-
+        all_added_nodes = []
+        all_added_edges = []
         for i, messages in enumerate(memory_samples, 1):
             all_topics = []
             # 加载进度可视化
@@ -364,12 +389,13 @@ class Hippocampus:
 
             compress_rate = global_config.memory_compress_rate
             compressed_memory, similar_topics_dict = await self.memory_compress(messages, compress_rate)
-            logger.info(f"压缩后记忆数量: {len(compressed_memory)}，似曾相识的话题: {len(similar_topics_dict)}")
+            logger.debug(f"压缩后记忆数量: {compressed_memory}，似曾相识的话题: {similar_topics_dict}")
 
             current_time = datetime.datetime.now().timestamp()
-
+            logger.debug(f"添加节点: {', '.join(topic for topic, _ in compressed_memory)}")
+            all_added_nodes.extend(topic for topic, _ in compressed_memory)
+            
             for topic, memory in compressed_memory:
-                logger.info(f"添加节点: {topic}")
                 self.memory_graph.add_dot(topic, memory)
                 all_topics.append(topic)
 
@@ -379,7 +405,8 @@ class Hippocampus:
                     for similar_topic, similarity in similar_topics:
                         if topic != similar_topic:
                             strength = int(similarity * 10)
-                            logger.info(f"连接相似节点: {topic} 和 {similar_topic} (强度: {strength})")
+                            logger.debug(f"连接相似节点: {topic} 和 {similar_topic} (强度: {strength})")
+                            all_added_edges.append(f"{topic}-{similar_topic}")
                             self.memory_graph.G.add_edge(
                                 topic,
                                 similar_topic,
@@ -391,9 +418,13 @@ class Hippocampus:
             # 连接同批次的相关话题
             for i in range(len(all_topics)):
                 for j in range(i + 1, len(all_topics)):
-                    logger.info(f"连接同批次节点: {all_topics[i]} 和 {all_topics[j]}")
+                    logger.debug(f"连接同批次节点: {all_topics[i]} 和 {all_topics[j]}")
+                    all_added_edges.append(f"{all_topics[i]}-{all_topics[j]}")
                     self.memory_graph.connect_dot(all_topics[i], all_topics[j])
 
+        logger.success(f"更新记忆: {', '.join(all_added_nodes)}")
+        logger.success(f"强化连接: {', '.join(all_added_edges)}")
+        # logger.success(f"强化连接: {', '.join(all_added_edges)}")
         self.sync_memory_to_db()
 
     def sync_memory_to_db(self):

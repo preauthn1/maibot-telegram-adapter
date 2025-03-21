@@ -154,7 +154,7 @@ class ChatBot:
             )
             # 开始思考的时间点
             thinking_time_point = round(time.time(), 2)
-            logger.info(f"开始思考的时间点: {thinking_time_point}")
+            # logger.debug(f"开始思考的时间点: {thinking_time_point}")
             think_id = "mt" + str(thinking_time_point)
             thinking_message = MessageThinking(
                 message_id=think_id,
