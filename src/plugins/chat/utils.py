@@ -314,7 +314,7 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
             sentence = sentence.replace("，", " ").replace(",", " ")
         sentences_done.append(sentence)
 
-    logger.info(f"处理后的句子: {sentences_done}")
+    logger.debug(f"处理后的句子: {sentences_done}")
     return sentences_done
 
 

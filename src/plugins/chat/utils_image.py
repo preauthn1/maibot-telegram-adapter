@@ -184,7 +184,7 @@ class ImageManager:
                 logger.warning(f"虽然生成了描述，但是找到缓存图片描述 {cached_description}")
                 return f"[图片：{cached_description}]"
 
-            logger.info(f"描述是{description}")
+            logger.debug(f"描述是{description}")
 
             if description is None:
                 logger.warning("AI未能生成图片描述")
