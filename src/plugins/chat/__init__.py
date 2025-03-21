@@ -110,7 +110,7 @@ async def build_memory_task():
     """每build_memory_interval秒执行一次记忆构建"""
     logger.debug("[记忆构建]------------------------------------开始构建记忆--------------------------------------")
     start_time = time.time()
-    await hippocampus.operation_build_memory(chat_size=20)
+    await hippocampus.operation_build_memory()
     end_time = time.time()
     logger.success(
         f"[记忆构建]--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} "

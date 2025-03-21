@@ -31,9 +31,10 @@ _handler_registry: Dict[str, List[int]] = {}
 current_file_path = Path(__file__).resolve()
 LOG_ROOT = "logs"
 
-ENABLE_ADVANCE_OUTPUT = False
+ENABLE_ADVANCE_OUTPUT = os.getenv("SIMPLE_OUTPUT", "false")
+print(f"ENABLE_ADVANCE_OUTPUT: {ENABLE_ADVANCE_OUTPUT}")
 
-if ENABLE_ADVANCE_OUTPUT:
+if not ENABLE_ADVANCE_OUTPUT:
     # 默认全局配置
     DEFAULT_CONFIG = {
         # 日志级别配置
