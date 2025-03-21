@@ -38,9 +38,9 @@ class EmojiManager:
 
     def __init__(self):
         self._scan_task = None
-        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000,request_type = 'image')
+        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000, request_type="image")
         self.llm_emotion_judge = LLM_request(
-            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8,request_type = 'image'
+            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8, request_type="image"
         )  # 更高的温度，更少的token（后续可以根据情绪来调整温度）
 
     def _ensure_emoji_dir(self):
@@ -189,7 +189,10 @@ class EmojiManager:
 
     async def _check_emoji(self, image_base64: str, image_format: str) -> str:
         try:
-            prompt = f'这是一个表情包，请回答这个表情包是否满足"{global_config.EMOJI_CHECK_PROMPT}"的要求，是则回答是，否则回答否，不要出现任何其他内容'
+            prompt = (
+                f'这是一个表情包，请回答这个表情包是否满足"{global_config.EMOJI_CHECK_PROMPT}"的要求，是则回答是，'
+                f"否则回答否，不要出现任何其他内容"
+            )
 
             content, _ = await self.vlm.generate_response_for_image(prompt, image_base64, image_format)
             logger.debug(f"[检查] 表情包检查结果: {content}")
@@ -201,7 +204,11 @@ class EmojiManager:
 
     async def _get_kimoji_for_text(self, text: str):
         try:
-            prompt = f'这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，注意不要输出任何对消息内容的分析内容，只输出"一种什么样的感觉"中间的形容词部分。'
+            prompt = (
+                f"这是{global_config.BOT_NICKNAME}将要发送的消息内容:\n{text}\n若要为其配上表情包，"
+                f"请你输出这个表情包应该表达怎样的情感，应该给人什么样的感觉，不要太简洁也不要太长，"
+                f'注意不要输出任何对消息内容的分析内容，只输出"一种什么样的感觉"中间的形容词部分。'
+            )
 
             content, _ = await self.llm_emotion_judge.generate_response_async(prompt, temperature=1.5)
             logger.info(f"[情感] 表情包情感描述: {content}")
@@ -235,7 +242,33 @@ class EmojiManager:
                 image_hash = hashlib.md5(image_bytes).hexdigest()
                 image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
                 # 检查是否已经注册过
-                existing_emoji = db["emoji"].find_one({"hash": image_hash})
+                existing_emoji_by_path = db["emoji"].find_one({"filename": filename})
+                existing_emoji_by_hash = db["emoji"].find_one({"hash": image_hash})
+                if existing_emoji_by_path and existing_emoji_by_hash:
+                    if existing_emoji_by_path["_id"] != existing_emoji_by_hash["_id"]:
+                        logger.error(f"[错误] 表情包已存在但记录不一致: {filename}")
+                        db.emoji.delete_one({"_id": existing_emoji_by_path["_id"]})
+                        db.emoji.update_one(
+                            {"_id": existing_emoji_by_hash["_id"]}, {"$set": {"path": image_path, "filename": filename}}
+                        )
+                        existing_emoji_by_hash["path"] = image_path
+                        existing_emoji_by_hash["filename"] = filename
+                    existing_emoji = existing_emoji_by_hash
+                elif existing_emoji_by_hash:
+                    logger.error(f"[错误] 表情包hash已存在但path不存在: {filename}")
+                    db.emoji.update_one(
+                        {"_id": existing_emoji_by_hash["_id"]}, {"$set": {"path": image_path, "filename": filename}}
+                    )
+                    existing_emoji_by_hash["path"] = image_path
+                    existing_emoji_by_hash["filename"] = filename
+                    existing_emoji = existing_emoji_by_hash
+                elif existing_emoji_by_path:
+                    logger.error(f"[错误] 表情包path已存在但hash不存在: {filename}")
+                    db.emoji.delete_one({"_id": existing_emoji_by_path["_id"]})
+                    existing_emoji = None
+                else:
+                    existing_emoji = None
+
                 description = None
 
                 if existing_emoji:
@@ -359,6 +392,12 @@ class EmojiManager:
                         logger.warning(f"[检查] 发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
                         hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
                         db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
+                    else:
+                        file_hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
+                        if emoji["hash"] != file_hash:
+                            logger.warning(f"[检查] 表情包文件hash不匹配，ID: {emoji.get('_id', 'unknown')}")
+                            db.emoji.delete_one({"_id": emoji["_id"]})
+                            removed_count += 1
 
                 except Exception as item_error:
                     logger.error(f"[错误] 处理表情包记录时出错: {str(item_error)}")

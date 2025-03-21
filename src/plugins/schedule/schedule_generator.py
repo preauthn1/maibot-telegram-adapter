@@ -23,7 +23,7 @@ class ScheduleGenerator:
     def __init__(self):
         # 根据global_config.llm_normal这一字典配置指定模型
         # self.llm_scheduler = LLMModel(model = global_config.llm_normal,temperature=0.9)
-        self.llm_scheduler = LLM_request(model=global_config.llm_normal, temperature=0.9,request_type = 'scheduler')
+        self.llm_scheduler = LLM_request(model=global_config.llm_normal, temperature=0.9, request_type="scheduler")
         self.today_schedule_text = ""
         self.today_schedule = {}
         self.tomorrow_schedule_text = ""
@@ -73,7 +73,7 @@ class ScheduleGenerator:
             )
 
             try:
-                schedule_text, _ = await self.llm_scheduler.generate_response(prompt)
+                schedule_text, _, _ = await self.llm_scheduler.generate_response(prompt)
                 db.schedule.insert_one({"date": date_str, "schedule": schedule_text})
                 self.enable_output = True
             except Exception as e:
