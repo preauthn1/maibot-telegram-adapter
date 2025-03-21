@@ -1,8 +1,6 @@
 import datetime
 import json
 import re
-import os
-import sys
 from typing import Dict, Union
 
 from nonebot import get_driver

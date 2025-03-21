@@ -239,7 +239,11 @@ class Hippocampus:
 
         chat_samples = []
         for timestamp in timestamps:
-            messages = self.random_get_msg_snippet(timestamp, global_config.build_memory_sample_length, max_memorized_time_per_msg)
+            messages = self.random_get_msg_snippet(
+                timestamp, 
+                global_config.build_memory_sample_length, 
+                max_memorized_time_per_msg
+            )
             if messages:
                 time_diff = (datetime.datetime.now().timestamp() - timestamp) / 3600
                 logger.debug(f"成功抽取 {time_diff:.1f} 小时前的消息样本，共{len(messages)}条")

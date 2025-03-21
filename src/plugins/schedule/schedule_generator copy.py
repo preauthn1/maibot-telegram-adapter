@@ -5,16 +5,15 @@ import os
 import sys
 from typing import Dict, Union
 
-from nonebot import get_driver
 
 # 添加项目根目录到 Python 路径
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(root_path)
 
-# from src.plugins.chat.config import global_config
-from src.common.database import db  # 使用正确的导入语法
-from src.plugins.schedule.offline_llm import LLMModel
-from src.common.logger import get_module_logger
+from src.common.database import db # noqa: E402
+from src.common.logger import get_module_logger # noqa: E402
+from src.plugins.schedule.offline_llm import LLMModel # noqa: E402
+from src.plugins.chat.config import global_config # noqa: E402
 
 logger = get_module_logger("scheduler")
 

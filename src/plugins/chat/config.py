@@ -321,9 +321,18 @@ class BotConfig:
                 )
                 config.memory_compress_rate = memory_config.get("memory_compress_rate", config.memory_compress_rate)
             if config.INNER_VERSION in SpecifierSet(">=0.0.11"):
-                config.memory_build_distribution = memory_config.get("memory_build_distribution", config.memory_build_distribution)
-                config.build_memory_sample_num = memory_config.get("build_memory_sample_num", config.build_memory_sample_num)
-                config.build_memory_sample_length = memory_config.get("build_memory_sample_length", config.build_memory_sample_length)
+                config.memory_build_distribution = memory_config.get(
+                    "memory_build_distribution", 
+                    config.memory_build_distribution
+                )
+                config.build_memory_sample_num = memory_config.get(
+                    "build_memory_sample_num", 
+                    config.build_memory_sample_num
+                )
+                config.build_memory_sample_length = memory_config.get(
+                    "build_memory_sample_length", 
+                    config.build_memory_sample_length
+                )
 
 
         def remote(parent: dict):

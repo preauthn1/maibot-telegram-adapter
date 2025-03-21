@@ -17,7 +17,7 @@ import jieba
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(root_path)
 
-from src.common.logger import get_module_logger
+from src.common.logger import get_module_logger # noqa: E402
 from src.common.database import db  # noqa E402
 from src.plugins.memory_system.offline_llm import LLMModel  # noqa E402
 
