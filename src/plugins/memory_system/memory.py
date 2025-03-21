@@ -3,6 +3,7 @@ import datetime
 import math
 import random
 import time
+import re
 
 import jieba
 import networkx as nx
@@ -295,22 +296,27 @@ class Hippocampus:
         topic_num = self.calculate_topic_num(input_text, compress_rate)
         topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(input_text, topic_num))
 
-        # 过滤topics
-        # 从配置文件获取需要过滤的关键词列表
-        filter_keywords = global_config.memory_ban_words
+        # 使用正则表达式提取<>中的内容
+        topics = re.findall(r'<([^>]+)>', topics_response[0])
         
-        # 将topics_response[0]中的中文逗号、顿号、空格都替换成英文逗号
-        # 然后按逗号分割成列表,并去除每个topic前后的空白字符
-        topics = [
-            topic.strip()
-            for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
-            if topic.strip()
-        ]
-        
+        # 如果没有找到<>包裹的内容，返回['none']
+        if not topics:
+            topics = ['none']
+        else:
+            # 处理提取出的话题
+            topics = [
+                topic.strip()
+                for topic in ','.join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                if topic.strip()
+            ]
+
         # 过滤掉包含禁用关键词的topic
         # any()检查topic中是否包含任何一个filter_keywords中的关键词
         # 只保留不包含禁用关键词的topic
-        filtered_topics = [topic for topic in topics if not any(keyword in topic for keyword in filter_keywords)]
+        filtered_topics = [
+            topic for topic in topics 
+            if not any(keyword in topic for keyword in global_config.memory_ban_words)
+        ]
 
         logger.debug(f"过滤后话题: {filtered_topics}")
 
@@ -769,8 +775,9 @@ class Hippocampus:
 
     def find_topic_llm(self, text, topic_num):
         prompt = (
-            f"这是一段文字：{text}。请你从这段话中总结出{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
-            f"用逗号,隔开，尽可能精简。只需要列举{topic_num}个话题就好，不要有序号，不要告诉我其他内容。"
+            f"这是一段文字：{text}。请你从这段话中总结出最多{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
+            f"将主题用逗号隔开，并加上<>,例如<主题1>,<主题2>......尽可能精简。只需要列举最多{topic_num}个话题就好，不要有序号，不要告诉我其他内容。"
+            f"如果找不出主题或者没有明显主题，返回<none>。"
         )
         return prompt
 
@@ -790,14 +797,21 @@ class Hippocampus:
         Returns:
             list: 识别出的主题列表
         """
-        topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, 5))
-        # print(f"话题: {topics_response[0]}")
-        topics = [
-            topic.strip()
-            for topic in topics_response[0].replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
-            if topic.strip()
-        ]
-        # print(f"话题: {topics}")
+        topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, 4))
+        # 使用正则表达式提取<>中的内容
+        print(f"话题: {topics_response[0]}")
+        topics = re.findall(r'<([^>]+)>', topics_response[0])
+        
+        # 如果没有找到<>包裹的内容，返回['none']
+        if not topics:
+            topics = ['none']
+        else:
+            # 处理提取出的话题
+            topics = [
+                topic.strip()
+                for topic in ','.join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                if topic.strip()
+            ]
 
         return topics
 
@@ -870,8 +884,9 @@ class Hippocampus:
         """计算输入文本对记忆的激活程度"""
         # 识别主题
         identified_topics = await self._identify_topics(text)
+        print(f"识别主题: {identified_topics}")
         
-        if not identified_topics:
+        if identified_topics[0] == "none":
             return 0
 
         # 查找相似主题
@@ -932,7 +947,7 @@ class Hippocampus:
         # 计算最终激活值
         activation = int((topic_match + average_similarities) / 2 * 100)
         
-        logger.info(f"识别主题: {identified_topics}, 匹配率: {topic_match:.3f}, 激活值: {activation}")
+        logger.info(f"识别<{text[:15]}...>主题: {identified_topics}, 匹配率: {topic_match:.3f}, 激活值: {activation}")
 
         return activation
 
