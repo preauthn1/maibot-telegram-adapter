@@ -109,14 +109,7 @@ async def _(bot: Bot, event: NoticeEvent, state: T_State):
 @scheduler.scheduled_job("interval", seconds=global_config.build_memory_interval, id="build_memory")
 async def build_memory_task():
     """每build_memory_interval秒执行一次记忆构建"""
-    logger.debug("[记忆构建]------------------------------------开始构建记忆--------------------------------------")
-    start_time = time.time()
     await hippocampus.operation_build_memory()
-    end_time = time.time()
-    logger.success(
-        f"[记忆构建]--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} "
-        "秒-------------------------------------------"
-    )
 
 
 @scheduler.scheduled_job("interval", seconds=global_config.forget_memory_interval, id="forget_memory")
