@@ -239,6 +239,7 @@ async def save_desc(desc):
                 db.image_descriptions.update_one({"hash": e_hash}, update_dict)
                 emoji_show["description"] = desc
 
+                logger.info(f'Update description and embeddings: {e_id}(hash={hash})')
                 yield ["保存完成", gr.update(value=desc, interactive=True), gr.update(interactive=True)]
         except Exception as e:
             yield [f"<span style='color: red;'>出现异常: {e}</span>", gr.update(interactive=True), gr.update(interactive=True)]
