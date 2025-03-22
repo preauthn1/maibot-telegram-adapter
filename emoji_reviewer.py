@@ -1,17 +1,14 @@
 import json
 import re
 import warnings
-from urllib.parse import urljoin
-
 import gradio as gr
 import os
 import signal
 import sys
-
 import requests
 import tomli
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
 from src.common.database import db
 
 try:
