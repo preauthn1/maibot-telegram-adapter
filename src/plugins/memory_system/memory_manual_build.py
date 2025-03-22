@@ -10,6 +10,12 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import networkx as nx
 from dotenv import load_dotenv
+sys.path.insert(0, sys.path[0]+"/../")
+sys.path.insert(0, sys.path[0]+"/../")
+sys.path.insert(0, sys.path[0]+"/../")
+sys.path.insert(0, sys.path[0]+"/../")
+sys.path.insert(0, sys.path[0]+"/../")
+from src.common.logger import get_module_logger
 import jieba
 
 # from chat.config import global_config
