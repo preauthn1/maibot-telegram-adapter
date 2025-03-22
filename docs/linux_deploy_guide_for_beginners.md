@@ -320,7 +320,7 @@ sudo systemctl enable bot.service # 启动bot服务
 sudo systemctl status bot.service # 检查bot服务状态
 ```
 
-```python
+```bash
 python bot.py  # 运行麦麦
 ```
 

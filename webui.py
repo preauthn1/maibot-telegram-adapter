@@ -1,3 +1,4 @@
+import warnings
 import gradio as gr
 import os
 import toml
@@ -6,9 +7,11 @@ import sys
 import requests
 try:
     from src.common.logger import get_module_logger
+
     logger = get_module_logger("webui")
 except ImportError:
     from loguru import logger
+
     # 检查并创建日志目录
     log_dir = "logs/webui"
     if not os.path.exists(log_dir):
@@ -23,11 +26,14 @@ import shutil
 import ast
 from packaging import version
 from decimal import Decimal
+# 忽略 gradio 版本警告
+warnings.filterwarnings("ignore", message="IMPORTANT: You are using gradio version.*")
 
 def signal_handler(signum, frame):
     """处理 Ctrl+C 信号"""
     logger.info("收到终止信号，正在关闭 Gradio 服务器...")
     sys.exit(0)
+
 
 # 注册信号处理器
 signal.signal(signal.SIGINT, signal_handler)
@@ -44,10 +50,10 @@ if not os.path.exists(".env.prod"):
     raise FileNotFoundError("环境配置文件 .env.prod 不存在，请检查配置文件路径")
 
 config_data = toml.load("config/bot_config.toml")
-#增加对老版本配置文件支持
+# 增加对老版本配置文件支持
 LEGACY_CONFIG_VERSION = version.parse("0.0.1")
 
-#增加最低支持版本
+# 增加最低支持版本
 MIN_SUPPORT_VERSION = version.parse("0.0.8")
 MIN_SUPPORT_MAIMAI_VERSION = version.parse("0.5.13")
 
@@ -66,7 +72,7 @@ else:
 
 HAVE_ONLINE_STATUS_VERSION = version.parse("0.0.9")
 
-#定义意愿模式可选项
+# 定义意愿模式可选项
 WILLING_MODE_CHOICES = [
     "classical",
     "dynamic",
@@ -74,10 +80,9 @@ WILLING_MODE_CHOICES = [
 ]
 
 
+# 添加WebUI配置文件版本
+WEBUI_VERSION = version.parse("0.0.10")
 
-
-#添加WebUI配置文件版本
-WEBUI_VERSION = version.parse("0.0.9")
 
 # ==============================================
 # env环境配置文件读取部分
@@ -94,9 +99,13 @@ def parse_env_config(config_file):
     # 逐行处理配置
     for line in lines:
         line = line.strip()
-        # 忽略空行和注释
+        # 忽略空行和注释行
         if not line or line.startswith("#"):
             continue
+
+        # 处理行尾注释
+        if "#" in line:
+            line = line.split("#")[0].strip()
 
         # 拆分键值对
         key, value = line.split("=", 1)
@@ -204,7 +213,7 @@ MODEL_PROVIDER_LIST = parse_model_providers(env_config_data)
 # env读取保存结束
 # ==============================================
 
-#获取在线麦麦数量
+# 获取在线麦麦数量
 
 
 def get_online_maimbot(url="http://hyybuth.xyz:10058/api/clients/details", timeout=10):
@@ -331,19 +340,19 @@ def format_list_to_str(lst):
 
 # env保存函数
 def save_trigger(
-        server_address,
-        server_port,
-        final_result_list,
-        t_mongodb_host,
-        t_mongodb_port,
-        t_mongodb_database_name,
-        t_console_log_level,
-        t_file_log_level,
-        t_default_console_log_level,
-        t_default_file_log_level,
-        t_api_provider,
-        t_api_base_url,
-        t_api_key,
+    server_address,
+    server_port,
+    final_result_list,
+    t_mongodb_host,
+    t_mongodb_port,
+    t_mongodb_database_name,
+    t_console_log_level,
+    t_file_log_level,
+    t_default_console_log_level,
+    t_default_file_log_level,
+    t_api_provider,
+    t_api_base_url,
+    t_api_key,
 ):
     final_result_lists = format_list_to_str(final_result_list)
     env_config_data["env_HOST"] = server_address
@@ -412,12 +421,12 @@ def save_bot_config(t_qqbot_qq, t_nickname, t_nickname_final_result):
 
 # 监听滑块的值变化，确保总和不超过 1，并显示警告
 def adjust_personality_greater_probabilities(
-        t_personality_1_probability, t_personality_2_probability, t_personality_3_probability
+    t_personality_1_probability, t_personality_2_probability, t_personality_3_probability
 ):
     total = (
-            Decimal(str(t_personality_1_probability))
-            + Decimal(str(t_personality_2_probability))
-            + Decimal(str(t_personality_3_probability))
+        Decimal(str(t_personality_1_probability))
+        + Decimal(str(t_personality_2_probability))
+        + Decimal(str(t_personality_3_probability))
     )
     if total > Decimal("1.0"):
         warning_message = (
@@ -428,12 +437,12 @@ def adjust_personality_greater_probabilities(
 
 
 def adjust_personality_less_probabilities(
-        t_personality_1_probability, t_personality_2_probability, t_personality_3_probability
+    t_personality_1_probability, t_personality_2_probability, t_personality_3_probability
 ):
     total = (
-            Decimal(str(t_personality_1_probability))
-            + Decimal(str(t_personality_2_probability))
-            + Decimal(str(t_personality_3_probability))
+        Decimal(str(t_personality_1_probability))
+        + Decimal(str(t_personality_2_probability))
+        + Decimal(str(t_personality_3_probability))
     )
     if total < Decimal("1.0"):
         warning_message = (
@@ -445,9 +454,7 @@ def adjust_personality_less_probabilities(
 
 def adjust_model_greater_probabilities(t_model_1_probability, t_model_2_probability, t_model_3_probability):
     total = (
-            Decimal(str(t_model_1_probability)) +
-            Decimal(str(t_model_2_probability)) +
-            Decimal(str(t_model_3_probability))
+        Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
     )
     if total > Decimal("1.0"):
         warning_message = (
@@ -459,9 +466,7 @@ def adjust_model_greater_probabilities(t_model_1_probability, t_model_2_probabil
 
 def adjust_model_less_probabilities(t_model_1_probability, t_model_2_probability, t_model_3_probability):
     total = (
-            Decimal(str(t_model_1_probability))
-            + Decimal(str(t_model_2_probability))
-            + Decimal(str(t_model_3_probability))
+        Decimal(str(t_model_1_probability)) + Decimal(str(t_model_2_probability)) + Decimal(str(t_model_3_probability))
     )
     if total < Decimal("1.0"):
         warning_message = (
@@ -474,13 +479,13 @@ def adjust_model_less_probabilities(t_model_1_probability, t_model_2_probability
 # ==============================================
 # 人格保存函数
 def save_personality_config(
-        t_prompt_personality_1,
-        t_prompt_personality_2,
-        t_prompt_personality_3,
-        t_prompt_schedule,
-        t_personality_1_probability,
-        t_personality_2_probability,
-        t_personality_3_probability,
+    t_prompt_personality_1,
+    t_prompt_personality_2,
+    t_prompt_personality_3,
+    t_prompt_schedule,
+    t_personality_1_probability,
+    t_personality_2_probability,
+    t_personality_3_probability,
 ):
     # 保存人格提示词
     config_data["personality"]["prompt_personality"][0] = t_prompt_personality_1
@@ -501,20 +506,20 @@ def save_personality_config(
 
 
 def save_message_and_emoji_config(
-        t_min_text_length,
-        t_max_context_size,
-        t_emoji_chance,
-        t_thinking_timeout,
-        t_response_willing_amplifier,
-        t_response_interested_rate_amplifier,
-        t_down_frequency_rate,
-        t_ban_words_final_result,
-        t_ban_msgs_regex_final_result,
-        t_check_interval,
-        t_register_interval,
-        t_auto_save,
-        t_enable_check,
-        t_check_prompt,
+    t_min_text_length,
+    t_max_context_size,
+    t_emoji_chance,
+    t_thinking_timeout,
+    t_response_willing_amplifier,
+    t_response_interested_rate_amplifier,
+    t_down_frequency_rate,
+    t_ban_words_final_result,
+    t_ban_msgs_regex_final_result,
+    t_check_interval,
+    t_register_interval,
+    t_auto_save,
+    t_enable_check,
+    t_check_prompt,
 ):
     config_data["message"]["min_text_length"] = t_min_text_length
     config_data["message"]["max_context_size"] = t_max_context_size
@@ -536,27 +541,27 @@ def save_message_and_emoji_config(
 
 
 def save_response_model_config(
-        t_willing_mode,
-        t_model_r1_probability,
-        t_model_r2_probability,
-        t_model_r3_probability,
-        t_max_response_length,
-        t_model1_name,
-        t_model1_provider,
-        t_model1_pri_in,
-        t_model1_pri_out,
-        t_model2_name,
-        t_model2_provider,
-        t_model3_name,
-        t_model3_provider,
-        t_emotion_model_name,
-        t_emotion_model_provider,
-        t_topic_judge_model_name,
-        t_topic_judge_model_provider,
-        t_summary_by_topic_model_name,
-        t_summary_by_topic_model_provider,
-        t_vlm_model_name,
-        t_vlm_model_provider,
+    t_willing_mode,
+    t_model_r1_probability,
+    t_model_r2_probability,
+    t_model_r3_probability,
+    t_max_response_length,
+    t_model1_name,
+    t_model1_provider,
+    t_model1_pri_in,
+    t_model1_pri_out,
+    t_model2_name,
+    t_model2_provider,
+    t_model3_name,
+    t_model3_provider,
+    t_emotion_model_name,
+    t_emotion_model_provider,
+    t_topic_judge_model_name,
+    t_topic_judge_model_provider,
+    t_summary_by_topic_model_name,
+    t_summary_by_topic_model_provider,
+    t_vlm_model_name,
+    t_vlm_model_provider,
 ):
     if PARSED_CONFIG_VERSION >= version.parse("0.0.10"):
         config_data["willing"]["willing_mode"] = t_willing_mode
@@ -586,15 +591,15 @@ def save_response_model_config(
 
 
 def save_memory_mood_config(
-        t_build_memory_interval,
-        t_memory_compress_rate,
-        t_forget_memory_interval,
-        t_memory_forget_time,
-        t_memory_forget_percentage,
-        t_memory_ban_words_final_result,
-        t_mood_update_interval,
-        t_mood_decay_rate,
-        t_mood_intensity_factor,
+    t_build_memory_interval,
+    t_memory_compress_rate,
+    t_forget_memory_interval,
+    t_memory_forget_time,
+    t_memory_forget_percentage,
+    t_memory_ban_words_final_result,
+    t_mood_update_interval,
+    t_mood_decay_rate,
+    t_mood_intensity_factor,
 ):
     config_data["memory"]["build_memory_interval"] = t_build_memory_interval
     config_data["memory"]["memory_compress_rate"] = t_memory_compress_rate
@@ -611,17 +616,17 @@ def save_memory_mood_config(
 
 
 def save_other_config(
-        t_keywords_reaction_enabled,
-        t_enable_advance_output,
-        t_enable_kuuki_read,
-        t_enable_debug_output,
-        t_enable_friend_chat,
-        t_chinese_typo_enabled,
-        t_error_rate,
-        t_min_freq,
-        t_tone_error_rate,
-        t_word_replace_rate,
-        t_remote_status,
+    t_keywords_reaction_enabled,
+    t_enable_advance_output,
+    t_enable_kuuki_read,
+    t_enable_debug_output,
+    t_enable_friend_chat,
+    t_chinese_typo_enabled,
+    t_error_rate,
+    t_min_freq,
+    t_tone_error_rate,
+    t_word_replace_rate,
+    t_remote_status,
 ):
     config_data["keywords_reaction"]["enable"] = t_keywords_reaction_enabled
     config_data["others"]["enable_advance_output"] = t_enable_advance_output
@@ -641,9 +646,9 @@ def save_other_config(
 
 
 def save_group_config(
-        t_talk_allowed_final_result,
-        t_talk_frequency_down_final_result,
-        t_ban_user_id_final_result,
+    t_talk_allowed_final_result,
+    t_talk_frequency_down_final_result,
+    t_ban_user_id_final_result,
 ):
     config_data["groups"]["talk_allowed"] = t_talk_allowed_final_result
     config_data["groups"]["talk_frequency_down"] = t_talk_frequency_down_final_result
@@ -656,13 +661,21 @@ def save_group_config(
 with gr.Blocks(title="MaimBot配置文件编辑") as app:
     gr.Markdown(
         value="""
-        ### 欢迎使用由墨梓柒MotricSeven编写的MaimBot配置文件编辑器\n
+        # 欢迎使用由墨梓柒MotricSeven编写的MaimBot配置文件编辑器\n
         感谢ZureTz大佬提供的人格保存部分修复！
         """
     )
+    gr.Markdown(value="---")  # 添加分割线
+    gr.Markdown(value="""
+        ## 注意！！！\n
+        由于Gradio的限制，在保存配置文件时，请不要刷新浏览器窗口！！\n
+        您的配置文件在点击保存按钮的时候就已经成功保存！！
+        """)
+    gr.Markdown(value="---")  # 添加分割线
     gr.Markdown(value="## 全球在线MaiMBot数量: " + str((online_maimbot_data or {}).get("online_clients", 0)))
     gr.Markdown(value="## 当前WebUI版本: " + str(WEBUI_VERSION))
-    gr.Markdown(value="### 配置文件版本：" + config_data["inner"]["version"])
+    gr.Markdown(value="## 配置文件版本：" + config_data["inner"]["version"])
+    gr.Markdown(value="---")  # 添加分割线
     with gr.Tabs():
         with gr.TabItem("0-环境设置"):
             with gr.Row():
@@ -1212,10 +1225,10 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                             willing_mode = gr.Dropdown(
                                 choices=WILLING_MODE_CHOICES,
                                 value=config_data["willing"]["willing_mode"],
-                                label="回复意愿模式"
+                                label="回复意愿模式",
                             )
                     else:
-                        willing_mode = gr.Textbox(visible=False,value="disabled")
+                        willing_mode = gr.Textbox(visible=False, value="disabled")
                     with gr.Row():
                         model_r1_probability = gr.Slider(
                             minimum=0,
