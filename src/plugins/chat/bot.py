@@ -26,11 +26,14 @@ from .chat_stream import chat_manager
 from .message_sender import message_manager  # 导入新的消息管理器
 from .relationship_manager import relationship_manager
 from .storage import MessageStorage
-from .utils import is_mentioned_bot_in_message
+from .utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
 from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
+
+from src.think_flow_demo.current_mind import brain
+from src.think_flow_demo.outer_world import outer_world
 
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 
@@ -175,6 +178,14 @@ class ChatBot:
 
         # print(f"response: {response}")
         if response:
+            stream_id = message.chat_stream.stream_id
+            chat_talking_prompt = ""
+            if stream_id:
+                chat_talking_prompt = get_recent_group_detailed_plain_text(
+                    stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
+                )
+                
+            await brain.do_after_reply(response,chat_talking_prompt)
             # print(f"有response: {response}")
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None
