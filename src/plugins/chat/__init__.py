@@ -18,7 +18,7 @@ from ..memory_system.memory import hippocampus
 from .message_sender import message_manager, message_sender
 from .storage import MessageStorage
 from src.common.logger import get_module_logger
-from src.think_flow_demo.current_mind import brain
+# from src.think_flow_demo.current_mind import subheartflow
 from src.think_flow_demo.outer_world import outer_world
 
 logger = get_module_logger("chat_init")
@@ -46,12 +46,11 @@ scheduler = require("nonebot_plugin_apscheduler").scheduler
 
 
 async def start_think_flow():
-    """启动大脑和外部世界"""
+    """启动外部世界"""
     try:
-        brain_task = asyncio.create_task(brain.brain_start_working())
         outer_world_task = asyncio.create_task(outer_world.open_eyes())
         logger.success("大脑和外部世界启动成功")
-        return brain_task, outer_world_task
+        return outer_world_task
     except Exception as e:
         logger.error(f"启动大脑和外部世界失败: {e}")
         raise

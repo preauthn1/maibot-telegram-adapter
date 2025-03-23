@@ -12,7 +12,7 @@ from .chat_stream import chat_manager
 from .relationship_manager import relationship_manager
 from src.common.logger import get_module_logger
 
-from src.think_flow_demo.current_mind import brain
+from src.think_flow_demo.heartflow import subheartflow_manager
 from src.think_flow_demo.outer_world import outer_world
 
 logger = get_module_logger("prompt")
@@ -36,8 +36,8 @@ class PromptBuilder:
             limit=global_config.MAX_CONTEXT_SIZE,
         )
         
-        outer_world_info = outer_world.outer_world_info
-        current_mind_info = brain.current_mind
+        # outer_world_info = outer_world.outer_world_info
+        current_mind_info = subheartflow_manager.get_subheartflow(stream_id).current_mind
         
         relation_prompt = ""
         for person in who_chat_in_group:
@@ -183,7 +183,7 @@ class PromptBuilder:
         prompt_check_if_response = ""
         
         
-        print(prompt)
+        # print(prompt)
         
         return prompt, prompt_check_if_response
 

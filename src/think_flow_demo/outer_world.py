@@ -1,8 +1,11 @@
 #定义了来自外部世界的信息
 import asyncio
 from datetime import datetime
+from src.plugins.models.utils_model import LLM_request
+from src.plugins.chat.config import global_config
+import sys
 from src.common.database import db
-from .offline_llm import LLMModel
+
 #存储一段聊天的大致内容
 class Talking_info:
     def __init__(self,chat_id):
@@ -10,25 +13,71 @@ class Talking_info:
         self.talking_message = []
         self.talking_message_str = ""
         self.talking_summary = ""
-        self.last_message_time = None  # 记录最新消息的时间
+        self.last_observe_time = int(datetime.now().timestamp()) #初始化为当前时间
+        self.observe_times = 0
+        self.activate = 360
         
-        self.llm_summary = LLMModel("Pro/Qwen/Qwen2.5-7B-Instruct")  
+        self.oberve_interval = 3
         
-    def update_talking_message(self):
-        #从数据库取最近30条该聊天流的消息
-        messages = db.messages.find({"chat_id": self.chat_id}).sort("time", -1).limit(15)
-        self.talking_message = []
-        self.talking_message_str = ""
-        for message in messages:
-            self.talking_message.append(message)
-            self.talking_message_str += message["detailed_plain_text"]
-
-    async def update_talking_summary(self,new_summary=""):
+        self.llm_summary = LLM_request(model=global_config.llm_topic_judge, temperature=0.7, max_tokens=300, request_type="outer_world")
+    
+    async def start_observe(self):
+        while True:
+            if self.activate <= 0:
+                print(f"聊天 {self.chat_id} 活跃度不足，进入休眠状态")
+                await self.waiting_for_activate()
+                print(f"聊天 {self.chat_id} 被重新激活")
+            await self.observe_world()
+            await asyncio.sleep(self.oberve_interval)
+    
+    async def waiting_for_activate(self):
+        while True:
+            # 检查从上次观察时间之后的新消息数量
+            new_messages_count = db.messages.count_documents({
+                "chat_id": self.chat_id,
+                "time": {"$gt": self.last_observe_time}
+            })
+            
+            if new_messages_count > 10:
+                self.activate = 360*(self.observe_times+1)
+                return
+            
+            await asyncio.sleep(10)  # 每10秒检查一次
+    
+    async def observe_world(self):
+        # 查找新消息
+        new_messages = list(db.messages.find({
+            "chat_id": self.chat_id,
+            "time": {"$gt": self.last_observe_time}
+        }).sort("time", 1))  # 按时间正序排列
+        
+        if not new_messages:
+            self.activate += -1
+            return
+            
+        # 将新消息添加到talking_message
+        self.talking_message.extend(new_messages)
+        self.translate_message_list_to_str()
+        self.observe_times += 1
+        self.last_observe_time = new_messages[-1]["time"]
+        
+        if self.observe_times > 3:
+            await self.update_talking_summary()
+            print(f"更新了聊天总结：{self.talking_summary}")
+    
+    async def update_talking_summary(self):
         #基于已经有的talking_summary，和新的talking_message，生成一个summary
-        prompt = f"聊天内容：{self.talking_message_str}\n\n"
-        prompt += f"以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，以及聊天中的一些重要信息，记得不要分点，不要太长，精简的概括成一段文本\n\n"
-        prompt += f"总结："
+        prompt = ""
+        prompt = f"你正在参与一个qq群聊的讨论，这个群之前在聊的内容是：{self.talking_summary}\n"
+        prompt += f"现在群里的群友们产生了新的讨论，有了新的发言，具体内容如下：{self.talking_message_str}\n"
+        prompt += f"以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，以及聊天中的一些重要信息，记得不要分点，不要太长，精简的概括成一段文本\n"
+        prompt += f"总结概括："
         self.talking_summary, reasoning_content = await self.llm_summary.generate_response_async(prompt)
+        
+    def translate_message_list_to_str(self):
+        self.talking_message_str = ""
+        for message in self.talking_message:
+            self.talking_message_str += message["detailed_plain_text"]
     
 class SheduleInfo:
     def __init__(self):
@@ -38,72 +87,41 @@ class OuterWorld:
     def __init__(self):
         self.talking_info_list = [] #装的一堆talking_info
         self.shedule_info = "无日程"
-        self.interest_info = "麦麦你好"
-        
+        # self.interest_info = "麦麦你好"
         self.outer_world_info = ""
-        
         self.start_time = int(datetime.now().timestamp())
-        
-        self.llm_summary = LLMModel("Qwen/Qwen2.5-32B-Instruct")   
-        
+    
+        self.llm_summary = LLM_request(model=global_config.llm_topic_judge, temperature=0.7, max_tokens=600, request_type="outer_world_info")  
+    
+    async def check_and_add_new_observe(self):
+        # 获取所有聊天流
+        all_streams = db.chat_streams.find({})
+        # 遍历所有聊天流
+        for data in all_streams:         
+            stream_id = data.get("stream_id")
+            # 检查是否已存在该聊天流的观察对象
+            existing_info = next((info for info in self.talking_info_list if info.chat_id == stream_id), None)
+            
+            # 如果不存在，创建新的Talking_info对象并添加到列表中
+            if existing_info is None:
+                print(f"发现新的聊天流: {stream_id}")
+                new_talking_info = Talking_info(stream_id)
+                self.talking_info_list.append(new_talking_info)
+                # 启动新对象的观察任务
+                asyncio.create_task(new_talking_info.start_observe())
 
     async def open_eyes(self):
         while True:
+            print("检查新的聊天流")
+            await self.check_and_add_new_observe()
             await asyncio.sleep(60)
-            print("更新所有聊天信息")
-            await self.update_all_talking_info()
-            print("更新outer_world_info")
-            await self.update_outer_world_info()
-            
-            print(self.outer_world_info)
-            
-            for talking_info in self.talking_info_list:
-                # print(talking_info.talking_message_str)
-                # print(talking_info.talking_summary)
-                pass
     
-    async def update_outer_world_info(self):
-        print("总结当前outer_world_info")
-        all_talking_summary = ""
+    def get_world_by_stream_id(self,stream_id):
         for talking_info in self.talking_info_list:
-            all_talking_summary += talking_info.talking_summary
-        
-        prompt = f"聊天内容：{all_talking_summary}\n\n"
-        prompt += f"以上是多个群里在进行的聊天，请你对所有聊天内容进行总结，总结内容要包含聊天的大致内容，以及聊天中的一些重要信息，记得不要分点，不要太长，精简的概括成一段文本\n\n"
-        prompt += f"总结："
-        self.outer_world_info, reasoning_content = await self.llm_summary.generate_response_async(prompt)
-    
-            
-    async def update_talking_info(self,chat_id):
-        # 查找现有的talking_info
-        talking_info = next((info for info in self.talking_info_list if info.chat_id == chat_id), None)
-        
-        if talking_info is None:
-            print("新聊天流")
-            talking_info = Talking_info(chat_id)
-            talking_info.update_talking_message()
-            await talking_info.update_talking_summary()
-            self.talking_info_list.append(talking_info)
-        else:
-            print("旧聊天流")
-            talking_info.update_talking_message()
-            await talking_info.update_talking_summary()
-    
-    async def update_all_talking_info(self):
-        all_streams = db.chat_streams.find({})
-        update_tasks = []
-        
-        for data in all_streams:         
-            stream_id = data.get("stream_id")
-            # print(stream_id)
-            last_active_time = data.get("last_active_time")
-            
-            if last_active_time > self.start_time or 1:
-                update_tasks.append(self.update_talking_info(stream_id))
-        
-        # 并行执行所有更新任务
-        if update_tasks:
-            await asyncio.gather(*update_tasks)
+            if talking_info.chat_id == stream_id:
+                return talking_info
+        return None
+
 
 outer_world = OuterWorld()
 

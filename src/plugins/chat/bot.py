@@ -32,7 +32,7 @@ from .utils_user import get_user_nickname, get_user_cardname
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
 
-from src.think_flow_demo.current_mind import brain
+from src.think_flow_demo.heartflow import subheartflow_manager
 from src.think_flow_demo.outer_world import outer_world
 
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
@@ -93,6 +93,12 @@ class ChatBot:
             group_info=groupinfo,  # 我嘞个gourp_info
         )
         message.update_chat_stream(chat)
+        
+        #创建 心流 观察
+        await outer_world.check_and_add_new_observe()
+        subheartflow_manager.create_subheartflow(chat.stream_id)
+        
+        
         await relationship_manager.update_relationship(
             chat_stream=chat,
         )
@@ -185,7 +191,7 @@ class ChatBot:
                     stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
                 )
                 
-            await brain.do_after_reply(response,chat_talking_prompt)
+            await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response,chat_talking_prompt)
             # print(f"有response: {response}")
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None
@@ -308,11 +314,11 @@ class ChatBot:
 
             raw_message = f"[戳了戳]{global_config.BOT_NICKNAME}"  # 默认类型
             if info := event.model_extra["raw_info"]:
-                poke_type = info[2].get("txt", "戳了戳")  # 戳戳类型，例如“拍一拍”、“揉一揉”、“捏一捏”
+                poke_type = info[2].get("txt", "戳了戳")  # 戳戳类型，例如"拍一拍"、"揉一揉"、"捏一捏"
                 custom_poke_message = info[4].get("txt", "")  # 自定义戳戳消息，若不存在会为空字符串
                 raw_message = f"[{poke_type}]{global_config.BOT_NICKNAME}{custom_poke_message}"
 
-                raw_message += "（这是一个类似摸摸头的友善行为，而不是恶意行为，请不要作出攻击发言）"
+                raw_message += "，作为一个类似摸摸头的友善行为"
 
             user_info = UserInfo(
                 user_id=event.user_id,
