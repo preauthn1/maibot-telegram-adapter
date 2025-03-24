@@ -61,7 +61,7 @@ tags = {
     "blacklist": ("黑名单", "排除"),
 }
 format_choices = ["包括", "无"]
-formats = ["jpg", "png", "gif"]
+formats = ["jpg", "jpeg", "png", "gif", "其它"]
 
 
 def signal_handler(signum, frame):
@@ -133,7 +133,13 @@ def filter_emojis(tag_filters, format_filters):
         elif value == "排除":
             e_filtered = [d for d in e_filtered if tag not in d]
 
-    if len(format_include) > 0:
+    if '其它' in format_include:
+        exclude = [f for f in formats if f not in format_include]
+        if exclude:
+            ff = '|'.join(exclude)
+            pattern = rf"\.({ff})$"
+            e_filtered = [d for d in e_filtered if not re.search(pattern, d.get("path", ""), re.IGNORECASE)]
+    else:
         ff = '|'.join(format_include)
         pattern = rf"\.({ff})$"
         e_filtered = [d for d in e_filtered if re.search(pattern, d.get("path", ""), re.IGNORECASE)]
