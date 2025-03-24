@@ -95,7 +95,8 @@ class Heartflow:
         if observe_chat_id not in self._subheartflows:
             subheartflow = SubHeartflow()
             subheartflow.assign_observe(observe_chat_id)
-            subheartflow.subheartflow_start_working()
+            # 创建异步任务
+            asyncio.create_task(subheartflow.subheartflow_start_working())
             self._subheartflows[observe_chat_id] = subheartflow
         return self._subheartflows[observe_chat_id]
     

@@ -145,7 +145,10 @@ class ChatBot:
             interested_rate=interested_rate,
             sender_id=str(message.message_info.user_info.user_id),
         )
-        current_willing = willing_manager.get_willing(chat_stream=chat)
+        current_willing_old = willing_manager.get_willing(chat_stream=chat)
+        current_willing_new = (subheartflow_manager.get_subheartflow(chat.stream_id).current_state.willing-5)/4
+        print(f"旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
+        current_willing = (current_willing_old + current_willing_new) / 2
 
         logger.info(
             f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]"

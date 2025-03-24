@@ -17,9 +17,9 @@ class Talking_info:
         self.observe_times = 0
         self.activate = 360
         
-        self.oberve_interval = 5
+        self.oberve_interval = 3
         
-        self.llm_summary = LLM_request(model=global_config.llm_topic_judge, temperature=0.7, max_tokens=300, request_type="outer_world")
+        self.llm_summary = LLM_request(model=global_config.llm_outer_world, temperature=0.7, max_tokens=300, request_type="outer_world")
     
     async def start_observe(self):
         while True:
@@ -42,7 +42,7 @@ class Talking_info:
                 self.activate = 360*(self.observe_times+1)
                 return
             
-            await asyncio.sleep(10)  # 每10秒检查一次
+            await asyncio.sleep(8)  # 每10秒检查一次
     
     async def observe_world(self):
         # 查找新消息，限制最多20条

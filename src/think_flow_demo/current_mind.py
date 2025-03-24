@@ -3,7 +3,7 @@ import asyncio
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.chat.config import global_config
-
+import re
 class CuttentState:
     def __init__(self):
         self.willing = 0
@@ -38,7 +38,9 @@ class SubHeartflow:
     async def subheartflow_start_working(self):
         while True:
             await self.do_a_thinking()
-            await asyncio.sleep(30)
+            print("麦麦闹情绪了")
+            await self.judge_willing()
+            await asyncio.sleep(20)
     
     async def do_a_thinking(self):
         print("麦麦小脑袋转起来了")
@@ -67,7 +69,7 @@ class SubHeartflow:
         print(f"麦麦的脑内状态：{self.current_mind}")
     
     async def do_after_reply(self,reply_content,chat_talking_prompt):
-        print("麦麦脑袋转起来了")
+        # print("麦麦脑袋转起来了")
         self.current_state.update_current_state_info()
         
         personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
@@ -93,9 +95,34 @@ class SubHeartflow:
         self.update_current_mind(reponse)
         
         self.current_mind = reponse
-        print(f"麦麦的脑内状态：{self.current_mind}")
-    
-    
+        print(f"{self.observe_chat_id}麦麦的脑内状态：{self.current_mind}")
+        
+    async def judge_willing(self):
+        # print("麦麦闹情绪了1")
+        personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
+        current_thinking_info = self.current_mind
+        mood_info = self.current_state.mood
+        # print("麦麦闹情绪了2")
+        prompt = f""
+        prompt += f"{personality_info}\n"
+        prompt += f"现在你正在上网，和qq群里的网友们聊天"
+        prompt += f"你现在的想法是{current_thinking_info}。"
+        prompt += f"你现在{mood_info}。"
+        prompt += f"现在请你思考，你想不想发言或者回复，请你输出一个数字，1-10，1表示非常不想，10表示非常想。"
+        prompt += f"请你用<>包裹你的回复意愿，例如输出<1>表示不想回复，输出<10>表示非常想回复。<5>表示想回复，但是需要思考一下。"
+        
+        response, reasoning_content = await self.llm_model.generate_response_async(prompt)
+        # 解析willing值
+        willing_match = re.search(r'<(\d+)>', response)
+        if willing_match:
+            self.current_state.willing = int(willing_match.group(1))
+        else:
+            self.current_state.willing = 0
+            
+        print(f"{self.observe_chat_id}麦麦的回复意愿：{self.current_state.willing}")
+            
+        return self.current_state.willing
+
     def build_outer_world_info(self):
         outer_world_info = outer_world.outer_world_info
         return outer_world_info
