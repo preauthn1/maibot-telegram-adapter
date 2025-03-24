@@ -24,6 +24,8 @@ class SubHeartflow:
         self.llm_model = LLM_request(model=global_config.llm_topic_judge, temperature=0.7, max_tokens=600, request_type="sub_heart_flow")
         self.outer_world = None
         
+        self.main_heartflow_info = ""
+        
         self.observe_chat_id = None
         
         if not self.current_mind:
@@ -49,12 +51,13 @@ class SubHeartflow:
         message_stream_info = self.outer_world.talking_summary
         
         prompt = f""
+        # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
         prompt += f"{personality_info}\n"
         prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{message_stream_info}\n"
         prompt += f"你想起来{related_memory_info}。"
         prompt += f"刚刚你的想法是{current_thinking_info}。"
         prompt += f"你现在{mood_info}。"
-        prompt += f"现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，但是记得结合上述的消息，要记得你的人设，关注聊天和新内容，不要思考太多:"
+        prompt += f"现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，但是记得结合上述的消息，要记得维持住你的人设，关注聊天和新内容，不要思考太多:"
         
         reponse, reasoning_content = await self.llm_model.generate_response_async(prompt)
         

@@ -291,10 +291,6 @@ class ChatBot:
             # 使用情绪管理器更新情绪
             self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
 
-            # willing_manager.change_reply_willing_after_sent(
-            #     chat_stream=chat
-            # )
-
     async def handle_notice(self, event: NoticeEvent, bot: Bot) -> None:
         """处理收到的通知"""
         if isinstance(event, PokeNotifyEvent):

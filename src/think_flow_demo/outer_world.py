@@ -17,7 +17,7 @@ class Talking_info:
         self.observe_times = 0
         self.activate = 360
         
-        self.oberve_interval = 3
+        self.oberve_interval = 5
         
         self.llm_summary = LLM_request(model=global_config.llm_topic_judge, temperature=0.7, max_tokens=300, request_type="outer_world")
     
@@ -38,32 +38,35 @@ class Talking_info:
                 "time": {"$gt": self.last_observe_time}
             })
             
-            if new_messages_count > 10:
+            if new_messages_count > 15:
                 self.activate = 360*(self.observe_times+1)
                 return
             
             await asyncio.sleep(10)  # 每10秒检查一次
     
     async def observe_world(self):
-        # 查找新消息
+        # 查找新消息，限制最多20条
         new_messages = list(db.messages.find({
             "chat_id": self.chat_id,
             "time": {"$gt": self.last_observe_time}
-        }).sort("time", 1))  # 按时间正序排列
+        }).sort("time", 1).limit(20))  # 按时间正序排列，最多20条
         
         if not new_messages:
             self.activate += -1
             return
             
-        # 将新消息添加到talking_message
+        # 将新消息添加到talking_message，同时保持列表长度不超过20条
         self.talking_message.extend(new_messages)
+        if len(self.talking_message) > 20:
+            self.talking_message = self.talking_message[-20:]  # 只保留最新的20条
         self.translate_message_list_to_str()
+        # print(self.talking_message_str)
         self.observe_times += 1
         self.last_observe_time = new_messages[-1]["time"]
         
         if self.observe_times > 3:
             await self.update_talking_summary()
-            print(f"更新了聊天总结：{self.talking_summary}")
+            # print(f"更新了聊天总结：{self.talking_summary}")
     
     async def update_talking_summary(self):
         #基于已经有的talking_summary，和新的talking_message，生成一个summary
