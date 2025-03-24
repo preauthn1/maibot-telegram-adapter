@@ -44,10 +44,10 @@ if os.path.exists(bot_config_path):
             embedding_config = toml_dict['model']['embedding']
             embedding_name = embedding_config["name"]
             embedding_provider = embedding_config["provider"]
-        except tomli.TOMLDecodeError:
+        except tomli.TOMLDecodeError as e:
             logger.critical(f"配置文件bot_config.toml填写有误，请检查第{e.lineno}行第{e.colno}处：{e.msg}")
             exit(1)
-        except KeyError as e:
+        except KeyError:
             logger.critical("配置文件bot_config.toml缺少model.embedding设置，请补充后再编辑表情包")
             exit(1)
 else:
@@ -253,7 +253,11 @@ async def save_desc(desc):
                 logger.info(f'Update description and embeddings: {e_id}(hash={hash})')
                 yield ["保存完成", gr.update(value=desc, interactive=True), gr.update(interactive=True)]
         except Exception as e:
-            yield [f"<span style='color: red;'>出现异常: {e}</span>", gr.update(interactive=True), gr.update(interactive=True)]
+            yield [
+                f"<span style='color: red;'>出现异常: {e}</span>",
+                gr.update(interactive=True),
+                gr.update(interactive=True)
+            ]
 
     else:
         yield ["没有选中表情包", gr.update()]
