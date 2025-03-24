@@ -25,7 +25,11 @@ except ImportError:
     # 配置控制台输出格式
     logger.remove()  # 移除默认的处理器
     logger.add(sys.stderr, format="{time:MM-DD HH:mm} | emoji_reviewer | {message}")  # 添加控制台输出
-    logger.add("logs/emoji_reviewer/{time:YYYY-MM-DD}.log", rotation="00:00", format="{time:MM-DD HH:mm} | emoji_reviewer | {message}")
+    logger.add(
+        "logs/emoji_reviewer/{time:YYYY-MM-DD}.log",
+        rotation="00:00",
+        format="{time:MM-DD HH:mm} | emoji_reviewer | {message}"
+    )
     logger.warning("检测到src.common.logger并未导入，将使用默认loguru作为日志记录器")
     logger.warning("如果你是用的是低版本(0.5.13)麦麦，请忽略此警告")
 # 忽略 gradio 版本警告
@@ -40,11 +44,11 @@ if os.path.exists(bot_config_path):
             embedding_config = toml_dict['model']['embedding']
             embedding_name = embedding_config["name"]
             embedding_provider = embedding_config["provider"]
-        except tomli.TOMLDecodeError as e:
+        except tomli.TOMLDecodeError:
             logger.critical(f"配置文件bot_config.toml填写有误，请检查第{e.lineno}行第{e.colno}处：{e.msg}")
             exit(1)
         except KeyError as e:
-            logger.critical(f"配置文件bot_config.toml缺少model.embedding设置，请补充后再编辑表情包")
+            logger.critical("配置文件bot_config.toml缺少model.embedding设置，请补充后再编辑表情包")
             exit(1)
 else:
     logger.critical(f"没有找到配置文件{bot_config_path}")
@@ -106,7 +110,7 @@ async def get_embedding(text):
             return embedding
         else:
             return f"网络错误{response.status_code}"
-    except:
+    except Exception:
         return None
 
 
@@ -176,7 +180,7 @@ def on_select(evt: gr.SelectData, *tag_values):
     if new_index is None:
         emoji_show = None
         targets = []
-        for current_value, tag in zip(tag_values, tags.keys()):
+        for current_value in tag_values:
             if current_value:
                 neglect_update += 1
                 targets.append(False)
@@ -230,7 +234,11 @@ async def save_desc(desc):
             yield ["正在构建embedding，请勿关闭页面...", gr.update(interactive=False), gr.update(interactive=False)]
             embedding = await get_embedding(desc)
             if embedding is None or isinstance(embedding, str):
-                yield [f"<span style='color: red;'>获取embeddings失败！{embedding}</span>", gr.update(interactive=True), gr.update(interactive=True)]
+                yield [
+                    f"<span style='color: red;'>获取embeddings失败！{embedding}</span>",
+                    gr.update(interactive=True),
+                    gr.update(interactive=True)
+                ]
             else:
                 e_id = emoji_show["_id"]
                 update_dict = {"$set": {"embedding": embedding, "description": desc}}
@@ -349,8 +357,8 @@ with gr.Blocks(title="MaimBot表情包审查器") as app:
     gallery.select(fn=on_select, inputs=list(tag_boxes.values()), outputs=[gallery, description, *tag_boxes.values()])
     revert_btn.click(fn=revert_desc, inputs=None, outputs=description)
     save_btn.click(fn=save_desc, inputs=description, outputs=[description_label, description, save_btn])
-    for k, v in tag_boxes.items():
-        v.change(fn=change_tag, inputs=list(tag_boxes.values()), outputs=description_label)
+    for box in tag_boxes.values():
+        box.change(fn=change_tag, inputs=list(tag_boxes.values()), outputs=description_label)
     app.load(
         fn=update_gallery,
         inputs=[check_from_latest, *filters],
