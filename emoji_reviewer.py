@@ -137,12 +137,12 @@ def filter_emojis(tag_filters, format_filters):
         exclude = [f for f in formats if f not in format_include]
         if exclude:
             ff = '|'.join(exclude)
-            pattern = rf"\.({ff})$"
-            e_filtered = [d for d in e_filtered if not re.search(pattern, d.get("path", ""), re.IGNORECASE)]
+            compiled_pattern = re.compile(rf"\.({ff})$", re.IGNORECASE)
+            e_filtered = [d for d in e_filtered if not compiled_pattern.search(d.get("path", ""), re.IGNORECASE)]
     else:
         ff = '|'.join(format_include)
-        pattern = rf"\.({ff})$"
-        e_filtered = [d for d in e_filtered if re.search(pattern, d.get("path", ""), re.IGNORECASE)]
+        compiled_pattern = re.compile(rf"\.({ff})$", re.IGNORECASE)
+        e_filtered = [d for d in e_filtered if compiled_pattern.search(d.get("path", ""), re.IGNORECASE)]
 
     emoji_filtered = e_filtered
 
