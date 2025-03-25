@@ -18,6 +18,9 @@ from ..memory_system.memory import hippocampus
 from .message_sender import message_manager, message_sender
 from .storage import MessageStorage
 from src.common.logger import get_module_logger
+# from src.think_flow_demo.current_mind import subheartflow
+from src.think_flow_demo.outer_world import outer_world
+from src.think_flow_demo.heartflow import subheartflow_manager
 
 logger = get_module_logger("chat_init")
 
@@ -43,6 +46,17 @@ notice_matcher = on_notice(priority=1)
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
 
+async def start_think_flow():
+    """启动外部世界"""
+    try:
+        outer_world_task = asyncio.create_task(outer_world.open_eyes())
+        logger.success("大脑和外部世界启动成功")
+        return outer_world_task
+    except Exception as e:
+        logger.error(f"启动大脑和外部世界失败: {e}")
+        raise
+
+
 @driver.on_startup
 async def start_background_tasks():
     """启动后台任务"""
@@ -54,6 +68,13 @@ async def start_background_tasks():
     mood_manager = MoodManager.get_instance()
     mood_manager.start_mood_update(update_interval=global_config.mood_update_interval)
     logger.success("情绪管理器启动成功")
+
+    # 启动大脑和外部世界
+    await start_think_flow()
+    
+    # 启动心流系统
+    heartflow_task = asyncio.create_task(subheartflow_manager.heartflow_start_working())
+    logger.success("心流系统启动成功")
 
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))

@@ -59,6 +59,7 @@ class BotConfig:
     llm_topic_judge: Dict[str, str] = field(default_factory=lambda: {})
     llm_summary_by_topic: Dict[str, str] = field(default_factory=lambda: {})
     llm_emotion_judge: Dict[str, str] = field(default_factory=lambda: {})
+    llm_outer_world: Dict[str, str] = field(default_factory=lambda: {})
     embedding: Dict[str, str] = field(default_factory=lambda: {})
     vlm: Dict[str, str] = field(default_factory=lambda: {})
     moderation: Dict[str, str] = field(default_factory=lambda: {})
@@ -237,6 +238,7 @@ class BotConfig:
                 "llm_topic_judge",
                 "llm_summary_by_topic",
                 "llm_emotion_judge",
+                "llm_outer_world",
                 "vlm",
                 "embedding",
                 "moderation",
