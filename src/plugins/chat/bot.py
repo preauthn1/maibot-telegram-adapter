@@ -26,14 +26,11 @@ from .chat_stream import chat_manager
 from .message_sender import message_manager  # 导入新的消息管理器
 from .relationship_manager import relationship_manager
 from .storage import MessageStorage
-from .utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
+from .utils import is_mentioned_bot_in_message
 from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
-
-from src.think_flow_demo.heartflow import subheartflow_manager
-from src.think_flow_demo.outer_world import outer_world
 
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 
@@ -93,12 +90,6 @@ class ChatBot:
             group_info=groupinfo,  # 我嘞个gourp_info
         )
         message.update_chat_stream(chat)
-        
-        #创建 心流 观察
-        await outer_world.check_and_add_new_observe()
-        subheartflow_manager.create_subheartflow(chat.stream_id)
-        
-        
         await relationship_manager.update_relationship(
             chat_stream=chat,
         )
@@ -145,10 +136,7 @@ class ChatBot:
             interested_rate=interested_rate,
             sender_id=str(message.message_info.user_info.user_id),
         )
-        current_willing_old = willing_manager.get_willing(chat_stream=chat)
-        current_willing_new = (subheartflow_manager.get_subheartflow(chat.stream_id).current_state.willing-5)/4
-        print(f"旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
-        current_willing = (current_willing_old + current_willing_new) / 2
+        current_willing = willing_manager.get_willing(chat_stream=chat)
 
         logger.info(
             f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]"
@@ -187,14 +175,6 @@ class ChatBot:
 
         # print(f"response: {response}")
         if response:
-            stream_id = message.chat_stream.stream_id
-            chat_talking_prompt = ""
-            if stream_id:
-                chat_talking_prompt = get_recent_group_detailed_plain_text(
-                    stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
-                )
-                
-            await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response,chat_talking_prompt)
             # print(f"有response: {response}")
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None
@@ -294,6 +274,10 @@ class ChatBot:
             # 使用情绪管理器更新情绪
             self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
 
+            # willing_manager.change_reply_willing_after_sent(
+            #     chat_stream=chat
+            # )
+
     async def handle_notice(self, event: NoticeEvent, bot: Bot) -> None:
         """处理收到的通知"""
         if isinstance(event, PokeNotifyEvent):
@@ -313,11 +297,11 @@ class ChatBot:
 
             raw_message = f"[戳了戳]{global_config.BOT_NICKNAME}"  # 默认类型
             if info := event.model_extra["raw_info"]:
-                poke_type = info[2].get("txt", "戳了戳")  # 戳戳类型，例如"拍一拍"、"揉一揉"、"捏一捏"
+                poke_type = info[2].get("txt", "戳了戳")  # 戳戳类型，例如“拍一拍”、“揉一揉”、“捏一捏”
                 custom_poke_message = info[4].get("txt", "")  # 自定义戳戳消息，若不存在会为空字符串
                 raw_message = f"[{poke_type}]{global_config.BOT_NICKNAME}{custom_poke_message}"
 
-                raw_message += "，作为一个类似摸摸头的友善行为"
+                raw_message += "（这是一个类似摸摸头的友善行为，而不是恶意行为，请不要作出攻击发言）"
 
             user_info = UserInfo(
                 user_id=event.user_id,
