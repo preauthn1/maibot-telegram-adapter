@@ -36,8 +36,9 @@ config = driver.config
 
 # 初始化表情管理器
 emoji_manager.initialize()
-
-logger.debug(f"正在唤醒{global_config.BOT_NICKNAME}......")
+logger.success("--------------------------------")
+logger.success(f"正在唤醒{global_config.BOT_NICKNAME}......使用版本：{global_config.MAI_VERSION}")
+logger.success("--------------------------------")
 # 注册消息处理器
 msg_in = on_message(priority=5)
 # 注册和bot相关的通知处理器

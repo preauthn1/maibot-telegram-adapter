@@ -196,6 +196,12 @@ class BotConfig:
     def load_config(cls, config_path: str = None) -> "BotConfig":
         """从TOML配置文件加载配置"""
         config = cls()
+        
+        def mai_version(parent: dict):
+            mai_version_config = parent["mai_version"]
+            version = mai_version_config.get("version")
+            version_fix = mai_version_config.get("version-fix")
+            config.MAI_VERSION = f"{version}-{version_fix}"
 
         def personality(parent: dict):
             personality_config = parent["personality"]
@@ -420,6 +426,7 @@ class BotConfig:
         # 正常执行程序，但是会看到这条自定义提示
         include_configs = {
             "bot": {"func": bot, "support": ">=0.0.0"},
+            "mai_version": {"func": mai_version, "support": ">=0.0.11"},
             "groups": {"func": groups, "support": ">=0.0.0"},
             "personality": {"func": personality, "support": ">=0.0.0"},
             "schedule": {"func": schedule, "support": ">=0.0.11", "necessary": False},
