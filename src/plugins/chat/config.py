@@ -130,6 +130,8 @@ class BotConfig:
 
     # 实验性
     llm_outer_world: Dict[str, str] = field(default_factory=lambda: {})
+    llm_sub_heartflow: Dict[str, str] = field(default_factory=lambda: {})
+    llm_heartflow: Dict[str, str] = field(default_factory=lambda: {})
 
 
     @staticmethod
@@ -265,6 +267,8 @@ class BotConfig:
                 "embedding",
                 "moderation",
                 "llm_outer_world",
+                "llm_sub_heartflow",
+                "llm_heartflow",
             ]
 
             for item in config_list:

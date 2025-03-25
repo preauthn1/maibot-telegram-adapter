@@ -37,7 +37,10 @@ class PromptBuilder:
         )
         
         # outer_world_info = outer_world.outer_world_info
-        current_mind_info = subheartflow_manager.get_subheartflow(stream_id).current_mind
+        if global_config.enable_think_flow:
+            current_mind_info = subheartflow_manager.get_subheartflow(stream_id).current_mind
+        else:
+            current_mind_info = ""
         
         relation_prompt = ""
         for person in who_chat_in_group:

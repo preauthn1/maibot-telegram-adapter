@@ -21,7 +21,7 @@ class SubHeartflow:
         self.current_mind = ""
         self.past_mind = []
         self.current_state : CuttentState = CuttentState()
-        self.llm_model = LLM_request(model=global_config.llm_topic_judge, temperature=0.7, max_tokens=600, request_type="sub_heart_flow")
+        self.llm_model = LLM_request(model=global_config.llm_sub_heartflow, temperature=0.7, max_tokens=600, request_type="sub_heart_flow")
         self.outer_world = None
         
         self.main_heartflow_info = ""

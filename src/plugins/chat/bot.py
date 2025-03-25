@@ -91,9 +91,11 @@ class ChatBot:
         )
         message.update_chat_stream(chat)
         
+        
         #创建 心流 观察
-        await outer_world.check_and_add_new_observe()
-        subheartflow_manager.create_subheartflow(chat.stream_id)
+        if global_config.enable_think_flow:
+            await outer_world.check_and_add_new_observe()
+            subheartflow_manager.create_subheartflow(chat.stream_id)
         
         
         await relationship_manager.update_relationship(
@@ -142,10 +144,14 @@ class ChatBot:
             interested_rate=interested_rate,
             sender_id=str(message.message_info.user_info.user_id),
         )
-        current_willing_old = willing_manager.get_willing(chat_stream=chat)
-        current_willing_new = (subheartflow_manager.get_subheartflow(chat.stream_id).current_state.willing-5)/4
-        print(f"旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
-        current_willing = (current_willing_old + current_willing_new) / 2
+        
+        if global_config.enable_think_flow:
+            current_willing_old = willing_manager.get_willing(chat_stream=chat)
+            current_willing_new = (subheartflow_manager.get_subheartflow(chat.stream_id).current_state.willing-5)/4
+            print(f"旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
+            current_willing = (current_willing_old + current_willing_new) / 2
+        else:
+            current_willing = willing_manager.get_willing(chat_stream=chat)
 
         logger.info(
             f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]"
@@ -185,13 +191,16 @@ class ChatBot:
         # print(f"response: {response}")
         if response:
             stream_id = message.chat_stream.stream_id
-            chat_talking_prompt = ""
-            if stream_id:
-                chat_talking_prompt = get_recent_group_detailed_plain_text(
-                    stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
-                )
-                
-            await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response,chat_talking_prompt)
+            
+            if global_config.enable_think_flow:
+                chat_talking_prompt = ""
+                if stream_id:
+                    chat_talking_prompt = get_recent_group_detailed_plain_text(
+                        stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
+                    )
+                await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response,chat_talking_prompt)
+            
+            
             # print(f"有response: {response}")
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None

@@ -132,7 +132,7 @@ enable = true
 
 [experimental]
 enable_friend_chat = false # 是否启用好友聊天
-enable_thinkflow = false # 是否启用思维流
+enable_think_flow = false # 是否启用思维流
 
 #下面的模型若使用硅基流动则不需要更改，使用ds官方则改成.env.prod自定义的宏，使用自定义模型则选择定位相似的模型自己填写
 #推理模型
@@ -203,3 +203,17 @@ name = "Qwen/Qwen2.5-7B-Instruct"
 provider = "SILICONFLOW"
 pri_in = 0
 pri_out = 0
+
+[model.llm_sub_heartflow] #心流：建议使用qwen2.5 7b
+# name = "Pro/Qwen/Qwen2.5-7B-Instruct"
+name = "Qwen/Qwen2.5-32B-Instruct"
+provider = "SILICONFLOW"
+pri_in = 1.26
+pri_out = 1.26
+
+[model.llm_heartflow] #心流：建议使用qwen2.5 32b
+# name = "Pro/Qwen/Qwen2.5-7B-Instruct"
+name = "Qwen/Qwen2.5-32B-Instruct"
+provider = "SILICONFLOW"
+pri_in = 1.26
+pri_out = 1.26

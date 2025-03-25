@@ -51,7 +51,10 @@ async def start_think_flow():
     try:
         outer_world_task = asyncio.create_task(outer_world.open_eyes())
         logger.success("大脑和外部世界启动成功")
-        return outer_world_task
+        # 启动心流系统
+        heartflow_task = asyncio.create_task(subheartflow_manager.heartflow_start_working())
+        logger.success("心流系统启动成功")  
+        return outer_world_task, heartflow_task
     except Exception as e:
         logger.error(f"启动大脑和外部世界失败: {e}")
         raise
@@ -70,11 +73,9 @@ async def start_background_tasks():
     logger.success("情绪管理器启动成功")
 
     # 启动大脑和外部世界
-    await start_think_flow()
-    
-    # 启动心流系统
-    heartflow_task = asyncio.create_task(subheartflow_manager.heartflow_start_working())
-    logger.success("心流系统启动成功")
+    if global_config.enable_think_flow:
+        logger.success("启动测试功能：心流系统")
+        await start_think_flow()
 
     # 只启动表情包管理任务
     asyncio.create_task(emoji_manager.start_periodic_check())
