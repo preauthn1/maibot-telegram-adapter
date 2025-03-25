@@ -18,7 +18,6 @@ from ..memory_system.memory import hippocampus
 from .message_sender import message_manager, message_sender
 from .storage import MessageStorage
 from src.common.logger import get_module_logger
-# from src.think_flow_demo.current_mind import subheartflow
 from src.think_flow_demo.outer_world import outer_world
 from src.think_flow_demo.heartflow import subheartflow_manager
 
