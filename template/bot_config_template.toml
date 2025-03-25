@@ -67,6 +67,7 @@ willing_mode = "classical" # 回复意愿模式 经典模式
 response_willing_amplifier = 1 # 麦麦回复意愿放大系数，一般为1
 response_interested_rate_amplifier = 1 # 麦麦回复兴趣度放大系数,听到记忆里的内容时放大系数
 down_frequency_rate = 3 # 降低回复频率的群组回复意愿降低系数 除法
+emoji_response_penalty = 0.1 # 表情包回复惩罚系数，设为0为不回复单个表情包，减少单独回复表情包的概率
 
 [response]
 model_r1_probability = 0.8 # 麦麦回答时选择主要回复模型1 模型的概率
@@ -105,7 +106,7 @@ enable = true  # 关键词反应功能的总开关
 
 [[keywords_reaction.rules]] # 如果想要新增多个关键词，直接复制本条，修改keywords和reaction即可
 enable = true # 是否启用此条（为了人类在未来AI战争能更好地识别AI（bushi），默认开启）
-keywords = ["人机", "bot", "机器", "入机", "robot", "机器人"] # 会触发反应的关键词
+keywords = ["人机", "bot", "机器", "入机", "robot", "机器人","ai","AI"] # 会触发反应的关键词
 reaction = "有人说你是人机或者机器人，否定这一事实，攻击或反问他。注意，只有认为你是机器人才回复，否则不要否认" # 触发之后添加的提示词
 
 [[keywords_reaction.rules]] # 就像这样复制
@@ -119,6 +120,12 @@ error_rate=0.001 # 单字替换概率
 min_freq=9 # 最小字频阈值
 tone_error_rate=0.1 # 声调错误概率
 word_replace_rate=0.006 # 整词替换概率
+
+[response_spliter]
+enable_response_spliter = true # 是否启用回复分割器
+response_max_length = 100 # 回复允许的最大长度
+response_max_sentence_num = 4 # 回复允许的最大句子数
+
 
 [remote] #发送统计信息，主要是看全球有多少只麦麦
 enable = true

@@ -57,6 +57,7 @@ class BotConfig:
     response_willing_amplifier: float = 1.0  # 回复意愿放大系数
     response_interested_rate_amplifier: float = 1.0  # 回复兴趣度放大系数
     down_frequency_rate: float = 3  # 降低回复频率的群组回复意愿降低系数
+    emoji_response_penalty: float = 0.0  # 表情包回复惩罚
     
     # response
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
@@ -101,6 +102,11 @@ class BotConfig:
     chinese_typo_min_freq = 7  # 最小字频阈值
     chinese_typo_tone_error_rate = 0.2  # 声调错误概率
     chinese_typo_word_replace_rate = 0.02  # 整词替换概率
+    
+    #response_spliter
+    enable_response_spliter = True  # 是否启用回复分割器
+    response_max_length = 100 # 回复允许的最大长度
+    response_max_sentence_num = 3 # 回复允许的最大句子数    
 
     # remote
     remote_enable: bool = True  # 是否启用远程控制
@@ -242,7 +248,8 @@ class BotConfig:
                 config.response_willing_amplifier = willing_config.get("response_willing_amplifier", config.response_willing_amplifier)
                 config.response_interested_rate_amplifier = willing_config.get("response_interested_rate_amplifier", config.response_interested_rate_amplifier)
                 config.down_frequency_rate = willing_config.get("down_frequency_rate", config.down_frequency_rate)
-
+                config.emoji_response_penalty = willing_config.get("emoji_response_penalty", config.emoji_response_penalty)
+                
         def model(parent: dict):
             # 加载模型配置
             model_config: dict = parent["model"]
@@ -378,6 +385,12 @@ class BotConfig:
             config.chinese_typo_word_replace_rate = chinese_typo_config.get(
                 "word_replace_rate", config.chinese_typo_word_replace_rate
             )
+            
+        def response_spliter(parent: dict):
+            response_spliter_config = parent["response_spliter"]
+            config.enable_response_spliter = response_spliter_config.get("enable_response_spliter", config.enable_response_spliter)
+            config.response_max_length = response_spliter_config.get("response_max_length", config.response_max_length)
+            config.response_max_sentence_num = response_spliter_config.get("response_max_sentence_num", config.response_max_sentence_num)
 
         def groups(parent: dict):
             groups_config = parent["groups"]
@@ -409,6 +422,7 @@ class BotConfig:
             "remote": {"func": remote, "support": ">=0.0.10", "necessary": False},
             "keywords_reaction": {"func": keywords_reaction, "support": ">=0.0.2", "necessary": False},
             "chinese_typo": {"func": chinese_typo, "support": ">=0.0.3", "necessary": False},
+            "response_spliter": {"func": response_spliter, "support": ">=0.0.11", "necessary": False},
             "experimental": {"func": experimental, "support": ">=0.0.11", "necessary": False},
         }
 

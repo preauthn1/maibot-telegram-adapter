@@ -1,6 +1,7 @@
 import asyncio
 from typing import Dict
 from ..chat.chat_stream import ChatStream
+from ..chat.config import global_config
 
 
 class WillingManager:
@@ -51,7 +52,7 @@ class WillingManager:
             current_willing += 0.05
 
         if is_emoji:
-            current_willing *= 0.2
+            current_willing *= global_config.emoji_response_penalty
 
         self.chat_reply_willing[chat_id] = min(current_willing, 3.0)
 
