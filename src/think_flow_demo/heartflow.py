@@ -2,7 +2,6 @@ from .current_mind import SubHeartflow
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.chat.config import global_config
-from .outer_world import outer_world
 import asyncio
 
 class CuttentState:
@@ -21,7 +20,8 @@ class Heartflow:
         self.current_mind = "你什么也没想"
         self.past_mind = []
         self.current_state : CuttentState = CuttentState()
-        self.llm_model = LLM_request(model=global_config.llm_heartflow, temperature=0.6, max_tokens=1000, request_type="heart_flow")
+        self.llm_model = LLM_request(
+            model=global_config.llm_heartflow, temperature=0.6, max_tokens=1000, request_type="heart_flow")
         
         self._subheartflows = {}
         self.active_subheartflows_nums = 0
@@ -50,7 +50,8 @@ class Heartflow:
         prompt += f"刚刚你的主要想法是{current_thinking_info}。"
         prompt += f"你还有一些小想法，因为你在参加不同的群聊天，是你正在做的事情：{sub_flows_info}\n"
         prompt += f"你现在{mood_info}。"
-        prompt += f"现在你接下去继续思考，产生新的想法，但是要基于原有的主要想法，不要分点输出，输出连贯的内心独白，不要太长，但是记得结合上述的消息，关注新内容:"
+        prompt += "现在你接下去继续思考，产生新的想法，但是要基于原有的主要想法，不要分点输出，"
+        prompt += "输出连贯的内心独白，不要太长，但是记得结合上述的消息，关注新内容:"
         
         reponse, reasoning_content = await self.llm_model.generate_response_async(prompt)
         
@@ -84,7 +85,8 @@ class Heartflow:
         prompt += f"现在麦麦的想法是：{self.current_mind}\n"
         prompt += f"现在麦麦在qq群里进行聊天，聊天的话题如下：{minds_str}\n"
         prompt += f"你现在{mood_info}\n"
-        prompt += f"现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白，不要太长，但是记得结合上述的消息，要记得你的人设，关注新内容:"
+        prompt += '''现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白
+        不要太长，但是记得结合上述的消息，要记得你的人设，关注新内容:'''
 
         reponse, reasoning_content = await self.llm_model.generate_response_async(prompt)
 

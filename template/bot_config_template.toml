@@ -41,7 +41,7 @@ personality_2_probability = 0.2 # 第二种人格出现概率，可以为0
 personality_3_probability = 0.1 # 第三种人格出现概率，请确保三个概率相加等于1
 
 [schedule]
-enable_schedule_gen = true # 是否启用日程表
+enable_schedule_gen = true # 是否启用日程表(尚未完成)
 prompt_schedule_gen = "用几句话描述描述性格特点或行动规律，这个特征会用来生成日程表"
 
 [message]

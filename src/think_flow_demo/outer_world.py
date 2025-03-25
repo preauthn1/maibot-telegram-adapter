@@ -3,7 +3,6 @@ import asyncio
 from datetime import datetime
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.chat.config import global_config
-import sys
 from src.common.database import db
 
 #存储一段聊天的大致内容
@@ -19,7 +18,8 @@ class Talking_info:
         
         self.oberve_interval = 3
         
-        self.llm_summary = LLM_request(model=global_config.llm_outer_world, temperature=0.7, max_tokens=300, request_type="outer_world")
+        self.llm_summary = LLM_request(
+            model=global_config.llm_outer_world, temperature=0.7, max_tokens=300, request_type="outer_world")
     
     async def start_observe(self):
         while True:
@@ -73,8 +73,9 @@ class Talking_info:
         prompt = ""
         prompt = f"你正在参与一个qq群聊的讨论，这个群之前在聊的内容是：{self.talking_summary}\n"
         prompt += f"现在群里的群友们产生了新的讨论，有了新的发言，具体内容如下：{self.talking_message_str}\n"
-        prompt += f"以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，以及聊天中的一些重要信息，记得不要分点，不要太长，精简的概括成一段文本\n"
-        prompt += f"总结概括："
+        prompt += '''以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，
+        以及聊天中的一些重要信息，记得不要分点，不要太长，精简的概括成一段文本\n'''
+        prompt += "总结概括："
         self.talking_summary, reasoning_content = await self.llm_summary.generate_response_async(prompt)
         
     def translate_message_list_to_str(self):
@@ -94,7 +95,8 @@ class OuterWorld:
         self.outer_world_info = ""
         self.start_time = int(datetime.now().timestamp())
     
-        self.llm_summary = LLM_request(model=global_config.llm_topic_judge, temperature=0.7, max_tokens=600, request_type="outer_world_info")  
+        self.llm_summary = LLM_request(
+            model=global_config.llm_outer_world, temperature=0.7, max_tokens=600, request_type="outer_world_info")  
     
     async def check_and_add_new_observe(self):
         # 获取所有聊天流

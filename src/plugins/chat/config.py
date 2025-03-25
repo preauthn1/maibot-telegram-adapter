@@ -213,7 +213,8 @@ class BotConfig:
             schedule_config = parent["schedule"]
             config.ENABLE_SCHEDULE_GEN = schedule_config.get("enable_schedule_gen", config.ENABLE_SCHEDULE_GEN)
             config.PROMPT_SCHEDULE_GEN = schedule_config.get("prompt_schedule_gen", config.PROMPT_SCHEDULE_GEN)
-            logger.info(f"载入自定义日程prompt:{schedule_config.get('prompt_schedule_gen', config.PROMPT_SCHEDULE_GEN)}")
+            logger.info(
+                f"载入自定义日程prompt:{schedule_config.get('prompt_schedule_gen', config.PROMPT_SCHEDULE_GEN)}")
 
         def emoji(parent: dict):
             emoji_config = parent["emoji"]
@@ -247,10 +248,13 @@ class BotConfig:
             config.willing_mode = willing_config.get("willing_mode", config.willing_mode)
             
             if config.INNER_VERSION in SpecifierSet(">=0.0.11"):
-                config.response_willing_amplifier = willing_config.get("response_willing_amplifier", config.response_willing_amplifier)
-                config.response_interested_rate_amplifier = willing_config.get("response_interested_rate_amplifier", config.response_interested_rate_amplifier)
+                config.response_willing_amplifier = willing_config.get(
+                    "response_willing_amplifier", config.response_willing_amplifier)
+                config.response_interested_rate_amplifier = willing_config.get(
+                    "response_interested_rate_amplifier", config.response_interested_rate_amplifier)
                 config.down_frequency_rate = willing_config.get("down_frequency_rate", config.down_frequency_rate)
-                config.emoji_response_penalty = willing_config.get("emoji_response_penalty", config.emoji_response_penalty)
+                config.emoji_response_penalty = willing_config.get(
+                    "emoji_response_penalty", config.emoji_response_penalty)
                 
         def model(parent: dict):
             # 加载模型配置
@@ -392,9 +396,11 @@ class BotConfig:
             
         def response_spliter(parent: dict):
             response_spliter_config = parent["response_spliter"]
-            config.enable_response_spliter = response_spliter_config.get("enable_response_spliter", config.enable_response_spliter)
+            config.enable_response_spliter = response_spliter_config.get(
+                "enable_response_spliter", config.enable_response_spliter)
             config.response_max_length = response_spliter_config.get("response_max_length", config.response_max_length)
-            config.response_max_sentence_num = response_spliter_config.get("response_max_sentence_num", config.response_max_sentence_num)
+            config.response_max_sentence_num = response_spliter_config.get(
+                "response_max_sentence_num", config.response_max_sentence_num)
 
         def groups(parent: dict):
             groups_config = parent["groups"]
@@ -405,7 +411,8 @@ class BotConfig:
         def experimental(parent: dict):
             experimental_config = parent["experimental"]
             config.enable_friend_chat = experimental_config.get("enable_friend_chat", config.enable_friend_chat)
-
+            config.enable_think_flow = experimental_config.get("enable_think_flow", config.enable_think_flow)
+            
         # 版本表达式：>=1.0.0,<2.0.0
         # 允许字段：func: method, support: str, notice: str, necessary: bool
         # 如果使用 notice 字段，在该组配置加载时，会展示该字段对用户的警示

@@ -13,7 +13,6 @@ from .relationship_manager import relationship_manager
 from src.common.logger import get_module_logger
 
 from src.think_flow_demo.heartflow import subheartflow_manager
-from src.think_flow_demo.outer_world import outer_world
 
 logger = get_module_logger("prompt")
 
@@ -58,9 +57,9 @@ class PromptBuilder:
         mood_prompt = mood_manager.get_prompt()
 
         # 日程构建
-        current_date = time.strftime("%Y-%m-%d", time.localtime())
-        current_time = time.strftime("%H:%M:%S", time.localtime())
-        bot_schedule_now_time, bot_schedule_now_activity = bot_schedule.get_current_task()
+        # current_date = time.strftime("%Y-%m-%d", time.localtime())
+        # current_time = time.strftime("%H:%M:%S", time.localtime())
+        # bot_schedule_now_time, bot_schedule_now_activity = bot_schedule.get_current_task()
 
         # 获取聊天上下文
         chat_in_group = True
