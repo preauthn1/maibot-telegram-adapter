@@ -77,7 +77,7 @@ async def start_background_tasks():
     logger.success("心流系统启动成功")
 
     # 只启动表情包管理任务
-    asyncio.create_task(emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL))
+    asyncio.create_task(emoji_manager.start_periodic_check())
     await bot_schedule.initialize()
     bot_schedule.print_schedule()
 
@@ -105,7 +105,7 @@ async def _(bot: Bot):
         _message_manager_started = True
         logger.success("-----------消息处理器已启动！-----------")
 
-    asyncio.create_task(emoji_manager._periodic_scan(interval_MINS=global_config.EMOJI_REGISTER_INTERVAL))
+    asyncio.create_task(emoji_manager._periodic_scan())
     logger.success("-----------开始偷表情包！-----------")
     asyncio.create_task(chat_manager._initialize())
     asyncio.create_task(chat_manager._auto_save_task())

@@ -57,9 +57,6 @@ class ChatBot:
         self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
         self.mood_manager.start_mood_update()  # 启动情绪更新
 
-        self.emoji_chance = 0.2  # 发送表情包的基础概率
-        # self.message_streams = MessageStreamContainer()
-
     async def _ensure_started(self):
         """确保所有任务已启动"""
         if not self._started:
