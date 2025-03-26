@@ -57,7 +57,7 @@ class PromptBuilder:
         mood_prompt = mood_manager.get_prompt()
 
         # 日程构建
-        schedule_prompt = f'''你现在正在做的事情是：{bot_schedule.get_current_num_task(num = 1,time_info = False)}'''
+        # schedule_prompt = f'''你现在正在做的事情是：{bot_schedule.get_current_num_task(num = 1,time_info = False)}'''
 
         # 获取聊天上下文
         chat_in_group = True

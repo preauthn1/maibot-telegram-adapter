@@ -84,7 +84,11 @@ async def start_background_tasks():
 @driver.on_startup
 async def init_schedule():
     """在 NoneBot2 启动时初始化日程系统"""
-    bot_schedule.initialize(name=global_config.BOT_NICKNAME, personality=global_config.PROMPT_PERSONALITY, behavior=global_config.PROMPT_SCHEDULE_GEN, interval=global_config.SCHEDULE_DOING_UPDATE_INTERVAL)
+    bot_schedule.initialize(
+        name=global_config.BOT_NICKNAME, 
+        personality=global_config.PROMPT_PERSONALITY, 
+        behavior=global_config.PROMPT_SCHEDULE_GEN, 
+        interval=global_config.SCHEDULE_DOING_UPDATE_INTERVAL)
     asyncio.create_task(bot_schedule.mai_schedule_start())
 
 @driver.on_startup

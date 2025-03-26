@@ -24,7 +24,7 @@ logger = get_module_logger("scheduler", config=schedule_config)
 class ScheduleGenerator:
     # enable_output: bool = True
 
-    def __init__(self, ):
+    def __init__(self):
         # 使用离线LLM模型
         self.llm_scheduler_all = LLM_request(
             model= global_config.llm_reasoning, temperature=0.9, max_tokens=7000,request_type="schedule")
@@ -45,7 +45,11 @@ class ScheduleGenerator:
         
         self.schedule_doing_update_interval = 300 #最好大于60
     
-    def initialize(self,name: str = "bot_name", personality: str = "你是一个爱国爱党的新时代青年", behavior: str = "你非常外向，喜欢尝试新事物和人交流",interval: int = 60):
+    def initialize(
+        self,name: str = "bot_name", 
+        personality: str = "你是一个爱国爱党的新时代青年", 
+        behavior: str = "你非常外向，喜欢尝试新事物和人交流",
+        interval: int = 60):
         """初始化日程系统"""
         self.name = name
         self.behavior = behavior
@@ -117,7 +121,7 @@ class ScheduleGenerator:
         prompt =  f"你是{self.name}，{self.personality}，{self.behavior}"
         prompt += f"你昨天的日程是：{self.yesterday_schedule_text}\n"
         prompt += f"请为你生成{date_str}（{weekday}）的日程安排，结合你的个人特点和行为习惯\n"
-        prompt += "推测你的日程安排，包括你一天都在做什么，从起床到睡眠，有什么发现和思考，具体一些，详细一些，需要1500字以上，精确到每半个小时，记得写明时间\n"
+        prompt += "推测你的日程安排，包括你一天都在做什么，从起床到睡眠，有什么发现和思考，具体一些，详细一些，需要1500字以上，精确到每半个小时，记得写明时间\n" #noqa: E501
         prompt += "直接返回你的日程，从起床到睡觉，不要输出其他内容："
         return prompt
     
@@ -132,7 +136,7 @@ class ScheduleGenerator:
         
         prompt = f"你是{self.name}，{self.personality}，{self.behavior}"
         prompt += f"你今天的日程是：{self.today_schedule_text}\n"
-        prompt += f"你之前做了的事情是：{previous_doings}，从之前到现在已经过去了{self.schedule_doing_update_interval/60}分钟了\n"
+        prompt += f"你之前做了的事情是：{previous_doings}，从之前到现在已经过去了{self.schedule_doing_update_interval/60}分钟了\n" #noqa: E501
         if mind_thinking:
             prompt += f"你脑子里在想：{mind_thinking}\n"
         prompt += f"现在是{now_time}，结合你的个人特点和行为习惯,"
@@ -284,7 +288,11 @@ class ScheduleGenerator:
 async def main():
     # 使用示例
     scheduler = ScheduleGenerator()
-    scheduler.initialize(name="麦麦", personality="你叫麦麦，你19岁，是一个大二的女大学生，你有一头黑色短发，你会刷贴吧，你现在在学习心理学", behavior="你比较内向，一般熬夜比较晚，然后第二天早上10点起床吃早午饭",interval=60)
+    scheduler.initialize(
+        name="麦麦", 
+        personality="你叫麦麦，你19岁，是一个大二的女大学生，你有一头黑色短发，你会刷贴吧，你现在在学习心理学", 
+        behavior="你比较内向，一般熬夜比较晚，然后第二天早上10点起床吃早午饭",
+        interval=60)
     await scheduler.mai_schedule_start()
     
 
