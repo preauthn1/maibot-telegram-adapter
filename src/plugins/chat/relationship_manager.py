@@ -1,6 +1,6 @@
 import asyncio
 from typing import Optional
-from src.common.logger import get_module_logger, LogConfig, RELATIONSHIP_STYLE_CONFIG
+from src.common.logger import get_module_logger, LogConfig, RELATION_STYLE_CONFIG
 
 from ...common.database import db
 from .message_base import UserInfo
@@ -10,8 +10,8 @@ from bson.decimal128 import Decimal128
 
 relationship_config = LogConfig(
     # 使用关系专用样式
-    console_format=RELATIONSHIP_STYLE_CONFIG["console_format"],
-    file_format=RELATIONSHIP_STYLE_CONFIG["file_format"],
+    console_format=RELATION_STYLE_CONFIG["console_format"],
+    file_format=RELATION_STYLE_CONFIG["file_format"],
 )
 logger = get_module_logger("rel_manager", config=relationship_config)
 
