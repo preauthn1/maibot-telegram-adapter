@@ -30,7 +30,7 @@ class LLMModel:
         data = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.5,
+            "temperature": 0.7,
             **self.params,
         }
 

@@ -5,6 +5,8 @@ from src.plugins.models.utils_model import LLM_request
 from src.plugins.chat.config import global_config
 import re
 import time
+from src.plugins.schedule.schedule_generator import bot_schedule
+
 class CuttentState:
     def __init__(self):
         self.willing = 0
@@ -57,10 +59,12 @@ class SubHeartflow:
         personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
-        related_memory_info = 'memory'
+        related_memory_info = ''
         message_stream_info = self.outer_world.talking_summary
+        schedule_info = bot_schedule.get_current_num_task(num = 2,time_info = False)
         
         prompt = ""
+        prompt += f"你刚刚在做的事情是：{schedule_info}\n"
         # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
         prompt += f"{personality_info}\n"
         prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{message_stream_info}\n"

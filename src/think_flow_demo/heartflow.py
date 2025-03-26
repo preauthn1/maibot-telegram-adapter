@@ -2,6 +2,7 @@ from .current_mind import SubHeartflow
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.chat.config import global_config
+from src.plugins.schedule.schedule_generator import bot_schedule
 import asyncio
 
 class CuttentState:
@@ -30,8 +31,8 @@ class Heartflow:
 
     async def heartflow_start_working(self):
         while True:
-            # await self.do_a_thinking()
-            await asyncio.sleep(60)
+            await self.do_a_thinking()
+            await asyncio.sleep(900)
     
     async def do_a_thinking(self):
         print("麦麦大脑袋转起来了")
@@ -43,9 +44,11 @@ class Heartflow:
         related_memory_info = 'memory'
         sub_flows_info = await self.get_all_subheartflows_minds()
         
+        schedule_info = bot_schedule.get_current_num_task(num = 5,time_info = True)
+        
         prompt = ""
+        prompt += f"你刚刚在做的事情是：{schedule_info}\n"
         prompt += f"{personality_info}\n"
-        # prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{message_stream_info}\n"
         prompt += f"你想起来{related_memory_info}。"
         prompt += f"刚刚你的主要想法是{current_thinking_info}。"
         prompt += f"你还有一些小想法，因为你在参加不同的群聊天，是你正在做的事情：{sub_flows_info}\n"
