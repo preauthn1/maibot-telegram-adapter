@@ -1,7 +1,7 @@
 from .current_mind import SubHeartflow
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
-from src.plugins.chat.config import global_config
+from src.plugins.chat.config import global_config, BotConfig
 from src.plugins.schedule.schedule_generator import bot_schedule
 import asyncio
 from src.common.logger import get_module_logger, LogConfig, HEARTFLOW_STYLE_CONFIG # noqa: E402
@@ -46,7 +46,7 @@ class Heartflow:
         logger.info("麦麦大脑袋转起来了")
         self.current_state.update_current_state_info()
         
-        personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
+        personality_info = " ".join(BotConfig.PROMPT_PERSONALITY)
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         related_memory_info = 'memory'
@@ -91,13 +91,13 @@ class Heartflow:
         return await self.minds_summary(sub_minds)
     
     async def minds_summary(self,minds_str):
-        personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
+        personality_info = " ".join(BotConfig.PROMPT_PERSONALITY)
         mood_info = self.current_state.mood
         
         prompt = ""
         prompt += f"{personality_info}\n"
         prompt += f"现在{global_config.BOT_NICKNAME}的想法是：{self.current_mind}\n"
-        prompt += f"现在麦麦在qq群里进行聊天，聊天的话题如下：{minds_str}\n"
+        prompt += f"现在{global_config.BOT_NICKNAME}在qq群里进行聊天，聊天的话题如下：{minds_str}\n"
         prompt += f"你现在{mood_info}\n"
         prompt += '''现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白
         不要太长，但是记得结合上述的消息，要记得你的人设，关注新内容:'''
