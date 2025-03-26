@@ -2,7 +2,7 @@ from .outer_world import outer_world
 import asyncio
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
-from src.plugins.chat.config import global_config
+from src.plugins.chat.config import global_config, BotConfig
 import re
 import time
 from src.plugins.schedule.schedule_generator import bot_schedule
@@ -36,6 +36,8 @@ class SubHeartflow:
         
         if not self.current_mind:
             self.current_mind = "你什么也没想"
+            
+        self.personality_info = " ".join(BotConfig.PROMPT_PERSONALITY)
     
     def assign_observe(self,stream_id):
         self.outer_world = outer_world.get_world_by_stream_id(stream_id)
@@ -56,7 +58,6 @@ class SubHeartflow:
         print("麦麦小脑袋转起来了")
         self.current_state.update_current_state_info()
         
-        personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         related_memory_info = ''
@@ -66,7 +67,7 @@ class SubHeartflow:
         prompt = ""
         prompt += f"你刚刚在做的事情是：{schedule_info}\n"
         # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
-        prompt += f"{personality_info}\n"
+        prompt += f"{self.personality_info}\n"
         prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{message_stream_info}\n"
         prompt += f"你想起来{related_memory_info}。"
         prompt += f"刚刚你的想法是{current_thinking_info}。"
@@ -84,7 +85,6 @@ class SubHeartflow:
         # print("麦麦脑袋转起来了")
         self.current_state.update_current_state_info()
         
-        personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         related_memory_info = 'memory'
@@ -93,7 +93,7 @@ class SubHeartflow:
         reply_info = reply_content
         
         prompt = ""
-        prompt += f"{personality_info}\n"
+        prompt += f"{self.personality_info}\n"
         prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{message_stream_info}\n"
         prompt += f"你想起来{related_memory_info}。"
         prompt += f"刚刚你的想法是{current_thinking_info}。"
@@ -114,12 +114,11 @@ class SubHeartflow:
         
     async def judge_willing(self):
         # print("麦麦闹情绪了1")
-        personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         # print("麦麦闹情绪了2")
         prompt = ""
-        prompt += f"{personality_info}\n"
+        prompt += f"{self.personality_info}\n"
         prompt += "现在你正在上网，和qq群里的网友们聊天"
         prompt += f"你现在的想法是{current_thinking_info}。"
         prompt += f"你现在{mood_info}。"
