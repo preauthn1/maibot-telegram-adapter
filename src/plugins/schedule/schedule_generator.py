@@ -27,7 +27,7 @@ class ScheduleGenerator:
     def __init__(self, ):
         # 使用离线LLM模型
         self.llm_scheduler_all = LLM_request(
-            model= global_config.llm_reasoning, temperature=0.9, max_tokens=2048,request_type="schedule")
+            model= global_config.llm_reasoning, temperature=0.9, max_tokens=7000,request_type="schedule")
         self.llm_scheduler_doing = LLM_request(
             model= global_config.llm_normal, temperature=0.9, max_tokens=2048,request_type="schedule")
         
@@ -43,7 +43,7 @@ class ScheduleGenerator:
 
         self.start_time = datetime.datetime.now()
         
-        self.schedule_doing_update_interval = 60 #最好大于60
+        self.schedule_doing_update_interval = 300 #最好大于60
     
     def initialize(self,name: str = "bot_name", personality: str = "你是一个爱国爱党的新时代青年", behavior: str = "你非常外向，喜欢尝试新事物和人交流",interval: int = 60):
         """初始化日程系统"""

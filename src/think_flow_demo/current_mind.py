@@ -46,11 +46,11 @@ class SubHeartflow:
             current_time = time.time()
             if current_time - self.last_reply_time > 180:  # 3分钟 = 180秒
                 # print(f"{self.observe_chat_id}麦麦已经3分钟没有回复了，暂时停止思考")
-                await asyncio.sleep(25)  # 每30秒检查一次
+                await asyncio.sleep(60)  # 每30秒检查一次
             else:
                 await self.do_a_thinking()
                 await self.judge_willing()
-                await asyncio.sleep(25)
+                await asyncio.sleep(60)
     
     async def do_a_thinking(self):
         print("麦麦小脑袋转起来了")
