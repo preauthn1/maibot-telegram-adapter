@@ -76,8 +76,9 @@ class ScheduleGenerator:
                     self.print_schedule()
                 
                 # 执行当前活动
-                current_activity = await self.move_doing(mind_thinking="")
-                logger.info(f"当前活动: {current_activity}")
+                # mind_thinking = subheartflow_manager.current_state.current_mind
+                
+                await self.move_doing()
                 
                 await asyncio.sleep(self.schedule_doing_update_interval) 
                 
@@ -190,11 +191,18 @@ class ScheduleGenerator:
 
     async def move_doing(self,mind_thinking: str = ""):
         current_time = datetime.datetime.now()
-        doing_prompt = self.construct_doing_prompt(current_time,mind_thinking)
+        if mind_thinking:
+            doing_prompt = self.construct_doing_prompt(current_time,mind_thinking)
+        else:
+            doing_prompt = self.construct_doing_prompt(current_time)
+            
+        print(doing_prompt)
         doing_response,_ = await self.llm_scheduler_doing.generate_response_async(doing_prompt)
         self.today_done_list.append((current_time,doing_response))
 
         await self.update_today_done_list()
+        
+        logger.info(f"当前活动: {doing_response}")
         
         return doing_response
 

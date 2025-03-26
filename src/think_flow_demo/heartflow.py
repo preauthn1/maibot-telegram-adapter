@@ -4,6 +4,14 @@ from src.plugins.models.utils_model import LLM_request
 from src.plugins.chat.config import global_config
 from src.plugins.schedule.schedule_generator import bot_schedule
 import asyncio
+from src.common.logger import get_module_logger, LogConfig, HEARTFLOW_STYLE_CONFIG # noqa: E402
+
+heartflow_config = LogConfig(
+    # 使用海马体专用样式
+    console_format=HEARTFLOW_STYLE_CONFIG["console_format"],
+    file_format=HEARTFLOW_STYLE_CONFIG["file_format"],
+)   
+logger = get_module_logger("heartflow", config=heartflow_config)
 
 class CuttentState:
     def __init__(self):
@@ -32,10 +40,10 @@ class Heartflow:
     async def heartflow_start_working(self):
         while True:
             await self.do_a_thinking()
-            await asyncio.sleep(900)
+            await asyncio.sleep(100)
     
     async def do_a_thinking(self):
-        print("麦麦大脑袋转起来了")
+        logger.info("麦麦大脑袋转起来了")
         self.current_state.update_current_state_info()
         
         personality_info = open("src/think_flow_demo/personality_info.txt", "r", encoding="utf-8").read()
@@ -61,7 +69,10 @@ class Heartflow:
         self.update_current_mind(reponse)
         
         self.current_mind = reponse
-        print(f"麦麦的总体脑内状态：{self.current_mind}")
+        logger.info(f"麦麦的总体脑内状态：{self.current_mind}")
+        logger.info("麦麦想了想，当前活动:")
+        await bot_schedule.move_doing(self.current_mind)
+        
         
         for _, subheartflow in self._subheartflows.items():
             subheartflow.main_heartflow_info = reponse
