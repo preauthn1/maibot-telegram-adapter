@@ -4,6 +4,7 @@ from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.chat.config import global_config
 import re
+import time
 class CuttentState:
     def __init__(self):
         self.willing = 0
@@ -29,6 +30,8 @@ class SubHeartflow:
         
         self.observe_chat_id = None
         
+        self.last_reply_time = time.time()
+        
         if not self.current_mind:
             self.current_mind = "你什么也没想"
     
@@ -38,10 +41,14 @@ class SubHeartflow:
 
     async def subheartflow_start_working(self):
         while True:
-            await self.do_a_thinking()
-            print("麦麦闹情绪了")
-            await self.judge_willing()
-            await asyncio.sleep(30)
+            current_time = time.time()
+            if current_time - self.last_reply_time > 180:  # 3分钟 = 180秒
+                # print(f"{self.observe_chat_id}麦麦已经3分钟没有回复了，暂时停止思考")
+                await asyncio.sleep(25)  # 每30秒检查一次
+            else:
+                await self.do_a_thinking()
+                await self.judge_willing()
+                await asyncio.sleep(25)
     
     async def do_a_thinking(self):
         print("麦麦小脑袋转起来了")
@@ -98,6 +105,8 @@ class SubHeartflow:
         
         self.current_mind = reponse
         print(f"{self.observe_chat_id}麦麦的脑内状态：{self.current_mind}")
+        
+        self.last_reply_time = time.time()
         
     async def judge_willing(self):
         # print("麦麦闹情绪了1")
