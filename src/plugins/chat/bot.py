@@ -298,7 +298,7 @@ class ChatBot:
             )
 
             # 使用情绪管理器更新情绪
-            self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
+            self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
 
     async def handle_notice(self, event: NoticeEvent, bot: Bot) -> None:
         """处理收到的通知"""
