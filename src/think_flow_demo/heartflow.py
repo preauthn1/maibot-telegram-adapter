@@ -40,7 +40,7 @@ class Heartflow:
     async def heartflow_start_working(self):
         while True:
             await self.do_a_thinking()
-            await asyncio.sleep(100)
+            await asyncio.sleep(600)
     
     async def do_a_thinking(self):
         logger.info("麦麦大脑袋转起来了")
