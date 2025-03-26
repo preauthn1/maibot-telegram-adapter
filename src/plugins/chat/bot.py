@@ -3,16 +3,15 @@ import time
 from random import random
 from nonebot.adapters.onebot.v11 import (
     Bot,
-    GroupMessageEvent,
     MessageEvent,
     PrivateMessageEvent,
+    GroupMessageEvent,
     NoticeEvent,
     PokeNotifyEvent,
     GroupRecallNoticeEvent,
     FriendRecallNoticeEvent,
 )
 
-from src.common.logger import get_module_logger
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
@@ -27,13 +26,26 @@ from .chat_stream import chat_manager
 from .message_sender import message_manager  # 导入新的消息管理器
 from .relationship_manager import relationship_manager
 from .storage import MessageStorage
-from .utils import calculate_typing_time, is_mentioned_bot_in_message
+from .utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
 from .utils_image import image_path_to_base64
-from .utils_user import get_user_nickname, get_user_cardname, get_groupname
+from .utils_user import get_user_nickname, get_user_cardname
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from .message_base import UserInfo, GroupInfo, Seg
 
-logger = get_module_logger("chat_bot")
+from src.think_flow_demo.heartflow import subheartflow_manager
+from src.think_flow_demo.outer_world import outer_world
+
+from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
+
+# 定义日志配置
+chat_config = LogConfig(
+    # 使用消息发送专用样式
+    console_format=CHAT_STYLE_CONFIG["console_format"],
+    file_format=CHAT_STYLE_CONFIG["file_format"],
+)
+
+# 配置主程序日志格式
+logger = get_module_logger("chat_bot", config=chat_config)
 
 
 class ChatBot:
@@ -44,9 +56,6 @@ class ChatBot:
         self._started = False
         self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
         self.mood_manager.start_mood_update()  # 启动情绪更新
-
-        self.emoji_chance = 0.2  # 发送表情包的基础概率
-        # self.message_streams = MessageStreamContainer()
 
     async def _ensure_started(self):
         """确保所有任务已启动"""
@@ -76,23 +85,32 @@ class ChatBot:
 
         # 创建聊天流
         chat = await chat_manager.get_or_create_stream(
-            platform=messageinfo.platform, user_info=userinfo, group_info=groupinfo #我嘞个gourp_info
+            platform=messageinfo.platform,
+            user_info=userinfo,
+            group_info=groupinfo,  # 我嘞个gourp_info
         )
         message.update_chat_stream(chat)
+        
+        
+        #创建 心流 观察
+        if global_config.enable_think_flow:
+            await outer_world.check_and_add_new_observe()
+            subheartflow_manager.create_subheartflow(chat.stream_id)
+        
+        
         await relationship_manager.update_relationship(
             chat_stream=chat,
         )
-        await relationship_manager.update_relationship_value(
-            chat_stream=chat, relationship_value=0.5
-        )
+        await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=0)
 
         await message.process()
-        
+
         # 过滤词
         for word in global_config.ban_words:
             if word in message.processed_plain_text:
                 logger.info(
-                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]{userinfo.user_nickname}:{message.processed_plain_text}"
+                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]"
+                    f"{userinfo.user_nickname}:{message.processed_plain_text}"
                 )
                 logger.info(f"[过滤词识别]消息中含有{word}，filtered")
                 return
@@ -101,20 +119,17 @@ class ChatBot:
         for pattern in global_config.ban_msgs_regex:
             if re.search(pattern, message.raw_message):
                 logger.info(
-                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]{userinfo.user_nickname}:{message.raw_message}"
+                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]"
+                    f"{userinfo.user_nickname}:{message.raw_message}"
                 )
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return
 
-        current_time = time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time)
-        )
+        current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
 
-        #根据话题计算激活度
+        # 根据话题计算激活度
         topic = ""
-        interested_rate = (
-            await hippocampus.memory_activate_value(message.processed_plain_text) / 100
-        )
+        interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
         logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
 
@@ -129,28 +144,39 @@ class ChatBot:
             interested_rate=interested_rate,
             sender_id=str(message.message_info.user_info.user_id),
         )
-        current_willing = willing_manager.get_willing(chat_stream=chat)
+        
+        if global_config.enable_think_flow:
+            current_willing_old = willing_manager.get_willing(chat_stream=chat)
+            current_willing_new = (subheartflow_manager.get_subheartflow(chat.stream_id).current_state.willing-5)/4
+            print(f"旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
+            current_willing = (current_willing_old + current_willing_new) / 2
+        else:
+            current_willing = willing_manager.get_willing(chat_stream=chat)
 
         logger.info(
-            f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]{chat.user_info.user_nickname}:"
+            f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]"
+            f"{chat.user_info.user_nickname}:"
             f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
         )
 
         response = None
-
+        # 开始组织语言
         if random() < reply_probability:
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ,
                 user_nickname=global_config.BOT_NICKNAME,
                 platform=messageinfo.platform,
             )
+            # 开始思考的时间点
             thinking_time_point = round(time.time(), 2)
+            # logger.debug(f"开始思考的时间点: {thinking_time_point}")
             think_id = "mt" + str(thinking_time_point)
             thinking_message = MessageThinking(
                 message_id=think_id,
                 chat_stream=chat,
                 bot_user_info=bot_user_info,
                 reply=message,
+                thinking_start_time=thinking_time_point,
             )
 
             message_manager.add_message(thinking_message)
@@ -164,16 +190,24 @@ class ChatBot:
 
         # print(f"response: {response}")
         if response:
+            stream_id = message.chat_stream.stream_id
+            
+            if global_config.enable_think_flow:
+                chat_talking_prompt = ""
+                if stream_id:
+                    chat_talking_prompt = get_recent_group_detailed_plain_text(
+                        stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
+                    )
+                await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response,chat_talking_prompt)
+            
+            
             # print(f"有response: {response}")
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None
             # 找到message,删除
             # print(f"开始找思考消息")
             for msg in container.messages:
-                if (
-                    isinstance(msg, MessageThinking)
-                    and msg.message_info.message_id == think_id
-                ):
+                if isinstance(msg, MessageThinking) and msg.message_info.message_id == think_id:
                     # print(f"找到思考消息: {msg}")
                     thinking_message = msg
                     container.messages.remove(msg)
@@ -188,16 +222,16 @@ class ChatBot:
             thinking_start_time = thinking_message.thinking_start_time
             message_set = MessageSet(chat, think_id)
             # 计算打字时间，1是为了模拟打字，2是避免多条回复乱序
-            accu_typing_time = 0
+            # accu_typing_time = 0
 
             mark_head = False
             for msg in response:
                 # print(f"\033[1;32m[回复内容]\033[0m {msg}")
                 # 通过时间改变时间戳
-                typing_time = calculate_typing_time(msg)
-                logger.debug(f"typing_time: {typing_time}")
-                accu_typing_time += typing_time
-                timepoint = thinking_time_point + accu_typing_time
+                # typing_time = calculate_typing_time(msg)
+                # logger.debug(f"typing_time: {typing_time}")
+                # accu_typing_time += typing_time
+                # timepoint = thinking_time_point + accu_typing_time
                 message_segment = Seg(type="text", data=msg)
                 # logger.debug(f"message_segment: {message_segment}")
                 bot_message = MessageSending(
@@ -209,6 +243,7 @@ class ChatBot:
                     reply=message,
                     is_head=not mark_head,
                     is_emoji=False,
+                    thinking_start_time=thinking_start_time,
                 )
                 if not mark_head:
                     mark_head = True
@@ -255,28 +290,15 @@ class ChatBot:
                     )
                     message_manager.add_message(bot_message)
 
-            emotion = await self.gpt._get_emotion_tags(raw_content)
-            logger.debug(f"为 '{response}' 获取到的情感标签为：{emotion}")
-            valuedict = {
-                "happy": 0.5,
-                "angry": -1,
-                "sad": -0.5,
-                "surprised": 0.2,
-                "disgusted": -1.5,
-                "fearful": -0.7,
-                "neutral": 0.1,
-            }
-            await relationship_manager.update_relationship_value(
-                chat_stream=chat, relationship_value=valuedict[emotion[0]]
-            )
-            # 使用情绪管理器更新情绪
-            self.mood_manager.update_mood_from_emotion(
-                emotion[0], global_config.mood_intensity_factor
+            # 获取立场和情感标签，更新关系值
+            stance, emotion = await self.gpt._get_emotion_tags(raw_content, message.processed_plain_text)
+            logger.debug(f"为 '{response}' 立场为：{stance} 获取到的情感标签为：{emotion}")
+            await relationship_manager.calculate_update_relationship_value(
+                chat_stream=chat, label=emotion, stance=stance
             )
 
-            # willing_manager.change_reply_willing_after_sent(
-            #     chat_stream=chat
-            # )
+            # 使用情绪管理器更新情绪
+            self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
 
     async def handle_notice(self, event: NoticeEvent, bot: Bot) -> None:
         """处理收到的通知"""
@@ -296,32 +318,22 @@ class ChatBot:
                     return
 
             raw_message = f"[戳了戳]{global_config.BOT_NICKNAME}"  # 默认类型
-            if info := event.raw_info:
-                poke_type = info[2].get(
-                    "txt", "戳了戳"
-                )  # 戳戳类型，例如“拍一拍”、“揉一揉”、“捏一捏”
-                custom_poke_message = info[4].get(
-                    "txt", ""
-                )  # 自定义戳戳消息，若不存在会为空字符串
-                raw_message = (
-                    f"[{poke_type}]{global_config.BOT_NICKNAME}{custom_poke_message}"
-                )
+            if info := event.model_extra["raw_info"]:
+                poke_type = info[2].get("txt", "戳了戳")  # 戳戳类型，例如"拍一拍"、"揉一揉"、"捏一捏"
+                custom_poke_message = info[4].get("txt", "")  # 自定义戳戳消息，若不存在会为空字符串
+                raw_message = f"[{poke_type}]{global_config.BOT_NICKNAME}{custom_poke_message}"
 
-                raw_message += "（这是一个类似摸摸头的友善行为，而不是恶意行为，请不要作出攻击发言）"
+                raw_message += "，作为一个类似摸摸头的友善行为"
 
             user_info = UserInfo(
                 user_id=event.user_id,
-                user_nickname=(
-                    await bot.get_stranger_info(user_id=event.user_id, no_cache=True)
-                )["nickname"],
+                user_nickname=(await bot.get_stranger_info(user_id=event.user_id, no_cache=True))["nickname"],
                 user_cardname=None,
                 platform="qq",
             )
 
             if event.group_id:
-                group_info = GroupInfo(
-                    group_id=event.group_id, group_name=None, platform="qq"
-                )
+                group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
             else:
                 group_info = None
 
@@ -335,10 +347,8 @@ class ChatBot:
             )
 
             await self.message_process(message_cq)
-            
-        elif isinstance(event, GroupRecallNoticeEvent) or isinstance(
-            event, FriendRecallNoticeEvent
-        ):
+
+        elif isinstance(event, GroupRecallNoticeEvent) or isinstance(event, FriendRecallNoticeEvent):
             user_info = UserInfo(
                 user_id=event.user_id,
                 user_nickname=get_user_nickname(event.user_id) or None,
@@ -347,9 +357,7 @@ class ChatBot:
             )
 
             if isinstance(event, GroupRecallNoticeEvent):
-                group_info = GroupInfo(
-                    group_id=event.group_id, group_name=None, platform="qq"
-                )
+                group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
             else:
                 group_info = None
 
@@ -357,9 +365,7 @@ class ChatBot:
                 platform=user_info.platform, user_info=user_info, group_info=group_info
             )
 
-            await self.storage.store_recalled_message(
-                event.message_id, time.time(), chat
-            )
+            await self.storage.store_recalled_message(event.message_id, time.time(), chat)
 
     async def handle_message(self, event: MessageEvent, bot: Bot) -> None:
         """处理收到的消息"""
@@ -376,9 +382,7 @@ class ChatBot:
             and hasattr(event.reply.sender, "user_id")
             and event.reply.sender.user_id in global_config.ban_user_id
         ):
-            logger.debug(
-                f"跳过处理回复来自被ban用户 {event.reply.sender.user_id} 的消息"
-            )
+            logger.debug(f"跳过处理回复来自被ban用户 {event.reply.sender.user_id} 的消息")
             return
         # 处理私聊消息
         if isinstance(event, PrivateMessageEvent):
@@ -388,11 +392,7 @@ class ChatBot:
                 try:
                     user_info = UserInfo(
                         user_id=event.user_id,
-                        user_nickname=(
-                            await bot.get_stranger_info(
-                                user_id=event.user_id, no_cache=True
-                            )
-                        )["nickname"],
+                        user_nickname=(await bot.get_stranger_info(user_id=event.user_id, no_cache=True))["nickname"],
                         user_cardname=None,
                         platform="qq",
                     )
@@ -418,9 +418,7 @@ class ChatBot:
                 platform="qq",
             )
 
-            group_info = GroupInfo(
-                group_id=event.group_id, group_name=None, platform="qq"
-            )
+            group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
 
         # group_info = await bot.get_group_info(group_id=event.group_id)
         # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
@@ -435,6 +433,102 @@ class ChatBot:
         )
 
         await self.message_process(message_cq)
+
+    async def handle_forward_message(self, event: MessageEvent, bot: Bot) -> None:
+        """专用于处理合并转发的消息处理器"""
+
+        # 用户屏蔽,不区分私聊/群聊
+        if event.user_id in global_config.ban_user_id:
+            return
+
+        if isinstance(event, GroupMessageEvent):
+            if event.group_id:
+                if event.group_id not in global_config.talk_allowed_groups:
+                    return
+
+        # 获取合并转发消息的详细信息
+        forward_info = await bot.get_forward_msg(message_id=event.message_id)
+        messages = forward_info["messages"]
+
+        # 构建合并转发消息的文本表示
+        processed_messages = []
+        for node in messages:
+            # 提取发送者昵称
+            nickname = node["sender"].get("nickname", "未知用户")
+
+            # 递归处理消息内容
+            message_content = await self.process_message_segments(node["message"], layer=0)
+
+            # 拼接为【昵称】+ 内容
+            processed_messages.append(f"【{nickname}】{message_content}")
+
+        # 组合所有消息
+        combined_message = "\n".join(processed_messages)
+        combined_message = f"合并转发消息内容：\n{combined_message}"
+
+        # 构建用户信息（使用转发消息的发送者）
+        user_info = UserInfo(
+            user_id=event.user_id,
+            user_nickname=event.sender.nickname,
+            user_cardname=event.sender.card if hasattr(event.sender, "card") else None,
+            platform="qq",
+        )
+
+        # 构建群聊信息（如果是群聊）
+        group_info = None
+        if isinstance(event, GroupMessageEvent):
+            group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
+
+        # 创建消息对象
+        message_cq = MessageRecvCQ(
+            message_id=event.message_id,
+            user_info=user_info,
+            raw_message=combined_message,
+            group_info=group_info,
+            reply_message=event.reply,
+            platform="qq",
+        )
+
+        # 进入标准消息处理流程
+        await self.message_process(message_cq)
+
+    async def process_message_segments(self, segments: list, layer: int) -> str:
+        """递归处理消息段"""
+        parts = []
+        for seg in segments:
+            part = await self.process_segment(seg, layer + 1)
+            parts.append(part)
+        return "".join(parts)
+
+    async def process_segment(self, seg: dict, layer: int) -> str:
+        """处理单个消息段"""
+        seg_type = seg["type"]
+        if layer > 3:
+            # 防止有那种100层转发消息炸飞麦麦
+            return "【转发消息】"
+        if seg_type == "text":
+            return seg["data"]["text"]
+        elif seg_type == "image":
+            return "[图片]"
+        elif seg_type == "face":
+            return "[表情]"
+        elif seg_type == "at":
+            return f"@{seg['data'].get('qq', '未知用户')}"
+        elif seg_type == "forward":
+            # 递归处理嵌套的合并转发消息
+            nested_nodes = seg["data"].get("content", [])
+            nested_messages = []
+            nested_messages.append("合并转发消息内容：")
+            for node in nested_nodes:
+                nickname = node["sender"].get("nickname", "未知用户")
+                content = await self.process_message_segments(node["message"], layer=layer)
+                # nested_messages.append('-' * layer)
+                nested_messages.append(f"{'--' * layer}【{nickname}】{content}")
+            # nested_messages.append(f"{'--' * layer}合并转发第【{layer}】层结束")
+            return "\n".join(nested_messages)
+        else:
+            return f"[{seg_type}]"
+
 
 # 创建全局ChatBot实例
 chat_bot = ChatBot()

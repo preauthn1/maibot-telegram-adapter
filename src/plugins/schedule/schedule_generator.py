@@ -5,8 +5,9 @@ from typing import Dict, Union
 
 from nonebot import get_driver
 
-from src.plugins.chat.config import global_config
+# 添加项目根目录到 Python 路径
 
+from src.plugins.chat.config import global_config
 from ...common.database import db  # 使用正确的导入语法
 from ..models.utils_model import LLM_request
 from src.common.logger import get_module_logger
@@ -23,7 +24,7 @@ class ScheduleGenerator:
     def __init__(self):
         # 根据global_config.llm_normal这一字典配置指定模型
         # self.llm_scheduler = LLMModel(model = global_config.llm_normal,temperature=0.9)
-        self.llm_scheduler = LLM_request(model=global_config.llm_normal, temperature=0.9)
+        self.llm_scheduler = LLM_request(model=global_config.llm_normal, temperature=0.9, request_type="scheduler")
         self.today_schedule_text = ""
         self.today_schedule = {}
         self.tomorrow_schedule_text = ""
@@ -73,7 +74,7 @@ class ScheduleGenerator:
             )
 
             try:
-                schedule_text, _ = await self.llm_scheduler.generate_response(prompt)
+                schedule_text, _, _ = await self.llm_scheduler.generate_response(prompt)
                 db.schedule.insert_one({"date": date_str, "schedule": schedule_text})
                 self.enable_output = True
             except Exception as e:
@@ -96,10 +97,27 @@ class ScheduleGenerator:
             reg = r"\{(.|\r|\n)+\}"
             matched = re.search(reg, schedule_text)[0]
             schedule_dict = json.loads(matched)
+            self._check_schedule_validity(schedule_dict)
             return schedule_dict
         except json.JSONDecodeError:
             logger.exception("解析日程失败: {}".format(schedule_text))
             return False
+        except ValueError as e:
+            logger.exception(f"解析日程失败: {str(e)}")
+            return False
+        except Exception as e:
+            logger.exception(f"解析日程发生错误:{str(e)}")
+            return False
+
+    def _check_schedule_validity(self, schedule_dict: Dict[str, str]):
+        """检查日程是否合法"""
+        if not schedule_dict:
+            return
+        for time_str in schedule_dict.keys():
+            try:
+                self._parse_time(time_str)
+            except ValueError:
+                raise ValueError("日程时间格式不正确") from None
 
     def _parse_time(self, time_str: str) -> str:
         """解析时间字符串，转换为时间"""
@@ -157,7 +175,7 @@ class ScheduleGenerator:
     def print_schedule(self):
         """打印完整的日程安排"""
         if not self._parse_schedule(self.today_schedule_text):
-            logger.warning("今日日程有误，将在下次运行时重新生成")
+            logger.warning("今日日程有误，将在两小时后重新生成")
             db.schedule.delete_one({"date": datetime.datetime.now().strftime("%Y-%m-%d")})
         else:
             logger.info("=== 今日日程安排 ===")
@@ -165,24 +183,5 @@ class ScheduleGenerator:
                 logger.info(f"时间[{time_str}]: 活动[{activity}]")
             logger.info("==================")
             self.enable_output = False
-
-
-# def main():
-#     # 使用示例
-#     scheduler = ScheduleGenerator()
-#     # new_schedule = scheduler.generate_daily_schedule()
-#     scheduler.print_schedule()
-#     print("\n当前任务：")
-#     print(scheduler.get_current_task())
-
-#     print("昨天日程：")
-#     print(scheduler.yesterday_schedule)
-#     print("今天日程：")
-#     print(scheduler.today_schedule)
-#     print("明天日程：")
-#     print(scheduler.tomorrow_schedule)
-
-# if __name__ == "__main__":
-#     main()
-
+# 当作为组件导入时使用的实例
 bot_schedule = ScheduleGenerator()

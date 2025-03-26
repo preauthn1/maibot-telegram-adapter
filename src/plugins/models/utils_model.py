@@ -26,11 +26,11 @@ class LLM_request:
         "o1-mini",
         "o1-preview",
         "o1-2024-12-17",
-        "o1-preview-2024-09-12", 
+        "o1-preview-2024-09-12",
         "o3-mini-2025-01-31",
         "o1-mini-2024-09-12",
     ]
-    
+
     def __init__(self, model, **kwargs):
         # 将大写的配置键转换为小写并从config中获取实际值
         try:
@@ -48,6 +48,9 @@ class LLM_request:
 
         # 获取数据库实例
         self._init_database()
+
+        # 从 kwargs 中提取 request_type，如果没有提供则默认为 "default"
+        self.request_type = kwargs.pop("request_type", "default")
 
     @staticmethod
     def _init_database():
@@ -67,7 +70,7 @@ class LLM_request:
         completion_tokens: int,
         total_tokens: int,
         user_id: str = "system",
-        request_type: str = "chat",
+        request_type: str = None,
         endpoint: str = "/chat/completions",
     ):
         """记录模型使用情况到数据库
@@ -76,9 +79,13 @@ class LLM_request:
             completion_tokens: 输出token数
             total_tokens: 总token数
             user_id: 用户ID，默认为system
-            request_type: 请求类型(chat/embedding/image等)
+            request_type: 请求类型(chat/embedding/image/topic/schedule)
             endpoint: API端点
         """
+        # 如果 request_type 为 None，则使用实例变量中的值
+        if request_type is None:
+            request_type = self.request_type
+
         try:
             usage_data = {
                 "model_name": self.model_name,
@@ -93,7 +100,7 @@ class LLM_request:
                 "timestamp": datetime.now(),
             }
             db.llm_usage.insert_one(usage_data)
-            logger.info(
+            logger.debug(
                 f"Token使用情况 - 模型: {self.model_name}, "
                 f"用户: {user_id}, 类型: {request_type}, "
                 f"提示词: {prompt_tokens}, 完成: {completion_tokens}, "
@@ -128,7 +135,7 @@ class LLM_request:
         retry_policy: dict = None,
         response_handler: callable = None,
         user_id: str = "system",
-        request_type: str = "chat",
+        request_type: str = None,
     ):
         """统一请求执行入口
         Args:
@@ -142,6 +149,10 @@ class LLM_request:
             user_id: 用户ID
             request_type: 请求类型
         """
+
+        if request_type is None:
+            request_type = self.request_type
+
         # 合并重试策略
         default_retry = {
             "max_retries": 3,
@@ -166,7 +177,7 @@ class LLM_request:
         api_url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         # 判断是否为流式
         stream_mode = self.params.get("stream", False)
-        logger_msg = "进入流式输出模式，" if stream_mode else ""
+        # logger_msg = "进入流式输出模式，" if stream_mode else ""
         # logger.debug(f"{logger_msg}发送请求到URL: {api_url}")
         # logger.info(f"使用模型: {self.model_name}")
 
@@ -215,7 +226,8 @@ class LLM_request:
                                             error_message = error_obj.get("message")
                                             error_status = error_obj.get("status")
                                             logger.error(
-                                                f"服务器错误详情: 代码={error_code}, 状态={error_status}, 消息={error_message}"
+                                                f"服务器错误详情: 代码={error_code}, 状态={error_status}, "
+                                                f"消息={error_message}"
                                             )
                                 elif isinstance(error_json, dict) and "error" in error_json:
                                     # 处理单个错误对象的情况
@@ -262,13 +274,14 @@ class LLM_request:
                             raise RuntimeError(f"请求被拒绝: {error_code_mapping.get(response.status)}")
 
                         response.raise_for_status()
+                        reasoning_content = ""
 
                         # 将流式输出转化为非流式输出
                         if stream_mode:
                             flag_delta_content_finished = False
                             accumulated_content = ""
                             usage = None  # 初始化usage变量，避免未定义错误
-                            
+
                             async for line_bytes in response.content:
                                 line = line_bytes.decode("utf-8").strip()
                                 if not line:
@@ -280,7 +293,7 @@ class LLM_request:
                                     try:
                                         chunk = json.loads(data_str)
                                         if flag_delta_content_finished:
-                                            chunk_usage = chunk.get("usage",None)
+                                            chunk_usage = chunk.get("usage", None)
                                             if chunk_usage:
                                                 usage = chunk_usage  # 获取token用量
                                         else:
@@ -291,8 +304,10 @@ class LLM_request:
                                             accumulated_content += delta_content
                                             # 检测流式输出文本是否结束
                                             finish_reason = chunk["choices"][0].get("finish_reason")
+                                            if delta.get("reasoning_content", None):
+                                                reasoning_content += delta["reasoning_content"]
                                             if finish_reason == "stop":
-                                                chunk_usage = chunk.get("usage",None)
+                                                chunk_usage = chunk.get("usage", None)
                                                 if chunk_usage:
                                                     usage = chunk_usage
                                                     break
@@ -302,7 +317,6 @@ class LLM_request:
                                     except Exception as e:
                                         logger.exception(f"解析流式输出错误: {str(e)}")
                             content = accumulated_content
-                            reasoning_content = ""
                             think_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
                             if think_match:
                                 reasoning_content = think_match.group(1).strip()
@@ -341,12 +355,16 @@ class LLM_request:
                                         if "error" in error_item and isinstance(error_item["error"], dict):
                                             error_obj = error_item["error"]
                                             logger.error(
-                                                f"服务器错误详情: 代码={error_obj.get('code')}, 状态={error_obj.get('status')}, 消息={error_obj.get('message')}"
+                                                f"服务器错误详情: 代码={error_obj.get('code')}, "
+                                                f"状态={error_obj.get('status')}, "
+                                                f"消息={error_obj.get('message')}"
                                             )
                                 elif isinstance(error_json, dict) and "error" in error_json:
                                     error_obj = error_json.get("error", {})
                                     logger.error(
-                                        f"服务器错误详情: 代码={error_obj.get('code')}, 状态={error_obj.get('status')}, 消息={error_obj.get('message')}"
+                                        f"服务器错误详情: 代码={error_obj.get('code')}, "
+                                        f"状态={error_obj.get('status')}, "
+                                        f"消息={error_obj.get('message')}"
                                     )
                                 else:
                                     logger.error(f"服务器错误响应: {error_json}")
@@ -359,15 +377,22 @@ class LLM_request:
                 else:
                     logger.critical(f"HTTP响应错误达到最大重试次数: 状态码: {e.status}, 错误: {e.message}")
                     # 安全地检查和记录请求详情
-                    if image_base64 and payload and isinstance(payload, dict) and "messages" in payload and len(payload["messages"]) > 0:
+                    if (
+                        image_base64
+                        and payload
+                        and isinstance(payload, dict)
+                        and "messages" in payload
+                        and len(payload["messages"]) > 0
+                    ):
                         if isinstance(payload["messages"][0], dict) and "content" in payload["messages"][0]:
                             content = payload["messages"][0]["content"]
                             if isinstance(content, list) and len(content) > 1 and "image_url" in content[1]:
                                 payload["messages"][0]["content"][1]["image_url"]["url"] = (
-                                    f"data:image/{image_format.lower() if image_format else 'jpeg'};base64,{image_base64[:10]}...{image_base64[-10:]}"
+                                    f"data:image/{image_format.lower() if image_format else 'jpeg'};base64,"
+                                    f"{image_base64[:10]}...{image_base64[-10:]}"
                                 )
                     logger.critical(f"请求头: {await self._build_headers(no_key=True)} 请求体: {payload}")
-                    raise RuntimeError(f"API请求失败: 状态码 {e.status}, {e.message}")
+                    raise RuntimeError(f"API请求失败: 状态码 {e.status}, {e.message}") from e
             except Exception as e:
                 if retry < policy["max_retries"] - 1:
                     wait_time = policy["base_wait"] * (2**retry)
@@ -376,15 +401,22 @@ class LLM_request:
                 else:
                     logger.critical(f"请求失败: {str(e)}")
                     # 安全地检查和记录请求详情
-                    if image_base64 and payload and isinstance(payload, dict) and "messages" in payload and len(payload["messages"]) > 0:
+                    if (
+                        image_base64
+                        and payload
+                        and isinstance(payload, dict)
+                        and "messages" in payload
+                        and len(payload["messages"]) > 0
+                    ):
                         if isinstance(payload["messages"][0], dict) and "content" in payload["messages"][0]:
                             content = payload["messages"][0]["content"]
                             if isinstance(content, list) and len(content) > 1 and "image_url" in content[1]:
                                 payload["messages"][0]["content"][1]["image_url"]["url"] = (
-                                    f"data:image/{image_format.lower() if image_format else 'jpeg'};base64,{image_base64[:10]}...{image_base64[-10:]}"
+                                    f"data:image/{image_format.lower() if image_format else 'jpeg'};base64,"
+                                    f"{image_base64[:10]}...{image_base64[-10:]}"
                                 )
                     logger.critical(f"请求头: {await self._build_headers(no_key=True)} 请求体: {payload}")
-                    raise RuntimeError(f"API请求失败: {str(e)}")
+                    raise RuntimeError(f"API请求失败: {str(e)}") from e
 
         logger.error("达到最大重试次数，请求仍然失败")
         raise RuntimeError("达到最大重试次数，API请求仍然失败")
@@ -397,7 +429,7 @@ class LLM_request:
         """
         # 复制一份参数，避免直接修改原始数据
         new_params = dict(params)
-        
+
         if self.model_name.lower() in self.MODELS_NEEDING_TRANSFORMATION:
             # 删除 'temperature' 参数（如果存在）
             new_params.pop("temperature", None)
@@ -441,7 +473,7 @@ class LLM_request:
         return payload
 
     def _default_response_handler(
-        self, result: dict, user_id: str = "system", request_type: str = "chat", endpoint: str = "/chat/completions"
+        self, result: dict, user_id: str = "system", request_type: str = None, endpoint: str = "/chat/completions"
     ) -> Tuple:
         """默认响应解析"""
         if "choices" in result and result["choices"]:
@@ -465,7 +497,7 @@ class LLM_request:
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
                     user_id=user_id,
-                    request_type=request_type,
+                    request_type=request_type if request_type is not None else self.request_type,
                     endpoint=endpoint,
                 )
 
@@ -492,11 +524,11 @@ class LLM_request:
             return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
             # 防止小朋友们截图自己的key
 
-    async def generate_response(self, prompt: str) -> Tuple[str, str]:
+    async def generate_response(self, prompt: str) -> Tuple[str, str, str]:
         """根据输入的提示生成模型的异步响应"""
 
         content, reasoning_content = await self._execute_request(endpoint="/chat/completions", prompt=prompt)
-        return content, reasoning_content
+        return content, reasoning_content, self.model_name
 
     async def generate_response_for_image(self, prompt: str, image_base64: str, image_format: str) -> Tuple[str, str]:
         """根据输入的提示和图片生成模型的异步响应"""
@@ -532,12 +564,30 @@ class LLM_request:
             list: embedding向量，如果失败则返回None
         """
 
-        if(len(text) < 1):
+        if len(text) < 1:
             logger.debug("该消息没有长度，不再发送获取embedding向量的请求")
             return None
+
         def embedding_handler(result):
             """处理响应"""
             if "data" in result and len(result["data"]) > 0:
+                # 提取 token 使用信息
+                usage = result.get("usage", {})
+                if usage:
+                    prompt_tokens = usage.get("prompt_tokens", 0)
+                    completion_tokens = usage.get("completion_tokens", 0)
+                    total_tokens = usage.get("total_tokens", 0)
+                    # 记录 token 使用情况
+                    self._record_usage(
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        user_id="system",  # 可以根据需要修改 user_id
+                        # request_type="embedding",  # 请求类型为 embedding
+                        request_type=self.request_type,  # 请求类型为 text
+                        endpoint="/embeddings",  # API 端点
+                    )
+                    return result["data"][0].get("embedding", None)
                 return result["data"][0].get("embedding", None)
             return None
 

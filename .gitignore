@@ -29,6 +29,7 @@ run_dev.bat
 elua.confirmed
 # C extensions
 *.so
+/results
 
 # Distribution / packaging
 .Python
@@ -213,3 +214,6 @@ jieba.cache
 .python-version
 
 OtherRes.txt
+
+/eula.confirmed
+/privacy.confirmed
