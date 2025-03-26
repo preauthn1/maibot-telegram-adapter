@@ -30,7 +30,7 @@ class Heartflow:
 
     async def heartflow_start_working(self):
         while True:
-            await self.do_a_thinking()
+            # await self.do_a_thinking()
             await asyncio.sleep(60)
     
     async def do_a_thinking(self):
@@ -82,7 +82,7 @@ class Heartflow:
         
         prompt = ""
         prompt += f"{personality_info}\n"
-        prompt += f"现在麦麦的想法是：{self.current_mind}\n"
+        prompt += f"现在{global_config.BOT_NICKNAME}的想法是：{self.current_mind}\n"
         prompt += f"现在麦麦在qq群里进行聊天，聊天的话题如下：{minds_str}\n"
         prompt += f"你现在{mood_info}\n"
         prompt += '''现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白
