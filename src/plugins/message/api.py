@@ -49,8 +49,11 @@ class BaseMessageAPI:
         """异步方式运行服务器"""
         config = uvicorn.Config(self.app, host=self.host, port=self.port, loop="asyncio")
         self.server = uvicorn.Server(config)
-
-        await self.server.serve()
+        try:
+            await self.server.serve()
+        except KeyboardInterrupt as e:
+            await self.stop()
+            raise KeyboardInterrupt from e
 
     async def start_server(self):
         """启动服务器的异步方法"""
@@ -83,4 +86,4 @@ class BaseMessageAPI:
             loop.close()
 
 
-global_api = BaseMessageAPI(host=os.environ["HOST"], port=os.environ["PORT"])
+global_api = BaseMessageAPI(host=os.environ["HOST"], port=int(os.environ["PORT"]))

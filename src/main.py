@@ -33,9 +33,6 @@ class MainSystem:
         """初始化系统组件"""
         logger.debug(f"正在唤醒{global_config.BOT_NICKNAME}......")
 
-        # 启动API服务器（改为异步启动）
-        self.api_task = asyncio.create_task(self.app.run())
-
         # 其他初始化任务
         await asyncio.gather(
             self._init_components(),  # 将原有的初始化代码移到这个新方法中
@@ -91,6 +88,7 @@ class MainSystem:
                 self.generate_schedule_task(),
                 self.remove_recalled_message_task(),
                 emoji_manager.start_periodic_check(interval_MINS=global_config.EMOJI_CHECK_INTERVAL),
+                self.app.run(),
             ]
             await asyncio.gather(*tasks)
 
@@ -143,7 +141,10 @@ class MainSystem:
 async def main():
     """主函数"""
     system = MainSystem()
-    await asyncio.gather(system.initialize(), system.schedule_tasks(), system.api_task)
+    await asyncio.gather(
+        system.initialize(),
+        system.schedule_tasks(),
+    )
     # await system.initialize()
     # await system.schedule_tasks()
 
