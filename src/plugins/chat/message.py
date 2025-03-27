@@ -9,7 +9,7 @@ import urllib3
 
 from .utils_image import image_manager
 
-from .message_base import Seg, UserInfo, BaseMessageInfo, MessageBase
+from ..message.message_base import Seg, UserInfo, BaseMessageInfo, MessageBase
 from .chat_stream import ChatStream
 from src.common.logger import get_module_logger
 
@@ -74,19 +74,6 @@ class MessageRecv(Message):
             message_dict: MessageCQ序列化后的字典
         """
         self.message_info = BaseMessageInfo.from_dict(message_dict.get("message_info", {}))
-
-        message_segment = message_dict.get("message_segment", {})
-
-        if message_segment.get("data", "") == "[json]":
-            # 提取json消息中的展示信息
-            pattern = r"\[CQ:json,data=(?P<json_data>.+?)\]"
-            match = re.search(pattern, message_dict.get("raw_message", ""))
-            raw_json = html.unescape(match.group("json_data"))
-            try:
-                json_message = json.loads(raw_json)
-            except json.JSONDecodeError:
-                json_message = {}
-            message_segment["data"] = json_message.get("prompt", "")
 
         self.message_segment = Seg.from_dict(message_dict.get("message_segment", {}))
         self.raw_message = message_dict.get("raw_message")

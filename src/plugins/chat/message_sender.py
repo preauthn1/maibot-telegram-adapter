@@ -3,9 +3,8 @@ import time
 from typing import Dict, List, Optional, Union
 
 from src.common.logger import get_module_logger
-from nonebot.adapters.onebot.v11 import Bot
 from ...common.database import db
-from .message_cq import MessageSendCQ
+from ..message.api import global_api
 from .message import MessageSending, MessageThinking, MessageSet
 
 from .storage import MessageStorage
@@ -32,9 +31,9 @@ class Message_Sender:
         self.last_send_time = 0
         self._current_bot = None
 
-    def set_bot(self, bot: Bot):
+    def set_bot(self, bot):
         """设置当前bot实例"""
-        self._current_bot = bot
+        pass
 
     def get_recalled_messages(self, stream_id: str) -> list:
         """获取所有撤回的消息"""
@@ -60,31 +59,14 @@ class Message_Sender:
                     break
             if not is_recalled:
                 message_json = message.to_dict()
-                message_send = MessageSendCQ(data=message_json)
+
                 message_preview = truncate_message(message.processed_plain_text)
-                if message_send.message_info.group_info and message_send.message_info.group_info.group_id:
-                    try:
-                        await self._current_bot.send_group_msg(
-                            group_id=message.message_info.group_info.group_id,
-                            message=message_send.raw_message,
-                            auto_escape=False,
-                        )
+                try:
+                    result = await global_api.send_message("http://127.0.0.1:18002/api/message", message_json)
+                    if result["status"] == "success":
                         logger.success(f"发送消息“{message_preview}”成功")
-                    except Exception as e:
-                        logger.error(f"[调试] 发生错误 {e}")
-                        logger.error(f"[调试] 发送消息“{message_preview}”失败")
-                else:
-                    try:
-                        logger.debug(message.message_info.user_info)
-                        await self._current_bot.send_private_msg(
-                            user_id=message.sender_info.user_id,
-                            message=message_send.raw_message,
-                            auto_escape=False,
-                        )
-                        logger.success(f"发送消息“{message_preview}”成功")
-                    except Exception as e:
-                        logger.error(f"[调试] 发生错误 {e}")
-                        logger.error(f"[调试] 发送消息“{message_preview}”失败")
+                except Exception as e:
+                    logger.error(f"发送消息“{message_preview}”失败: {str(e)}")
 
 
 class MessageContainer:

@@ -8,7 +8,6 @@ import re
 import jieba
 import networkx as nx
 
-from nonebot import get_driver
 from ...common.database import db
 from ..chat.config import global_config
 from ..chat.utils import (
@@ -232,13 +231,13 @@ class Hippocampus:
 
         # 创建双峰分布的记忆调度器
         scheduler = MemoryBuildScheduler(
-            n_hours1=global_config.memory_build_distribution[0],           # 第一个分布均值（4小时前）
-            std_hours1=global_config.memory_build_distribution[1],         # 第一个分布标准差
-            weight1=global_config.memory_build_distribution[2],          # 第一个分布权重 60%
-            n_hours2=global_config.memory_build_distribution[3],          # 第二个分布均值（24小时前）
-            std_hours2=global_config.memory_build_distribution[4],         # 第二个分布标准差
-            weight2=global_config.memory_build_distribution[5],          # 第二个分布权重 40%
-            total_samples=global_config.build_memory_sample_num      # 总共生成10个时间点
+            n_hours1=global_config.memory_build_distribution[0],  # 第一个分布均值（4小时前）
+            std_hours1=global_config.memory_build_distribution[1],  # 第一个分布标准差
+            weight1=global_config.memory_build_distribution[2],  # 第一个分布权重 60%
+            n_hours2=global_config.memory_build_distribution[3],  # 第二个分布均值（24小时前）
+            std_hours2=global_config.memory_build_distribution[4],  # 第二个分布标准差
+            weight2=global_config.memory_build_distribution[5],  # 第二个分布权重 40%
+            total_samples=global_config.build_memory_sample_num,  # 总共生成10个时间点
         )
 
         # 生成时间戳数组
@@ -250,9 +249,7 @@ class Hippocampus:
         chat_samples = []
         for timestamp in timestamps:
             messages = self.random_get_msg_snippet(
-                timestamp, 
-                global_config.build_memory_sample_length, 
-                max_memorized_time_per_msg
+                timestamp, global_config.build_memory_sample_length, max_memorized_time_per_msg
             )
             if messages:
                 time_diff = (datetime.datetime.now().timestamp() - timestamp) / 3600
@@ -297,16 +294,16 @@ class Hippocampus:
         topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(input_text, topic_num))
 
         # 使用正则表达式提取<>中的内容
-        topics = re.findall(r'<([^>]+)>', topics_response[0])
-        
+        topics = re.findall(r"<([^>]+)>", topics_response[0])
+
         # 如果没有找到<>包裹的内容，返回['none']
         if not topics:
-            topics = ['none']
+            topics = ["none"]
         else:
             # 处理提取出的话题
             topics = [
                 topic.strip()
-                for topic in ','.join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                for topic in ",".join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
                 if topic.strip()
             ]
 
@@ -314,8 +311,7 @@ class Hippocampus:
         # any()检查topic中是否包含任何一个filter_keywords中的关键词
         # 只保留不包含禁用关键词的topic
         filtered_topics = [
-            topic for topic in topics 
-            if not any(keyword in topic for keyword in global_config.memory_ban_words)
+            topic for topic in topics if not any(keyword in topic for keyword in global_config.memory_ban_words)
         ]
 
         logger.debug(f"过滤后话题: {filtered_topics}")
@@ -331,14 +327,14 @@ class Hippocampus:
         # 初始化压缩后的记忆集合和相似主题字典
         compressed_memory = set()  # 存储压缩后的(主题,内容)元组
         similar_topics_dict = {}  # 存储每个话题的相似主题列表
-        
+
         # 遍历每个主题及其对应的LLM任务
         for topic, task in tasks:
             response = await task
             if response:
                 # 将主题和LLM生成的内容添加到压缩记忆中
                 compressed_memory.add((topic, response[0]))
-                
+
                 # 为当前主题寻找相似的已存在主题
                 existing_topics = list(self.memory_graph.G.nodes())
                 similar_topics = []
@@ -404,7 +400,7 @@ class Hippocampus:
             logger.debug(f"添加节点: {', '.join(topic for topic, _ in compressed_memory)}")
             all_added_nodes.extend(topic for topic, _ in compressed_memory)
             # all_connected_nodes.extend(topic for topic, _ in similar_topics_dict)
-            
+
             for topic, memory in compressed_memory:
                 self.memory_graph.add_dot(topic, memory)
                 all_topics.append(topic)
@@ -415,13 +411,13 @@ class Hippocampus:
                     for similar_topic, similarity in similar_topics:
                         if topic != similar_topic:
                             strength = int(similarity * 10)
-                            
+
                             logger.debug(f"连接相似节点: {topic} 和 {similar_topic} (强度: {strength})")
                             all_added_edges.append(f"{topic}-{similar_topic}")
-                            
+
                             all_connected_nodes.append(topic)
                             all_connected_nodes.append(similar_topic)
-                            
+
                             self.memory_graph.G.add_edge(
                                 topic,
                                 similar_topic,
@@ -442,11 +438,10 @@ class Hippocampus:
         logger.info(f"强化连接节点: {', '.join(all_connected_nodes)}")
         # logger.success(f"强化连接: {', '.join(all_added_edges)}")
         self.sync_memory_to_db()
-        
+
         end_time = time.time()
         logger.success(
-            f"--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} "
-            "秒--------------------------"
+            f"--------------------------记忆构建完成：耗时: {end_time - start_time:.2f} 秒--------------------------"
         )
 
     def sync_memory_to_db(self):
@@ -800,16 +795,16 @@ class Hippocampus:
         topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, 4))
         # 使用正则表达式提取<>中的内容
         print(f"话题: {topics_response[0]}")
-        topics = re.findall(r'<([^>]+)>', topics_response[0])
-        
+        topics = re.findall(r"<([^>]+)>", topics_response[0])
+
         # 如果没有找到<>包裹的内容，返回['none']
         if not topics:
-            topics = ['none']
+            topics = ["none"]
         else:
             # 处理提取出的话题
             topics = [
                 topic.strip()
-                for topic in ','.join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                for topic in ",".join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
                 if topic.strip()
             ]
 
@@ -885,7 +880,7 @@ class Hippocampus:
         # 识别主题
         identified_topics = await self._identify_topics(text)
         print(f"识别主题: {identified_topics}")
-        
+
         if identified_topics[0] == "none":
             return 0
 
@@ -946,7 +941,7 @@ class Hippocampus:
 
         # 计算最终激活值
         activation = int((topic_match + average_similarities) / 2 * 100)
-        
+
         logger.info(f"识别<{text[:15]}...>主题: {identified_topics}, 匹配率: {topic_match:.3f}, 激活值: {activation}")
 
         return activation
@@ -993,9 +988,6 @@ def segment_text(text):
     seg_text = list(jieba.cut(text))
     return seg_text
 
-
-driver = get_driver()
-config = driver.config
 
 start_time = time.time()
 

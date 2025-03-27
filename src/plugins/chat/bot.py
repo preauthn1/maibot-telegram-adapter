@@ -1,16 +1,7 @@
 import re
 import time
 from random import random
-from nonebot.adapters.onebot.v11 import (
-    Bot,
-    MessageEvent,
-    PrivateMessageEvent,
-    GroupMessageEvent,
-    NoticeEvent,
-    PokeNotifyEvent,
-    GroupRecallNoticeEvent,
-    FriendRecallNoticeEvent,
-)
+import json
 
 from ..memory_system.memory import hippocampus
 from ..moods.moods import MoodManager  # 导入情绪管理器
@@ -18,9 +9,7 @@ from .config import global_config
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
-from .message_cq import (
-    MessageRecvCQ,
-)
+
 from .chat_stream import chat_manager
 
 from .message_sender import message_manager  # 导入新的消息管理器
@@ -30,7 +19,7 @@ from .utils import is_mentioned_bot_in_message
 from .utils_image import image_path_to_base64
 from .utils_user import get_user_nickname, get_user_cardname
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
-from .message_base import UserInfo, GroupInfo, Seg
+from ..message import UserInfo, GroupInfo, Seg
 
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 
@@ -62,7 +51,7 @@ class ChatBot:
         if not self._started:
             self._started = True
 
-    async def message_process(self, message_cq: MessageRecvCQ) -> None:
+    async def message_process(self, message_data: str) -> None:
         """处理转化后的统一格式消息
         1. 过滤消息
         2. 记忆激活
@@ -71,12 +60,11 @@ class ChatBot:
         5. 更新关系
         6. 更新情绪
         """
-        await message_cq.initialize()
-        message_json = message_cq.to_dict()
+        # message_json = json.loads(message_data)
         # 哦我嘞个json
 
         # 进入maimbot
-        message = MessageRecv(message_json)
+        message = MessageRecv(message_data)
         groupinfo = message.message_info.group_info
         userinfo = message.message_info.user_info
         messageinfo = message.message_info
@@ -146,7 +134,7 @@ class ChatBot:
 
         response = None
         # 开始组织语言
-        if random() < reply_probability:
+        if random() < reply_probability + 100:
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ,
                 user_nickname=global_config.BOT_NICKNAME,
@@ -277,235 +265,6 @@ class ChatBot:
             # willing_manager.change_reply_willing_after_sent(
             #     chat_stream=chat
             # )
-
-    async def handle_notice(self, event: NoticeEvent, bot: Bot) -> None:
-        """处理收到的通知"""
-        if isinstance(event, PokeNotifyEvent):
-            # 戳一戳 通知
-            # 不处理其他人的戳戳
-            if not event.is_tome():
-                return
-
-            # 用户屏蔽,不区分私聊/群聊
-            if event.user_id in global_config.ban_user_id:
-                return
-
-            # 白名单模式
-            if event.group_id:
-                if event.group_id not in global_config.talk_allowed_groups:
-                    return
-
-            raw_message = f"[戳了戳]{global_config.BOT_NICKNAME}"  # 默认类型
-            if info := event.model_extra["raw_info"]:
-                poke_type = info[2].get("txt", "戳了戳")  # 戳戳类型，例如“拍一拍”、“揉一揉”、“捏一捏”
-                custom_poke_message = info[4].get("txt", "")  # 自定义戳戳消息，若不存在会为空字符串
-                raw_message = f"[{poke_type}]{global_config.BOT_NICKNAME}{custom_poke_message}"
-
-                raw_message += "（这是一个类似摸摸头的友善行为，而不是恶意行为，请不要作出攻击发言）"
-
-            user_info = UserInfo(
-                user_id=event.user_id,
-                user_nickname=(await bot.get_stranger_info(user_id=event.user_id, no_cache=True))["nickname"],
-                user_cardname=None,
-                platform="qq",
-            )
-
-            if event.group_id:
-                group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
-            else:
-                group_info = None
-
-            message_cq = MessageRecvCQ(
-                message_id=0,
-                user_info=user_info,
-                raw_message=str(raw_message),
-                group_info=group_info,
-                reply_message=None,
-                platform="qq",
-            )
-
-            await self.message_process(message_cq)
-
-        elif isinstance(event, GroupRecallNoticeEvent) or isinstance(event, FriendRecallNoticeEvent):
-            user_info = UserInfo(
-                user_id=event.user_id,
-                user_nickname=get_user_nickname(event.user_id) or None,
-                user_cardname=get_user_cardname(event.user_id) or None,
-                platform="qq",
-            )
-
-            if isinstance(event, GroupRecallNoticeEvent):
-                group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
-            else:
-                group_info = None
-
-            chat = await chat_manager.get_or_create_stream(
-                platform=user_info.platform, user_info=user_info, group_info=group_info
-            )
-
-            await self.storage.store_recalled_message(event.message_id, time.time(), chat)
-
-    async def handle_message(self, event: MessageEvent, bot: Bot) -> None:
-        """处理收到的消息"""
-
-        self.bot = bot  # 更新 bot 实例
-
-        # 用户屏蔽,不区分私聊/群聊
-        if event.user_id in global_config.ban_user_id:
-            return
-
-        if (
-            event.reply
-            and hasattr(event.reply, "sender")
-            and hasattr(event.reply.sender, "user_id")
-            and event.reply.sender.user_id in global_config.ban_user_id
-        ):
-            logger.debug(f"跳过处理回复来自被ban用户 {event.reply.sender.user_id} 的消息")
-            return
-        # 处理私聊消息
-        if isinstance(event, PrivateMessageEvent):
-            if not global_config.enable_friend_chat:  # 私聊过滤
-                return
-            else:
-                try:
-                    user_info = UserInfo(
-                        user_id=event.user_id,
-                        user_nickname=(await bot.get_stranger_info(user_id=event.user_id, no_cache=True))["nickname"],
-                        user_cardname=None,
-                        platform="qq",
-                    )
-                except Exception as e:
-                    logger.error(f"获取陌生人信息失败: {e}")
-                    return
-                logger.debug(user_info)
-
-                # group_info = GroupInfo(group_id=0, group_name="私聊", platform="qq")
-                group_info = None
-
-        # 处理群聊消息
-        else:
-            # 白名单设定由nontbot侧完成
-            if event.group_id:
-                if event.group_id not in global_config.talk_allowed_groups:
-                    return
-
-            user_info = UserInfo(
-                user_id=event.user_id,
-                user_nickname=event.sender.nickname,
-                user_cardname=event.sender.card or None,
-                platform="qq",
-            )
-
-            group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
-
-        # group_info = await bot.get_group_info(group_id=event.group_id)
-        # sender_info = await bot.get_group_member_info(group_id=event.group_id, user_id=event.user_id, no_cache=True)
-
-        message_cq = MessageRecvCQ(
-            message_id=event.message_id,
-            user_info=user_info,
-            raw_message=str(event.original_message),
-            group_info=group_info,
-            reply_message=event.reply,
-            platform="qq",
-        )
-
-        await self.message_process(message_cq)
-
-    async def handle_forward_message(self, event: MessageEvent, bot: Bot) -> None:
-        """专用于处理合并转发的消息处理器"""
-
-        # 用户屏蔽,不区分私聊/群聊
-        if event.user_id in global_config.ban_user_id:
-            return
-
-        if isinstance(event, GroupMessageEvent):
-            if event.group_id:
-                if event.group_id not in global_config.talk_allowed_groups:
-                    return
-
-        # 获取合并转发消息的详细信息
-        forward_info = await bot.get_forward_msg(message_id=event.message_id)
-        messages = forward_info["messages"]
-
-        # 构建合并转发消息的文本表示
-        processed_messages = []
-        for node in messages:
-            # 提取发送者昵称
-            nickname = node["sender"].get("nickname", "未知用户")
-
-            # 递归处理消息内容
-            message_content = await self.process_message_segments(node["message"], layer=0)
-
-            # 拼接为【昵称】+ 内容
-            processed_messages.append(f"【{nickname}】{message_content}")
-
-        # 组合所有消息
-        combined_message = "\n".join(processed_messages)
-        combined_message = f"合并转发消息内容：\n{combined_message}"
-
-        # 构建用户信息（使用转发消息的发送者）
-        user_info = UserInfo(
-            user_id=event.user_id,
-            user_nickname=event.sender.nickname,
-            user_cardname=event.sender.card if hasattr(event.sender, "card") else None,
-            platform="qq",
-        )
-
-        # 构建群聊信息（如果是群聊）
-        group_info = None
-        if isinstance(event, GroupMessageEvent):
-            group_info = GroupInfo(group_id=event.group_id, group_name=None, platform="qq")
-
-        # 创建消息对象
-        message_cq = MessageRecvCQ(
-            message_id=event.message_id,
-            user_info=user_info,
-            raw_message=combined_message,
-            group_info=group_info,
-            reply_message=event.reply,
-            platform="qq",
-        )
-
-        # 进入标准消息处理流程
-        await self.message_process(message_cq)
-
-    async def process_message_segments(self, segments: list, layer: int) -> str:
-        """递归处理消息段"""
-        parts = []
-        for seg in segments:
-            part = await self.process_segment(seg, layer + 1)
-            parts.append(part)
-        return "".join(parts)
-
-    async def process_segment(self, seg: dict, layer: int) -> str:
-        """处理单个消息段"""
-        seg_type = seg["type"]
-        if layer > 3:
-            # 防止有那种100层转发消息炸飞麦麦
-            return "【转发消息】"
-        if seg_type == "text":
-            return seg["data"]["text"]
-        elif seg_type == "image":
-            return "[图片]"
-        elif seg_type == "face":
-            return "[表情]"
-        elif seg_type == "at":
-            return f"@{seg['data'].get('qq', '未知用户')}"
-        elif seg_type == "forward":
-            # 递归处理嵌套的合并转发消息
-            nested_nodes = seg["data"].get("content", [])
-            nested_messages = []
-            nested_messages.append("合并转发消息内容：")
-            for node in nested_nodes:
-                nickname = node["sender"].get("nickname", "未知用户")
-                content = await self.process_message_segments(node["message"], layer=layer)
-                # nested_messages.append('-' * layer)
-                nested_messages.append(f"{'--' * layer}【{nickname}】{content}")
-            # nested_messages.append(f"{'--' * layer}合并转发第【{layer}】层结束")
-            return "\n".join(nested_messages)
-        else:
-            return f"[{seg_type}]"
 
 
 # 创建全局ChatBot实例

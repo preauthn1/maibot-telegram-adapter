@@ -9,8 +9,6 @@ from typing import Optional, Tuple
 from PIL import Image
 import io
 
-from nonebot import get_driver
-
 from ...common.database import db
 from ..chat.config import global_config
 from ..chat.utils import get_embedding
@@ -21,8 +19,6 @@ from src.common.logger import get_module_logger
 logger = get_module_logger("emoji")
 
 
-driver = get_driver()
-config = driver.config
 image_manager = ImageManager()
 
 
@@ -118,9 +114,11 @@ class EmojiManager:
 
             try:
                 # 获取所有表情包
-                all_emojis = [e for e in
-                              db.emoji.find({}, {"_id": 1, "path": 1, "embedding": 1, "description": 1, "blacklist": 1})
-                              if 'blacklist' not in e]
+                all_emojis = [
+                    e
+                    for e in db.emoji.find({}, {"_id": 1, "path": 1, "embedding": 1, "description": 1, "blacklist": 1})
+                    if "blacklist" not in e
+                ]
 
                 if not all_emojis:
                     logger.warning("数据库中没有任何表情包")

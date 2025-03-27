@@ -4,15 +4,11 @@ import os
 import shutil
 import sys
 from pathlib import Path
-
-import nonebot
 import time
-
-import uvicorn
-from dotenv import load_dotenv
-from nonebot.adapters.onebot.v11 import Adapter
 import platform
+from dotenv import load_dotenv
 from src.common.logger import get_module_logger
+from src.main import MainSystem
 
 logger = get_module_logger("main_bot")
 
@@ -134,11 +130,7 @@ def scan_provider(env_config: dict):
 
 async def graceful_shutdown():
     try:
-        global uvicorn_server
-        if uvicorn_server:
-            uvicorn_server.force_exit = True  # 强制退出
-            await uvicorn_server.shutdown()
-
+        logger.info("正在优雅关闭麦麦...")
         tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
         for task in tasks:
             task.cancel()
@@ -146,22 +138,6 @@ async def graceful_shutdown():
 
     except Exception as e:
         logger.error(f"麦麦关闭失败: {e}")
-
-
-async def uvicorn_main():
-    global uvicorn_server
-    config = uvicorn.Config(
-        app="__main__:app",
-        host=os.getenv("HOST", "127.0.0.1"),
-        port=int(os.getenv("PORT", 8080)),
-        reload=os.getenv("ENVIRONMENT") == "dev",
-        timeout_graceful_shutdown=5,
-        log_config=None,
-        access_log=False,
-    )
-    server = uvicorn.Server(config)
-    uvicorn_server = server
-    await server.serve()
 
 
 def check_eula():
@@ -245,7 +221,6 @@ def check_eula():
 
 def raw_main():
     # 利用 TZ 环境变量设定程序工作的时区
-    # 仅保证行为一致，不依赖 localtime()，实际对生产环境几乎没有作用
     if platform.system().lower() != "windows":
         time.tzset()
 
@@ -256,40 +231,26 @@ def raw_main():
     init_env()
     load_env()
 
-    # load_logger()
-
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
 
-    # 设置基础配置
-    base_config = {
-        "websocket_port": int(env_config.get("PORT", 8080)),
-        "host": env_config.get("HOST", "127.0.0.1"),
-        "log_level": "INFO",
-    }
-
-    # 合并配置
-    nonebot.init(**base_config, **env_config)
-
-    # 注册适配器
-    global driver
-    driver = nonebot.get_driver()
-    driver.register_adapter(Adapter)
-
-    # 加载插件
-    nonebot.load_plugins("src/plugins")
+    # 返回MainSystem实例
+    return MainSystem()
 
 
 if __name__ == "__main__":
     try:
-        raw_main()
+        # 获取MainSystem实例
+        main_system = raw_main()
 
-        app = nonebot.get_asgi()
+        # 创建事件循环
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
-            loop.run_until_complete(uvicorn_main())
+            # 执行初始化和任务调度
+            loop.run_until_complete(main_system.initialize())
+            loop.run_until_complete(main_system.schedule_tasks())
         except KeyboardInterrupt:
             logger.warning("收到中断信号，正在优雅关闭...")
             loop.run_until_complete(graceful_shutdown())

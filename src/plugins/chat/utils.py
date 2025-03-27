@@ -7,20 +7,17 @@ from typing import Dict, List
 
 import jieba
 import numpy as np
-from nonebot import get_driver
 from src.common.logger import get_module_logger
 
 from ..models.utils_model import LLM_request
 from ..utils.typo_generator import ChineseTypoGenerator
 from .config import global_config
 from .message import MessageRecv, Message
-from .message_base import UserInfo
+from ..message.message_base import UserInfo
 from .chat_stream import ChatStream
 from ..moods.moods import MoodManager
 from ...common.database import db
 
-driver = get_driver()
-config = driver.config
 
 logger = get_module_logger("chat_utils")
 
@@ -291,7 +288,7 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     for sentence in sentences:
         parts = sentence.split("，")
         current_sentence = parts[0]
-        if  not is_western_paragraph(current_sentence):
+        if not is_western_paragraph(current_sentence):
             for part in parts[1:]:
                 if random.random() < split_strength:
                     new_sentences.append(current_sentence.strip())
@@ -323,7 +320,7 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     for sentence in sentences:
         sentence = sentence.rstrip("，,")
         # 西文字符句子不进行随机合并
-        if  not is_western_paragraph(current_sentence):
+        if not is_western_paragraph(current_sentence):
             if random.random() < split_strength * 0.5:
                 sentence = sentence.replace("，", "").replace(",", "")
             elif random.random() < split_strength:
@@ -364,10 +361,10 @@ def random_remove_punctuation(text: str) -> str:
 def process_llm_response(text: str) -> List[str]:
     # processed_response = process_text_with_typos(content)
     # 对西文字符段落的回复长度设置为汉字字符的两倍
-    if len(text) > 100 and not is_western_paragraph(text) :
+    if len(text) > 100 and not is_western_paragraph(text):
         logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
         return ["懒得说"]
-    elif len(text) > 200 :
+    elif len(text) > 200:
         logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
         return ["懒得说"]
     # 处理长消息
@@ -530,12 +527,12 @@ def recover_kaomoji(sentences, placeholder_to_kaomoji):
         recovered_sentences.append(sentence)
     return recovered_sentences
 
-  
+
 def is_western_char(char):
     """检测是否为西文字符"""
-    return len(char.encode('utf-8')) <= 2
+    return len(char.encode("utf-8")) <= 2
+
 
 def is_western_paragraph(paragraph):
     """检测是否为西文字符段落"""
     return all(is_western_char(char) for char in paragraph if char.isalnum())
-  

@@ -1,21 +1,19 @@
 import asyncio
 import time
 from datetime import datetime
-
-from plugins.utils.statistic import LLMStatistics
-from plugins.moods.moods import MoodManager
-from plugins.schedule.schedule_generator import bot_schedule
-from plugins.chat.emoji_manager import emoji_manager
-from plugins.chat.relationship_manager import relationship_manager
-from plugins.willing.willing_manager import willing_manager
-from plugins.chat.chat_stream import chat_manager
-from plugins.memory_system.memory import hippocampus
-from plugins.chat.message_sender import message_manager
-from plugins.chat.storage import MessageStorage
-from plugins.chat.config import global_config
-from common.logger import get_module_logger
-from fastapi import FastAPI
-from plugins.chat.api import app as api_app
+from .plugins.utils.statistic import LLMStatistics
+from .plugins.moods.moods import MoodManager
+from .plugins.schedule.schedule_generator import bot_schedule
+from .plugins.chat.emoji_manager import emoji_manager
+from .plugins.chat.relationship_manager import relationship_manager
+from .plugins.willing.willing_manager import willing_manager
+from .plugins.chat.chat_stream import chat_manager
+from .plugins.memory_system.memory import hippocampus
+from .plugins.chat.message_sender import message_manager
+from .plugins.chat.storage import MessageStorage
+from .plugins.chat.config import global_config
+from .plugins.chat.bot import chat_bot
+from .common.logger import get_module_logger
 
 logger = get_module_logger("main")
 
@@ -25,13 +23,29 @@ class MainSystem:
         self.llm_stats = LLMStatistics("llm_statistics.txt")
         self.mood_manager = MoodManager.get_instance()
         self._message_manager_started = False
-        self.app = FastAPI()
-        self.app.mount("/chat", api_app)
+
+        # 使用消息API替代直接的FastAPI实例
+        from .plugins.message import global_api
+
+        self.app = global_api
 
     async def initialize(self):
         """初始化系统组件"""
         logger.debug(f"正在唤醒{global_config.BOT_NICKNAME}......")
 
+        # 启动API服务器（改为异步启动）
+        self.api_task = asyncio.create_task(self.app.run())
+
+        # 其他初始化任务
+        await asyncio.gather(
+            self._init_components(),  # 将原有的初始化代码移到这个新方法中
+            # api_task,
+        )
+
+        logger.success("系统初始化完成")
+
+    async def _init_components(self):
+        """初始化其他组件"""
         # 启动LLM统计
         self.llm_stats.start()
         logger.success("LLM统计功能启动成功")
@@ -64,10 +78,7 @@ class MainSystem:
         bot_schedule.print_schedule()
 
         # 启动FastAPI服务器
-        import uvicorn
-
-        uvicorn.run(self.app, host="0.0.0.0", port=18000)
-        logger.success("API服务器启动成功")
+        self.app.register_message_handler(chat_bot.message_process)
 
     async def schedule_tasks(self):
         """调度定时任务"""
@@ -86,6 +97,7 @@ class MainSystem:
     async def build_memory_task(self):
         """记忆构建任务"""
         while True:
+            logger.info("正在进行记忆构建")
             await hippocampus.operation_build_memory()
             await asyncio.sleep(global_config.build_memory_interval)
 
@@ -100,6 +112,7 @@ class MainSystem:
     async def merge_memory_task(self):
         """记忆整合任务"""
         while True:
+            logger.info("正在进行记忆整合")
             await asyncio.sleep(global_config.build_memory_interval + 10)
 
     async def print_mood_task(self):
@@ -130,8 +143,9 @@ class MainSystem:
 async def main():
     """主函数"""
     system = MainSystem()
-    await system.initialize()
-    await system.schedule_tasks()
+    await asyncio.gather(system.initialize(), system.schedule_tasks(), system.api_task)
+    # await system.initialize()
+    # await system.schedule_tasks()
 
 
 if __name__ == "__main__":

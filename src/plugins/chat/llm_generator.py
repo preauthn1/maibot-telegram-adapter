@@ -2,7 +2,6 @@ import random
 import time
 from typing import List, Optional, Tuple, Union
 
-from nonebot import get_driver
 
 from ...common.database import db
 from ..models.utils_model import LLM_request
@@ -20,9 +19,6 @@ llm_config = LogConfig(
 )
 
 logger = get_module_logger("llm_generator", config=llm_config)
-
-driver = get_driver()
-config = driver.config
 
 
 class ResponseGenerator:

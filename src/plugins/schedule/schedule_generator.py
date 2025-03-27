@@ -3,7 +3,6 @@ import json
 import re
 from typing import Dict, Union
 
-from nonebot import get_driver
 
 # 添加项目根目录到 Python 路径
 
@@ -13,9 +12,6 @@ from ..models.utils_model import LLM_request
 from src.common.logger import get_module_logger
 
 logger = get_module_logger("scheduler")
-
-driver = get_driver()
-config = driver.config
 
 
 class ScheduleGenerator:
@@ -183,5 +179,7 @@ class ScheduleGenerator:
                 logger.info(f"时间[{time_str}]: 活动[{activity}]")
             logger.info("==================")
             self.enable_output = False
+
+
 # 当作为组件导入时使用的实例
 bot_schedule = ScheduleGenerator()

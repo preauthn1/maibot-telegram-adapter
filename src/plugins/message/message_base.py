@@ -104,6 +104,63 @@ class UserInfo:
 
 
 @dataclass
+class FormatInfo:
+    """格式信息类"""
+
+    """
+    目前maimcore可接受的格式为text,image,emoji
+    可发送的格式为text,emoji,reply
+    """
+
+    content_format: Optional[str] = None
+    accept_format: Optional[str] = None
+
+    def to_dict(self) -> Dict:
+        """转换为字典格式"""
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "FormatInfo":
+        """从字典创建FormatInfo实例
+        Args:
+            data: 包含必要字段的字典
+        Returns:
+            FormatInfo: 新的实例
+        """
+        return cls(
+            content_format=data.get("content_format"),
+            accept_format=data.get("accept_format"),
+        )
+
+
+@dataclass
+class TemplateInfo:
+    """模板信息类"""
+
+    template_items: Optional[List[Dict]] = None
+    template_name: Optional[str] = None
+    template_default: bool = True
+
+    def to_dict(self) -> Dict:
+        """转换为字典格式"""
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> "TemplateInfo":
+        """从字典创建TemplateInfo实例
+        Args:
+            data: 包含必要字段的字典
+        Returns:
+            TemplateInfo: 新的实例
+        """
+        return cls(
+            template_items=data.get("template_items"),
+            template_name=data.get("template_name"),
+            template_default=data.get("template_default", True),
+        )
+
+
+@dataclass
 class BaseMessageInfo:
     """消息信息类"""
 
@@ -112,13 +169,15 @@ class BaseMessageInfo:
     time: Optional[int] = None
     group_info: Optional[GroupInfo] = None
     user_info: Optional[UserInfo] = None
+    format_info: Optional[FormatInfo] = None
+    template_info: Optional[TemplateInfo] = None
 
     def to_dict(self) -> Dict:
         """转换为字典格式"""
         result = {}
         for field, value in asdict(self).items():
             if value is not None:
-                if isinstance(value, (GroupInfo, UserInfo)):
+                if isinstance(value, (GroupInfo, UserInfo, FormatInfo, TemplateInfo)):
                     result[field] = value.to_dict()
                 else:
                     result[field] = value
@@ -136,12 +195,16 @@ class BaseMessageInfo:
         """
         group_info = GroupInfo.from_dict(data.get("group_info", {}))
         user_info = UserInfo.from_dict(data.get("user_info", {}))
+        format_info = FormatInfo.from_dict(data.get("format_info", {}))
+        template_info = TemplateInfo.from_dict(data.get("template_info", {}))
         return cls(
             platform=data.get("platform"),
             message_id=data.get("message_id"),
             time=data.get("time"),
             group_info=group_info,
             user_info=user_info,
+            format_info=format_info,
+            template_info=template_info,
         )
 
 

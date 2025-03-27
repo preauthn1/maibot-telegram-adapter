@@ -1,6 +1,5 @@
 from typing import List, Optional
 
-from nonebot import get_driver
 
 from ..models.utils_model import LLM_request
 from .config import global_config
@@ -14,9 +13,6 @@ topic_config = LogConfig(
 )
 
 logger = get_module_logger("topic_identifier", config=topic_config)
-
-driver = get_driver()
-config = driver.config
 
 
 class TopicIdentifier:
