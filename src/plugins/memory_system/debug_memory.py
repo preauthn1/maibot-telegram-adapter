@@ -42,21 +42,22 @@ async def test_memory_system():
 [03-24 10:46:49] ❦幻凌慌てない(ta的id:2459587037): 为什么改了回复系数麦麦还是不怎么回复？大佬们'''
 
 
-        test_text = '''千石可乐：niko分不清AI的陪伴和人类的陪伴,是这样吗？'''
+        # test_text = '''千石可乐：分不清AI的陪伴和人类的陪伴,是这样吗？'''
         print(f"开始测试记忆检索，测试文本: {test_text}\n")
         memories = await hippocampus_manager.get_memory_from_text(
             text=test_text,
-            num=3,
+            max_memory_num=3,
+            max_memory_length=2,
             max_depth=3,
             fast_retrieval=False
         )
         
+        await asyncio.sleep(1)
+        
         print("检索到的记忆:")
-        for topic, memory_items, similarity in memories:
+        for topic, memory_items in memories:
             print(f"主题: {topic}")
-            print(f"相似度: {similarity:.2f}")
-            for memory in memory_items:
-                print(f"- {memory}")
+            print(f"- {memory_items}")
 
 
 
