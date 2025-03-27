@@ -9,7 +9,7 @@ from ..moods.moods import MoodManager  # 导入情绪管理器
 from ..schedule.schedule_generator import bot_schedule
 from ..utils.statistic import LLMStatistics
 from .bot import chat_bot
-from .config import global_config
+from ..config.config import global_config
 from .emoji_manager import emoji_manager
 from .relationship_manager import relationship_manager
 from ..willing.willing_manager import willing_manager

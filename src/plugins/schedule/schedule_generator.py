@@ -10,7 +10,7 @@ sys.path.append(root_path)
 from src.common.database import db # noqa: E402
 from src.common.logger import get_module_logger, SCHEDULE_STYLE_CONFIG, LogConfig # noqa: E402
 from src.plugins.models.utils_model import LLM_request # noqa: E402
-from src.plugins.chat.config import global_config # noqa: E402
+from src.plugins.config.config import global_config # noqa: E402
 
 
 schedule_config = LogConfig(

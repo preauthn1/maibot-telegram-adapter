@@ -3,7 +3,7 @@ import threading
 import time
 from dataclasses import dataclass
 
-from ..chat.config import global_config
+from ..config.config import global_config
 from src.common.logger import get_module_logger, LogConfig, MOOD_STYLE_CONFIG
 
 mood_config = LogConfig(

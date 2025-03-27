@@ -1,7 +1,7 @@
 from .current_mind import SubHeartflow
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
-from src.plugins.chat.config import global_config, BotConfig
+from src.plugins.config.config import global_config, BotConfig
 from src.plugins.schedule.schedule_generator import bot_schedule
 import asyncio
 from src.common.logger import get_module_logger, LogConfig, HEARTFLOW_STYLE_CONFIG # noqa: E402

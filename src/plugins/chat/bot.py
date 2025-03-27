@@ -14,7 +14,7 @@ from nonebot.adapters.onebot.v11 import (
 
 from ..memory_system.Hippocampus import HippocampusManager
 from ..moods.moods import MoodManager  # 导入情绪管理器
-from .config import global_config
+from ..config.config import global_config
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet

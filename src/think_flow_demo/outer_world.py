@@ -2,7 +2,7 @@
 import asyncio
 from datetime import datetime
 from src.plugins.models.utils_model import LLM_request
-from src.plugins.chat.config import global_config
+from src.plugins.config.config import global_config
 from src.common.database import db
 
 #存储一段聊天的大致内容

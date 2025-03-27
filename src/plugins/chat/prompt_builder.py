@@ -6,7 +6,7 @@ from ...common.database import db
 from ..memory_system.Hippocampus import HippocampusManager
 from ..moods.moods import MoodManager
 from ..schedule.schedule_generator import bot_schedule
-from .config import global_config
+from ..config.config import global_config
 from .utils import get_embedding, get_recent_group_detailed_plain_text, get_recent_group_speaker
 from .chat_stream import chat_manager
 from .relationship_manager import relationship_manager
@@ -82,7 +82,8 @@ class PromptBuilder:
         relevant_memories = await HippocampusManager.get_instance().get_memory_from_text(
             text=message_txt, num=3, max_depth=2, fast_retrieval=True
         )
-        memory_str = "\n".join(memory for topic, memories, _ in relevant_memories for memory in memories)
+        # memory_str = "\n".join(memory for topic, memories, _ in relevant_memories for memory in memories)
+        memory_str = ""
         print(f"memory_str: {memory_str}")
 
         if relevant_memories:

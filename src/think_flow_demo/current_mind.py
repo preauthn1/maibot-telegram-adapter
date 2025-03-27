@@ -2,7 +2,7 @@ from .outer_world import outer_world
 import asyncio
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
-from src.plugins.chat.config import global_config, BotConfig
+from src.plugins.config.config import global_config, BotConfig
 import re
 import time
 from src.plugins.schedule.schedule_generator import bot_schedule
