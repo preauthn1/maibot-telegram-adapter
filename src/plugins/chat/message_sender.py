@@ -63,8 +63,7 @@ class Message_Sender:
                 message_preview = truncate_message(message.processed_plain_text)
                 try:
                     result = await global_api.send_message("http://127.0.0.1:18002/api/message", message_json)
-                    if result["status"] == "success":
-                        logger.success(f"发送消息“{message_preview}”成功")
+                    logger.success(f"发送消息“{message_preview}”成功")
                 except Exception as e:
                     logger.error(f"发送消息“{message_preview}”失败: {str(e)}")
 
