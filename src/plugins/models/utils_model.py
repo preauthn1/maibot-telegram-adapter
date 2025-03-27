@@ -34,7 +34,6 @@ class LLM_request:
         try:
             self.api_key = os.environ[model["key"]]
             self.base_url = os.environ[model["base_url"]]
-            print(self.api_key, self.base_url)
         except AttributeError as e:
             logger.error(f"原始 model dict 信息：{model}")
             logger.error(f"配置错误：找不到对应的配置项 - {str(e)}")
