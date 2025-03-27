@@ -1145,10 +1145,11 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                         label="日程生成提示词", value=config_data["schedule"]["prompt_schedule_gen"], interactive=True
                     )
                 with gr.Row():
-                    schedule_doing_update_interval = gr.Number(value=config_data["schedule"]["schedule_doing_update_interval"],
-                                                            label="日程表更新间隔 单位秒",
-                                                            interactive=True
-                                                            )
+                    schedule_doing_update_interval = gr.Number(
+                        value=config_data["schedule"]["schedule_doing_update_interval"],
+                        label="日程表更新间隔 单位秒",
+                        interactive=True
+                        )
             else:
                 with gr.Row():
                     prompt_schedule_gen = gr.Textbox(
