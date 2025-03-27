@@ -1,5 +1,5 @@
 [inner]
-version = "0.0.11"
+version = "0.0.12"
 
 #以下是给开发人员阅读的，一般用户不需要阅读
 #如果你想要修改配置文件，请在修改后将version的值进行变更
@@ -28,6 +28,10 @@ personality_1_probability = 0.7 # 第一种人格出现概率
 personality_2_probability = 0.2 # 第二种人格出现概率
 personality_3_probability = 0.1 # 第三种人格出现概率，请确保三个概率相加等于1
 prompt_schedule = "用一句话或几句话描述描述性格特点和其他特征"
+
+[platforms] # 必填项目，填写每个平台适配器提供的链接
+qq="http://127.0.0.1:18002/api/message"
+
 
 [message]
 min_text_length = 2 # 与麦麦聊天时麦麦只会回答文本大于等于此数的消息

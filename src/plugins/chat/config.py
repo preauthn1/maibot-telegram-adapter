@@ -108,11 +108,13 @@ class BotConfig:
     build_memory_sample_num: int = 10  # 记忆构建采样数量
     build_memory_sample_length: int = 20  # 记忆构建采样长度
     memory_build_distribution: list = field(
-        default_factory=lambda: [4,2,0.6,24,8,0.4]
+        default_factory=lambda: [4, 2, 0.6, 24, 8, 0.4]
     )  # 记忆构建分布，参数：分布1均值，标准差，权重，分布2均值，标准差，权重
     memory_ban_words: list = field(
         default_factory=lambda: ["表情包", "图片", "回复", "聊天记录"]
     )  # 添加新的配置项默认值
+
+    api_urls: Dict[str, str] = field(default_factory=lambda: {})
 
     @staticmethod
     def get_config_dir() -> str:
@@ -320,18 +322,14 @@ class BotConfig:
                 config.memory_compress_rate = memory_config.get("memory_compress_rate", config.memory_compress_rate)
             if config.INNER_VERSION in SpecifierSet(">=0.0.11"):
                 config.memory_build_distribution = memory_config.get(
-                    "memory_build_distribution", 
-                    config.memory_build_distribution
+                    "memory_build_distribution", config.memory_build_distribution
                 )
                 config.build_memory_sample_num = memory_config.get(
-                    "build_memory_sample_num", 
-                    config.build_memory_sample_num
+                    "build_memory_sample_num", config.build_memory_sample_num
                 )
                 config.build_memory_sample_length = memory_config.get(
-                    "build_memory_sample_length", 
-                    config.build_memory_sample_length
+                    "build_memory_sample_length", config.build_memory_sample_length
                 )
-
 
         def remote(parent: dict):
             remote_config = parent["remote"]
@@ -366,6 +364,12 @@ class BotConfig:
             config.talk_frequency_down_groups = set(groups_config.get("talk_frequency_down", []))
             config.ban_user_id = set(groups_config.get("ban_user_id", []))
 
+        def platforms(parent: dict):
+            platforms_config = parent["platforms"]
+            if platforms_config and isinstance(platforms_config, dict):
+                for k in platforms_config.keys():
+                    config.api_urls[k] = platforms_config[k]
+
         def others(parent: dict):
             others_config = parent["others"]
             # config.enable_advance_output = others_config.get("enable_advance_output", config.enable_advance_output)
@@ -394,6 +398,7 @@ class BotConfig:
             "keywords_reaction": {"func": keywords_reaction, "support": ">=0.0.2", "necessary": False},
             "chinese_typo": {"func": chinese_typo, "support": ">=0.0.3", "necessary": False},
             "groups": {"func": groups, "support": ">=0.0.0"},
+            "platforms": {"func": platforms, "support": ">=0.0.11"},
             "others": {"func": others, "support": ">=0.0.0"},
         }
 

@@ -133,7 +133,7 @@ class ChatBot:
 
         response = None
         # 开始组织语言
-        if random() < reply_probability + 100:
+        if random() < reply_probability:
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ,
                 user_nickname=global_config.BOT_NICKNAME,

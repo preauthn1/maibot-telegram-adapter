@@ -62,7 +62,11 @@ class Message_Sender:
 
                 message_preview = truncate_message(message.processed_plain_text)
                 try:
-                    result = await global_api.send_message("http://127.0.0.1:18002/api/message", message_json)
+                    end_point = global_config.api_urls.get(message.message_info.platform, None)
+                    if end_point:
+                        result = await global_api.send_message(end_point, message_json)
+                    else:
+                        raise ValueError(f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件")
                     logger.success(f"发送消息“{message_preview}”成功")
                 except Exception as e:
                     logger.error(f"发送消息“{message_preview}”失败: {str(e)}")
