@@ -129,7 +129,7 @@ class ChatBot:
 
         # 根据话题计算激活度
         topic = ""
-        interested_rate = await HippocampusManager.get_instance().get_activate_from_text(message.processed_plain_text)*20
+        interested_rate = await HippocampusManager.get_instance().get_activate_from_text(message.processed_plain_text)*300
         # interested_rate = 0.1
         logger.info(f"对{message.processed_plain_text}的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")

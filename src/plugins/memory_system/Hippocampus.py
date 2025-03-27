@@ -1219,7 +1219,7 @@ class Hippocampus:
         total_nodes = len(self.memory_graph.G.nodes())
         activated_nodes = len(activate_map)
         activation_ratio = activated_nodes / total_nodes if total_nodes > 0 else 0
-        logger.info(f"激活节点数: {activated_nodes}, 总节点数: {total_nodes}, 激活比例: {activation_ratio:.2%}")
+        logger.info(f"激活节点数: {activated_nodes}, 总节点数: {total_nodes}, 激活比例: {activation_ratio}")
         
         return activation_ratio
 
