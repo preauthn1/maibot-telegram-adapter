@@ -139,8 +139,8 @@ class ScheduleGenerator:
         prompt += f"你之前做了的事情是：{previous_doings}，从之前到现在已经过去了{self.schedule_doing_update_interval/60}分钟了\n" #noqa: E501
         if mind_thinking:
             prompt += f"你脑子里在想：{mind_thinking}\n"
-        prompt += f"现在是{now_time}，结合你的个人特点和行为习惯,"
-        prompt += "推测你现在做什么，具体一些，详细一些\n"
+        prompt += f"现在是{now_time}，结合你的个人特点和行为习惯,注意关注你今天的日程安排和想法，这很重要，"
+        prompt += "推测你现在和之后做什么，具体一些，详细一些\n"
         prompt += "直接返回你在做的事情，不要输出其他内容："
         return prompt
     
