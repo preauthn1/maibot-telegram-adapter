@@ -84,7 +84,7 @@ class PromptBuilder:
             max_memory_num=4,
             max_memory_length=2,
             max_depth=3,
-            fast_retrieval=False
+            fast_retrieval=True
         )
         memory_str = ""
         for topic, memories in relevant_memories:
