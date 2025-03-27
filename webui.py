@@ -1744,33 +1744,51 @@ with gr.Blocks(title="MaimBot配置文件编辑") as app:
                         with gr.Row():
                             with gr.Column(scale=1):
                                 build_memory_dist1_mean = gr.Number(
-                                    value=config_data["memory"].get("build_memory_distribution", [4.0,2.0,0.6,24.0,8.0,0.4])[0],
+                                    value=config_data["memory"].get(
+                                        "build_memory_distribution", 
+                                        [4.0,2.0,0.6,24.0,8.0,0.4]
+                                    )[0],
                                     label="分布1均值",
                                 )
                             with gr.Column(scale=1):
                                 build_memory_dist1_std = gr.Number(
-                                    value=config_data["memory"].get("build_memory_distribution", [4.0,2.0,0.6,24.0,8.0,0.4])[1],
+                                    value=config_data["memory"].get(
+                                        "build_memory_distribution", 
+                                        [4.0,2.0,0.6,24.0,8.0,0.4]
+                                    )[1],
                                     label="分布1标准差",
                                 )
                             with gr.Column(scale=1):
                                 build_memory_dist1_weight = gr.Number(
-                                    value=config_data["memory"].get("build_memory_distribution", [4.0,2.0,0.6,24.0,8.0,0.4])[2],
+                                    value=config_data["memory"].get(
+                                        "build_memory_distribution", 
+                                        [4.0,2.0,0.6,24.0,8.0,0.4]
+                                    )[2],
                                     label="分布1权重",
                                 )
                         with gr.Row():
                             with gr.Column(scale=1):
                                 build_memory_dist2_mean = gr.Number(
-                                    value=config_data["memory"].get("build_memory_distribution", [4.0,2.0,0.6,24.0,8.0,0.4])[3],
+                                    value=config_data["memory"].get(
+                                        "build_memory_distribution", 
+                                        [4.0,2.0,0.6,24.0,8.0,0.4]
+                                    )[3],
                                     label="分布2均值",
                                 )
                             with gr.Column(scale=1):
                                 build_memory_dist2_std = gr.Number(
-                                    value=config_data["memory"].get("build_memory_distribution", [4.0,2.0,0.6,24.0,8.0,0.4])[4],
+                                    value=config_data["memory"].get(
+                                        "build_memory_distribution", 
+                                        [4.0,2.0,0.6,24.0,8.0,0.4]
+                                    )[4],
                                     label="分布2标准差",
                                 )
                             with gr.Column(scale=1):
                                 build_memory_dist2_weight = gr.Number(
-                                    value=config_data["memory"].get("build_memory_distribution", [4.0,2.0,0.6,24.0,8.0,0.4])[5],
+                                    value=config_data["memory"].get(
+                                        "build_memory_distribution", 
+                                        [4.0,2.0,0.6,24.0,8.0,0.4]
+                                    )[5],
                                     label="分布2权重",
                                 )
                         with gr.Row():
