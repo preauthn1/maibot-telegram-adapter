@@ -4,7 +4,6 @@ import math
 import random
 import time
 import re
-
 import jieba
 import networkx as nx
 
@@ -15,7 +14,6 @@ from ..chat.utils import (
     calculate_information_content,
     cosine_similarity,
     get_closest_chat_from_db,
-    text_to_vector,
 )
 from ..models.utils_model import LLM_request
 from src.common.logger import get_module_logger, LogConfig, MEMORY_STYLE_CONFIG
@@ -180,7 +178,7 @@ class EntorhinalCortex:
         max_memorized_time_per_msg = 3
 
         # 创建双峰分布的记忆调度器
-        scheduler = MemoryBuildScheduler(
+        sample_scheduler = MemoryBuildScheduler(
             n_hours1=self.config.memory_build_distribution[0],
             std_hours1=self.config.memory_build_distribution[1],
             weight1=self.config.memory_build_distribution[2],
@@ -190,7 +188,7 @@ class EntorhinalCortex:
             total_samples=self.config.build_memory_sample_num
         )
 
-        timestamps = scheduler.get_timestamp_array()
+        timestamps = sample_scheduler.get_timestamp_array()
         logger.info(f"回忆往事: {[time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts)) for ts in timestamps]}")
         chat_samples = []
         for timestamp in timestamps:
@@ -674,8 +672,8 @@ class Hippocampus:
         self.parahippocampal_gyrus = ParahippocampalGyrus(self)
         # 从数据库加载记忆图
         self.entorhinal_cortex.sync_memory_from_db()
-        self.llm_topic_judge = self.config.llm_topic_judge
-        self.llm_summary_by_topic = self.config.llm_summary_by_topic
+        self.llm_topic_judge = LLM_request(self.config.llm_topic_judge)
+        self.llm_summary_by_topic = LLM_request(self.config.llm_summary_by_topic)
 
     def get_all_node_names(self) -> list:
         """获取记忆图中所有节点的名字列表"""
@@ -831,19 +829,79 @@ class Hippocampus:
         unique_memories.sort(key=lambda x: x[2], reverse=True)
         return unique_memories[:num]
 
-# driver = get_driver()
-# config = driver.config
+class HippocampusManager:
+    _instance = None
+    _hippocampus = None
+    _global_config = None
+    _initialized = False
 
-start_time = time.time()
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
-# 创建记忆图
-memory_graph = Memory_graph()
-# 创建海马体
-hippocampus = Hippocampus()
+    @classmethod
+    def get_hippocampus(cls):
+        if not cls._initialized:
+            raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
+        return cls._hippocampus
 
-# 从全局配置初始化记忆系统
-from ..chat.config import global_config
-hippocampus.initialize(global_config=global_config)
+    def initialize(self, global_config):
+        """初始化海马体实例"""
+        if self._initialized:
+            return self._hippocampus
+            
+        self._global_config = global_config
+        self._hippocampus = Hippocampus()
+        self._hippocampus.initialize(global_config)
+        self._initialized = True
+        
+        # 输出记忆系统参数信息
+        config = self._hippocampus.config
+        logger.success("--------------------------------")
+        logger.success("记忆系统参数配置:")
+        logger.success(f"记忆构建间隔: {global_config.build_memory_interval}秒")
+        logger.success(f"记忆遗忘间隔: {global_config.forget_memory_interval}秒")
+        logger.success(f"记忆遗忘比例: {global_config.memory_forget_percentage}")
+        logger.success(f"记忆压缩率: {config.memory_compress_rate}")
+        logger.success(f"记忆构建样本数: {config.build_memory_sample_num}")
+        logger.success(f"记忆构建样本长度: {config.build_memory_sample_length}")
+        logger.success(f"记忆遗忘时间: {config.memory_forget_time}小时")
+        logger.success(f"记忆构建分布: {config.memory_build_distribution}")
+        logger.success("--------------------------------")
+        
+        return self._hippocampus
 
-end_time = time.time()
-logger.success(f"加载海马体耗时: {end_time - start_time:.2f} 秒")
+    async def build_memory(self):
+        """构建记忆的公共接口"""
+        if not self._initialized:
+            raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
+        return await self._hippocampus.parahippocampal_gyrus.operation_build_memory()
+
+    async def forget_memory(self, percentage: float = 0.1):
+        """遗忘记忆的公共接口"""
+        if not self._initialized:
+            raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
+        return await self._hippocampus.parahippocampal_gyrus.operation_forget_topic(percentage)
+
+    async def get_memory_from_text(self, text: str, num: int = 5, max_depth: int = 2, 
+                                 fast_retrieval: bool = False) -> list:
+        """从文本中获取相关记忆的公共接口"""
+        if not self._initialized:
+            raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
+        return await self._hippocampus.get_memory_from_text(text, num, max_depth, fast_retrieval)
+
+    def get_memory_from_keyword(self, keyword: str, max_depth: int = 2) -> list:
+        """从关键词获取相关记忆的公共接口"""
+        if not self._initialized:
+            raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
+        return self._hippocampus.get_memory_from_keyword(keyword, max_depth)
+
+    def get_all_node_names(self) -> list:
+        """获取所有节点名称的公共接口"""
+        if not self._initialized:
+            raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
+        return self._hippocampus.get_all_node_names()
+
+

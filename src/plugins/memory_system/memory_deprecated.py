@@ -227,7 +227,7 @@ class Hippocampus:
         max_memorized_time_per_msg = 3
 
         # 创建双峰分布的记忆调度器
-        scheduler = MemoryBuildScheduler(
+        sample_scheduler = MemoryBuildScheduler(
             n_hours1=global_config.memory_build_distribution[0],           # 第一个分布均值（4小时前）
             std_hours1=global_config.memory_build_distribution[1],         # 第一个分布标准差
             weight1=global_config.memory_build_distribution[2],          # 第一个分布权重 60%
@@ -238,7 +238,7 @@ class Hippocampus:
         )
 
         # 生成时间戳数组
-        timestamps = scheduler.get_timestamp_array()
+        timestamps = sample_scheduler.get_timestamp_array()
         # logger.debug(f"生成的时间戳数组: {timestamps}")
         # print(f"生成的时间戳数组: {timestamps}")
         # print(f"时间戳的实际时间: {[time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts)) for ts in timestamps]}")

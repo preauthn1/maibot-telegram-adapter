@@ -12,7 +12,7 @@ from nonebot.adapters.onebot.v11 import (
     FriendRecallNoticeEvent,
 )
 
-from ..memory_system.memory import hippocampus
+from ..memory_system.Hippocampus import HippocampusManager
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from .config import global_config
 from .emoji_manager import emoji_manager  # 导入表情包管理器
@@ -129,7 +129,8 @@ class ChatBot:
 
         # 根据话题计算激活度
         topic = ""
-        interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
+        # interested_rate = await HippocampusManager.get_instance().memory_activate_value(message.processed_plain_text) / 100
+        interested_rate = 0.1
         logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
 
