@@ -3,7 +3,7 @@ from .relationship_manager import relationship_manager
 from .chat_stream import chat_manager
 from .message_sender import message_manager
 from .storage import MessageStorage
-from .config import global_config
+from .auto_speak import auto_speak_manager
 
 __all__ = [
     "emoji_manager",
@@ -11,5 +11,4 @@ __all__ = [
     "chat_manager",
     "message_manager",
     "MessageStorage",
-    "global_config",
 ]
