@@ -566,7 +566,8 @@ class ParahippocampalGyrus:
         logger.debug(input_text)
 
         topic_num = self.hippocampus.calculate_topic_num(input_text, compress_rate)
-        topics_response = await self.hippocampus.llm_topic_judge.generate_response(self.hippocampus.find_topic_llm(input_text, topic_num))
+        topics_response = await self.hippocampus.llm_topic_judge.generate_response(
+            self.hippocampus.find_topic_llm(input_text, topic_num))
 
         # 使用正则表达式提取<>中的内容
         topics = re.findall(r'<([^>]+)>', topics_response[0])
@@ -779,16 +780,20 @@ class ParahippocampalGyrus:
             # 汇总输出所有变化
             logger.info("[遗忘] 遗忘操作统计:")
             if edge_changes["weakened"]:
-                logger.info(f"[遗忘] 减弱的连接 ({len(edge_changes['weakened'])}个): {', '.join(edge_changes['weakened'])}")
+                logger.info(
+                    f"[遗忘] 减弱的连接 ({len(edge_changes['weakened'])}个): {', '.join(edge_changes['weakened'])}")
             
             if edge_changes["removed"]:
-                logger.info(f"[遗忘] 移除的连接 ({len(edge_changes['removed'])}个): {', '.join(edge_changes['removed'])}")
+                logger.info(
+                    f"[遗忘] 移除的连接 ({len(edge_changes['removed'])}个): {', '.join(edge_changes['removed'])}")
             
             if node_changes["reduced"]:
-                logger.info(f"[遗忘] 减少记忆的节点 ({len(node_changes['reduced'])}个): {', '.join(node_changes['reduced'])}")
+                logger.info(
+                    f"[遗忘] 减少记忆的节点 ({len(node_changes['reduced'])}个): {', '.join(node_changes['reduced'])}")
             
             if node_changes["removed"]:
-                logger.info(f"[遗忘] 移除的节点 ({len(node_changes['removed'])}个): {', '.join(node_changes['removed'])}")
+                logger.info(
+                    f"[遗忘] 移除的节点 ({len(node_changes['removed'])}个): {', '.join(node_changes['removed'])}")
         else:
             logger.info("[遗忘] 本次检查没有节点或连接满足遗忘条件")
 
@@ -903,8 +908,9 @@ class Hippocampus:
         memories.sort(key=lambda x: x[2], reverse=True)
         return memories
 
-    async def get_memory_from_text(self, text: str, max_memory_num: int = 3, max_memory_length: int = 2, max_depth: int = 3, 
-                                 fast_retrieval: bool = False) -> list:
+    async def get_memory_from_text(self, text: str, max_memory_num: int = 3, max_memory_length: int = 2, 
+                                max_depth: int = 3, 
+                                fast_retrieval: bool = False) -> list:
         """从文本中提取关键词并获取相关记忆。
 
         Args:
@@ -964,8 +970,6 @@ class Hippocampus:
 
         # 从每个关键词获取记忆
         all_memories = []
-        keyword_connections = []  # 存储关键词之间的连接关系
-        activation_words = set(valid_keywords)  # 存储所有激活词（包括关键词和途经点）
         activate_map = {}  # 存储每个词的累计激活值
 
         # 对每个关键词进行扩散式检索
@@ -1003,7 +1007,8 @@ class Hippocampus:
                         activation_values[neighbor] = new_activation
                         visited_nodes.add(neighbor)
                         nodes_to_process.append((neighbor, new_activation, current_depth + 1))
-                        logger.debug(f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")
+                        logger.debug(
+                            f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")  # noqa: E501
             
             # 更新激活映射
             for node, activation_value in activation_values.items():
@@ -1041,7 +1046,8 @@ class Hippocampus:
             # 将选中的节点添加到remember_map
             for node, normalized_activation in sorted_nodes:
                 remember_map[node] = activate_map[node]  # 使用原始激活值
-                logger.info(f"节点 '{node}' 被选中 (归一化激活值: {normalized_activation:.2f}, 原始激活值: {activate_map[node]:.2f})")
+                logger.info(
+                    f"节点 '{node}' (归一化激活值: {normalized_activation:.2f}, 激活值: {activate_map[node]:.2f})")
         else:
             logger.info("没有有效的激活值")
 
@@ -1161,8 +1167,6 @@ class Hippocampus:
         logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
 
         # 从每个关键词获取记忆
-        keyword_connections = []  # 存储关键词之间的连接关系
-        activation_words = set(valid_keywords)  # 存储所有激活词（包括关键词和途经点）
         activate_map = {}  # 存储每个词的累计激活值
 
         # 对每个关键词进行扩散式检索
@@ -1200,7 +1204,8 @@ class Hippocampus:
                         activation_values[neighbor] = new_activation
                         visited_nodes.add(neighbor)
                         nodes_to_process.append((neighbor, new_activation, current_depth + 1))
-                        logger.debug(f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")
+                        logger.debug(
+                            f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")  # noqa: E501
             
             # 更新激活映射
             for node, activation_value in activation_values.items():
@@ -1289,12 +1294,14 @@ class HippocampusManager:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         return await self._hippocampus.parahippocampal_gyrus.operation_forget_topic(percentage)
 
-    async def get_memory_from_text(self, text: str, max_memory_num: int = 3, max_memory_length: int = 2, max_depth: int = 3, 
-                                 fast_retrieval: bool = False) -> list:
+    async def get_memory_from_text(self, text: str, max_memory_num: int = 3,
+                                max_memory_length: int = 2, max_depth: int = 3, 
+                                fast_retrieval: bool = False) -> list:
         """从文本中获取相关记忆的公共接口"""
         if not self._initialized:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
-        return await self._hippocampus.get_memory_from_text(text, max_memory_num, max_memory_length, max_depth, fast_retrieval)
+        return await self._hippocampus.get_memory_from_text(
+            text, max_memory_num, max_memory_length, max_depth, fast_retrieval)
 
     async def get_activate_from_text(self, text: str, max_depth: int = 3, 
                                  fast_retrieval: bool = False) -> float:

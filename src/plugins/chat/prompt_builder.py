@@ -87,7 +87,7 @@ class PromptBuilder:
             fast_retrieval=True
         )
         memory_str = ""
-        for topic, memories in relevant_memories:
+        for _topic, memories in relevant_memories:
             memory_str += f"{memories}\n"
         print(f"memory_str: {memory_str}")
 
