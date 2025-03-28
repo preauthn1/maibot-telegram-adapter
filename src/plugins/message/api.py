@@ -48,7 +48,10 @@ class BaseMessageAPI:
         while True:
             if len(self.cache) > 0:
                 for handler in self.message_handlers:
-                    await handler(self.cache[0])
+                    try:
+                        await handler(self.cache[0])
+                    except:
+                        pass
                 self.cache.pop(0)
             if len(self.cache) > 0:
                 await asyncio.sleep(0.1 / len(self.cache))
