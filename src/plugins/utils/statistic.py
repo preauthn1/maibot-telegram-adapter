@@ -223,7 +223,7 @@ class LLMStatistics:
                 logger.exception("统计数据处理失败")
 
             # 等待5分钟
-            for _ in range(300):  # 5分钟 = 300秒
+            for _ in range(30):  # 5分钟 = 300秒
                 if not self.running:
                     break
                 time.sleep(1)

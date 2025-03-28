@@ -129,23 +129,12 @@ class ChatBot:
 
         # 根据话题计算激活度
         topic = ""
-        interested_rate = await HippocampusManager.get_instance().get_activate_from_text(
-            message.processed_plain_text,fast_retrieval=True)
-        # interested_rate = 0.1
-        # logger.info(f"对{message.processed_plain_text}的激活度:{interested_rate}")
-        # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
-
         await self.storage.store_message(message, chat, topic[0] if topic else None)
 
+        interested_rate = 0
+        interested_rate = await HippocampusManager.get_instance().get_activate_from_text(
+            message.processed_plain_text,fast_retrieval=True)
         is_mentioned = is_mentioned_bot_in_message(message)
-        reply_probability = await willing_manager.change_reply_willing_received(
-            chat_stream=chat,
-            is_mentioned_bot=is_mentioned,
-            config=global_config,
-            is_emoji=message.is_emoji,
-            interested_rate=interested_rate,
-            sender_id=str(message.message_info.user_info.user_id),
-        )
         
         if global_config.enable_think_flow:
             current_willing_old = willing_manager.get_willing(chat_stream=chat)
@@ -154,6 +143,17 @@ class ChatBot:
             current_willing = (current_willing_old + current_willing_new) / 2
         else:
             current_willing = willing_manager.get_willing(chat_stream=chat)
+        
+        willing_manager.set_willing(chat.stream_id,current_willing)
+        
+        reply_probability = await willing_manager.change_reply_willing_received(
+            chat_stream=chat,
+            is_mentioned_bot=is_mentioned,
+            config=global_config,
+            is_emoji=message.is_emoji,
+            interested_rate=interested_rate,
+            sender_id=str(message.message_info.user_info.user_id),
+        )
 
         logger.info(
             f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]"
@@ -347,8 +347,9 @@ class ChatBot:
                 reply_message=None,
                 platform="qq",
             )
-
-            await self.message_process(message_cq)
+            
+            if random() < 0.1:
+                await self.message_process(message_cq)
 
         elif isinstance(event, GroupRecallNoticeEvent) or isinstance(event, FriendRecallNoticeEvent):
             user_info = UserInfo(
