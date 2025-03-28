@@ -81,15 +81,15 @@ class PromptBuilder:
         # 调用 hippocampus 的 get_relevant_memories 方法
         relevant_memories = await HippocampusManager.get_instance().get_memory_from_text(
             text=message_txt,
-            max_memory_num=4,
+            max_memory_num=3,
             max_memory_length=2,
             max_depth=3,
-            fast_retrieval=True
+            fast_retrieval=False
         )
         memory_str = ""
         for _topic, memories in relevant_memories:
             memory_str += f"{memories}\n"
-        print(f"memory_str: {memory_str}")
+        # print(f"memory_str: {memory_str}")
 
         if relevant_memories:
             # 格式化记忆内容

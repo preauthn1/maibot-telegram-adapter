@@ -3,7 +3,7 @@ version = "0.0.11"
 
 [mai_version]
 version = "0.6.0"
-version-fix = "snapshot-1"
+version-fix = "snapshot-2"
 
 #以下是给开发人员阅读的，一般用户不需要阅读
 #如果你想要修改配置文件，请在修改后将version的值进行变更

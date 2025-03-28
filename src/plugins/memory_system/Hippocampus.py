@@ -817,8 +817,8 @@ class Hippocampus:
         self.parahippocampal_gyrus = ParahippocampalGyrus(self)
         # 从数据库加载记忆图
         self.entorhinal_cortex.sync_memory_from_db()
-        self.llm_topic_judge = LLM_request(self.config.llm_topic_judge)
-        self.llm_summary_by_topic = LLM_request(self.config.llm_summary_by_topic)
+        self.llm_topic_judge = LLM_request(self.config.llm_topic_judge,request_type="memory")
+        self.llm_summary_by_topic = LLM_request(self.config.llm_summary_by_topic,request_type="memory")
 
     def get_all_node_names(self) -> list:
         """获取记忆图中所有节点的名字列表"""
@@ -950,7 +950,7 @@ class Hippocampus:
             # 提取关键词
             keywords = re.findall(r'<([^>]+)>', topics_response[0])
             if not keywords:
-                keywords = ['none']
+                keywords = []
             else:
                 keywords = [
                     keyword.strip()
@@ -1025,7 +1025,7 @@ class Hippocampus:
 
         # 基于激活值平方的独立概率选择
         remember_map = {}
-        logger.info("基于激活值平方的归一化选择:")
+        # logger.info("基于激活值平方的归一化选择:")
         
         # 计算所有激活值的平方和
         total_squared_activation = sum(activation ** 2 for activation in activate_map.values())
@@ -1079,12 +1079,11 @@ class Hippocampus:
                 memory_similarities.sort(key=lambda x: x[1], reverse=True)
                 # 获取最匹配的记忆
                 top_memories = memory_similarities[:max_memory_length]
-
                 
                 # 添加到结果中
                 for memory, similarity in top_memories:
                     all_memories.append((node, [memory], similarity))
-                    logger.info(f"选中记忆: {memory} (相似度: {similarity:.2f})")
+                    # logger.info(f"选中记忆: {memory} (相似度: {similarity:.2f})")
             else:
                 logger.info("节点没有记忆")
 
@@ -1148,7 +1147,7 @@ class Hippocampus:
             # 提取关键词
             keywords = re.findall(r'<([^>]+)>', topics_response[0])
             if not keywords:
-                keywords = ['none']
+                keywords = []
             else:
                 keywords = [
                     keyword.strip()
@@ -1221,10 +1220,13 @@ class Hippocampus:
         #     logger.info(f"节点 '{node}': 累计激活值 = {total_activation:.2f}")
         
         # 计算激活节点数与总节点数的比值
+        total_activation = sum(activate_map.values())
+        logger.info(f"总激活值: {total_activation:.2f}")
         total_nodes = len(self.memory_graph.G.nodes())
-        activated_nodes = len(activate_map)
-        activation_ratio = activated_nodes / total_nodes if total_nodes > 0 else 0
-        logger.info(f"激活节点数: {activated_nodes}, 总节点数: {total_nodes}, 激活比例: {activation_ratio}")
+        # activated_nodes = len(activate_map)
+        activation_ratio = total_activation / total_nodes if total_nodes > 0 else 0
+        activation_ratio = activation_ratio*40
+        logger.info(f"总激活值: {total_activation:.2f}, 总节点数: {total_nodes}, 激活: {activation_ratio}")
         
         return activation_ratio
 

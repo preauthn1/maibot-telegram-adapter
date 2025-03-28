@@ -1,4 +1,4 @@
-from .current_mind import SubHeartflow
+from .sub_heartflow import SubHeartflow
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.config.config import global_config, BotConfig
@@ -46,7 +46,7 @@ class Heartflow:
         logger.info("麦麦大脑袋转起来了")
         self.current_state.update_current_state_info()
         
-        personality_info = " ".join(BotConfig.PROMPT_PERSONALITY)
+        personality_info = " ".join(global_config.PROMPT_PERSONALITY)
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         related_memory_info = 'memory'
