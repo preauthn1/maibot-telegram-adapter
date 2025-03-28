@@ -9,7 +9,6 @@ import platform
 from dotenv import load_dotenv
 from src.common.logger import get_module_logger
 from src.main import MainSystem
-from src.plugins.message import global_api
 
 logger = get_module_logger("main_bot")
 

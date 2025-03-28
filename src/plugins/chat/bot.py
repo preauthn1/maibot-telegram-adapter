@@ -15,11 +15,13 @@ from .chat_stream import chat_manager
 from .message_sender import message_manager  # 导入新的消息管理器
 from .relationship_manager import relationship_manager
 from .storage import MessageStorage
-from .utils import is_mentioned_bot_in_message
+from .utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
 from .utils_image import image_path_to_base64
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from ..message import UserInfo, GroupInfo, Seg
 
+from src.think_flow_demo.heartflow import subheartflow_manager
+from src.think_flow_demo.outer_world import outer_world
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 
 # 定义日志配置
