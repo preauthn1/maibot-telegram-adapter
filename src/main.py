@@ -109,6 +109,7 @@ class MainSystem:
                 self.remove_recalled_message_task(),
                 emoji_manager.start_periodic_check(),
                 self.app.run(),
+                self.app.message_process(),
             ]
             await asyncio.gather(*tasks)
 

@@ -12,6 +12,7 @@ class BaseMessageAPI:
         self.host = host
         self.port = port
         self.message_handlers: List[Callable] = []
+        self.cache = []
         self._setup_routes()
         self._running = False
 
@@ -20,12 +21,11 @@ class BaseMessageAPI:
 
         @self.app.post("/api/message")
         async def handle_message(message: Dict[str, Any]):
-            # try:
-            for handler in self.message_handlers:
-                await handler(message)
-            return {"status": "success"}
-            # except Exception as e:
-            #     raise HTTPException(status_code=500, detail=str(e)) from e
+            try:
+                self.cache.append(message)
+                return {"status": "success"}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e)) from e
 
     def register_message_handler(self, handler: Callable):
         """注册消息处理函数"""
@@ -40,6 +40,20 @@ class BaseMessageAPI:
             except Exception as e:
                 # logger.error(f"发送消息失败: {str(e)}")
                 pass
+
+    async def message_process(
+        self,
+    ):
+        """启动消息处理"""
+        while True:
+            if len(self.cache) > 0:
+                for handler in self.message_handlers:
+                    await handler(self.cache[0])
+                self.cache.pop(0)
+            if len(self.cache) > 0:
+                await asyncio.sleep(0.1 / len(self.cache))
+            else:
+                await asyncio.sleep(0.2)
 
     def run_sync(self):
         """同步方式运行服务器"""
