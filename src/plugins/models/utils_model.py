@@ -11,7 +11,8 @@ from PIL import Image
 import io
 import os
 from ...common.database import db
-from ..chat.config import global_config
+from ..config.config import global_config
+from ..config.config_env import env_config
 
 
 logger = get_module_logger("model_utils")

@@ -1,6 +1,6 @@
 # 🐳 Docker 部署指南
 
-## 部署步骤 (推荐，但不一定是最新)
+## 部署步骤 (不一定是最新)
 
 **"更新镜像与容器"部分在本文档 [Part 6](#6-更新镜像与容器)**
 
@@ -41,7 +41,7 @@ NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker-compose up -d
 
 ### 3. 修改配置并重启Docker
 
-- 请前往 [🎀 新手配置指南](docs/installation_cute.md) 或 [⚙️ 标准配置指南](docs/installation_standard.md) 完成`.env.prod`与`bot_config.toml`配置文件的编写\
+- 请前往 [🎀 新手配置指南](./installation_cute.md) 或 [⚙️ 标准配置指南](./installation_standard.md) 完成`.env.prod`与`bot_config.toml`配置文件的编写\
 **需要注意`.env.prod`中HOST处IP的填写，Docker中部署和系统中直接安装的配置会有所不同**
 
 - 重启Docker容器:

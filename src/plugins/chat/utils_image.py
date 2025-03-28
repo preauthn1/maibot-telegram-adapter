@@ -8,7 +8,7 @@ import io
 
 
 from ...common.database import db
-from ..chat.config import global_config
+from ..config.config import global_config
 from ..models.utils_model import LLM_request
 
 from src.common.logger import get_module_logger

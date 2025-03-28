@@ -3,9 +3,9 @@ import time
 from random import random
 import json
 
-from ..memory_system.memory import hippocampus
+from ..memory_system.Hippocampus import HippocampusManager
 from ..moods.moods import MoodManager  # 导入情绪管理器
-from .config import global_config
+from ..config.config import global_config
 from .emoji_manager import emoji_manager  # 导入表情包管理器
 from .llm_generator import ResponseGenerator
 from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
@@ -42,9 +42,6 @@ class ChatBot:
         self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
         self.mood_manager.start_mood_update()  # 启动情绪更新
 
-        self.emoji_chance = 0.2  # 发送表情包的基础概率
-        # self.message_streams = MessageStreamContainer()
-
     async def _ensure_started(self):
         """确保所有任务已启动"""
         if not self._started:
@@ -77,6 +74,12 @@ class ChatBot:
             group_info=groupinfo,  # 我嘞个gourp_info
         )
         message.update_chat_stream(chat)
+
+        # 创建 心流 观察
+        if global_config.enable_think_flow:
+            await outer_world.check_and_add_new_observe()
+            subheartflow_manager.create_subheartflow(chat.stream_id)
+
         await relationship_manager.update_relationship(
             chat_stream=chat,
         )
@@ -108,8 +111,11 @@ class ChatBot:
 
         # 根据话题计算激活度
         topic = ""
-        interested_rate = await hippocampus.memory_activate_value(message.processed_plain_text) / 100
-        logger.debug(f"对{message.processed_plain_text}的激活度:{interested_rate}")
+        interested_rate = await HippocampusManager.get_instance().get_activate_from_text(
+            message.processed_plain_text, fast_retrieval=True
+        )
+        # interested_rate = 0.1
+        # logger.info(f"对{message.processed_plain_text}的激活度:{interested_rate}")
         # logger.info(f"\033[1;32m[主题识别]\033[0m 使用{global_config.topic_extract}主题: {topic}")
 
         await self.storage.store_message(message, chat, topic[0] if topic else None)
@@ -123,7 +129,10 @@ class ChatBot:
             interested_rate=interested_rate,
             sender_id=str(message.message_info.user_info.user_id),
         )
-        current_willing = willing_manager.get_willing(chat_stream=chat)
+        current_willing_old = willing_manager.get_willing(chat_stream=chat)
+        current_willing_new = (subheartflow_manager.get_subheartflow(chat.stream_id).current_state.willing - 5) / 4
+        print(f"旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
+        current_willing = (current_willing_old + current_willing_new) / 2
 
         logger.info(
             f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]"
@@ -162,6 +171,14 @@ class ChatBot:
 
         # print(f"response: {response}")
         if response:
+            stream_id = message.chat_stream.stream_id
+            chat_talking_prompt = ""
+            if stream_id:
+                chat_talking_prompt = get_recent_group_detailed_plain_text(
+                    stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
+                )
+
+            await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response, chat_talking_prompt)
             # print(f"有response: {response}")
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None
@@ -259,7 +276,7 @@ class ChatBot:
             )
 
             # 使用情绪管理器更新情绪
-            self.mood_manager.update_mood_from_emotion(emotion[0], global_config.mood_intensity_factor)
+            self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
 
             # willing_manager.change_reply_willing_after_sent(
             #     chat_stream=chat
