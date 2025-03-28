@@ -148,7 +148,7 @@ class ChatBot:
 
         response = None
         # 开始组织语言
-        if random() < reply_probability:
+        if random() < reply_probability + 1:
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ,
                 user_nickname=global_config.BOT_NICKNAME,
@@ -183,8 +183,10 @@ class ChatBot:
                 chat_talking_prompt = get_recent_group_detailed_plain_text(
                     stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
                 )
-
-            await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response, chat_talking_prompt)
+            if subheartflow_manager.get_subheartflow(stream_id):
+                await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response, chat_talking_prompt)
+            else:
+                await subheartflow_manager.create_subheartflow(stream_id).do_after_reply(response, chat_talking_prompt)
             # print(f"有response: {response}")
             container = message_manager.get_container(chat.stream_id)
             thinking_message = None

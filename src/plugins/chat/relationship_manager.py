@@ -170,7 +170,7 @@ class RelationshipManager:
         if key in self.relationships:
             return self.relationships[key]
         else:
-            return 0
+            return None
 
     async def load_relationship(self, data: dict) -> Relationship:
         """从数据库加载或创建新的关系对象"""
