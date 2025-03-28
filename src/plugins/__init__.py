@@ -8,7 +8,6 @@ from .chat.emoji_manager import emoji_manager
 from .chat.relationship_manager import relationship_manager
 from .moods.moods import MoodManager
 from .willing.willing_manager import willing_manager
-from .memory_system.Hippocampus import HippocampusManager
 from .schedule.schedule_generator import bot_schedule
 
 # 导出主要组件供外部使用
