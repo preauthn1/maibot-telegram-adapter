@@ -229,7 +229,7 @@ class MessageManager:
 
                         await message_sender.send_message(msg)
 
-                        await self.storage.store_message(msg, msg.chat_stream, None)
+                        await self.storage.store_message(msg, msg.chat_stream)
 
                         if not container.remove_message(msg):
                             logger.warning("尝试删除不存在的消息")
