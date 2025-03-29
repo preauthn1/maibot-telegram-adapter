@@ -241,6 +241,6 @@ class MessageBase:
             MessageBase: 新的实例
         """
         message_info = BaseMessageInfo.from_dict(data.get("message_info", {}))
-        message_segment = Seg(**data.get("message_segment", {}))
+        message_segment = Seg.from_dict(data.get("message_segment", {}))
         raw_message = data.get("raw_message", None)
         return cls(message_info=message_info, message_segment=message_segment, raw_message=raw_message)
