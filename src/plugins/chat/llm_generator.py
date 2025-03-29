@@ -79,7 +79,7 @@ class ResponseGenerator:
         else:
             sender_name = f"用户({message.chat_stream.user_info.user_id})"
 
-        logger.debug(f"开始使用生成回复-2")
+        logger.debug("开始使用生成回复-2")
         # 构建prompt
         timer1 = time.time()
         prompt = await prompt_builder._build_prompt(

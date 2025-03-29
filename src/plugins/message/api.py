@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException
-from typing import Optional, Dict, Any, Callable, List
+from typing import Dict, Any, Callable, List
 import aiohttp
 import asyncio
 import uvicorn
@@ -37,7 +37,7 @@ class BaseMessageAPI:
             try:
                 async with session.post(url, json=data, headers={"Content-Type": "application/json"}) as response:
                     return await response.json()
-            except Exception as e:
+            except Exception:
                 # logger.error(f"发送消息失败: {str(e)}")
                 pass
 
@@ -50,7 +50,7 @@ class BaseMessageAPI:
                 for handler in self.message_handlers:
                     try:
                         await handler(self.cache[0])
-                    except:
+                    except Exception:
                         pass
                 self.cache.pop(0)
             if len(self.cache) > 0:

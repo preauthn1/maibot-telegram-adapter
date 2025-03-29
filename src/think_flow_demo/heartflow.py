@@ -149,15 +149,15 @@ class Heartflow:
             logger.debug(f"创建 observation: {subheartflow_id}")
             observation = ChattingObservation(subheartflow_id)
 
-            logger.debug(f"添加 observation ")
+            logger.debug("添加 observation ")
             subheartflow.add_observation(observation)
-            logger.debug(f"添加 observation 成功")
+            logger.debug("添加 observation 成功")
             # 创建异步任务
-            logger.debug(f"创建异步任务")
+            logger.debug("创建异步任务")
             asyncio.create_task(subheartflow.subheartflow_start_working())
-            logger.debug(f"创建异步任务 成功")
+            logger.debug("创建异步任务 成功")
             self._subheartflows[subheartflow_id] = subheartflow
-            logger.info(f"添加 subheartflow 成功")
+            logger.info("添加 subheartflow 成功")
         return self._subheartflows[subheartflow_id]
 
     def get_subheartflow(self, observe_chat_id):

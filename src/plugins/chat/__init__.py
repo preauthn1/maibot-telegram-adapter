@@ -11,4 +11,5 @@ __all__ = [
     "chat_manager",
     "message_manager",
     "MessageStorage",
+    "auto_speak_manager"
 ]

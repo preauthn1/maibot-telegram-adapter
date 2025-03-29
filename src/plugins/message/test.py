@@ -7,7 +7,6 @@ from message_base import (
     UserInfo,
     GroupInfo,
     FormatInfo,
-    TemplateInfo,
     MessageBase,
     Seg,
 )

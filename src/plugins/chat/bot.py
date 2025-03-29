@@ -277,7 +277,6 @@ class ChatBot:
                 emoji_cq = image_path_to_base64(emoji_path)
 
                 thinking_time_point = round(message.message_info.time, 2)
-                bot_response_time = thinking_time_point + (1 if random() < 0.5 else -1)
 
                 message_segment = Seg(type="emoji", data=emoji_cq)
                 bot_message = MessageSending(

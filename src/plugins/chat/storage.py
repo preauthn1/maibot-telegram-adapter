@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Union
 
 from ...common.database import db
 from .message import MessageSending, MessageRecv

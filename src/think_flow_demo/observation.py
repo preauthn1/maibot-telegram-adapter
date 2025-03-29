@@ -1,6 +1,5 @@
 # 定义了来自外部世界的信息
 # 外部世界可以是某个聊天 不同平台的聊天 也可以是任意媒体
-import asyncio
 from datetime import datetime
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.config.config import global_config
