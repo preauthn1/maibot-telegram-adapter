@@ -79,7 +79,7 @@ class SubHeartflow:
     async def subheartflow_start_working(self):
         while True:
             current_time = time.time()
-            if current_time - self.last_reply_time > 180:  # 3分钟 = 180秒
+            if current_time - self.last_reply_time > 120:  # 120秒无回复/不在场，冻结
                 self.is_active = False
                 await asyncio.sleep(60)  # 每60秒检查一次
             else:
@@ -87,7 +87,7 @@ class SubHeartflow:
                 self.last_active_time = current_time  # 更新最后激活时间
                 
                 observation = self.observations[0]
-                observation.observe()
+                await observation.observe()
                 
                 self.current_state.update_current_state_info()
                 
@@ -96,8 +96,8 @@ class SubHeartflow:
                 await asyncio.sleep(60)
             
             # 检查是否超过10分钟没有激活
-            if current_time - self.last_active_time > 600:  # 10分钟 = 600秒
-                logger.info(f"子心流 {self.subheartflow_id} 已经10分钟没有激活，正在销毁...")
+            if current_time - self.last_active_time > 600:  # 5分钟无回复/不在场，销毁
+                logger.info(f"子心流 {self.subheartflow_id} 已经5分钟没有激活，正在销毁...")
                 break  # 退出循环，销毁自己
     
     async def do_a_thinking(self):
@@ -146,7 +146,7 @@ class SubHeartflow:
         self.update_current_mind(reponse)
         
         self.current_mind = reponse
-        logger.info(f"prompt:\n{prompt}\n")
+        logger.debug(f"prompt:\n{prompt}\n")
         logger.info(f"麦麦的脑内状态：{self.current_mind}")
     
     async def do_after_reply(self,reply_content,chat_talking_prompt):

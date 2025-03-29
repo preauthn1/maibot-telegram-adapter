@@ -78,7 +78,7 @@ class ChatBot:
         timer1 = time.time()
         await message.process()
         timer2 = time.time()
-        logger.info(f"2消息处理时间: {timer2 - timer1}秒")
+        logger.debug(f"2消息处理时间: {timer2 - timer1}秒")
 
         # 过滤词/正则表达式过滤
         if (
@@ -97,7 +97,7 @@ class ChatBot:
             message.processed_plain_text, fast_retrieval=True
         )
         timer2 = time.time()
-        logger.info(f"3记忆激活时间: {timer2 - timer1}秒")
+        logger.debug(f"3记忆激活时间: {timer2 - timer1}秒")
 
 
         is_mentioned = is_mentioned_bot_in_message(message)
@@ -122,7 +122,7 @@ class ChatBot:
             sender_id=str(message.message_info.user_info.user_id),
         )
         timer2 = time.time()
-        logger.info(f"4计算意愿激活时间: {timer2 - timer1}秒")
+        logger.debug(f"4计算意愿激活时间: {timer2 - timer1}秒")
 
         #神秘的消息流数据结构处理
         if chat.group_info:
@@ -168,7 +168,7 @@ class ChatBot:
             timer1 = time.time()
             await self._handle_emoji(message, chat, response_set)
             timer2 = time.time()
-            logger.info(f"8处理表情包时间: {timer2 - timer1}秒")
+            logger.debug(f"8处理表情包时间: {timer2 - timer1}秒")
         
             timer1 = time.time()
             await self._update_using_response(message, chat, response_set)
@@ -229,7 +229,7 @@ class ChatBot:
         container = message_manager.get_container(chat.stream_id)
         thinking_message = None
         
-        logger.info(f"开始发送消息准备")
+        # logger.info(f"开始发送消息准备")
         for msg in container.messages:
             if isinstance(msg, MessageThinking) and msg.message_info.message_id == thinking_id:
                 thinking_message = msg
@@ -240,7 +240,7 @@ class ChatBot:
             logger.warning("未找到对应的思考消息，可能已超时被移除")
             return
 
-        logger.info(f"开始发送消息")
+        # logger.info(f"开始发送消息")
         thinking_start_time = thinking_message.thinking_start_time
         message_set = MessageSet(chat, thinking_id)
         
@@ -265,7 +265,7 @@ class ChatBot:
             if not mark_head:
                 mark_head = True
             message_set.add_message(bot_message)
-        logger.info(f"开始添加发送消息")
+        # logger.info(f"开始添加发送消息")
         message_manager.add_message(message_set)
 
     async def _handle_emoji(self, message, chat, response):

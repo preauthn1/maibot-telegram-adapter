@@ -71,8 +71,6 @@ class ResponseGenerator:
             return None
 
     async def _generate_response_with_model(self, message: MessageThinking, model: LLM_request):
-        """使用指定的模型生成回复"""
-        logger.info(f"开始使用生成回复-1")
         sender_name = ""
         if message.chat_stream.user_info.user_cardname and message.chat_stream.user_info.user_nickname:
             sender_name = (
@@ -84,7 +82,7 @@ class ResponseGenerator:
         else:
             sender_name = f"用户({message.chat_stream.user_info.user_id})"
 
-        logger.info(f"开始使用生成回复-2")
+        logger.debug(f"开始使用生成回复-2")
         # 构建prompt
         timer1 = time.time()
         prompt = await prompt_builder._build_prompt(

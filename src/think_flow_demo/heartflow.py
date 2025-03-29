@@ -56,7 +56,7 @@ class Heartflow:
                 del self._subheartflows[subheartflow_id]
                 logger.info(f"已清理不活跃的子心流: {subheartflow_id}")
             
-            await asyncio.sleep(60)  # 每分钟检查一次
+            await asyncio.sleep(30)  # 每分钟检查一次
 
     async def heartflow_start_working(self):
         # 启动清理任务
@@ -65,7 +65,7 @@ class Heartflow:
         while True:
             # 检查是否存在子心流
             if not self._subheartflows:
-                logger.debug("当前没有子心流，等待新的子心流创建...")
+                logger.info("当前没有子心流，等待新的子心流创建...")
                 await asyncio.sleep(60)  # 每分钟检查一次是否有新的子心流
                 continue
                 
@@ -73,7 +73,7 @@ class Heartflow:
             await asyncio.sleep(300)  # 5分钟思考一次
     
     async def do_a_thinking(self):
-        logger.info("麦麦大脑袋转起来了")
+        logger.debug("麦麦大脑袋转起来了")
         self.current_state.update_current_state_info()
         
         personality_info = self.personality_info
@@ -157,7 +157,7 @@ class Heartflow:
             asyncio.create_task(subheartflow.subheartflow_start_working())
             logger.debug(f"创建异步任务 成功")
             self._subheartflows[subheartflow_id] = subheartflow
-            logger.debug(f"添加 subheartflow 成功")
+            logger.info(f"添加 subheartflow 成功")
         return self._subheartflows[subheartflow_id]
     
     def get_subheartflow(self, observe_chat_id):
