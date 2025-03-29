@@ -47,8 +47,8 @@ class ChatStream:
     @classmethod
     def from_dict(cls, data: dict) -> "ChatStream":
         """从字典创建实例"""
-        user_info = UserInfo(**data.get("user_info", {})) if data.get("user_info") else None
-        group_info = GroupInfo(**data.get("group_info", {})) if data.get("group_info") else None
+        user_info = UserInfo.from_dict(data.get("user_info", {})) if data.get("user_info") else None
+        group_info = GroupInfo.from_dict(data.get("group_info", {})) if data.get("group_info") else None
 
         return cls(
             stream_id=data["stream_id"],
