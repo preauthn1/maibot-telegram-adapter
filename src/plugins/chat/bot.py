@@ -147,6 +147,10 @@ class ChatBot:
         )
 
         response = None
+
+        if message.message_info.additional_config:
+            if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
+                reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
         # 开始组织语言
         if random() < reply_probability:
             bot_user_info = UserInfo(
