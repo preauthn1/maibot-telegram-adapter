@@ -28,10 +28,10 @@ class ScheduleGenerator:
     def __init__(self):
         # 使用离线LLM模型
         self.llm_scheduler_all = LLM_request(
-            model=global_config.llm_reasoning, temperature=0.9, max_tokens=7000, request_type="schedule"
+            model=global_config.llm_reasoning, temperature=0.8, max_tokens=7000, request_type="schedule"
         )
         self.llm_scheduler_doing = LLM_request(
-            model=global_config.llm_normal, temperature=0.9, max_tokens=2048, request_type="schedule"
+            model=global_config.llm_normal, temperature=0.6, max_tokens=2048, request_type="schedule"
         )
 
         self.today_schedule_text = ""
@@ -124,26 +124,23 @@ class ScheduleGenerator:
 
         prompt = f"你是{self.name}，{self.personality}，{self.behavior}"
         prompt += f"你昨天的日程是：{self.yesterday_schedule_text}\n"
-        prompt += f"请为你生成{date_str}（{weekday}）的日程安排，结合你的个人特点和行为习惯\n"
+        prompt += f"请为你生成{date_str}（{weekday}），也就是今天的日程安排，结合你的个人特点和行为习惯以及昨天的安排\n"
         prompt += "推测你的日程安排，包括你一天都在做什么，从起床到睡眠，有什么发现和思考，具体一些，详细一些，需要1500字以上，精确到每半个小时，记得写明时间\n"  # noqa: E501
         prompt += "直接返回你的日程，从起床到睡觉，不要输出其他内容："
         return prompt
 
     def construct_doing_prompt(self, time: datetime.datetime, mind_thinking: str = ""):
         now_time = time.strftime("%H:%M")
-        if self.today_done_list:
-            previous_doings = self.get_current_num_task(5, True)
-            # print(previous_doings)
-        else:
-            previous_doings = "你没做什么事情"
+        previous_doings = self.get_current_num_task(5, True)
 
         prompt = f"你是{self.name}，{self.personality}，{self.behavior}"
         prompt += f"你今天的日程是：{self.today_schedule_text}\n"
-        prompt += f"你之前做了的事情是：{previous_doings}，从之前到现在已经过去了{self.schedule_doing_update_interval / 60}分钟了\n"  # noqa: E501
+        if previous_doings:
+            prompt += f"你之前做了的事情是：{previous_doings}，从之前到现在已经过去了{self.schedule_doing_update_interval / 60}分钟了\n"  # noqa: E501
         if mind_thinking:
             prompt += f"你脑子里在想：{mind_thinking}\n"
-        prompt += f"现在是{now_time}，结合你的个人特点和行为习惯,注意关注你今天的日程安排和想法，这很重要，"
-        prompt += "推测你现在在做什么，具体一些，详细一些\n"
+        prompt += f"现在是{now_time}，结合你的个人特点和行为习惯,注意关注你今天的日程安排和想法安排你接下来做什么，"
+        prompt += "安排你接下来做什么，具体一些，详细一些\n"
         prompt += "直接返回你在做的事情，注意是当前时间，不要输出其他内容："
         return prompt
 
@@ -154,23 +151,6 @@ class ScheduleGenerator:
         daytime_prompt = self.construct_daytime_prompt(target_date)
         daytime_response, _ = await self.llm_scheduler_all.generate_response_async(daytime_prompt)
         return daytime_response
-
-    def _time_diff(self, time1: str, time2: str) -> int:
-        """计算两个时间字符串之间的分钟差"""
-        if time1 == "24:00":
-            time1 = "23:59"
-        if time2 == "24:00":
-            time2 = "23:59"
-        t1 = datetime.datetime.strptime(time1, "%H:%M")
-        t2 = datetime.datetime.strptime(time2, "%H:%M")
-        diff = int((t2 - t1).total_seconds() / 60)
-        # 考虑时间的循环性
-        if diff < -720:
-            diff += 1440  # 加一天的分钟
-        elif diff > 720:
-            diff -= 1440  # 减一天的分钟
-        # print(f"时间1[{time1}]: 时间2[{time2}]，差值[{diff}]分钟")
-        return diff
 
     def print_schedule(self):
         """打印完整的日程安排"""

@@ -221,11 +221,8 @@ class ChatBot:
             chat_talking_prompt = get_recent_group_detailed_plain_text(
                 stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
             )
-            
-        if heartflow.get_subheartflow(stream_id):
-            await heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
-        else:
-            await heartflow.create_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
+        
+        heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
 
 
     async def _send_response_messages(self, message, chat, response_set, thinking_id):

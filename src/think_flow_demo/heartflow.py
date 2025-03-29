@@ -6,6 +6,7 @@ from src.plugins.config.config import global_config
 from src.plugins.schedule.schedule_generator import bot_schedule
 import asyncio
 from src.common.logger import get_module_logger, LogConfig, HEARTFLOW_STYLE_CONFIG # noqa: E402
+import time
 
 heartflow_config = LogConfig(
     # 使用海马体专用样式
@@ -37,12 +38,39 @@ class Heartflow:
         self.active_subheartflows_nums = 0
         
         self.personality_info = " ".join(global_config.PROMPT_PERSONALITY)
-        
+
+    async def _cleanup_inactive_subheartflows(self):
+        """定期清理不活跃的子心流"""
+        while True:
+            current_time = time.time()
+            inactive_subheartflows = []
+            
+            # 检查所有子心流
+            for subheartflow_id, subheartflow in self._subheartflows.items():
+                if current_time - subheartflow.last_active_time > 600:  # 10分钟 = 600秒
+                    inactive_subheartflows.append(subheartflow_id)
+                    logger.info(f"发现不活跃的子心流: {subheartflow_id}")
+            
+            # 清理不活跃的子心流
+            for subheartflow_id in inactive_subheartflows:
+                del self._subheartflows[subheartflow_id]
+                logger.info(f"已清理不活跃的子心流: {subheartflow_id}")
+            
+            await asyncio.sleep(60)  # 每分钟检查一次
 
     async def heartflow_start_working(self):
+        # 启动清理任务
+        asyncio.create_task(self._cleanup_inactive_subheartflows())
+        
         while True:
+            # 检查是否存在子心流
+            if not self._subheartflows:
+                logger.debug("当前没有子心流，等待新的子心流创建...")
+                await asyncio.sleep(60)  # 每分钟检查一次是否有新的子心流
+                continue
+                
             await self.do_a_thinking()
-            await asyncio.sleep(600)
+            await asyncio.sleep(300)  # 5分钟思考一次
     
     async def do_a_thinking(self):
         logger.info("麦麦大脑袋转起来了")
@@ -72,7 +100,7 @@ class Heartflow:
         
         self.current_mind = reponse
         logger.info(f"麦麦的总体脑内状态：{self.current_mind}")
-        logger.info("麦麦想了想，当前活动:")
+        # logger.info("麦麦想了想，当前活动:")
         await bot_schedule.move_doing(self.current_mind)
         
         
