@@ -118,12 +118,12 @@ else:
     config_data = toml.load("config/bot_config.toml")
     init_model_pricing()
 
-if not os.path.exists(".env.prod"):
-    logger.error("环境配置文件 .env.prod 不存在，请检查配置文件路径")
-    raise FileNotFoundError("环境配置文件 .env.prod 不存在，请检查配置文件路径")
+if not os.path.exists(".env"):
+    logger.error("环境配置文件 .env 不存在，请检查配置文件路径")
+    raise FileNotFoundError("环境配置文件 .env 不存在，请检查配置文件路径")
 else:
     # 载入env文件并解析
-    env_config_file = ".env.prod"  # 配置文件路径
+    env_config_file = ".env"  # 配置文件路径
     env_config_data = parse_env_config(env_config_file)
 
 # 增加最低支持版本
@@ -173,7 +173,7 @@ WEBUI_VERSION = version.parse("0.0.11")
 
 
 # env环境配置文件保存函数
-def save_to_env_file(env_variables, filename=".env.prod"):
+def save_to_env_file(env_variables, filename=".env"):
     """
     将修改后的变量保存到指定的.env文件中，并在第一次保存前备份文件（如果备份文件不存在）。
     """
@@ -196,7 +196,7 @@ def save_to_env_file(env_variables, filename=".env.prod"):
 
 
 # 载入env文件并解析
-env_config_file = ".env.prod"  # 配置文件路径
+env_config_file = ".env"  # 配置文件路径
 env_config_data = parse_env_config(env_config_file)
 if "env_VOLCENGINE_BASE_URL" in env_config_data:
     logger.info("VOLCENGINE_BASE_URL 已存在，使用默认值")
@@ -421,7 +421,7 @@ def save_trigger(
     env_config_data[f"env_{t_api_provider}_KEY"] = t_api_key
 
     save_to_env_file(env_config_data)
-    logger.success("配置已保存到 .env.prod 文件中")
+    logger.success("配置已保存到 .env 文件中")
     return "配置已保存"
 
 

@@ -4,14 +4,14 @@
 
 本项目需要配置两个主要文件：
 
-1. `.env.prod` - 配置API服务和系统环境
+1. `.env` - 配置API服务和系统环境
 2. `bot_config.toml` - 配置机器人行为和模型
 
 ## API配置说明
 
-`.env.prod` 和 `bot_config.toml` 中的API配置关系如下：
+`.env` 和 `bot_config.toml` 中的API配置关系如下：
 
-### 在.env.prod中定义API凭证
+### 在.env中定义API凭证
 
 ```ini
 # API凭证配置
@@ -30,7 +30,7 @@ CHAT_ANY_WHERE_BASE_URL=https://api.chatanywhere.tech/v1  # ChatAnyWhere API地�
 ```toml
 [model.llm_reasoning]
 name = "Pro/deepseek-ai/DeepSeek-R1"
-provider = "SILICONFLOW"         # 引用.env.prod中定义的宏
+provider = "SILICONFLOW"         # 引用.env中定义的宏
 ```
 
 如需切换到其他API服务，只需修改引用：
@@ -43,7 +43,7 @@ provider = "DEEP_SEEK"           # 使用DeepSeek密钥
 
 ## 配置文件详解
 
-### 环境配置文件 (.env.prod)
+### 环境配置文件 (.env)
 
 ```ini
 # API配置

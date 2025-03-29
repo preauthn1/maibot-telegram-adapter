@@ -29,7 +29,7 @@ class EnvConfig:
             if env_type == 'dev':
                 env_file = self.ROOT_DIR / '.env.dev'
             elif env_type == 'prod':
-                env_file = self.ROOT_DIR / '.env.prod'
+                env_file = self.ROOT_DIR / '.env'
                 
             if env_file.exists():
                 load_dotenv(env_file, override=True)

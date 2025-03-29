@@ -26,8 +26,8 @@ from src.common.database import db  # noqa: E402
 if os.path.exists(os.path.join(root_dir, ".env.dev")):
     load_dotenv(os.path.join(root_dir, ".env.dev"))
     logger.info("成功加载开发环境配置")
-elif os.path.exists(os.path.join(root_dir, ".env.prod")):
-    load_dotenv(os.path.join(root_dir, ".env.prod"))
+elif os.path.exists(os.path.join(root_dir, ".env")):
+    load_dotenv(os.path.join(root_dir, ".env"))
     logger.info("成功加载生产环境配置")
 else:
     logger.error("未找到环境配置文件")

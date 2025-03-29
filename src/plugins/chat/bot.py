@@ -1,7 +1,6 @@
 import re
 import time
 from random import random
-import json
 
 from ..memory_system.Hippocampus import HippocampusManager
 from ..moods.moods import MoodManager  # 导入情绪管理器
@@ -18,10 +17,9 @@ from .storage import MessageStorage
 from .utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
 from .utils_image import image_path_to_base64
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
-from ..message import UserInfo, GroupInfo, Seg
+from ..message import UserInfo, Seg
 
-from src.think_flow_demo.heartflow import subheartflow_manager
-from src.think_flow_demo.outer_world import outer_world
+from src.think_flow_demo.heartflow import heartflow
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 
 # 定义日志配置
@@ -58,7 +56,7 @@ class ChatBot:
         5. 更新关系
         6. 更新情绪
         """
-
+        
         message = MessageRecv(message_data)
         groupinfo = message.message_info.group_info
         userinfo = message.message_info.user_info
@@ -74,18 +72,8 @@ class ChatBot:
         )
         message.update_chat_stream(chat)
 
-        # 创建 心流 观察
-        
-        await outer_world.check_and_add_new_observe()
-        subheartflow_manager.create_subheartflow(chat.stream_id)
-
-        timer1 = time.time()
-        await relationship_manager.update_relationship(
-            chat_stream=chat,
-        )
-        await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=0)
-        timer2 = time.time()
-        logger.info(f"1关系更新时间: {timer2 - timer1}秒")
+        # 创建 心流与chat的观察
+        heartflow.create_subheartflow(chat.stream_id)
 
         timer1 = time.time()
         await message.process()
@@ -99,10 +87,9 @@ class ChatBot:
         ):
             return
         
-        current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
 
-        # 根据话题计算激活度
         await self.storage.store_message(message, chat)
+        
 
         timer1 = time.time()
         interested_rate = 0
@@ -117,8 +104,8 @@ class ChatBot:
 
         if global_config.enable_think_flow:
             current_willing_old = willing_manager.get_willing(chat_stream=chat)
-            current_willing_new = (subheartflow_manager.get_subheartflow(chat.stream_id).current_state.willing - 5) / 4
-            print(f"4旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
+            current_willing_new = (heartflow.get_subheartflow(chat.stream_id).current_state.willing - 5) / 4
+            print(f"旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
             current_willing = (current_willing_old + current_willing_new) / 2
         else:
             current_willing = willing_manager.get_willing(chat_stream=chat)
@@ -147,7 +134,8 @@ class ChatBot:
         else:
             mes_name = '私聊'
             
-        # print(f"mes_name: {mes_name}")
+        #打印收到的信息的信息
+        current_time = time.strftime("%H:%M:%S", time.localtime(messageinfo.time))
         logger.info(
             f"[{current_time}][{mes_name}]"
             f"{chat.user_info.user_nickname}:"
@@ -225,7 +213,7 @@ class ChatBot:
         
         return response_set, thinking_id
 
-    async def _update_using_response(self, message, chat, response_set):
+    async def _update_using_response(self, message, response_set):
         # 更新心流状态
         stream_id = message.chat_stream.stream_id
         chat_talking_prompt = ""
@@ -234,10 +222,10 @@ class ChatBot:
                 stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
             )
             
-        if subheartflow_manager.get_subheartflow(stream_id):
-            await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
+        if heartflow.get_subheartflow(stream_id):
+            await heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
         else:
-            await subheartflow_manager.create_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
+            await heartflow.create_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
 
 
     async def _send_response_messages(self, message, chat, response_set, thinking_id):

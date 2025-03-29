@@ -42,7 +42,7 @@ services:
       - napcatCONFIG:/MaiMBot/napcat # 自动根据配置中的 QQ 号创建 ws 反向客户端配置
       - ./bot_config.toml:/MaiMBot/config/bot_config.toml # Toml 配置文件映射
       - maimbotDATA:/MaiMBot/data # NapCat 和 NoneBot 共享此卷，否则发送图片会有问题
-      - ./.env.prod:/MaiMBot/.env.prod # Toml 配置文件映射
+      - ./.env:/MaiMBot/.env # Toml 配置文件映射
     image: sengokucola/maimbot:latest
 
 volumes:

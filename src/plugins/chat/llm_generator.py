@@ -97,9 +97,7 @@ class ResponseGenerator:
         logger.info(f"构建prompt时间: {timer2 - timer1}秒")
         
         try:
-            print(111111111111111111111111111111111111111111111111111111111)
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
-            print(222222222222222222222222222222222222222222222222222222222)
         except Exception:
             logger.exception("生成回复时出错")
             return None

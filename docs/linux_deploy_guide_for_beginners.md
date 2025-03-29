@@ -224,7 +224,7 @@ python bot.py
 
 ```
 bot
-├─ .env.prod
+├─ .env
 └─ config
    └─ bot_config.toml
 ```
@@ -236,7 +236,7 @@ bot
 
 本项目需要配置两个主要文件：
 
-1. `.env.prod` - 配置API服务和系统环境
+1. `.env` - 配置API服务和系统环境
 2. `bot_config.toml` - 配置机器人行为和模型
 
 #### API

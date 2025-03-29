@@ -84,7 +84,7 @@ class ScheduleGenerator:
                     self.print_schedule()
 
                 # 执行当前活动
-                # mind_thinking = subheartflow_manager.current_state.current_mind
+                # mind_thinking = heartflow.current_state.current_mind
 
                 await self.move_doing()
 

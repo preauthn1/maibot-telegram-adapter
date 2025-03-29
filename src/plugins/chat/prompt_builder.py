@@ -12,7 +12,7 @@ from .chat_stream import chat_manager
 from .relationship_manager import relationship_manager
 from src.common.logger import get_module_logger
 
-from src.think_flow_demo.heartflow import subheartflow_manager
+from src.think_flow_demo.heartflow import heartflow
 
 logger = get_module_logger("prompt")
 
@@ -34,12 +34,11 @@ class PromptBuilder:
         # )
 
         # outer_world_info = outer_world.outer_world_info
-        if global_config.enable_think_flow:
-            current_mind_info = subheartflow_manager.get_subheartflow(stream_id).current_mind
-        else:
-            current_mind_info = ""
 
-        relation_prompt = ""
+        current_mind_info = heartflow.get_subheartflow(stream_id).current_mind
+
+
+        # relation_prompt = ""
         # for person in who_chat_in_group:
         #     relation_prompt += relationship_manager.build_relationship_info(person)
 
@@ -74,23 +73,22 @@ class PromptBuilder:
                 chat_talking_prompt = chat_talking_prompt
                 # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
                 
-        logger.info(f"聊天上下文prompt: {chat_talking_prompt}")
 
         # 使用新的记忆获取方法
         memory_prompt = ""
         start_time = time.time()
 
-        # 调用 hippocampus 的 get_relevant_memories 方法
-        # relevant_memories = await HippocampusManager.get_instance().get_memory_from_text(
-        #     text=message_txt, max_memory_num=3, max_memory_length=2, max_depth=2, fast_retrieval=True
-        # )
-        # memory_str = ""
-        # for _topic, memories in relevant_memories:
-            # memory_str += f"{memories}\n"
+        #调用 hippocampus 的 get_relevant_memories 方法
+        relevant_memories = await HippocampusManager.get_instance().get_memory_from_text(
+            text=message_txt, max_memory_num=3, max_memory_length=2, max_depth=2, fast_retrieval=False
+        )
+        memory_str = ""
+        for _topic, memories in relevant_memories:
+            memory_str += f"{memories}\n"
 
-        # if relevant_memories:
-        #     # 格式化记忆内容
-        #     memory_prompt = f"你回忆起：\n{memory_str}\n"
+        if relevant_memories:
+            # 格式化记忆内容
+            memory_prompt = f"你回忆起：\n{memory_str}\n"
 
         end_time = time.time()
         logger.info(f"回忆耗时: {(end_time - start_time):.3f}秒")

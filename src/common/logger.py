@@ -7,8 +7,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 # from ..plugins.chat.config import global_config
 
-# 加载 .env.prod 文件
-env_path = Path(__file__).resolve().parent.parent.parent / ".env.prod"
+# 加载 .env 文件
+env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # 保存原生处理器ID

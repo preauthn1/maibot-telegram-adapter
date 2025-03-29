@@ -45,25 +45,25 @@ def init_config():
             logger.info("创建config目录")
 
         shutil.copy("template/bot_config_template.toml", "config/bot_config.toml")
-        logger.info("复制完成，请修改config/bot_config.toml和.env.prod中的配置后重新启动")
+        logger.info("复制完成，请修改config/bot_config.toml和.env中的配置后重新启动")
 
 
 def init_env():
-    # 检测.env.prod文件是否存在
-    if not os.path.exists(".env.prod"):
-        logger.error("检测到.env.prod文件不存在")
-        shutil.copy("template/template.env", "./.env.prod")
-        logger.info("已从template/template.env复制创建.env.prod，请修改配置后重新启动")
+    # 检测.env文件是否存在
+    if not os.path.exists(".env"):
+        logger.error("检测到.env文件不存在")
+        shutil.copy("template/template.env", "./.env")
+        logger.info("已从template/template.env复制创建.env，请修改配置后重新启动")
 
 
 def load_env():
     # 直接加载生产环境变量配置
-    if os.path.exists(".env.prod"):
-        load_dotenv(".env.prod", override=True)
+    if os.path.exists(".env"):
+        load_dotenv(".env", override=True)
         logger.success("成功加载环境变量配置")
     else:
-        logger.error("未找到.env.prod文件，请确保文件存在")
-        raise FileNotFoundError("未找到.env.prod文件，请确保文件存在")
+        logger.error("未找到.env文件，请确保文件存在")
+        raise FileNotFoundError("未找到.env文件，请确保文件存在")
 
 
 def scan_provider(env_config: dict):

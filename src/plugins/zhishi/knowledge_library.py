@@ -16,7 +16,7 @@ sys.path.append(root_path)
 from src.common.database import db  # noqa E402
 
 # 加载根目录下的env.edv文件
-env_path = os.path.join(root_path, ".env.prod")
+env_path = os.path.join(root_path, ".env")
 if not os.path.exists(env_path):
     raise FileNotFoundError(f"配置文件不存在: {env_path}")
 load_dotenv(env_path)

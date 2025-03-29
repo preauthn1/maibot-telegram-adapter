@@ -164,7 +164,7 @@ class LLM_request:
         # 常见Error Code Mapping
         error_code_mapping = {
             400: "参数不正确",
-            401: "API key 错误，认证失败，请检查/config/bot_config.toml和.env.prod中的配置是否正确哦~",
+            401: "API key 错误，认证失败，请检查/config/bot_config.toml和.env中的配置是否正确哦~",
             402: "账号余额不足",
             403: "需要实名,或余额不足",
             404: "Not Found",

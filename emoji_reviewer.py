@@ -53,7 +53,7 @@ if os.path.exists(bot_config_path):
 else:
     logger.critical(f"没有找到配置文件{bot_config_path}")
     exit(1)
-env_path = os.path.join(root_dir, ".env.prod")
+env_path = os.path.join(root_dir, ".env")
 if not os.path.exists(env_path):
     logger.critical(f"没有找到环境变量文件{env_path}")
     exit(1)

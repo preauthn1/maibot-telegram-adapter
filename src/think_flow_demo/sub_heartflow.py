@@ -1,8 +1,8 @@
-from .outer_world import outer_world
+from .observation import Observation
 import asyncio
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
-from src.plugins.config.config import global_config, BotConfig
+from src.plugins.config.config import global_config
 import re
 import time
 from src.plugins.schedule.schedule_generator import bot_schedule
@@ -30,17 +30,16 @@ class CuttentState:
 
 
 class SubHeartflow:
-    def __init__(self):
+    def __init__(self,subheartflow_id):
+        self.subheartflow_id = subheartflow_id
+        
         self.current_mind = ""
         self.past_mind = []
         self.current_state : CuttentState = CuttentState()
         self.llm_model = LLM_request(
             model=global_config.llm_sub_heartflow, temperature=0.7, max_tokens=600, request_type="sub_heart_flow")
-        self.outer_world = None
         
         self.main_heartflow_info = ""
-        
-        self.observe_chat_id = None
         
         self.last_reply_time = time.time()
         
@@ -50,10 +49,31 @@ class SubHeartflow:
         self.personality_info = " ".join(global_config.PROMPT_PERSONALITY)
         
         self.is_active = False
+        
+        self.observations : list[Observation] = []
     
-    def assign_observe(self,stream_id):
-        self.outer_world = outer_world.get_world_by_stream_id(stream_id)
-        self.observe_chat_id = stream_id
+    def add_observation(self, observation: Observation):
+        """添加一个新的observation对象到列表中，如果已存在相同id的observation则不添加"""
+        # 查找是否存在相同id的observation
+        for existing_obs in self.observations:
+            if existing_obs.observe_id == observation.observe_id:
+                # 如果找到相同id的observation，直接返回
+                return
+        # 如果没有找到相同id的observation，则添加新的
+        self.observations.append(observation)
+        
+    def remove_observation(self, observation: Observation):
+        """从列表中移除一个observation对象"""
+        if observation in self.observations:
+            self.observations.remove(observation)
+    
+    def get_all_observations(self) -> list[Observation]:
+        """获取所有observation对象"""
+        return self.observations
+    
+    def clear_observations(self):
+        """清空所有observation对象"""
+        self.observations.clear()
 
     async def subheartflow_start_working(self):
         while True:
@@ -64,27 +84,34 @@ class SubHeartflow:
                 await asyncio.sleep(60)  # 每30秒检查一次
             else:
                 self.is_active = True
+                
+                observation = self.observations[0]
+                observation.observe()
+                
+                self.current_state.update_current_state_info()
+                
                 await self.do_a_thinking()
                 await self.judge_willing()
                 await asyncio.sleep(60)
     
     async def do_a_thinking(self):
-        self.current_state.update_current_state_info()
         
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         
-        message_stream_info = self.outer_world.talking_summary
-        print(f"message_stream_info：{message_stream_info}")
+        observation = self.observations[0]
+        chat_observe_info = observation.observe_info
+        print(f"chat_observe_info：{chat_observe_info}")
         
+        # 调取记忆
         related_memory = await HippocampusManager.get_instance().get_memory_from_text(
-            text=message_stream_info,
+            text=chat_observe_info,
             max_memory_num=2,
             max_memory_length=2,
             max_depth=3,
             fast_retrieval=False
         )
-        # print(f"相关记忆：{related_memory}")
+        
         if related_memory:
             related_memory_info = ""
             for memory in related_memory:
@@ -104,8 +131,7 @@ class SubHeartflow:
             prompt += f"你想起来你之前见过的回忆：{related_memory_info}。\n以上是你的回忆，不一定是目前聊天里的人说的，也不一定是现在发生的事情，请记住。\n"
         prompt += f"刚刚你的想法是{current_thinking_info}。\n"
         prompt += "-----------------------------------\n"
-        if message_stream_info:
-            prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{message_stream_info}\n"
+        prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{chat_observe_info}\n"
         prompt += f"你现在{mood_info}。\n"
         prompt += "现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，"
         prompt += "但是记得结合上述的消息，要记得维持住你的人设，关注聊天和新内容，不要思考太多:"
@@ -119,12 +145,13 @@ class SubHeartflow:
     
     async def do_after_reply(self,reply_content,chat_talking_prompt):
         # print("麦麦脑袋转起来了")
-        self.current_state.update_current_state_info()
         
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
-        # related_memory_info = 'memory'
-        message_stream_info = self.outer_world.talking_summary
+        
+        observation = self.observations[0]
+        chat_observe_info = observation.observe_info
+        
         message_new_info = chat_talking_prompt
         reply_info = reply_content
         schedule_info = bot_schedule.get_current_num_task(num = 1,time_info = False)
@@ -133,8 +160,7 @@ class SubHeartflow:
         prompt = ""
         prompt += f"你刚刚在做的事情是：{schedule_info}\n"
         prompt += f"你{self.personality_info}\n"
-        
-        prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{message_stream_info}\n"
+        prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{chat_observe_info}\n"
         # if related_memory_info:
             # prompt += f"你想起来{related_memory_info}。"
         prompt += f"刚刚你的想法是{current_thinking_info}。"
@@ -174,13 +200,7 @@ class SubHeartflow:
         else:
             self.current_state.willing = 0
             
-        logger.info(f"{self.observe_chat_id}麦麦的回复意愿：{self.current_state.willing}")
-            
         return self.current_state.willing
-
-    def build_outer_world_info(self):
-        outer_world_info = outer_world.outer_world_info
-        return outer_world_info
 
     def update_current_mind(self,reponse):
         self.past_mind.append(self.current_mind)

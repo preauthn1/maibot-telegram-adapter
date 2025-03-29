@@ -1266,13 +1266,13 @@ class HippocampusManager:
         node_count = len(memory_graph.nodes())
         edge_count = len(memory_graph.edges())
         
-        logger.success("--------------------------------")
-        logger.success("记忆系统参数配置:")
-        logger.success(f"构建间隔: {global_config.build_memory_interval}秒|样本数: {config.build_memory_sample_num},长度: {config.build_memory_sample_length}|压缩率: {config.memory_compress_rate}") # noqa: E501
-        logger.success(f"记忆构建分布: {config.memory_build_distribution}")
-        logger.success(f"遗忘间隔: {global_config.forget_memory_interval}秒|遗忘比例: {global_config.memory_forget_percentage}|遗忘: {config.memory_forget_time}小时之后") # noqa: E501
-        logger.success(f"记忆图统计信息: 节点数量: {node_count}, 连接数量: {edge_count}")
-        logger.success("--------------------------------")
+        logger.success(f'''--------------------------------
+                       记忆系统参数配置:
+                       构建间隔: {global_config.build_memory_interval}秒|样本数: {config.build_memory_sample_num},长度: {config.build_memory_sample_length}|压缩率: {config.memory_compress_rate}
+                       记忆构建分布: {config.memory_build_distribution}
+                       遗忘间隔: {global_config.forget_memory_interval}秒|遗忘比例: {global_config.memory_forget_percentage}|遗忘: {config.memory_forget_time}小时之后
+                       记忆图统计信息: 节点数量: {node_count}, 连接数量: {edge_count}
+                       --------------------------------''') #noqa: E501
         
         
         return self._hippocampus

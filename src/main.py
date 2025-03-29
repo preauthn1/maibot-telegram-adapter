@@ -8,10 +8,8 @@ from .plugins.chat.emoji_manager import emoji_manager
 from .plugins.chat.relationship_manager import relationship_manager
 from .plugins.willing.willing_manager import willing_manager
 from .plugins.chat.chat_stream import chat_manager
+from .think_flow_demo.heartflow import heartflow
 from .plugins.memory_system.Hippocampus import HippocampusManager
-from .plugins.chat import auto_speak_manager
-from .think_flow_demo.heartflow import subheartflow_manager
-from .think_flow_demo.outer_world import outer_world
 from .plugins.chat.message_sender import message_manager
 from .plugins.chat.storage import MessageStorage
 from .plugins.config.config import global_config
@@ -73,8 +71,8 @@ class MainSystem:
         asyncio.create_task(chat_manager._auto_save_task())
 
         # 使用HippocampusManager初始化海马体
-
         self.hippocampus_manager.initialize(global_config=global_config)
+        # await asyncio.sleep(0.5) #防止logger输出飞了
 
         # 初始化日程
         bot_schedule.initialize(
@@ -89,14 +87,12 @@ class MainSystem:
         self.app.register_message_handler(chat_bot.message_process)
 
         try:
-            asyncio.create_task(outer_world.open_eyes())
-            logger.success("大脑和外部世界启动成功")
             # 启动心流系统
-            asyncio.create_task(subheartflow_manager.heartflow_start_working())
+            asyncio.create_task(heartflow.heartflow_start_working())
             logger.success("心流系统启动成功")
             
-            init_end_time = time.time()
-            logger.success(f"初始化完成，用时{init_end_time - init_start_time}秒")
+            init_time = int(1000*(time.time()- init_start_time))
+            logger.success(f"初始化完成，神经元放电{init_time}次")
         except Exception as e:
             logger.error(f"启动大脑和外部世界失败: {e}")
             raise
@@ -107,9 +103,7 @@ class MainSystem:
             tasks = [
                 self.build_memory_task(),
                 self.forget_memory_task(),
-                # self.merge_memory_task(),
                 self.print_mood_task(),
-                # self.generate_schedule_task(),
                 self.remove_recalled_message_task(),
                 emoji_manager.start_periodic_check(),
                 self.app.run(),
@@ -132,25 +126,11 @@ class MainSystem:
             print("\033[1;32m[记忆遗忘]\033[0m 记忆遗忘完成")
             await asyncio.sleep(global_config.forget_memory_interval)
 
-    # async def merge_memory_task(self):
-    #     """记忆整合任务"""
-    #     while True:
-    #         logger.info("正在进行记忆整合")
-    #         await asyncio.sleep(global_config.build_memory_interval + 10)
-
     async def print_mood_task(self):
         """打印情绪状态"""
         while True:
             self.mood_manager.print_mood_status()
             await asyncio.sleep(30)
-
-    # async def generate_schedule_task(self):
-    #     """生成日程任务"""
-    #     while True:
-    #         await bot_schedule.initialize()
-    #         if not bot_schedule.enable_output:
-    #             bot_schedule.print_schedule()
-    #         await asyncio.sleep(7200)
 
     async def remove_recalled_message_task(self):
         """删除撤回消息任务"""

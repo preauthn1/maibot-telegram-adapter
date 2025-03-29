@@ -10,7 +10,7 @@ from .message_sender import message_manager
 from ..moods.moods import MoodManager
 from .llm_generator import ResponseGenerator
 from src.common.logger import get_module_logger
-from src.think_flow_demo.heartflow import subheartflow_manager
+from src.think_flow_demo.heartflow import heartflow
 from ...common.database import db
 
 logger = get_module_logger("auto_speak")
@@ -42,7 +42,7 @@ class AutoSpeakManager:
         while True and global_config.enable_think_flow:
             # 获取所有活跃的子心流
             active_subheartflows = []
-            for chat_id, subheartflow in subheartflow_manager._subheartflows.items():
+            for chat_id, subheartflow in heartflow._subheartflows.items():
                 if (
                     subheartflow.is_active and subheartflow.current_state.willing > 0
                 ):  # 只考虑活跃且意愿值大于0.5的子心流

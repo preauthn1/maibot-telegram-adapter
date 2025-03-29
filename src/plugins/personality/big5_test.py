@@ -10,7 +10,7 @@ import random
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent.parent
-env_path = project_root / ".env.prod"
+env_path = project_root / ".env"
 
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(root_path)

@@ -82,7 +82,7 @@ nb run
 python3 bot.py
 ```
 
-之后你就可以找到`.env.prod`和`bot_config.toml`这两个文件了
+之后你就可以找到`.env`和`bot_config.toml`这两个文件了
 
 关于文件内容的配置请参考：
 - [🎀 新手配置指南](./installation_cute.md) - 通俗易懂的配置教程，适合初次使用的猫娘
