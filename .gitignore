@@ -224,4 +224,4 @@ logs
 
 .vscode
 
-config
+/config/*
