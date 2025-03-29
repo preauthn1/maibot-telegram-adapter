@@ -451,9 +451,18 @@ class BotConfig:
         # 如果使用 notice 字段，在该组配置加载时，会展示该字段对用户的警示
         # 例如："notice": "personality 将在 1.3.2 后被移除"，那么在有效版本中的用户就会虽然可以
         # 正常执行程序，但是会看到这条自定义提示
+
+        # 版本格式：主版本号.次版本号.修订号，版本号递增规则如下：
+        #     主版本号：当你做了不兼容的 API 修改，
+        #     次版本号：当你做了向下兼容的功能性新增，
+        #     修订号：当你做了向下兼容的问题修正。
+        # 先行版本号及版本编译信息可以加到“主版本号.次版本号.修订号”的后面，作为延伸。
+
+        # 如果你做了break的修改，就应该改动主版本号
+        # 如果做了一个兼容修改，就不应该要求这个选项是必须的！
         include_configs = {
             "bot": {"func": bot, "support": ">=0.0.0"},
-            "mai_version": {"func": mai_version, "support": ">=0.0.11"},
+            "mai_version": {"func": mai_version, "support": ">=1.0.0"},
             "groups": {"func": groups, "support": ">=0.0.0"},
             "personality": {"func": personality, "support": ">=0.0.0"},
             "schedule": {"func": schedule, "support": ">=0.0.11", "necessary": False},
@@ -467,7 +476,7 @@ class BotConfig:
             "remote": {"func": remote, "support": ">=0.0.10", "necessary": False},
             "keywords_reaction": {"func": keywords_reaction, "support": ">=0.0.2", "necessary": False},
             "chinese_typo": {"func": chinese_typo, "support": ">=0.0.3", "necessary": False},
-            "platforms": {"func": platforms, "support": ">=0.0.11"},
+            "platforms": {"func": platforms, "support": ">=1.0.0"},
             "response_spliter": {"func": response_spliter, "support": ">=0.0.11", "necessary": False},
             "experimental": {"func": experimental, "support": ">=0.0.11", "necessary": False},
         }

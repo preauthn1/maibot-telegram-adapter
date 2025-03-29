@@ -1,5 +1,5 @@
 [inner]
-version = "0.0.12"
+version = "1.0.0"
 
 [mai_version]
 version = "0.6.0"
@@ -16,6 +16,12 @@ version-fix = "snapshot-2"
 #2.如果你修改的是[]下的项目，例如你新增了[memory]下的 memory_ban_words ,那么请在config.py的 load_config函数中的 memory函数下新增版本判断:
             # if config.INNER_VERSION in SpecifierSet(">=0.0.2"):
             #     config.memory_ban_words = set(memory_config.get("memory_ban_words", []))
+
+# 版本格式：主版本号.次版本号.修订号，版本号递增规则如下：
+#     主版本号：当你做了不兼容的 API 修改，
+#     次版本号：当你做了向下兼容的功能性新增，
+#     修订号：当你做了向下兼容的问题修正。
+# 先行版本号及版本编译信息可以加到“主版本号.次版本号.修订号”的后面，作为延伸。
 
 [bot]
 qq = 114514
