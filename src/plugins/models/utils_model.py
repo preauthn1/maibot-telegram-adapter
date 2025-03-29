@@ -12,8 +12,6 @@ import io
 import os
 from ...common.database import db
 from ..config.config import global_config
-from ..config.config_env import env_config
-
 
 logger = get_module_logger("model_utils")
 
@@ -42,6 +40,7 @@ class LLM_request:
         self.model_name = model["name"]
         self.params = kwargs
 
+        self.stream = model.get("stream", False)
         self.pri_in = model.get("pri_in", 0)
         self.pri_out = model.get("pri_out", 0)
 
@@ -175,7 +174,7 @@ class LLM_request:
 
         api_url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         # 判断是否为流式
-        stream_mode = self.params.get("stream", False)
+        stream_mode = self.stream
         # logger_msg = "进入流式输出模式，" if stream_mode else ""
         # logger.debug(f"{logger_msg}发送请求到URL: {api_url}")
         # logger.info(f"使用模型: {self.model_name}")
