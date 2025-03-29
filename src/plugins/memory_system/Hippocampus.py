@@ -1203,8 +1203,8 @@ class Hippocampus:
                         activation_values[neighbor] = new_activation
                         visited_nodes.add(neighbor)
                         nodes_to_process.append((neighbor, new_activation, current_depth + 1))
-                        logger.debug(
-                            f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")  # noqa: E501
+                        # logger.debug(
+                            # f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")  # noqa: E501
             
             # 更新激活映射
             for node, activation_value in activation_values.items():
@@ -1260,27 +1260,20 @@ class HippocampusManager:
         
         # 输出记忆系统参数信息
         config = self._hippocampus.config
-        logger.success("--------------------------------")
-        logger.success("记忆系统参数配置:")
-        logger.success(f"记忆构建间隔: {global_config.build_memory_interval}秒")
-        logger.success(f"记忆遗忘间隔: {global_config.forget_memory_interval}秒")
-        logger.success(f"记忆遗忘比例: {global_config.memory_forget_percentage}")
-        logger.success(f"记忆压缩率: {config.memory_compress_rate}")
-        logger.success(f"记忆构建样本数: {config.build_memory_sample_num}")
-        logger.success(f"记忆构建样本长度: {config.build_memory_sample_length}")
-        logger.success(f"记忆遗忘时间: {config.memory_forget_time}小时")
-        logger.success(f"记忆构建分布: {config.memory_build_distribution}")
-        logger.success("--------------------------------")
-        
+
         # 输出记忆图统计信息
         memory_graph = self._hippocampus.memory_graph.G
         node_count = len(memory_graph.nodes())
         edge_count = len(memory_graph.edges())
-        logger.success("--------------------------------")
-        logger.success("记忆图统计信息:")
-        logger.success(f"记忆节点数量: {node_count}")
-        logger.success(f"记忆连接数量: {edge_count}")
-        logger.success("--------------------------------")
+        
+        logger.success(f'''--------------------------------
+                       记忆系统参数配置:
+                       构建间隔: {global_config.build_memory_interval}秒|样本数: {config.build_memory_sample_num},长度: {config.build_memory_sample_length}|压缩率: {config.memory_compress_rate}
+                       记忆构建分布: {config.memory_build_distribution}
+                       遗忘间隔: {global_config.forget_memory_interval}秒|遗忘比例: {global_config.memory_forget_percentage}|遗忘: {config.memory_forget_time}小时之后
+                       记忆图统计信息: 节点数量: {node_count}, 连接数量: {edge_count}
+                       --------------------------------''') #noqa: E501
+        
         
         return self._hippocampus
 

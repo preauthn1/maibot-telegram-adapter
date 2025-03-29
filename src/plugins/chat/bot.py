@@ -1,7 +1,6 @@
 import re
 import time
 from random import random
-import json
 
 from ..memory_system.Hippocampus import HippocampusManager
 from ..moods.moods import MoodManager  # 导入情绪管理器
@@ -18,10 +17,9 @@ from .storage import MessageStorage
 from .utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
 from .utils_image import image_path_to_base64
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
-from ..message import UserInfo, GroupInfo, Seg
+from ..message import UserInfo, Seg
 
-from src.think_flow_demo.heartflow import subheartflow_manager
-from src.think_flow_demo.outer_world import outer_world
+from src.think_flow_demo.heartflow import heartflow
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 
 # 定义日志配置
@@ -58,10 +56,7 @@ class ChatBot:
         5. 更新关系
         6. 更新情绪
         """
-        # message_json = json.loads(message_data)
-        # 哦我嘞个json
-
-        # 进入maimbot
+        
         message = MessageRecv(message_data)
         groupinfo = message.message_info.group_info
         userinfo = message.message_info.user_info
@@ -73,57 +68,43 @@ class ChatBot:
         chat = await chat_manager.get_or_create_stream(
             platform=messageinfo.platform,
             user_info=userinfo,
-            group_info=groupinfo,  # 我嘞个gourp_info
+            group_info=groupinfo,  
         )
         message.update_chat_stream(chat)
 
-        # 创建 心流 观察
-        if global_config.enable_think_flow:
-            await outer_world.check_and_add_new_observe()
-            subheartflow_manager.create_subheartflow(chat.stream_id)
+        # 创建 心流与chat的观察
+        heartflow.create_subheartflow(chat.stream_id)
 
-        await relationship_manager.update_relationship(
-            chat_stream=chat,
-        )
-        await relationship_manager.update_relationship_value(chat_stream=chat, relationship_value=0)
-
+        timer1 = time.time()
         await message.process()
+        timer2 = time.time()
+        logger.info(f"2消息处理时间: {timer2 - timer1}秒")
 
-        # 过滤词
-        for word in global_config.ban_words:
-            if word in message.processed_plain_text:
-                logger.info(
-                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]"
-                    f"{userinfo.user_nickname}:{message.processed_plain_text}"
-                )
-                logger.info(f"[过滤词识别]消息中含有{word}，filtered")
-                return
+        # 过滤词/正则表达式过滤
+        if (
+            self._check_ban_words(message.processed_plain_text, chat, userinfo) 
+            or self._check_ban_regex(message.raw_message, chat, userinfo)
+        ):
+            return
+        
 
-        # 正则表达式过滤
-        for pattern in global_config.ban_msgs_regex:
-            if re.search(pattern, message.raw_message):
-                logger.info(
-                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]"
-                    f"{userinfo.user_nickname}:{message.raw_message}"
-                )
-                logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
-                return
+        await self.storage.store_message(message, chat)
+        
 
-        current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(messageinfo.time))
-
-        # 根据话题计算激活度
-        topic = ""
-        await self.storage.store_message(message, chat, topic[0] if topic else None)
-
+        timer1 = time.time()
         interested_rate = 0
         interested_rate = await HippocampusManager.get_instance().get_activate_from_text(
             message.processed_plain_text, fast_retrieval=True
         )
+        timer2 = time.time()
+        logger.info(f"3记忆激活时间: {timer2 - timer1}秒")
+
+
         is_mentioned = is_mentioned_bot_in_message(message)
 
         if global_config.enable_think_flow:
             current_willing_old = willing_manager.get_willing(chat_stream=chat)
-            current_willing_new = (subheartflow_manager.get_subheartflow(chat.stream_id).current_state.willing - 5) / 4
+            current_willing_new = (heartflow.get_subheartflow(chat.stream_id).current_state.willing - 5) / 4
             print(f"旧回复意愿：{current_willing_old}，新回复意愿：{current_willing_new}")
             current_willing = (current_willing_old + current_willing_new) / 2
         else:
@@ -131,6 +112,7 @@ class ChatBot:
 
         willing_manager.set_willing(chat.stream_id, current_willing)
 
+        timer1 = time.time()
         reply_probability = await willing_manager.change_reply_willing_received(
             chat_stream=chat,
             is_mentioned_bot=is_mentioned,
@@ -139,161 +121,247 @@ class ChatBot:
             interested_rate=interested_rate,
             sender_id=str(message.message_info.user_info.user_id),
         )
+        timer2 = time.time()
+        logger.info(f"4计算意愿激活时间: {timer2 - timer1}秒")
 
+        #神秘的消息流数据结构处理
+        if chat.group_info:
+            if chat.group_info.group_name:
+                mes_name_dict = chat.group_info.group_name
+                mes_name = mes_name_dict.get('group_name', '无名群聊')
+            else:
+                mes_name = '群聊'
+        else:
+            mes_name = '私聊'
+            
+        #打印收到的信息的信息
+        current_time = time.strftime("%H:%M:%S", time.localtime(messageinfo.time))
         logger.info(
-            f"[{current_time}][{chat.group_info.group_name if chat.group_info else '私聊'}]"
+            f"[{current_time}][{mes_name}]"
             f"{chat.user_info.user_nickname}:"
             f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
         )
 
-        response = None
-
         if message.message_info.additional_config:
             if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
                 reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
+                
+        
         # 开始组织语言
         if random() < reply_probability:
-            bot_user_info = UserInfo(
-                user_id=global_config.BOT_QQ,
-                user_nickname=global_config.BOT_NICKNAME,
-                platform=messageinfo.platform,
-            )
-            # 开始思考的时间点
-            thinking_time_point = round(time.time(), 2)
-            # logger.debug(f"开始思考的时间点: {thinking_time_point}")
-            think_id = "mt" + str(thinking_time_point)
-            thinking_message = MessageThinking(
-                message_id=think_id,
-                chat_stream=chat,
-                bot_user_info=bot_user_info,
-                reply=message,
-                thinking_start_time=thinking_time_point,
-            )
-
-            message_manager.add_message(thinking_message)
-
-            willing_manager.change_reply_willing_sent(chat)
-
-            response, raw_content = await self.gpt.generate_response(message)
-        else:
-            # 决定不回复时，也更新回复意愿
-            willing_manager.change_reply_willing_not_sent(chat)
-
-        # print(f"response: {response}")
-        if response:
-            stream_id = message.chat_stream.stream_id
-            chat_talking_prompt = ""
-            if stream_id:
-                chat_talking_prompt = get_recent_group_detailed_plain_text(
-                    stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
-                )
-            if subheartflow_manager.get_subheartflow(stream_id):
-                await subheartflow_manager.get_subheartflow(stream_id).do_after_reply(response, chat_talking_prompt)
-            else:
-                await subheartflow_manager.create_subheartflow(stream_id).do_after_reply(response, chat_talking_prompt)
-            # print(f"有response: {response}")
-            container = message_manager.get_container(chat.stream_id)
-            thinking_message = None
-            # 找到message,删除
-            # print(f"开始找思考消息")
-            for msg in container.messages:
-                if isinstance(msg, MessageThinking) and msg.message_info.message_id == think_id:
-                    # print(f"找到思考消息: {msg}")
-                    thinking_message = msg
-                    container.messages.remove(msg)
-                    break
-
-            # 如果找不到思考消息，直接返回
-            if not thinking_message:
-                logger.warning("未找到对应的思考消息，可能已超时被移除")
+            timer1 = time.time()
+            response_set, thinking_id = await self._generate_response_from_message(message, chat, userinfo, messageinfo)
+            timer2 = time.time()
+            logger.info(f"5生成回复时间: {timer2 - timer1}秒")
+            
+            if not response_set:
+                logger.info("为什么生成回复失败？")
                 return
+            
+            # 发送消息
+            timer1 = time.time()
+            await self._send_response_messages(message, chat, response_set, thinking_id)
+            timer2 = time.time()
+            logger.info(f"7发送消息时间: {timer2 - timer1}秒")
+        
+            # 处理表情包
+            timer1 = time.time()
+            await self._handle_emoji(message, chat, response_set)
+            timer2 = time.time()
+            logger.info(f"8处理表情包时间: {timer2 - timer1}秒")
+        
+            timer1 = time.time()
+            await self._update_using_response(message, chat, response_set)
+            timer2 = time.time()
+            logger.info(f"6更新htfl时间: {timer2 - timer1}秒")
+        
+            # 更新情绪和关系
+            # await self._update_emotion_and_relationship(message, chat, response_set)
 
-            # 记录开始思考的时间，避免从思考到回复的时间太久
-            thinking_start_time = thinking_message.thinking_start_time
-            message_set = MessageSet(chat, think_id)
-            # 计算打字时间，1是为了模拟打字，2是避免多条回复乱序
-            # accu_typing_time = 0
+    async def _generate_response_from_message(self, message, chat, userinfo, messageinfo):
+        """生成回复内容
+        
+        Args:
+            message: 接收到的消息
+            chat: 聊天流对象
+            userinfo: 用户信息对象
+            messageinfo: 消息信息对象
+            
+        Returns:
+            tuple: (response, raw_content) 回复内容和原始内容
+        """
+        bot_user_info = UserInfo(
+            user_id=global_config.BOT_QQ,
+            user_nickname=global_config.BOT_NICKNAME,
+            platform=messageinfo.platform,
+        )
+        
+        thinking_time_point = round(time.time(), 2)
+        thinking_id = "mt" + str(thinking_time_point)
+        thinking_message = MessageThinking(
+            message_id=thinking_id,
+            chat_stream=chat,
+            bot_user_info=bot_user_info,
+            reply=message,
+            thinking_start_time=thinking_time_point,
+        )
 
-            mark_head = False
-            for msg in response:
-                # print(f"\033[1;32m[回复内容]\033[0m {msg}")
-                # 通过时间改变时间戳
-                # typing_time = calculate_typing_time(msg)
-                # logger.debug(f"typing_time: {typing_time}")
-                # accu_typing_time += typing_time
-                # timepoint = thinking_time_point + accu_typing_time
-                message_segment = Seg(type="text", data=msg)
-                # logger.debug(f"message_segment: {message_segment}")
+        message_manager.add_message(thinking_message)
+        willing_manager.change_reply_willing_sent(chat)
+        
+        response_set = await self.gpt.generate_response(message)
+        
+        return response_set, thinking_id
+
+    async def _update_using_response(self, message, response_set):
+        # 更新心流状态
+        stream_id = message.chat_stream.stream_id
+        chat_talking_prompt = ""
+        if stream_id:
+            chat_talking_prompt = get_recent_group_detailed_plain_text(
+                stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
+            )
+            
+        if heartflow.get_subheartflow(stream_id):
+            await heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
+        else:
+            await heartflow.create_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
+
+
+    async def _send_response_messages(self, message, chat, response_set, thinking_id):
+        container = message_manager.get_container(chat.stream_id)
+        thinking_message = None
+        
+        logger.info(f"开始发送消息准备")
+        for msg in container.messages:
+            if isinstance(msg, MessageThinking) and msg.message_info.message_id == thinking_id:
+                thinking_message = msg
+                container.messages.remove(msg)
+                break
+
+        if not thinking_message:
+            logger.warning("未找到对应的思考消息，可能已超时被移除")
+            return
+
+        logger.info(f"开始发送消息")
+        thinking_start_time = thinking_message.thinking_start_time
+        message_set = MessageSet(chat, thinking_id)
+        
+        mark_head = False
+        for msg in response_set:
+            message_segment = Seg(type="text", data=msg)
+            bot_message = MessageSending(
+                message_id=thinking_id,
+                chat_stream=chat,
+                bot_user_info=UserInfo(
+                    user_id=global_config.BOT_QQ,
+                    user_nickname=global_config.BOT_NICKNAME,
+                    platform=message.message_info.platform,
+                ),
+                sender_info=message.message_info.user_info,
+                message_segment=message_segment,
+                reply=message,
+                is_head=not mark_head,
+                is_emoji=False,
+                thinking_start_time=thinking_start_time,
+            )
+            if not mark_head:
+                mark_head = True
+            message_set.add_message(bot_message)
+        logger.info(f"开始添加发送消息")
+        message_manager.add_message(message_set)
+
+    async def _handle_emoji(self, message, chat, response):
+        """处理表情包
+        
+        Args:
+            message: 接收到的消息
+            chat: 聊天流对象
+            response: 生成的回复
+        """
+        if random() < global_config.emoji_chance:
+            emoji_raw = await emoji_manager.get_emoji_for_text(response)
+            if emoji_raw:
+                emoji_path, description = emoji_raw
+                emoji_cq = image_path_to_base64(emoji_path)
+                
+                thinking_time_point = round(message.message_info.time, 2)
+                bot_response_time = thinking_time_point + (1 if random() < 0.5 else -1)
+                
+                message_segment = Seg(type="emoji", data=emoji_cq)
                 bot_message = MessageSending(
-                    message_id=think_id,
+                    message_id="mt" + str(thinking_time_point),
                     chat_stream=chat,
-                    bot_user_info=bot_user_info,
-                    sender_info=userinfo,
+                    bot_user_info=UserInfo(
+                        user_id=global_config.BOT_QQ,
+                        user_nickname=global_config.BOT_NICKNAME,
+                        platform=message.message_info.platform,
+                    ),
+                    sender_info=message.message_info.user_info,
                     message_segment=message_segment,
                     reply=message,
-                    is_head=not mark_head,
-                    is_emoji=False,
-                    thinking_start_time=thinking_start_time,
+                    is_head=False,
+                    is_emoji=True,
                 )
-                if not mark_head:
-                    mark_head = True
-                message_set.add_message(bot_message)
-                if len(str(bot_message)) < 1000:
-                    logger.debug(f"bot_message: {bot_message}")
-                    logger.debug(f"添加消息到message_set: {bot_message}")
-                else:
-                    logger.debug(f"bot_message: {str(bot_message)[:1000]}...{str(bot_message)[-10:]}")
-                    logger.debug(f"添加消息到message_set: {str(bot_message)[:1000]}...{str(bot_message)[-10:]}")
-            # message_set 可以直接加入 message_manager
-            # print(f"\033[1;32m[回复]\033[0m 将回复载入发送容器")
+                message_manager.add_message(bot_message)
 
-            logger.debug("添加message_set到message_manager")
+    async def _update_emotion_and_relationship(self, message, chat, response, raw_content):
+        """更新情绪和关系
+        
+        Args:
+            message: 接收到的消息
+            chat: 聊天流对象
+            response: 生成的回复
+            raw_content: 原始内容
+        """
+        stance, emotion = await self.gpt._get_emotion_tags(raw_content, message.processed_plain_text)
+        logger.debug(f"为 '{response}' 立场为：{stance} 获取到的情感标签为：{emotion}")
+        await relationship_manager.calculate_update_relationship_value(
+            chat_stream=chat, label=emotion, stance=stance
+        )
+        self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
 
-            message_manager.add_message(message_set)
+    def _check_ban_words(self, text: str, chat, userinfo) -> bool:
+        """检查消息中是否包含过滤词
+        
+        Args:
+            text: 要检查的文本
+            chat: 聊天流对象
+            userinfo: 用户信息对象
+            
+        Returns:
+            bool: 如果包含过滤词返回True，否则返回False
+        """
+        for word in global_config.ban_words:
+            if word in text:
+                logger.info(
+                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]"
+                    f"{userinfo.user_nickname}:{text}"
+                )
+                logger.info(f"[过滤词识别]消息中含有{word}，filtered")
+                return True
+        return False
 
-            bot_response_time = thinking_time_point
-
-            if random() < global_config.emoji_chance:
-                emoji_raw = await emoji_manager.get_emoji_for_text(response)
-
-                # 检查是否 <没有找到> emoji
-                if emoji_raw != None:
-                    emoji_path, description = emoji_raw
-
-                    emoji_cq = image_path_to_base64(emoji_path)
-
-                    if random() < 0.5:
-                        bot_response_time = thinking_time_point - 1
-                    else:
-                        bot_response_time = bot_response_time + 1
-
-                    message_segment = Seg(type="emoji", data=emoji_cq)
-                    bot_message = MessageSending(
-                        message_id=think_id,
-                        chat_stream=chat,
-                        bot_user_info=bot_user_info,
-                        sender_info=userinfo,
-                        message_segment=message_segment,
-                        reply=message,
-                        is_head=False,
-                        is_emoji=True,
-                    )
-                    message_manager.add_message(bot_message)
-
-            # 获取立场和情感标签，更新关系值
-            stance, emotion = await self.gpt._get_emotion_tags(raw_content, message.processed_plain_text)
-            logger.debug(f"为 '{response}' 立场为：{stance} 获取到的情感标签为：{emotion}")
-            await relationship_manager.calculate_update_relationship_value(
-                chat_stream=chat, label=emotion, stance=stance
-            )
-
-            # 使用情绪管理器更新情绪
-            self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
-
-            # willing_manager.change_reply_willing_after_sent(
-            #     chat_stream=chat
-            # )
-
+    def _check_ban_regex(self, text: str, chat, userinfo) -> bool:
+        """检查消息是否匹配过滤正则表达式
+        
+        Args:
+            text: 要检查的文本
+            chat: 聊天流对象
+            userinfo: 用户信息对象
+            
+        Returns:
+            bool: 如果匹配过滤正则返回True，否则返回False
+        """
+        for pattern in global_config.ban_msgs_regex:
+            if re.search(pattern, text):
+                logger.info(
+                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]"
+                    f"{userinfo.user_nickname}:{text}"
+                )
+                logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
+                return True
+        return False
 
 # 创建全局ChatBot实例
 chat_bot = ChatBot()

@@ -87,7 +87,7 @@ pip install -r requirements.txt
 
 ### 5️⃣ **配置文件设置，让麦麦Bot正常工作**
 
-- 修改环境配置文件：`.env.prod`
+- 修改环境配置文件：`.env`
 - 修改机器人配置文件：`bot_config.toml`
 
 ### 6️⃣ **启动麦麦机器人**

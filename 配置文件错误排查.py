@@ -556,7 +556,7 @@ def format_results(all_errors):
 def main():
     # 获取配置文件路径
     config_path = Path("config/bot_config.toml")
-    env_path = Path(".env.prod")
+    env_path = Path(".env")
     
     if not config_path.exists():
         print(f"错误: 找不到配置文件 {config_path}")

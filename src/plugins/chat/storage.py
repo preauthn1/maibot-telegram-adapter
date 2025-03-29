@@ -10,7 +10,7 @@ logger = get_module_logger("message_storage")
 
 class MessageStorage:
     async def store_message(
-        self, message: Union[MessageSending, MessageRecv], chat_stream: ChatStream, topic: Optional[str] = None
+        self, message: Union[MessageSending, MessageRecv], chat_stream: ChatStream
     ) -> None:
         """存储消息到数据库"""
         try:
@@ -22,7 +22,6 @@ class MessageStorage:
                 "user_info": message.message_info.user_info.to_dict(),
                 "processed_plain_text": message.processed_plain_text,
                 "detailed_plain_text": message.detailed_plain_text,
-                "topic": topic,
                 "memorized_times": message.memorized_times,
             }
             db.messages.insert_one(message_data)

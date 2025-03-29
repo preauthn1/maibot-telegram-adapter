@@ -1,7 +1,8 @@
 from .sub_heartflow import SubHeartflow
+from .observation import ChattingObservation
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
-from src.plugins.config.config import global_config, BotConfig
+from src.plugins.config.config import global_config
 from src.plugins.schedule.schedule_generator import bot_schedule
 import asyncio
 from src.common.logger import get_module_logger, LogConfig, HEARTFLOW_STYLE_CONFIG # noqa: E402
@@ -107,15 +108,29 @@ class Heartflow:
 
         return reponse
         
-    def create_subheartflow(self, observe_chat_id):
-        """创建一个新的SubHeartflow实例"""
-        if observe_chat_id not in self._subheartflows:
-            subheartflow = SubHeartflow()
-            subheartflow.assign_observe(observe_chat_id)
+    def create_subheartflow(self, subheartflow_id):
+        """
+        创建一个新的SubHeartflow实例
+        添加一个SubHeartflow实例到self._subheartflows字典中
+        并根据subheartflow_id为子心流创建一个观察对象
+        """
+        if subheartflow_id not in self._subheartflows:
+            logger.debug(f"创建 subheartflow: {subheartflow_id}")
+            subheartflow = SubHeartflow(subheartflow_id)
+            #创建一个观察对象，目前只可以用chat_id创建观察对象
+            logger.debug(f"创建 observation: {subheartflow_id}")
+            observation = ChattingObservation(subheartflow_id)
+            
+            logger.debug(f"添加 observation ")
+            subheartflow.add_observation(observation)
+            logger.debug(f"添加 observation 成功")
             # 创建异步任务
+            logger.debug(f"创建异步任务")
             asyncio.create_task(subheartflow.subheartflow_start_working())
-            self._subheartflows[observe_chat_id] = subheartflow
-        return self._subheartflows[observe_chat_id]
+            logger.debug(f"创建异步任务 成功")
+            self._subheartflows[subheartflow_id] = subheartflow
+            logger.debug(f"添加 subheartflow 成功")
+        return self._subheartflows[subheartflow_id]
     
     def get_subheartflow(self, observe_chat_id):
         """获取指定ID的SubHeartflow实例"""
@@ -123,4 +138,4 @@ class Heartflow:
 
 
 # 创建一个全局的管理器实例
-subheartflow_manager = Heartflow() 
+heartflow = Heartflow() 

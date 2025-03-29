@@ -22,13 +22,13 @@ bot_config.toml: https://github.com/SengokuCola/MaiMBot/blob/main/template/bot_c
 下载后，重命名为 `bot_config.toml`
 打开它，按自己的需求填写配置文件
 
-.env.prod: https://github.com/SengokuCola/MaiMBot/blob/main/template.env
-下载后，重命名为 `.env.prod`
+.env: https://github.com/SengokuCola/MaiMBot/blob/main/template.env
+下载后，重命名为 `.env`
 将 `HOST` 修改为 `0.0.0.0`，确保 maimbot 能被 napcat 访问
 按下图修改 mongodb 设置，使用  `MONGODB_URI`
-![](./pic/synology_.env.prod.png)
+![](./pic/synology_.env.png)
 
-把 `bot_config.toml` 和 `.env.prod` 放入之前创建的 `MaiMBot`文件夹
+把 `bot_config.toml` 和 `.env` 放入之前创建的 `MaiMBot`文件夹
 
 #### 如何下载？
 
