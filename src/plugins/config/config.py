@@ -316,16 +316,21 @@ class BotConfig:
 
                     elif config.INNER_VERSION in SpecifierSet(">=0.0.1"):
                         stable_item = ["name", "pri_in", "pri_out"]
-                        
+
+                        stream_item = ["stream"]
                         if config.INNER_VERSION in SpecifierSet(">=1.0.1"):
                             stable_item.append("stream")
-                        
+
                         pricing_item = ["pri_in", "pri_out"]
                         # 从配置中原始拷贝稳定字段
                         for i in stable_item:
                             # 如果 字段 属于计费项 且获取不到，那默认值是 0
                             if i in pricing_item and i not in cfg_item:
                                 cfg_target[i] = 0
+
+                            if i in stream_item and i not in cfg_item:
+                                cfg_target[i] = False
+
                             else:
                                 # 没有特殊情况则原样复制
                                 try:
