@@ -44,6 +44,7 @@ class MainSystem:
 
     async def _init_components(self):
         """初始化其他组件"""
+        init_start_time = time.time()
         # 启动LLM统计
         self.llm_stats.start()
         logger.success("LLM统计功能启动成功")
@@ -93,6 +94,9 @@ class MainSystem:
             # 启动心流系统
             asyncio.create_task(subheartflow_manager.heartflow_start_working())
             logger.success("心流系统启动成功")
+            
+            init_end_time = time.time()
+            logger.success(f"初始化完成，用时{init_end_time - init_start_time}秒")
         except Exception as e:
             logger.error(f"启动大脑和外部世界失败: {e}")
             raise
@@ -166,8 +170,6 @@ async def main():
         system.initialize(),
         system.schedule_tasks(),
     )
-    # await system.initialize()
-    # await system.schedule_tasks()
 
 
 if __name__ == "__main__":

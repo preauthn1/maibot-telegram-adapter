@@ -49,52 +49,21 @@ def init_config():
 
 
 def init_env():
-    # 初始化.env 默认ENVIRONMENT=prod
-    if not os.path.exists(".env"):
-        with open(".env", "w") as f:
-            f.write("ENVIRONMENT=prod")
-
-        # 检测.env.prod文件是否存在
-        if not os.path.exists(".env.prod"):
-            logger.error("检测到.env.prod文件不存在")
-            shutil.copy("template.env", "./.env.prod")
-
-    # 检测.env.dev文件是否存在，不存在的话直接复制生产环境配置
-    if not os.path.exists(".env.dev"):
-        logger.error("检测到.env.dev文件不存在")
-        shutil.copy(".env.prod", "./.env.dev")
-
-    # 首先加载基础环境变量.env
-    if os.path.exists(".env"):
-        load_dotenv(".env", override=True)
-        logger.success("成功加载基础环境变量配置")
+    # 检测.env.prod文件是否存在
+    if not os.path.exists(".env.prod"):
+        logger.error("检测到.env.prod文件不存在")
+        shutil.copy("template/template.env", "./.env.prod")
+        logger.info("已从template/template.env复制创建.env.prod，请修改配置后重新启动")
 
 
 def load_env():
-    # 使用闭包实现对加载器的横向扩展，避免大量重复判断
-    def prod():
-        logger.success("成功加载生产环境变量配置")
-        load_dotenv(".env.prod", override=True)  # override=True 允许覆盖已存在的环境变量
-
-    def dev():
-        logger.success("成功加载开发环境变量配置")
-        load_dotenv(".env.dev", override=True)  # override=True 允许覆盖已存在的环境变量
-
-    fn_map = {"prod": prod, "dev": dev}
-
-    env = os.getenv("ENVIRONMENT")
-    logger.info(f"[load_env] 当前的 ENVIRONMENT 变量值：{env}")
-
-    if env in fn_map:
-        fn_map[env]()  # 根据映射执行闭包函数
-
-    elif os.path.exists(f".env.{env}"):
-        logger.success(f"加载{env}环境变量配置")
-        load_dotenv(f".env.{env}", override=True)  # override=True 允许覆盖已存在的环境变量
-
+    # 直接加载生产环境变量配置
+    if os.path.exists(".env.prod"):
+        load_dotenv(".env.prod", override=True)
+        logger.success("成功加载环境变量配置")
     else:
-        logger.error(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
-        RuntimeError(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
+        logger.error("未找到.env.prod文件，请确保文件存在")
+        raise FileNotFoundError("未找到.env.prod文件，请确保文件存在")
 
 
 def scan_provider(env_config: dict):
