@@ -9,9 +9,7 @@ logger = get_module_logger("message_storage")
 
 
 class MessageStorage:
-    async def store_message(
-        self, message: Union[MessageSending, MessageRecv], chat_stream: ChatStream
-    ) -> None:
+    async def store_message(self, message: Union[MessageSending, MessageRecv], chat_stream: ChatStream) -> None:
         """存储消息到数据库"""
         try:
             message_data = {

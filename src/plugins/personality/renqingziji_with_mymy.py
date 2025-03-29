@@ -82,7 +82,6 @@ class PersonalityEvaluator_direct:
 
         dimensions_text = "\n".join(dimension_descriptions)
 
-
         prompt = f"""请根据以下场景和用户描述，评估用户在大五人格模型中的相关维度得分（1-6分）。
 
 场景描述：

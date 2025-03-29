@@ -90,8 +90,8 @@ class MainSystem:
             # 启动心流系统
             asyncio.create_task(heartflow.heartflow_start_working())
             logger.success("心流系统启动成功")
-            
-            init_time = int(1000*(time.time()- init_start_time))
+
+            init_time = int(1000 * (time.time() - init_start_time))
             logger.success(f"初始化完成，神经元放电{init_time}次")
         except Exception as e:
             logger.error(f"启动大脑和外部世界失败: {e}")

@@ -56,7 +56,7 @@ class ChatBot:
         5. 更新关系
         6. 更新情绪
         """
-        
+
         message = MessageRecv(message_data)
         groupinfo = message.message_info.group_info
         userinfo = message.message_info.user_info
@@ -68,7 +68,7 @@ class ChatBot:
         chat = await chat_manager.get_or_create_stream(
             platform=messageinfo.platform,
             user_info=userinfo,
-            group_info=groupinfo,  
+            group_info=groupinfo,
         )
         message.update_chat_stream(chat)
 
@@ -81,15 +81,12 @@ class ChatBot:
         logger.debug(f"2消息处理时间: {timer2 - timer1}秒")
 
         # 过滤词/正则表达式过滤
-        if (
-            self._check_ban_words(message.processed_plain_text, chat, userinfo) 
-            or self._check_ban_regex(message.raw_message, chat, userinfo)
+        if self._check_ban_words(message.processed_plain_text, chat, userinfo) or self._check_ban_regex(
+            message.raw_message, chat, userinfo
         ):
             return
-        
 
         await self.storage.store_message(message, chat)
-        
 
         timer1 = time.time()
         interested_rate = 0
@@ -98,7 +95,6 @@ class ChatBot:
         )
         timer2 = time.time()
         logger.debug(f"3记忆激活时间: {timer2 - timer1}秒")
-
 
         is_mentioned = is_mentioned_bot_in_message(message)
 
@@ -124,17 +120,17 @@ class ChatBot:
         timer2 = time.time()
         logger.debug(f"4计算意愿激活时间: {timer2 - timer1}秒")
 
-        #神秘的消息流数据结构处理
+        # 神秘的消息流数据结构处理
         if chat.group_info:
             if chat.group_info.group_name:
                 mes_name_dict = chat.group_info.group_name
-                mes_name = mes_name_dict.get('group_name', '无名群聊')
+                mes_name = mes_name_dict.get("group_name", "无名群聊")
             else:
-                mes_name = '群聊'
+                mes_name = "群聊"
         else:
-            mes_name = '私聊'
-            
-        #打印收到的信息的信息
+            mes_name = "私聊"
+
+        # 打印收到的信息的信息
         current_time = time.strftime("%H:%M:%S", time.localtime(messageinfo.time))
         logger.info(
             f"[{current_time}][{mes_name}]"
@@ -145,48 +141,47 @@ class ChatBot:
         if message.message_info.additional_config:
             if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
                 reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
-                
-        
+
         # 开始组织语言
         if random() < reply_probability:
             timer1 = time.time()
             response_set, thinking_id = await self._generate_response_from_message(message, chat, userinfo, messageinfo)
             timer2 = time.time()
             logger.info(f"5生成回复时间: {timer2 - timer1}秒")
-            
+
             if not response_set:
                 logger.info("为什么生成回复失败？")
                 return
-            
+
             # 发送消息
             timer1 = time.time()
             await self._send_response_messages(message, chat, response_set, thinking_id)
             timer2 = time.time()
             logger.info(f"7发送消息时间: {timer2 - timer1}秒")
-        
+
             # 处理表情包
             timer1 = time.time()
             await self._handle_emoji(message, chat, response_set)
             timer2 = time.time()
             logger.debug(f"8处理表情包时间: {timer2 - timer1}秒")
-        
+
             timer1 = time.time()
             await self._update_using_response(message, chat, response_set)
             timer2 = time.time()
             logger.info(f"6更新htfl时间: {timer2 - timer1}秒")
-        
+
             # 更新情绪和关系
             # await self._update_emotion_and_relationship(message, chat, response_set)
 
     async def _generate_response_from_message(self, message, chat, userinfo, messageinfo):
         """生成回复内容
-        
+
         Args:
             message: 接收到的消息
             chat: 聊天流对象
             userinfo: 用户信息对象
             messageinfo: 消息信息对象
-            
+
         Returns:
             tuple: (response, raw_content) 回复内容和原始内容
         """
@@ -195,7 +190,7 @@ class ChatBot:
             user_nickname=global_config.BOT_NICKNAME,
             platform=messageinfo.platform,
         )
-        
+
         thinking_time_point = round(time.time(), 2)
         thinking_id = "mt" + str(thinking_time_point)
         thinking_message = MessageThinking(
@@ -208,9 +203,9 @@ class ChatBot:
 
         message_manager.add_message(thinking_message)
         willing_manager.change_reply_willing_sent(chat)
-        
+
         response_set = await self.gpt.generate_response(message)
-        
+
         return response_set, thinking_id
 
     async def _update_using_response(self, message, response_set):
@@ -221,14 +216,13 @@ class ChatBot:
             chat_talking_prompt = get_recent_group_detailed_plain_text(
                 stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
             )
-        
-        heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
 
+        heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
 
     async def _send_response_messages(self, message, chat, response_set, thinking_id):
         container = message_manager.get_container(chat.stream_id)
         thinking_message = None
-        
+
         # logger.info(f"开始发送消息准备")
         for msg in container.messages:
             if isinstance(msg, MessageThinking) and msg.message_info.message_id == thinking_id:
@@ -243,7 +237,7 @@ class ChatBot:
         # logger.info(f"开始发送消息")
         thinking_start_time = thinking_message.thinking_start_time
         message_set = MessageSet(chat, thinking_id)
-        
+
         mark_head = False
         for msg in response_set:
             message_segment = Seg(type="text", data=msg)
@@ -270,7 +264,7 @@ class ChatBot:
 
     async def _handle_emoji(self, message, chat, response):
         """处理表情包
-        
+
         Args:
             message: 接收到的消息
             chat: 聊天流对象
@@ -281,10 +275,10 @@ class ChatBot:
             if emoji_raw:
                 emoji_path, description = emoji_raw
                 emoji_cq = image_path_to_base64(emoji_path)
-                
+
                 thinking_time_point = round(message.message_info.time, 2)
                 bot_response_time = thinking_time_point + (1 if random() < 0.5 else -1)
-                
+
                 message_segment = Seg(type="emoji", data=emoji_cq)
                 bot_message = MessageSending(
                     message_id="mt" + str(thinking_time_point),
@@ -304,7 +298,7 @@ class ChatBot:
 
     async def _update_emotion_and_relationship(self, message, chat, response, raw_content):
         """更新情绪和关系
-        
+
         Args:
             message: 接收到的消息
             chat: 聊天流对象
@@ -313,27 +307,24 @@ class ChatBot:
         """
         stance, emotion = await self.gpt._get_emotion_tags(raw_content, message.processed_plain_text)
         logger.debug(f"为 '{response}' 立场为：{stance} 获取到的情感标签为：{emotion}")
-        await relationship_manager.calculate_update_relationship_value(
-            chat_stream=chat, label=emotion, stance=stance
-        )
+        await relationship_manager.calculate_update_relationship_value(chat_stream=chat, label=emotion, stance=stance)
         self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
 
     def _check_ban_words(self, text: str, chat, userinfo) -> bool:
         """检查消息中是否包含过滤词
-        
+
         Args:
             text: 要检查的文本
             chat: 聊天流对象
             userinfo: 用户信息对象
-            
+
         Returns:
             bool: 如果包含过滤词返回True，否则返回False
         """
         for word in global_config.ban_words:
             if word in text:
                 logger.info(
-                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]"
-                    f"{userinfo.user_nickname}:{text}"
+                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]{userinfo.user_nickname}:{text}"
                 )
                 logger.info(f"[过滤词识别]消息中含有{word}，filtered")
                 return True
@@ -341,24 +332,24 @@ class ChatBot:
 
     def _check_ban_regex(self, text: str, chat, userinfo) -> bool:
         """检查消息是否匹配过滤正则表达式
-        
+
         Args:
             text: 要检查的文本
             chat: 聊天流对象
             userinfo: 用户信息对象
-            
+
         Returns:
             bool: 如果匹配过滤正则返回True，否则返回False
         """
         for pattern in global_config.ban_msgs_regex:
             if re.search(pattern, text):
                 logger.info(
-                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]"
-                    f"{userinfo.user_nickname}:{text}"
+                    f"[{chat.group_info.group_name if chat.group_info else '私聊'}]{userinfo.user_nickname}:{text}"
                 )
                 logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
                 return True
         return False
+
 
 # 创建全局ChatBot实例
 chat_bot = ChatBot()

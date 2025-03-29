@@ -3,10 +3,12 @@ import asyncio
 import time
 import sys
 import os
+
 # 添加项目根目录到系统路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 from src.plugins.memory_system.Hippocampus import HippocampusManager
 from src.plugins.config.config import global_config
+
 
 async def test_memory_system():
     """测试记忆系统的主要功能"""
@@ -24,7 +26,7 @@ async def test_memory_system():
 
         # 测试记忆检索
         test_text = "千石可乐在群里聊天"
-        test_text = '''[03-24 10:39:37] 麦麦(ta的id:123456785): 早说散步结果下雨改成室内运动啊
+        test_text = """[03-24 10:39:37] 麦麦(ta的id:123456785): 早说散步结果下雨改成室内运动啊
 [03-24 10:39:37] 麦麦(ta的id:123456785): [回复：变量] 变量就像今天计划总变
 [03-24 10:39:44] 状态异常(ta的id:535554838): 要把本地文件改成弹出来的路径吗
 [03-24 10:40:35] 状态异常(ta的id:535554838): [图片：这张图片显示的是Windows系统的环境变量设置界面。界面左侧列出了多个环境变量的值，包括Intel Dev Redist、Windows、Windows PowerShell、OpenSSH、NVIDIA Corporation的目录等。右侧有新建、编辑、浏览、删除、上移、下移和编辑文本等操作按钮。图片下方有一个错误提示框，显示"Windows找不到文件'mongodb\\bin\\mongod.exe'。请确定文件名是否正确后，再试一次。"这意味着用户试图运行MongoDB的mongod.exe程序时，系统找不到该文件。这可能是因为MongoDB的安装路径未正确添加到系统环境变量中，或者文件路径有误。
@@ -39,27 +41,20 @@ async def test_memory_system():
 [03-24 10:46:12] (ta的id:3229291803): [表情包：这张表情包显示了一只手正在做"点赞"的动作，通常表示赞同、喜欢或支持。这个表情包所表达的情感是积极的、赞同的或支持的。]
 [03-24 10:46:37] 星野風禾(ta的id:2890165435): 还能思考高达
 [03-24 10:46:39] 星野風禾(ta的id:2890165435): 什么知识库
-[03-24 10:46:49] ❦幻凌慌てない(ta的id:2459587037): 为什么改了回复系数麦麦还是不怎么回复？大佬们'''  # noqa: E501
-
+[03-24 10:46:49] ❦幻凌慌てない(ta的id:2459587037): 为什么改了回复系数麦麦还是不怎么回复？大佬们"""  # noqa: E501
 
         # test_text = '''千石可乐：分不清AI的陪伴和人类的陪伴,是这样吗？'''
         print(f"开始测试记忆检索，测试文本: {test_text}\n")
         memories = await hippocampus_manager.get_memory_from_text(
-            text=test_text,
-            max_memory_num=3,
-            max_memory_length=2,
-            max_depth=3,
-            fast_retrieval=False
+            text=test_text, max_memory_num=3, max_memory_length=2, max_depth=3, fast_retrieval=False
         )
-        
+
         await asyncio.sleep(1)
-        
+
         print("检索到的记忆:")
         for topic, memory_items in memories:
             print(f"主题: {topic}")
             print(f"- {memory_items}")
-
-
 
         # 测试记忆遗忘
         # forget_start_time = time.time()
@@ -80,6 +75,7 @@ async def test_memory_system():
         print(f"测试过程中出现错误: {e}")
         raise
 
+
 async def main():
     """主函数"""
     try:
@@ -91,5 +87,6 @@ async def main():
         print(f"程序执行出错: {e}")
         raise
 
+
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

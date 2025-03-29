@@ -31,12 +31,9 @@ class ResponseGenerator:
             request_type="response",
         )
         self.model_normal = LLM_request(
-            model=global_config.llm_normal,
-            temperature=0.7,
-            max_tokens=3000,
-            request_type="response"
+            model=global_config.llm_normal, temperature=0.7, max_tokens=3000, request_type="response"
         )
-        
+
         self.model_sum = LLM_request(
             model=global_config.llm_summary_by_topic, temperature=0.7, max_tokens=3000, request_type="relation"
         )
@@ -53,8 +50,9 @@ class ResponseGenerator:
             self.current_model_type = "浅浅的"
             current_model = self.model_normal
 
-        logger.info(f"{self.current_model_type}思考:{message.processed_plain_text[:30] + '...' if len(message.processed_plain_text) > 30 else message.processed_plain_text}") # noqa: E501
-
+        logger.info(
+            f"{self.current_model_type}思考:{message.processed_plain_text[:30] + '...' if len(message.processed_plain_text) > 30 else message.processed_plain_text}"
+        )  # noqa: E501
 
         model_response = await self._generate_response_with_model(message, current_model)
 
@@ -63,7 +61,6 @@ class ResponseGenerator:
         if model_response:
             logger.info(f"{global_config.BOT_NICKNAME}的回复是：{model_response}")
             model_response = await self._process_response(model_response)
-
 
             return model_response
         else:
@@ -93,7 +90,7 @@ class ResponseGenerator:
         )
         timer2 = time.time()
         logger.info(f"构建prompt时间: {timer2 - timer1}秒")
-        
+
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
         except Exception:

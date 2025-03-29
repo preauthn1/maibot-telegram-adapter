@@ -11,7 +11,7 @@ from collections import Counter
 from ...common.database import db
 from ...plugins.models.utils_model import LLM_request
 from src.common.logger import get_module_logger, LogConfig, MEMORY_STYLE_CONFIG
-from src.plugins.memory_system.sample_distribution import MemoryBuildScheduler #分布生成器
+from src.plugins.memory_system.sample_distribution import MemoryBuildScheduler  # 分布生成器
 from .memory_config import MemoryConfig
 
 
@@ -56,6 +56,7 @@ def get_closest_chat_from_db(length: int, timestamp: str):
 
     return []
 
+
 def calculate_information_content(text):
     """计算文本的信息量（熵）"""
     char_count = Counter(text)
@@ -67,6 +68,7 @@ def calculate_information_content(text):
         entropy -= probability * math.log2(probability)
 
     return entropy
+
 
 def cosine_similarity(v1, v2):
     """计算余弦相似度"""
@@ -223,7 +225,8 @@ class Memory_graph:
 
         return None
 
-#负责海马体与其他部分的交互
+
+# 负责海马体与其他部分的交互
 class EntorhinalCortex:
     def __init__(self, hippocampus):
         self.hippocampus = hippocampus
@@ -243,7 +246,7 @@ class EntorhinalCortex:
             n_hours2=self.config.memory_build_distribution[3],
             std_hours2=self.config.memory_build_distribution[4],
             weight2=self.config.memory_build_distribution[5],
-            total_samples=self.config.build_memory_sample_num
+            total_samples=self.config.build_memory_sample_num,
         )
 
         timestamps = sample_scheduler.get_timestamp_array()
@@ -251,9 +254,7 @@ class EntorhinalCortex:
         chat_samples = []
         for timestamp in timestamps:
             messages = self.random_get_msg_snippet(
-                timestamp, 
-                self.config.build_memory_sample_length, 
-                max_memorized_time_per_msg
+                timestamp, self.config.build_memory_sample_length, max_memorized_time_per_msg
             )
             if messages:
                 time_diff = (datetime.datetime.now().timestamp() - timestamp) / 3600
@@ -455,25 +456,25 @@ class EntorhinalCortex:
         """清空数据库并重新同步所有记忆数据"""
         start_time = time.time()
         logger.info("[数据库] 开始重新同步所有记忆数据...")
-        
+
         # 清空数据库
         clear_start = time.time()
         db.graph_data.nodes.delete_many({})
         db.graph_data.edges.delete_many({})
         clear_end = time.time()
         logger.info(f"[数据库] 清空数据库耗时: {clear_end - clear_start:.2f}秒")
-        
+
         # 获取所有节点和边
         memory_nodes = list(self.memory_graph.G.nodes(data=True))
         memory_edges = list(self.memory_graph.G.edges(data=True))
-        
+
         # 重新写入节点
         node_start = time.time()
         for concept, data in memory_nodes:
             memory_items = data.get("memory_items", [])
             if not isinstance(memory_items, list):
                 memory_items = [memory_items] if memory_items else []
-                
+
             node_data = {
                 "concept": concept,
                 "memory_items": memory_items,
@@ -484,7 +485,7 @@ class EntorhinalCortex:
             db.graph_data.nodes.insert_one(node_data)
         node_end = time.time()
         logger.info(f"[数据库] 写入 {len(memory_nodes)} 个节点耗时: {node_end - node_start:.2f}秒")
-        
+
         # 重新写入边
         edge_start = time.time()
         for source, target, data in memory_edges:
@@ -499,12 +500,13 @@ class EntorhinalCortex:
             db.graph_data.edges.insert_one(edge_data)
         edge_end = time.time()
         logger.info(f"[数据库] 写入 {len(memory_edges)} 条边耗时: {edge_end - edge_start:.2f}秒")
-        
+
         end_time = time.time()
         logger.success(f"[数据库] 重新同步完成，总耗时: {end_time - start_time:.2f}秒")
         logger.success(f"[数据库] 同步了 {len(memory_nodes)} 个节点和 {len(memory_edges)} 条边")
 
-#负责整合，遗忘，合并记忆
+
+# 负责整合，遗忘，合并记忆
 class ParahippocampalGyrus:
     def __init__(self, hippocampus):
         self.hippocampus = hippocampus
@@ -567,26 +569,26 @@ class ParahippocampalGyrus:
 
         topic_num = self.hippocampus.calculate_topic_num(input_text, compress_rate)
         topics_response = await self.hippocampus.llm_topic_judge.generate_response(
-            self.hippocampus.find_topic_llm(input_text, topic_num))
+            self.hippocampus.find_topic_llm(input_text, topic_num)
+        )
 
         # 使用正则表达式提取<>中的内容
-        topics = re.findall(r'<([^>]+)>', topics_response[0])
-        
+        topics = re.findall(r"<([^>]+)>", topics_response[0])
+
         # 如果没有找到<>包裹的内容，返回['none']
         if not topics:
-            topics = ['none']
+            topics = ["none"]
         else:
             # 处理提取出的话题
             topics = [
                 topic.strip()
-                for topic in ','.join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                for topic in ",".join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
                 if topic.strip()
             ]
 
         # 过滤掉包含禁用关键词的topic
         filtered_topics = [
-            topic for topic in topics 
-            if not any(keyword in topic for keyword in self.config.memory_ban_words)
+            topic for topic in topics if not any(keyword in topic for keyword in self.config.memory_ban_words)
         ]
 
         logger.debug(f"过滤后话题: {filtered_topics}")
@@ -601,12 +603,12 @@ class ParahippocampalGyrus:
         # 等待所有任务完成
         compressed_memory = set()
         similar_topics_dict = {}
-        
+
         for topic, task in tasks:
             response = await task
             if response:
                 compressed_memory.add((topic, response[0]))
-                
+
                 existing_topics = list(self.memory_graph.G.nodes())
                 similar_topics = []
 
@@ -651,7 +653,7 @@ class ParahippocampalGyrus:
             current_time = datetime.datetime.now().timestamp()
             logger.debug(f"添加节点: {', '.join(topic for topic, _ in compressed_memory)}")
             all_added_nodes.extend(topic for topic, _ in compressed_memory)
-            
+
             for topic, memory in compressed_memory:
                 self.memory_graph.add_dot(topic, memory)
                 all_topics.append(topic)
@@ -661,13 +663,13 @@ class ParahippocampalGyrus:
                     for similar_topic, similarity in similar_topics:
                         if topic != similar_topic:
                             strength = int(similarity * 10)
-                            
+
                             logger.debug(f"连接相似节点: {topic} 和 {similar_topic} (强度: {strength})")
                             all_added_edges.append(f"{topic}-{similar_topic}")
-                            
+
                             all_connected_nodes.append(topic)
                             all_connected_nodes.append(similar_topic)
-                            
+
                             self.memory_graph.G.add_edge(
                                 topic,
                                 similar_topic,
@@ -685,14 +687,11 @@ class ParahippocampalGyrus:
         logger.success(f"更新记忆: {', '.join(all_added_nodes)}")
         logger.debug(f"强化连接: {', '.join(all_added_edges)}")
         logger.info(f"强化连接节点: {', '.join(all_connected_nodes)}")
-        
+
         await self.hippocampus.entorhinal_cortex.sync_memory_to_db()
-        
+
         end_time = time.time()
-        logger.success(
-            f"---------------------记忆构建耗时: {end_time - start_time:.2f} "
-            "秒---------------------"
-        )
+        logger.success(f"---------------------记忆构建耗时: {end_time - start_time:.2f} 秒---------------------")
 
     async def operation_forget_topic(self, percentage=0.005):
         start_time = time.time()
@@ -714,11 +713,11 @@ class ParahippocampalGyrus:
         # 使用列表存储变化信息
         edge_changes = {
             "weakened": [],  # 存储减弱的边
-            "removed": []    # 存储移除的边
+            "removed": [],  # 存储移除的边
         }
         node_changes = {
-            "reduced": [],   # 存储减少记忆的节点
-            "removed": []    # 存储移除的节点
+            "reduced": [],  # 存储减少记忆的节点
+            "removed": [],  # 存储移除的节点
         }
 
         current_time = datetime.datetime.now().timestamp()
@@ -771,34 +770,39 @@ class ParahippocampalGyrus:
 
         if any(edge_changes.values()) or any(node_changes.values()):
             sync_start = time.time()
-            
+
             await self.hippocampus.entorhinal_cortex.resync_memory_to_db()
-            
+
             sync_end = time.time()
             logger.info(f"[遗忘] 数据库同步耗时: {sync_end - sync_start:.2f}秒")
-            
+
             # 汇总输出所有变化
             logger.info("[遗忘] 遗忘操作统计:")
             if edge_changes["weakened"]:
                 logger.info(
-                    f"[遗忘] 减弱的连接 ({len(edge_changes['weakened'])}个): {', '.join(edge_changes['weakened'])}")
-            
+                    f"[遗忘] 减弱的连接 ({len(edge_changes['weakened'])}个): {', '.join(edge_changes['weakened'])}"
+                )
+
             if edge_changes["removed"]:
                 logger.info(
-                    f"[遗忘] 移除的连接 ({len(edge_changes['removed'])}个): {', '.join(edge_changes['removed'])}")
-            
+                    f"[遗忘] 移除的连接 ({len(edge_changes['removed'])}个): {', '.join(edge_changes['removed'])}"
+                )
+
             if node_changes["reduced"]:
                 logger.info(
-                    f"[遗忘] 减少记忆的节点 ({len(node_changes['reduced'])}个): {', '.join(node_changes['reduced'])}")
-            
+                    f"[遗忘] 减少记忆的节点 ({len(node_changes['reduced'])}个): {', '.join(node_changes['reduced'])}"
+                )
+
             if node_changes["removed"]:
                 logger.info(
-                    f"[遗忘] 移除的节点 ({len(node_changes['removed'])}个): {', '.join(node_changes['removed'])}")
+                    f"[遗忘] 移除的节点 ({len(node_changes['removed'])}个): {', '.join(node_changes['removed'])}"
+                )
         else:
             logger.info("[遗忘] 本次检查没有节点或连接满足遗忘条件")
 
         end_time = time.time()
         logger.info(f"[遗忘] 总耗时: {end_time - start_time:.2f}秒")
+
 
 # 海马体
 class Hippocampus:
@@ -817,8 +821,8 @@ class Hippocampus:
         self.parahippocampal_gyrus = ParahippocampalGyrus(self)
         # 从数据库加载记忆图
         self.entorhinal_cortex.sync_memory_from_db()
-        self.llm_topic_judge = LLM_request(self.config.llm_topic_judge,request_type="memory")
-        self.llm_summary_by_topic = LLM_request(self.config.llm_summary_by_topic,request_type="memory")
+        self.llm_topic_judge = LLM_request(self.config.llm_topic_judge, request_type="memory")
+        self.llm_summary_by_topic = LLM_request(self.config.llm_summary_by_topic, request_type="memory")
 
     def get_all_node_names(self) -> list:
         """获取记忆图中所有节点的名字列表"""
@@ -901,16 +905,21 @@ class Hippocampus:
                 memory_items = node_data.get("memory_items", [])
                 if not isinstance(memory_items, list):
                     memory_items = [memory_items] if memory_items else []
-                
+
                 memories.append((node, memory_items, similarity))
 
         # 按相似度降序排序
         memories.sort(key=lambda x: x[2], reverse=True)
         return memories
 
-    async def get_memory_from_text(self, text: str, max_memory_num: int = 3, max_memory_length: int = 2, 
-                                max_depth: int = 3, 
-                                fast_retrieval: bool = False) -> list:
+    async def get_memory_from_text(
+        self,
+        text: str,
+        max_memory_num: int = 3,
+        max_memory_length: int = 2,
+        max_depth: int = 3,
+        fast_retrieval: bool = False,
+    ) -> list:
         """从文本中提取关键词并获取相关记忆。
 
         Args:
@@ -943,18 +952,16 @@ class Hippocampus:
             # 使用LLM提取关键词
             topic_num = min(5, max(1, int(len(text) * 0.1)))  # 根据文本长度动态调整关键词数量
             # logger.info(f"提取关键词数量: {topic_num}")
-            topics_response = await self.llm_topic_judge.generate_response(
-                self.find_topic_llm(text, topic_num)
-            )
+            topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, topic_num))
 
             # 提取关键词
-            keywords = re.findall(r'<([^>]+)>', topics_response[0])
+            keywords = re.findall(r"<([^>]+)>", topics_response[0])
             if not keywords:
                 keywords = []
             else:
                 keywords = [
                     keyword.strip()
-                    for keyword in ','.join(keywords).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                    for keyword in ",".join(keywords).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
                     if keyword.strip()
                 ]
 
@@ -965,7 +972,7 @@ class Hippocampus:
         if not valid_keywords:
             logger.info("没有找到有效的关键词节点")
             return []
-            
+
         logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
 
         # 从每个关键词获取记忆
@@ -981,35 +988,36 @@ class Hippocampus:
             visited_nodes = {keyword}
             # 待处理的节点队列，每个元素是(节点, 激活值, 当前深度)
             nodes_to_process = [(keyword, 1.0, 0)]
-            
+
             while nodes_to_process:
                 current_node, current_activation, current_depth = nodes_to_process.pop(0)
-                
+
                 # 如果激活值小于0或超过最大深度，停止扩散
                 if current_activation <= 0 or current_depth >= max_depth:
                     continue
-                    
+
                 # 获取当前节点的所有邻居
                 neighbors = list(self.memory_graph.G.neighbors(current_node))
-                
+
                 for neighbor in neighbors:
                     if neighbor in visited_nodes:
                         continue
-                        
+
                     # 获取连接强度
                     edge_data = self.memory_graph.G[current_node][neighbor]
                     strength = edge_data.get("strength", 1)
-                    
+
                     # 计算新的激活值
                     new_activation = current_activation - (1 / strength)
-                    
+
                     if new_activation > 0:
                         activation_values[neighbor] = new_activation
                         visited_nodes.add(neighbor)
                         nodes_to_process.append((neighbor, new_activation, current_depth + 1))
                         logger.debug(
-                            f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")  # noqa: E501
-            
+                            f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})"
+                        )  # noqa: E501
+
             # 更新激活映射
             for node, activation_value in activation_values.items():
                 if activation_value > 0:
@@ -1017,7 +1025,7 @@ class Hippocampus:
                         activate_map[node] += activation_value
                     else:
                         activate_map[node] = activation_value
-            
+
         # 输出激活映射
         # logger.info("激活映射统计:")
         # for node, total_activation in sorted(activate_map.items(), key=lambda x: x[1], reverse=True):
@@ -1026,28 +1034,24 @@ class Hippocampus:
         # 基于激活值平方的独立概率选择
         remember_map = {}
         # logger.info("基于激活值平方的归一化选择:")
-        
+
         # 计算所有激活值的平方和
-        total_squared_activation = sum(activation ** 2 for activation in activate_map.values())
+        total_squared_activation = sum(activation**2 for activation in activate_map.values())
         if total_squared_activation > 0:
             # 计算归一化的激活值
             normalized_activations = {
-                node: (activation ** 2) / total_squared_activation 
-                for node, activation in activate_map.items()
+                node: (activation**2) / total_squared_activation for node, activation in activate_map.items()
             }
-            
+
             # 按归一化激活值排序并选择前max_memory_num个
-            sorted_nodes = sorted(
-                normalized_activations.items(), 
-                key=lambda x: x[1], 
-                reverse=True
-            )[:max_memory_num]
-            
+            sorted_nodes = sorted(normalized_activations.items(), key=lambda x: x[1], reverse=True)[:max_memory_num]
+
             # 将选中的节点添加到remember_map
             for node, normalized_activation in sorted_nodes:
                 remember_map[node] = activate_map[node]  # 使用原始激活值
                 logger.debug(
-                    f"节点 '{node}' (归一化激活值: {normalized_activation:.2f}, 激活值: {activate_map[node]:.2f})")
+                    f"节点 '{node}' (归一化激活值: {normalized_activation:.2f}, 激活值: {activate_map[node]:.2f})"
+                )
         else:
             logger.info("没有有效的激活值")
 
@@ -1060,7 +1064,7 @@ class Hippocampus:
             memory_items = node_data.get("memory_items", [])
             if not isinstance(memory_items, list):
                 memory_items = [memory_items] if memory_items else []
-            
+
             if memory_items:
                 logger.debug(f"节点包含 {len(memory_items)} 条记忆")
                 # 计算每条记忆与输入文本的相似度
@@ -1079,7 +1083,7 @@ class Hippocampus:
                 memory_similarities.sort(key=lambda x: x[1], reverse=True)
                 # 获取最匹配的记忆
                 top_memories = memory_similarities[:max_memory_length]
-                
+
                 # 添加到结果中
                 for memory, similarity in top_memories:
                     all_memories.append((node, [memory], similarity))
@@ -1106,11 +1110,10 @@ class Hippocampus:
             memory = memory_items[0]  # 因为每个topic只有一条记忆
             result.append((topic, memory))
             logger.info(f"选中记忆: {memory} (来自节点: {topic})")
-        
+
         return result
-    
-    async def get_activate_from_text(self, text: str, max_depth: int = 3, 
-                                 fast_retrieval: bool = False) -> float:
+
+    async def get_activate_from_text(self, text: str, max_depth: int = 3, fast_retrieval: bool = False) -> float:
         """从文本中提取关键词并获取相关记忆。
 
         Args:
@@ -1140,18 +1143,16 @@ class Hippocampus:
             # 使用LLM提取关键词
             topic_num = min(5, max(1, int(len(text) * 0.1)))  # 根据文本长度动态调整关键词数量
             # logger.info(f"提取关键词数量: {topic_num}")
-            topics_response = await self.llm_topic_judge.generate_response(
-                self.find_topic_llm(text, topic_num)
-            )
+            topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, topic_num))
 
             # 提取关键词
-            keywords = re.findall(r'<([^>]+)>', topics_response[0])
+            keywords = re.findall(r"<([^>]+)>", topics_response[0])
             if not keywords:
                 keywords = []
             else:
                 keywords = [
                     keyword.strip()
-                    for keyword in ','.join(keywords).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+                    for keyword in ",".join(keywords).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
                     if keyword.strip()
                 ]
 
@@ -1162,7 +1163,7 @@ class Hippocampus:
         if not valid_keywords:
             logger.info("没有找到有效的关键词节点")
             return 0
-            
+
         logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
 
         # 从每个关键词获取记忆
@@ -1177,35 +1178,35 @@ class Hippocampus:
             visited_nodes = {keyword}
             # 待处理的节点队列，每个元素是(节点, 激活值, 当前深度)
             nodes_to_process = [(keyword, 1.0, 0)]
-            
+
             while nodes_to_process:
                 current_node, current_activation, current_depth = nodes_to_process.pop(0)
-                
+
                 # 如果激活值小于0或超过最大深度，停止扩散
                 if current_activation <= 0 or current_depth >= max_depth:
                     continue
-                    
+
                 # 获取当前节点的所有邻居
                 neighbors = list(self.memory_graph.G.neighbors(current_node))
-                
+
                 for neighbor in neighbors:
                     if neighbor in visited_nodes:
                         continue
-                        
+
                     # 获取连接强度
                     edge_data = self.memory_graph.G[current_node][neighbor]
                     strength = edge_data.get("strength", 1)
-                    
+
                     # 计算新的激活值
                     new_activation = current_activation - (1 / strength)
-                    
+
                     if new_activation > 0:
                         activation_values[neighbor] = new_activation
                         visited_nodes.add(neighbor)
                         nodes_to_process.append((neighbor, new_activation, current_depth + 1))
                         # logger.debug(
-                            # f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")  # noqa: E501
-            
+                        # f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")  # noqa: E501
+
             # 更新激活映射
             for node, activation_value in activation_values.items():
                 if activation_value > 0:
@@ -1213,22 +1214,23 @@ class Hippocampus:
                         activate_map[node] += activation_value
                     else:
                         activate_map[node] = activation_value
-            
+
         # 输出激活映射
         # logger.info("激活映射统计:")
         # for node, total_activation in sorted(activate_map.items(), key=lambda x: x[1], reverse=True):
         #     logger.info(f"节点 '{node}': 累计激活值 = {total_activation:.2f}")
-        
+
         # 计算激活节点数与总节点数的比值
         total_activation = sum(activate_map.values())
         logger.info(f"总激活值: {total_activation:.2f}")
         total_nodes = len(self.memory_graph.G.nodes())
         # activated_nodes = len(activate_map)
         activation_ratio = total_activation / total_nodes if total_nodes > 0 else 0
-        activation_ratio = activation_ratio*60
+        activation_ratio = activation_ratio * 60
         logger.info(f"总激活值: {total_activation:.2f}, 总节点数: {total_nodes}, 激活: {activation_ratio}")
-        
+
         return activation_ratio
+
 
 class HippocampusManager:
     _instance = None
@@ -1252,12 +1254,12 @@ class HippocampusManager:
         """初始化海马体实例"""
         if self._initialized:
             return self._hippocampus
-            
+
         self._global_config = global_config
         self._hippocampus = Hippocampus()
         self._hippocampus.initialize(global_config)
         self._initialized = True
-        
+
         # 输出记忆系统参数信息
         config = self._hippocampus.config
 
@@ -1265,16 +1267,15 @@ class HippocampusManager:
         memory_graph = self._hippocampus.memory_graph.G
         node_count = len(memory_graph.nodes())
         edge_count = len(memory_graph.edges())
-        
-        logger.success(f'''--------------------------------
+
+        logger.success(f"""--------------------------------
                        记忆系统参数配置:
                        构建间隔: {global_config.build_memory_interval}秒|样本数: {config.build_memory_sample_num},长度: {config.build_memory_sample_length}|压缩率: {config.memory_compress_rate}
                        记忆构建分布: {config.memory_build_distribution}
                        遗忘间隔: {global_config.forget_memory_interval}秒|遗忘比例: {global_config.memory_forget_percentage}|遗忘: {config.memory_forget_time}小时之后
                        记忆图统计信息: 节点数量: {node_count}, 连接数量: {edge_count}
-                       --------------------------------''') #noqa: E501
-        
-        
+                       --------------------------------""")  # noqa: E501
+
         return self._hippocampus
 
     async def build_memory(self):
@@ -1289,17 +1290,22 @@ class HippocampusManager:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         return await self._hippocampus.parahippocampal_gyrus.operation_forget_topic(percentage)
 
-    async def get_memory_from_text(self, text: str, max_memory_num: int = 3,
-                                max_memory_length: int = 2, max_depth: int = 3, 
-                                fast_retrieval: bool = False) -> list:
+    async def get_memory_from_text(
+        self,
+        text: str,
+        max_memory_num: int = 3,
+        max_memory_length: int = 2,
+        max_depth: int = 3,
+        fast_retrieval: bool = False,
+    ) -> list:
         """从文本中获取相关记忆的公共接口"""
         if not self._initialized:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         return await self._hippocampus.get_memory_from_text(
-            text, max_memory_num, max_memory_length, max_depth, fast_retrieval)
+            text, max_memory_num, max_memory_length, max_depth, fast_retrieval
+        )
 
-    async def get_activate_from_text(self, text: str, max_depth: int = 3, 
-                                 fast_retrieval: bool = False) -> float:
+    async def get_activate_from_text(self, text: str, max_depth: int = 3, fast_retrieval: bool = False) -> float:
         """从文本中获取激活值的公共接口"""
         if not self._initialized:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
@@ -1316,5 +1322,3 @@ class HippocampusManager:
         if not self._initialized:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         return self._hippocampus.get_all_node_names()
-
-

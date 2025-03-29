@@ -37,7 +37,6 @@ class PromptBuilder:
 
         current_mind_info = heartflow.get_subheartflow(stream_id).current_mind
 
-
         # relation_prompt = ""
         # for person in who_chat_in_group:
         #     relation_prompt += relationship_manager.build_relationship_info(person)
@@ -52,7 +51,7 @@ class PromptBuilder:
         # 心情
         mood_manager = MoodManager.get_instance()
         mood_prompt = mood_manager.get_prompt()
-        
+
         logger.info(f"心情prompt: {mood_prompt}")
 
         # 日程构建
@@ -72,13 +71,12 @@ class PromptBuilder:
                 chat_in_group = False
                 chat_talking_prompt = chat_talking_prompt
                 # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
-                
 
         # 使用新的记忆获取方法
         memory_prompt = ""
         start_time = time.time()
 
-        #调用 hippocampus 的 get_relevant_memories 方法
+        # 调用 hippocampus 的 get_relevant_memories 方法
         relevant_memories = await HippocampusManager.get_instance().get_memory_from_text(
             text=message_txt, max_memory_num=3, max_memory_length=2, max_depth=2, fast_retrieval=False
         )
@@ -165,10 +163,7 @@ class PromptBuilder:
 请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只输出回复内容。
 {moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。"""
 
-
         return prompt
-
-
 
     def _build_initiative_prompt_select(self, group_id, probability_1=0.8, probability_2=0.1):
         current_date = time.strftime("%Y-%m-%d", time.localtime())

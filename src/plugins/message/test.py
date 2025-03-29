@@ -54,9 +54,7 @@ class TestLiveAPI(unittest.IsolatedAsyncioTestCase):
         # 准备测试消息
         user_info = UserInfo(user_id=12345678, user_nickname="测试用户", platform="qq")
         group_info = GroupInfo(group_id=12345678, group_name="测试群", platform="qq")
-        format_info = FormatInfo(
-            content_format=["text"], accept_format=["text", "emoji", "reply"]
-        )
+        format_info = FormatInfo(content_format=["text"], accept_format=["text", "emoji", "reply"])
         template_info = None
         message_info = BaseMessageInfo(
             platform="qq",

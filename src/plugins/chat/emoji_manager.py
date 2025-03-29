@@ -343,7 +343,7 @@ class EmojiManager:
         while True:
             logger.info("[扫描] 开始扫描新表情包...")
             await self.scan_new_emojis()
-            await asyncio.sleep(global_config.EMOJI_CHECK_INTERVAL * 60) 
+            await asyncio.sleep(global_config.EMOJI_CHECK_INTERVAL * 60)
 
     def check_emoji_file_integrity(self):
         """检查表情包文件完整性
