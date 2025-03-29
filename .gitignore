@@ -217,3 +217,11 @@ OtherRes.txt
 
 /eula.confirmed
 /privacy.confirmed
+
+logs
+
+.ruff_cache
+
+.vscode
+
+config
