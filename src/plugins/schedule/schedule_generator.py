@@ -28,10 +28,10 @@ class ScheduleGenerator:
     def __init__(self):
         # 使用离线LLM模型
         self.llm_scheduler_all = LLM_request(
-            model=global_config.llm_reasoning, temperature=global_config.schedule_temperature, max_tokens=7000, request_type="schedule"
+            model=global_config.llm_reasoning, temperature=global_config.SCHEDULE_TEMPERATURE, max_tokens=7000, request_type="schedule"
         )
         self.llm_scheduler_doing = LLM_request(
-            model=global_config.llm_normal, temperature=global_config.schedule_temperature, max_tokens=2048, request_type="schedule"
+            model=global_config.llm_normal, temperature=global_config.SCHEDULE_TEMPERATURE, max_tokens=2048, request_type="schedule"
         )
 
         self.today_schedule_text = ""
