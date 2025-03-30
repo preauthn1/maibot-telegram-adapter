@@ -213,6 +213,8 @@ pri_out = 0.35
 [model.embedding] #嵌入
 name = "BAAI/bge-m3"
 provider = "SILICONFLOW"
+pri_in = 0
+pri_out = 0
 
 #测试模型，给think_glow用，如果你没开实验性功能，随便写就行，但是要有
 [model.llm_outer_world] #外世界判断：建议使用qwen2.5 7b
