@@ -79,6 +79,10 @@ class LLMStatistics:
             "tokens_by_model": defaultdict(int),
             # 新增在线时间统计
             "online_time_minutes": 0,
+            # 新增消息统计字段
+            "total_messages": 0,
+            "messages_by_user": defaultdict(int),
+            "messages_by_chat": defaultdict(int),
         }
 
         cursor = db.llm_usage.find({"timestamp": {"$gte": start_time}})
@@ -118,14 +122,25 @@ class LLMStatistics:
         for doc in online_time_cursor:
             stats["online_time_minutes"] += doc.get("duration", 0)
 
+        # 统计消息量
+        messages_cursor = db.messages.find({"time": {"$gte": start_time.timestamp()}})
+        for doc in messages_cursor:
+            stats["total_messages"] += 1
+            user_id = str(doc.get("user_info", {}).get("user_id", "unknown"))
+            chat_id = str(doc.get("chat_id", "unknown"))
+            stats["messages_by_user"][user_id] += 1
+            stats["messages_by_chat"][chat_id] += 1
+
         return stats
 
     def _collect_all_statistics(self) -> Dict[str, Dict[str, Any]]:
         """收集所有时间范围的统计数据"""
         now = datetime.now()
+        # 使用2000年1月1日作为"所有时间"的起始时间，这是一个更合理的起始点
+        all_time_start = datetime(2000, 1, 1)
 
         return {
-            "all_time": self._collect_statistics_for_period(datetime.min),
+            "all_time": self._collect_statistics_for_period(all_time_start),
             "last_7_days": self._collect_statistics_for_period(now - timedelta(days=7)),
             "last_24_hours": self._collect_statistics_for_period(now - timedelta(days=1)),
             "last_hour": self._collect_statistics_for_period(now - timedelta(hours=1)),
@@ -143,7 +158,8 @@ class LLMStatistics:
         if stats["total_requests"] > 0:
             output.append(f"总Token数: {stats['total_tokens']}")
             output.append(f"总花费: {stats['total_cost']:.4f}¥")
-            output.append(f"在线时间: {stats['online_time_minutes']}分钟\n")
+            output.append(f"在线时间: {stats['online_time_minutes']}分钟")
+            output.append(f"总消息数: {stats['total_messages']}\n")
 
             data_fmt = "{:<32}  {:>10}  {:>14}  {:>13.4f} ¥"
 
@@ -171,7 +187,7 @@ class LLMStatistics:
 
             # 修正用户统计列宽
             output.append("按用户统计:")
-            output.append(("模型名称                              调用次数       Token总量         累计花费"))
+            output.append(("用户ID                               调用次数       Token总量         累计花费"))
             for user_id, count in sorted(stats["requests_by_user"].items()):
                 tokens = stats["tokens_by_user"][user_id]
                 cost = stats["costs_by_user"][user_id]
@@ -183,6 +199,19 @@ class LLMStatistics:
                         cost,
                     )
                 )
+            output.append("")
+
+            # 添加消息统计
+            output.append("消息统计:")
+            output.append(("用户ID                               消息数量"))
+            for user_id, count in sorted(stats["messages_by_user"].items()):
+                output.append(f"{user_id[:32]:<32}  {count:>10}")
+            output.append("")
+
+            output.append("聊天统计:")
+            output.append(("聊天ID                               消息数量"))
+            for chat_id, count in sorted(stats["messages_by_chat"].items()):
+                output.append(f"{chat_id[:32]:<32}  {count:>10}")
 
         return "\n".join(output)
 
