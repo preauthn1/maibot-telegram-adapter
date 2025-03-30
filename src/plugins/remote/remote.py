@@ -57,13 +57,13 @@ def send_heartbeat(server_url, client_id):
         data = json.dumps(
             {"system": sys, "Version": global_config.MAI_VERSION},
         )
-        logger.info(f"正在发送心跳到服务器: {server_url}")
+        logger.debug(f"正在发送心跳到服务器: {server_url}")
         logger.debug(f"心跳数据: {data}")
         response = requests.post(f"{server_url}/api/clients", headers=headers, data=data)
 
         if response.status_code == 201:
             data = response.json()
-            logger.info(f"心跳发送成功。服务器响应: {data}")
+            logger.debug(f"心跳发送成功。服务器响应: {data}")
             return True
         else:
             logger.error(f"心跳发送失败。状态码: {response.status_code}, 响应内容: {response.text}")

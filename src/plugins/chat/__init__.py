@@ -5,6 +5,7 @@ from .message_sender import message_manager
 from .storage import MessageStorage
 from .auto_speak import auto_speak_manager
 
+
 __all__ = [
     "emoji_manager",
     "relationship_manager",
