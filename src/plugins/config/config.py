@@ -3,11 +3,120 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import tomli
+import tomlkit
+import shutil
+from datetime import datetime
+from pathlib import Path
 from packaging import version
 from packaging.version import Version, InvalidVersion
 from packaging.specifiers import SpecifierSet, InvalidSpecifier
 
-from src.common.logger import get_module_logger
+from src.common.logger import get_module_logger, CONFIG_STYLE_CONFIG, LogConfig
+
+# 定义日志配置
+config_config = LogConfig(
+    # 使用消息发送专用样式
+    console_format=CONFIG_STYLE_CONFIG["console_format"],
+    file_format=CONFIG_STYLE_CONFIG["file_format"],
+)
+
+# 配置主程序日志格式
+logger = get_module_logger("config", config=config_config)
+
+
+
+#考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
+mai_version_main = "0.6.0"
+mai_version_fix = "mmc-2"
+mai_version = f"{mai_version_main}-{mai_version_fix}"
+
+
+
+def update_config():
+    # 获取根目录路径
+    root_dir = Path(__file__).parent.parent.parent.parent
+    template_dir = root_dir / "template"
+    config_dir = root_dir / "config"
+    old_config_dir = config_dir / "old"
+
+    # 定义文件路径
+    template_path = template_dir / "bot_config_template.toml"
+    old_config_path = config_dir / "bot_config.toml"
+    new_config_path = config_dir / "bot_config.toml"
+
+    # 检查配置文件是否存在
+    if not old_config_path.exists():
+        logger.info("配置文件不存在，从模板创建新配置")
+        shutil.copy2(template_path, old_config_path)
+        logger.info(f"已创建新配置文件，请填写后重新运行: {old_config_path}")
+        # 如果是新创建的配置文件,直接返回
+        quit()
+        return
+
+    # 读取旧配置文件和模板文件
+    with open(old_config_path, "r", encoding="utf-8") as f:
+        old_config = tomlkit.load(f)
+    with open(template_path, "r", encoding="utf-8") as f:
+        new_config = tomlkit.load(f)
+
+    # 检查version是否相同
+    if old_config and "inner" in old_config and "inner" in new_config:
+        old_version = old_config["inner"].get("version")
+        new_version = new_config["inner"].get("version")
+        if old_version and new_version and old_version == new_version:
+            logger.info(f"检测到配置文件版本号相同 (v{old_version})，跳过更新")
+            return
+        else:
+            logger.info(f"检测到版本号不同: 旧版本 v{old_version} -> 新版本 v{new_version}")
+
+    # 创建old目录（如果不存在）
+    old_config_dir.mkdir(exist_ok=True)
+
+    # 生成带时间戳的新文件名
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    old_backup_path = old_config_dir / f"bot_config_{timestamp}.toml"
+    
+    # 移动旧配置文件到old目录
+    shutil.move(old_config_path, old_backup_path)
+    logger.info(f"已备份旧配置文件到: {old_backup_path}")
+
+    # 复制模板文件到配置目录
+    shutil.copy2(template_path, new_config_path)
+    logger.info(f"已创建新配置文件: {new_config_path}")
+
+    # 递归更新配置
+    def update_dict(target, source):
+        for key, value in source.items():
+            # 跳过version字段的更新
+            if key == "version":
+                continue
+            if key in target:
+                if isinstance(value, dict) and isinstance(target[key], (dict, tomlkit.items.Table)):
+                    update_dict(target[key], value)
+                else:
+                    try:
+                        # 对数组类型进行特殊处理
+                        if isinstance(value, list):
+                            # 如果是空数组，确保它保持为空数组
+                            if not value:
+                                target[key] = tomlkit.array()
+                            else:
+                                target[key] = tomlkit.array(value)
+                        else:
+                            # 其他类型使用item方法创建新值
+                            target[key] = tomlkit.item(value)
+                    except (TypeError, ValueError):
+                        # 如果转换失败，直接赋值
+                        target[key] = value
+
+    # 将旧配置的值更新到新配置中
+    logger.info("开始合并新旧配置...")
+    update_dict(new_config, old_config)
+
+    # 保存更新后的配置（保留注释和格式）
+    with open(new_config_path, "w", encoding="utf-8") as f:
+        f.write(tomlkit.dumps(new_config))
+    logger.info("配置文件更新完成")
 
 logger = get_module_logger("config")
 
@@ -17,7 +126,7 @@ class BotConfig:
     """机器人配置类"""
 
     INNER_VERSION: Version = None
-    MAI_VERSION: Version = None
+    MAI_VERSION: str = mai_version  # 硬编码的版本信息
 
     # bot
     BOT_QQ: Optional[int] = 114514
@@ -212,11 +321,6 @@ class BotConfig:
         """从TOML配置文件加载配置"""
         config = cls()
 
-        def mai_version(parent: dict):
-            mai_version_config = parent["mai_version"]
-            version = mai_version_config.get("version")
-            version_fix = mai_version_config.get("version-fix")
-            config.MAI_VERSION = f"{version}-{version_fix}"
 
         def personality(parent: dict):
             personality_config = parent["personality"]
@@ -465,13 +569,12 @@ class BotConfig:
         #     主版本号：当你做了不兼容的 API 修改，
         #     次版本号：当你做了向下兼容的功能性新增，
         #     修订号：当你做了向下兼容的问题修正。
-        # 先行版本号及版本编译信息可以加到“主版本号.次版本号.修订号”的后面，作为延伸。
+        # 先行版本号及版本编译信息可以加到"主版本号.次版本号.修订号"的后面，作为延伸。
 
         # 如果你做了break的修改，就应该改动主版本号
         # 如果做了一个兼容修改，就不应该要求这个选项是必须的！
         include_configs = {
             "bot": {"func": bot, "support": ">=0.0.0"},
-            "mai_version": {"func": mai_version, "support": ">=1.0.0"},
             "groups": {"func": groups, "support": ">=0.0.0"},
             "personality": {"func": personality, "support": ">=0.0.0"},
             "schedule": {"func": schedule, "support": ">=0.0.11", "necessary": False},
@@ -544,6 +647,9 @@ class BotConfig:
 
 
 # 获取配置文件路径
+logger.info(f"MaiCore当前版本: {mai_version}")
+update_config()
+
 bot_config_floder_path = BotConfig.get_config_dir()
 logger.info(f"正在品鉴配置文件目录: {bot_config_floder_path}")
 

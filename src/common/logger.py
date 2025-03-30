@@ -125,6 +125,24 @@ RELATION_STYLE_CONFIG = {
     },
 }
 
+# config
+CONFIG_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{extra[module]: <12}</cyan> | "
+            "<light-cyan>配置</light-cyan> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": ("{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 配置 | {message}"),
+    },
+    "simple": {
+        "console_format": ("<green>{time:MM-DD HH:mm}</green> | <light-cyan>配置</light-cyan> | {message}"),
+        "file_format": ("{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 配置 | {message}"),
+    },
+}
+
 SENDER_STYLE_CONFIG = {
     "advanced": {
         "console_format": (
@@ -287,6 +305,7 @@ SUB_HEARTFLOW_STYLE_CONFIG = (
     SUB_HEARTFLOW_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else SUB_HEARTFLOW_STYLE_CONFIG["advanced"]
 )  # noqa: E501
 WILLING_STYLE_CONFIG = WILLING_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else WILLING_STYLE_CONFIG["advanced"]
+CONFIG_STYLE_CONFIG = CONFIG_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else CONFIG_STYLE_CONFIG["advanced"]
 
 
 def is_registered_module(record: dict) -> bool:
