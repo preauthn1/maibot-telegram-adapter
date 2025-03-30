@@ -80,9 +80,9 @@ class SubHeartflow:
     async def subheartflow_start_working(self):
         while True:
             current_time = time.time()
-            if current_time - self.last_reply_time > 120:  # 120秒无回复/不在场，冻结
+            if current_time - self.last_reply_time > global_config.sub_heart_flow_freeze_time:  # 120秒无回复/不在场，冻结
                 self.is_active = False
-                await asyncio.sleep(60)  # 每60秒检查一次
+                await asyncio.sleep(global_config.sub_heart_flow_update_interval)  # 每60秒检查一次
             else:
                 self.is_active = True
                 self.last_active_time = current_time  # 更新最后激活时间
@@ -94,10 +94,10 @@ class SubHeartflow:
 
                 await self.do_a_thinking()
                 await self.judge_willing()
-                await asyncio.sleep(60)
+                await asyncio.sleep(global_config.sub_heart_flow_update_interval)
 
             # 检查是否超过10分钟没有激活
-            if current_time - self.last_active_time > 600:  # 5分钟无回复/不在场，销毁
+            if current_time - self.last_active_time > global_config.sub_heart_flow_stop_time:  # 5分钟无回复/不在场，销毁
                 logger.info(f"子心流 {self.subheartflow_id} 已经5分钟没有激活，正在销毁...")
                 break  # 退出循环，销毁自己
 

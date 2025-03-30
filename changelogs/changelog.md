@@ -36,7 +36,7 @@
   - `schedule`: 日程表生成功能配置
   - `response_spliter`: 回复分割控制
   - `experimental`: 实验性功能开关
-  - `llm_outer_world`和`llm_sub_heartflow`: 思维流模型配置
+  - `llm_observation`和`llm_sub_heartflow`: 思维流模型配置
   - `llm_heartflow`: 思维流核心模型配置
   - `prompt_schedule_gen`: 日程生成提示词配置
   - `memory_ban_words`: 记忆过滤词配置

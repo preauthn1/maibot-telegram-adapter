@@ -11,7 +11,7 @@ from .utils import get_embedding, get_recent_group_detailed_plain_text
 from .chat_stream import chat_manager
 from src.common.logger import get_module_logger
 
-from src.think_flow_demo.heartflow import heartflow
+from src.heart_flow.heartflow import heartflow
 
 logger = get_module_logger("prompt")
 

@@ -23,14 +23,10 @@ config_config = LogConfig(
 # 配置主程序日志格式
 logger = get_module_logger("config", config=config_config)
 
-
-
 #考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
 mai_version_main = "0.6.0"
 mai_version_fix = "mmc-2"
 mai_version = f"{mai_version_main}-{mai_version_fix}"
-
-
 
 def update_config():
     # 获取根目录路径
@@ -152,6 +148,7 @@ class BotConfig:
     ENABLE_SCHEDULE_GEN: bool = False  # 是否启用日程生成
     PROMPT_SCHEDULE_GEN = "无日程"
     SCHEDULE_DOING_UPDATE_INTERVAL: int = 300  # 日程表更新间隔 单位秒
+    SCHEDULE_TEMPERATURE: float = 0.5  # 日程表温度，建议0.5-1.0
 
     # message
     MAX_CONTEXT_SIZE: int = 15  # 上下文最大消息数
@@ -161,7 +158,14 @@ class BotConfig:
 
     ban_words = set()
     ban_msgs_regex = set()
-
+    
+    #heartflow
+    enable_heartflow: bool = False  # 是否启用心流
+    sub_heart_flow_update_interval: int = 60  # 子心流更新频率，间隔 单位秒
+    sub_heart_flow_freeze_time: int = 120  # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
+    sub_heart_flow_stop_time: int = 600  # 子心流停止时间，超过这个时间没有回复，子心流会停止，间隔 单位秒
+    heart_flow_update_interval: int = 300  # 心流更新频率，间隔 单位秒
+    
     # willing
     willing_mode: str = "classical"  # 意愿模式
     response_willing_amplifier: float = 1.0  # 回复意愿放大系数
@@ -237,7 +241,7 @@ class BotConfig:
     moderation: Dict[str, str] = field(default_factory=lambda: {})
 
     # 实验性
-    llm_outer_world: Dict[str, str] = field(default_factory=lambda: {})
+    llm_observation: Dict[str, str] = field(default_factory=lambda: {})
     llm_sub_heartflow: Dict[str, str] = field(default_factory=lambda: {})
     llm_heartflow: Dict[str, str] = field(default_factory=lambda: {})
 
@@ -329,10 +333,9 @@ class BotConfig:
                 logger.debug(f"载入自定义人格:{personality}")
                 config.PROMPT_PERSONALITY = personality_config.get("prompt_personality", config.PROMPT_PERSONALITY)
 
-            if config.INNER_VERSION in SpecifierSet(">=0.0.2"):
-                config.PERSONALITY_1 = personality_config.get("personality_1_probability", config.PERSONALITY_1)
-                config.PERSONALITY_2 = personality_config.get("personality_2_probability", config.PERSONALITY_2)
-                config.PERSONALITY_3 = personality_config.get("personality_3_probability", config.PERSONALITY_3)
+            config.PERSONALITY_1 = personality_config.get("personality_1_probability", config.PERSONALITY_1)
+            config.PERSONALITY_2 = personality_config.get("personality_2_probability", config.PERSONALITY_2)
+            config.PERSONALITY_3 = personality_config.get("personality_3_probability", config.PERSONALITY_3)
 
         def schedule(parent: dict):
             schedule_config = parent["schedule"]
@@ -344,6 +347,8 @@ class BotConfig:
             logger.info(
                 f"载入自定义日程prompt:{schedule_config.get('prompt_schedule_gen', config.PROMPT_SCHEDULE_GEN)}"
             )
+            if config.INNER_VERSION in SpecifierSet(">=1.0.2"):
+                config.SCHEDULE_TEMPERATURE = schedule_config.get("schedule_temperature", config.SCHEDULE_TEMPERATURE)
 
         def emoji(parent: dict):
             emoji_config = parent["emoji"]
@@ -359,9 +364,7 @@ class BotConfig:
             bot_qq = bot_config.get("qq")
             config.BOT_QQ = int(bot_qq)
             config.BOT_NICKNAME = bot_config.get("nickname", config.BOT_NICKNAME)
-
-            if config.INNER_VERSION in SpecifierSet(">=0.0.5"):
-                config.BOT_ALIAS_NAMES = bot_config.get("alias_names", config.BOT_ALIAS_NAMES)
+            config.BOT_ALIAS_NAMES = bot_config.get("alias_names", config.BOT_ALIAS_NAMES)
 
         def response(parent: dict):
             response_config = parent["response"]
@@ -402,7 +405,7 @@ class BotConfig:
                 "vlm",
                 "embedding",
                 "moderation",
-                "llm_outer_world",
+                "llm_observation",
                 "llm_sub_heartflow",
                 "llm_heartflow",
             ]
@@ -462,19 +465,15 @@ class BotConfig:
             config.MAX_CONTEXT_SIZE = msg_config.get("max_context_size", config.MAX_CONTEXT_SIZE)
             config.emoji_chance = msg_config.get("emoji_chance", config.emoji_chance)
             config.ban_words = msg_config.get("ban_words", config.ban_words)
-
-            if config.INNER_VERSION in SpecifierSet(">=0.0.2"):
-                config.thinking_timeout = msg_config.get("thinking_timeout", config.thinking_timeout)
-                config.response_willing_amplifier = msg_config.get(
-                    "response_willing_amplifier", config.response_willing_amplifier
-                )
-                config.response_interested_rate_amplifier = msg_config.get(
-                    "response_interested_rate_amplifier", config.response_interested_rate_amplifier
-                )
-                config.down_frequency_rate = msg_config.get("down_frequency_rate", config.down_frequency_rate)
-
-            if config.INNER_VERSION in SpecifierSet(">=0.0.6"):
-                config.ban_msgs_regex = msg_config.get("ban_msgs_regex", config.ban_msgs_regex)
+            config.thinking_timeout = msg_config.get("thinking_timeout", config.thinking_timeout)
+            config.response_willing_amplifier = msg_config.get(
+                "response_willing_amplifier", config.response_willing_amplifier
+            )
+            config.response_interested_rate_amplifier = msg_config.get(
+                "response_interested_rate_amplifier", config.response_interested_rate_amplifier
+            )
+            config.down_frequency_rate = msg_config.get("down_frequency_rate", config.down_frequency_rate)
+            config.ban_msgs_regex = msg_config.get("ban_msgs_regex", config.ban_msgs_regex)
 
             if config.INNER_VERSION in SpecifierSet(">=0.0.11"):
                 config.max_response_length = msg_config.get("max_response_length", config.max_response_length)
@@ -483,17 +482,12 @@ class BotConfig:
             memory_config = parent["memory"]
             config.build_memory_interval = memory_config.get("build_memory_interval", config.build_memory_interval)
             config.forget_memory_interval = memory_config.get("forget_memory_interval", config.forget_memory_interval)
-
-            # 在版本 >= 0.0.4 时才处理新增的配置项
-            if config.INNER_VERSION in SpecifierSet(">=0.0.4"):
-                config.memory_ban_words = set(memory_config.get("memory_ban_words", []))
-
-            if config.INNER_VERSION in SpecifierSet(">=0.0.7"):
-                config.memory_forget_time = memory_config.get("memory_forget_time", config.memory_forget_time)
-                config.memory_forget_percentage = memory_config.get(
-                    "memory_forget_percentage", config.memory_forget_percentage
-                )
-                config.memory_compress_rate = memory_config.get("memory_compress_rate", config.memory_compress_rate)
+            config.memory_ban_words = set(memory_config.get("memory_ban_words", []))
+            config.memory_forget_time = memory_config.get("memory_forget_time", config.memory_forget_time)
+            config.memory_forget_percentage = memory_config.get(
+                "memory_forget_percentage", config.memory_forget_percentage
+            )
+            config.memory_compress_rate = memory_config.get("memory_compress_rate", config.memory_compress_rate)
             if config.INNER_VERSION in SpecifierSet(">=0.0.11"):
                 config.memory_build_distribution = memory_config.get(
                     "memory_build_distribution", config.memory_build_distribution
@@ -553,6 +547,14 @@ class BotConfig:
             if platforms_config and isinstance(platforms_config, dict):
                 for k in platforms_config.keys():
                     config.api_urls[k] = platforms_config[k]
+        
+        def heartflow(parent: dict):
+            heartflow_config = parent["heartflow"]
+            config.enable_heartflow = heartflow_config.get("enable", config.enable_heartflow)
+            config.sub_heart_flow_update_interval = heartflow_config.get("sub_heart_flow_update_interval", config.sub_heart_flow_update_interval)
+            config.sub_heart_flow_freeze_time = heartflow_config.get("sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time)
+            config.sub_heart_flow_stop_time = heartflow_config.get("sub_heart_flow_stop_time", config.sub_heart_flow_stop_time)
+            config.heart_flow_update_interval = heartflow_config.get("heart_flow_update_interval", config.heart_flow_update_interval)
 
         def experimental(parent: dict):
             experimental_config = parent["experimental"]
@@ -591,6 +593,7 @@ class BotConfig:
             "platforms": {"func": platforms, "support": ">=1.0.0"},
             "response_spliter": {"func": response_spliter, "support": ">=0.0.11", "necessary": False},
             "experimental": {"func": experimental, "support": ">=0.0.11", "necessary": False},
+            "heartflow": {"func": heartflow, "support": ">=1.0.2", "necessary": False},
         }
 
         # 原地修改，将 字符串版本表达式 转换成 版本对象

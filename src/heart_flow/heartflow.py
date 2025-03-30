@@ -50,7 +50,7 @@ class Heartflow:
 
             # 检查所有子心流
             for subheartflow_id, subheartflow in self._subheartflows.items():
-                if current_time - subheartflow.last_active_time > 600:  # 10分钟 = 600秒
+                if current_time - subheartflow.last_active_time > global_config.sub_heart_flow_stop_time:  # 10分钟 = 600秒
                     inactive_subheartflows.append(subheartflow_id)
                     logger.info(f"发现不活跃的子心流: {subheartflow_id}")
 
@@ -69,11 +69,11 @@ class Heartflow:
             # 检查是否存在子心流
             if not self._subheartflows:
                 logger.info("当前没有子心流，等待新的子心流创建...")
-                await asyncio.sleep(60)  # 每分钟检查一次是否有新的子心流
+                await asyncio.sleep(30)  # 每分钟检查一次是否有新的子心流
                 continue
 
             await self.do_a_thinking()
-            await asyncio.sleep(300)  # 5分钟思考一次
+            await asyncio.sleep(global_config.heart_flow_update_interval)  # 5分钟思考一次
 
     async def do_a_thinking(self):
         logger.debug("麦麦大脑袋转起来了")

@@ -7,7 +7,7 @@ from .plugins.chat.emoji_manager import emoji_manager
 from .plugins.chat.relationship_manager import relationship_manager
 from .plugins.willing.willing_manager import willing_manager
 from .plugins.chat.chat_stream import chat_manager
-from .think_flow_demo.heartflow import heartflow
+from .heart_flow.heartflow import heartflow
 from .plugins.memory_system.Hippocampus import HippocampusManager
 from .plugins.chat.message_sender import message_manager
 from .plugins.chat.storage import MessageStorage

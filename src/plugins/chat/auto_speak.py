@@ -10,7 +10,7 @@ from .message_sender import message_manager
 from ..moods.moods import MoodManager
 from .llm_generator import ResponseGenerator
 from src.common.logger import get_module_logger
-from src.think_flow_demo.heartflow import heartflow
+from src.heart_flow.heartflow import heartflow
 from ...common.database import db
 
 logger = get_module_logger("auto_speak")

@@ -19,7 +19,7 @@ from .utils_image import image_path_to_base64
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器
 from ..message import UserInfo, Seg
 
-from src.think_flow_demo.heartflow import heartflow
+from src.heart_flow.heartflow import heartflow
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 
 # 定义日志配置
