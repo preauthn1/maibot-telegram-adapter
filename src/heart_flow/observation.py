@@ -51,8 +51,10 @@ class ChattingObservation(Observation):
         # 将新消息转换为字符串格式
         new_messages_str = ""
         for msg in new_messages:
-            if "sender_name" in msg and "content" in msg:
-                new_messages_str += f"{msg['sender_name']}: {msg['content']}\n"
+            if "detailed_plain_text" in msg:
+                new_messages_str += f"{msg['detailed_plain_text']}\n"
+                
+        print(f"new_messages_str：{new_messages_str}")
 
         # 将新消息添加到talking_message，同时保持列表长度不超过20条
         self.talking_message.extend(new_messages)
@@ -90,8 +92,8 @@ class ChattingObservation(Observation):
         # 将新消息转换为字符串格式
         new_messages_str = ""
         for msg in new_messages:
-            if "sender_name" in msg and "content" in msg:
-                new_messages_str += f"{msg['sender_name']}: {msg['content']}\n"
+            if "detailed_plain_text" in msg:
+                new_messages_str += f"{msg['detailed_plain_text']}\n"
 
         # 将新消息添加到talking_message，同时保持列表长度不超过30条
         self.talking_message.extend(new_messages)
@@ -116,6 +118,9 @@ class ChattingObservation(Observation):
         以及聊天中的一些重要信息，记得不要分点，不要太长，精简的概括成一段文本\n"""
         prompt += "总结概括："
         self.observe_info, reasoning_content = await self.llm_summary.generate_response_async(prompt)
+        print(f"prompt：{prompt}")
+        print(f"self.observe_info：{self.observe_info}")
+        
 
     def translate_message_list_to_str(self):
         self.talking_message_str = ""

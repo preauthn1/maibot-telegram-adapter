@@ -66,7 +66,7 @@ heart_flow_update_interval = 300 # 心流更新频率，间隔 单位秒
 max_context_size = 15 # 麦麦获得的上文数量，建议15，太短太长都会导致脑袋尖尖
 emoji_chance = 0.2 # 麦麦使用表情包的概率
 thinking_timeout = 120 # 麦麦最长思考时间，超过这个时间的思考会放弃
-max_response_length = 1024 # 麦麦回答的最大token数
+max_response_length = 256 # 麦麦回答的最大token数
 ban_words = [
     # "403","张三"
     ]
