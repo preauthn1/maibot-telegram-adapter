@@ -122,11 +122,7 @@ class ChatBot:
 
         # 神秘的消息流数据结构处理
         if chat.group_info:
-            if chat.group_info.group_name:
-                mes_name_dict = chat.group_info.group_name
-                mes_name = mes_name_dict.get("group_name", "无名群聊")
-            else:
-                mes_name = "群聊"
+            mes_name = chat.group_info.group_name
         else:
             mes_name = "私聊"
 

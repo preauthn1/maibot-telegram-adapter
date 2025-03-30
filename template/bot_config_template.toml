@@ -50,7 +50,7 @@ schedule_doing_update_interval = 900 # 日程表更新间隔 单位秒
 schedule_temperature = 0.5 # 日程表温度，建议0.5-1.0
 
 [platforms] # 必填项目，填写每个平台适配器提供的链接
-qq="http://127.0.0.1:18002/api/message"
+nonebot-qq="http://127.0.0.1:18002/api/message"
 
 [heartflow] # 注意：可能会消耗大量token，请谨慎开启
 enable = false
