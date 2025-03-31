@@ -9,8 +9,8 @@ COPY requirements.txt .
 COPY maim_message /maim_message
 
 # 安装依赖
-RUN pip install -e /maim_message -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
-RUN pip install --upgrade -r requirements.txt -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
+RUN pip install -e /maim_message
+RUN pip install --upgrade -r requirements.txt
 
 # 复制项目代码
 COPY . .
