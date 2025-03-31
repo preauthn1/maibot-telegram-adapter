@@ -2,15 +2,25 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Union
 
-from loguru import logger
-from nonebot.adapters.onebot.v11 import Bot
+from src.common.logger import get_module_logger
 from ...common.database import db
-from .message_cq import MessageSendCQ
-from .message import MessageSending, MessageThinking, MessageRecv, MessageSet
+from ..message.api import global_api
+from .message import MessageSending, MessageThinking, MessageSet
 
 from .storage import MessageStorage
-from .config import global_config
-from .utils import truncate_message
+from ..config.config import global_config
+from .utils import truncate_message, calculate_typing_time
+
+from src.common.logger import LogConfig, SENDER_STYLE_CONFIG
+
+# 定义日志配置
+sender_config = LogConfig(
+    # 使用消息发送专用样式
+    console_format=SENDER_STYLE_CONFIG["console_format"],
+    file_format=SENDER_STYLE_CONFIG["file_format"],
+)
+
+logger = get_module_logger("msg_sender", config=sender_config)
 
 
 class Message_Sender:
@@ -21,10 +31,10 @@ class Message_Sender:
         self.last_send_time = 0
         self._current_bot = None
 
-    def set_bot(self, bot: Bot):
+    def set_bot(self, bot):
         """设置当前bot实例"""
-        self._current_bot = bot
-    
+        pass
+
     def get_recalled_messages(self, stream_id: str) -> list:
         """获取所有撤回的消息"""
         recalled_messages = []
@@ -48,33 +58,21 @@ class Message_Sender:
                     logger.warning(f"消息“{message.processed_plain_text}”已被撤回，不发送")
                     break
             if not is_recalled:
+                typing_time = calculate_typing_time(message.processed_plain_text)
+                await asyncio.sleep(typing_time)
+
                 message_json = message.to_dict()
-                message_send = MessageSendCQ(data=message_json)
-                # logger.debug(message_send.message_info,message_send.raw_message)
+
                 message_preview = truncate_message(message.processed_plain_text)
-                if message_send.message_info.group_info and message_send.message_info.group_info.group_id:
-                    try:
-                        await self._current_bot.send_group_msg(
-                            group_id=message.message_info.group_info.group_id,
-                            message=message_send.raw_message,
-                            auto_escape=False,
-                        )
-                        logger.success(f"[调试] 发送消息“{message_preview}”成功")
-                    except Exception as e:
-                        logger.error(f"[调试] 发生错误 {e}")
-                        logger.error(f"[调试] 发送消息“{message_preview}”失败")
-                else:
-                    try:
-                        logger.debug(message.message_info.user_info)
-                        await self._current_bot.send_private_msg(
-                            user_id=message.sender_info.user_id,
-                            message=message_send.raw_message,
-                            auto_escape=False,
-                        )
-                        logger.success(f"[调试] 发送消息“{message_preview}”成功")
-                    except Exception as e:
-                        logger.error(f"[调试] 发生错误 {e}")
-                        logger.error(f"[调试] 发送消息“{message_preview}”失败")
+                try:
+                    end_point = global_config.api_urls.get(message.message_info.platform, None)
+                    if end_point:
+                        await global_api.send_message(end_point, message_json)
+                    else:
+                        raise ValueError(f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件")
+                    logger.success(f"发送消息“{message_preview}”成功")
+                except Exception as e:
+                    logger.error(f"发送消息“{message_preview}”失败: {str(e)}")
 
 
 class MessageContainer:
@@ -85,7 +83,7 @@ class MessageContainer:
         self.max_size = max_size
         self.messages = []
         self.last_send_time = 0
-        self.thinking_timeout = 20  # 思考超时时间（秒）
+        self.thinking_timeout = 10  # 思考等待超时时间（秒）
 
     def get_timeout_messages(self) -> List[MessageSending]:
         """获取所有超时的Message_Sending对象（思考时间超过30秒），按thinking_start_time排序"""
@@ -174,6 +172,7 @@ class MessageManager:
             if isinstance(message_earliest, MessageThinking):
                 message_earliest.update_thinking_time()
                 thinking_time = message_earliest.thinking_time
+                # print(thinking_time)
                 print(
                     f"消息正在思考中，已思考{int(thinking_time)}秒\r",
                     end="",
@@ -186,43 +185,51 @@ class MessageManager:
                     container.remove_message(message_earliest)
 
             else:
+                # print(message_earliest.is_head)
+                # print(message_earliest.update_thinking_time())
+                # print(message_earliest.is_private_message())
+                thinking_time = message_earliest.update_thinking_time()
+                print(thinking_time)
                 if (
                     message_earliest.is_head
-                    and message_earliest.update_thinking_time() > 30
+                    and message_earliest.update_thinking_time() > 18
                     and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                 ):
+                    logger.debug(f"设置回复消息{message_earliest.processed_plain_text}")
                     message_earliest.set_reply()
-                await message_sender.send_message(message_earliest)
+
                 await message_earliest.process()
 
-                print(
-                    f"\033[1;34m[调试]\033[0m 消息“{truncate_message(message_earliest.processed_plain_text)}”正在发送中"
-                )
+                await message_sender.send_message(message_earliest)
 
-                await self.storage.store_message(message_earliest, message_earliest.chat_stream, None)
+                await self.storage.store_message(message_earliest, message_earliest.chat_stream)
 
                 container.remove_message(message_earliest)
 
             message_timeout = container.get_timeout_messages()
             if message_timeout:
-                logger.warning(f"发现{len(message_timeout)}条超时消息")
+                logger.debug(f"发现{len(message_timeout)}条超时消息")
                 for msg in message_timeout:
                     if msg == message_earliest:
                         continue
 
                     try:
+                        # print(msg.is_head)
+                        print(msg.update_thinking_time())
+                        # print(msg.is_private_message())
                         if (
                             msg.is_head
-                            and msg.update_thinking_time() > 30
-                            and not message_earliest.is_private_message()  # 避免在私聊时插入reply
+                            and msg.update_thinking_time() > 18
+                            and not msg.is_private_message()  # 避免在私聊时插入reply
                         ):
+                            logger.debug(f"设置回复消息{msg.processed_plain_text}")
                             msg.set_reply()
+
+                        await msg.process()
+
                         await message_sender.send_message(msg)
 
-                        # if msg.is_emoji:
-                        #     msg.processed_plain_text = "[表情包]"
-                        await msg.process()
-                        await self.storage.store_message(msg, msg.chat_stream, None)
+                        await self.storage.store_message(msg, msg.chat_stream)
 
                         if not container.remove_message(msg):
                             logger.warning("尝试删除不存在的消息")

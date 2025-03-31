@@ -1,4 +1,4 @@
-# 麦麦！MaiMBot (编辑中)
+# 麦麦！MaiMBot-MaiCore (编辑中)
 
 <div align="center">
 
@@ -10,22 +10,21 @@
 
 ## 📝 项目简介
 
-**🍔麦麦是一个基于大语言模型的智能QQ群聊机器人**
+**🍔MaiCore是一个基于大语言模型的可交互智能体**
 
-- 基于 nonebot2 框架开发
 - LLM 提供对话能力
 - MongoDB 提供数据持久化支持
-- NapCat 作为QQ协议端支持
+- 可扩展，可支持多种平台和多种功能
 
-**最新版本: v0.5.13**
+**最新版本: v0.6.0** ([查看更新日志](changelog.md))
 > [!WARNING]
-> 注意，3月12日的v0.5.13, 该版本更新较大，建议单独开文件夹部署，然后转移/data文件 和数据库，数据库可能需要删除messages下的内容（不需要删除记忆）
-
+> 次版本MaiBot将基于MaiCore运行，不再依赖于nonebot相关组件运行。
+> MaiBot将通过nonebot的插件与nonebot建立联系，然后nonebot与QQ建立联系，实现MaiBot与QQ的交互
 
 
 <div align="center">
 <a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
-    <img src="docs/video.png" width="300" alt="麦麦演示视频">
+    <img src="docs/pic/video.png" width="300" alt="麦麦演示视频">
     <br>
     👆 点击观看麦麦演示视频 👆
 
@@ -39,61 +38,26 @@
 > - 由于持续迭代，可能存在一些已知或未知的bug
 > - 由于开发中，可能消耗较多token
 
-## 💬交流群
-- [一群](https://qm.qq.com/q/VQ3XZrWgMs) 123456780 ，建议加下面的（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
-- [二群](https://qm.qq.com/q/RzmCiRtHEW) 123456782 （开发和建议相关讨论）不一定有空回复，会优先写文档和代码
-- [三群](https://qm.qq.com/q/wlH5eT8OmQ) 1035228475（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
-- [四群](https://qm.qq.com/q/wlH5eT8OmQ) 729957033（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
+### 💬交流群（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
+- [五群](https://qm.qq.com/q/JxvHZnxyec) 1022489779
+- [一群](https://qm.qq.com/q/VQ3XZrWgMs) 123456780 【已满】
+- [二群](https://qm.qq.com/q/RzmCiRtHEW) 123456782【已满】
+- [三群](https://qm.qq.com/q/wlH5eT8OmQ) 1035228475【已满】
+- [四群](https://qm.qq.com/q/wlH5eT8OmQ) 729957033【已满】
 
-
-
-**📚 有热心网友创作的wiki:** https://maimbot.pages.dev/
-
-
-**😊 其他平台版本** 
-
-- (由 [CabLate](https://github.com/cablate) 贡献) [Telegram 与其他平台(未来可能会有)的版本](https://github.com/cablate/MaiMBot/tree/telegram) - [集中讨论串](https://github.com/SengokuCola/MaiMBot/discussions/149)
-
-
-
-## 📝 注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意注意
-**如果你有想法想要提交pr** 
-- 由于本项目在快速迭代和功能调整，并且有重构计划，目前不接受任何未经过核心开发组讨论的pr合并，谢谢！如您仍旧希望提交pr，可以详情请看置顶issue
 
 <div align="left">
-<h2>📚 文档        ⬇️ 快速开始使用麦麦 ⬇️</h2>
+<h2>📚 文档</h2>
 </div>
 
-### 部署方式(忙于开发，部分内容可能过时)
+### (部分内容可能过时，请注意版本对应)
 
--  📦 **Windows 一键傻瓜式部署**：请运行项目根目录中的 `run.bat`，部署完成后请参照后续配置指南进行配置
+### 核心文档
+- [📚 核心Wiki文档](https://docs.mai-mai.org) - 项目最全面的文档中心，你可以了解麦麦有关的一切
 
--  📦 Linux 自动部署（实验） ：请下载并运行项目根目录中的`run.sh`并按照提示安装，部署完成后请参照后续配置指南进行配置
+### 最新版本部署教程(MaiCore版本)
+- [🚀 最新版本部署教程](https://docs.mai-mai.org/manual/deployment/refactor_deploy.html) - 基于MaiCore的新版本部署方式（与旧版本不兼容）
 
-- [📦 Windows 手动部署指南 ](docs/manual_deploy_windows.md)
-
-- [📦 Linux 手动部署指南 ](docs/manual_deploy_linux.md)
-
-如果你不知道Docker是什么，建议寻找相关教程或使用手动部署 **（现在不建议使用docker，更新慢，可能不适配）**
-
-- [🐳 Docker部署指南](docs/docker_deploy.md)
-
-
-
-### 配置说明
-
-- [🎀 新手配置指南](docs/installation_cute.md) - 通俗易懂的配置教程，适合初次使用的猫娘
-- [⚙️ 标准配置指南](docs/installation_standard.md) - 简明专业的配置说明，适合有经验的用户
-
-### 常见问题
-
-- [❓ 快速 Q & A ](docs/fast_q_a.md) - 针对新手的疑难解答，适合完全没接触过编程的新手
-
-<div align="left">
-<h3>了解麦麦 </h3>
-</div>
-
-- [项目架构说明](docs/doc1.md) - 项目结构和核心功能实现细节
 
 ## 🎯 功能介绍
 
@@ -104,83 +68,85 @@
 - 支持多模型，多厂商自定义配置
 - 动态的prompt构建器，更拟人
 - 支持图片，转发消息，回复消息的识别
-- 错别字和多条回复功能：麦麦可以随机生成错别字，会多条发送回复以及对消息进行reply
+- 支持私聊功能，包括消息处理和回复
+
+### 🧠 思维流系统（实验性功能）
+- 思维流能够生成实时想法，增加回复的拟人性
+- 思维流与日程系统联动，实现动态日程生成
+
+### 🧠 记忆系统
+- 对聊天记录进行概括存储，在需要时调用
 
 ### 😊 表情包功能
-
 - 支持根据发言内容发送对应情绪的表情包
 - 会自动偷群友的表情包
+- 表情包审查功能
+- 表情包文件完整性自动检查
 
 ### 📅 日程功能
-
 - 麦麦会自动生成一天的日程，实现更拟人的回复
+- 支持动态日程生成
+- 优化日程文本解析功能
 
-### 🧠 记忆功能
+### 👥 关系系统
+- 针对每个用户创建"关系"，可以对不同用户进行个性化回复
 
-- 对聊天记录进行概括存储，在需要时调用，待完善
+### 📊 统计系统
+- 详细统计系统
+- LLM使用统计
 
-### 📚 知识库功能
-
-- 基于embedding模型的知识库，手动放入txt会自动识别，写完了，暂时禁用
-
-### 👥 关系功能
-
-- 针对每个用户创建"关系"，可以对不同用户进行个性化回复，目前只有极其简单的好感度（WIP）
-- 针对每个群创建"群印象"，可以对不同群进行个性化回复（WIP）
+### 🔧 系统功能
+- 支持优雅的shutdown机制
+- 自动保存功能，定期保存聊天记录和关系数据
 
 ## 开发计划TODO：LIST
 
-规划主线
-0.6.0：记忆系统更新
-0.7.0: 麦麦RunTime
-
 - 人格功能：WIP
-- 群氛围功能：WIP
+- 对特定对象的侧写功能
 - 图片发送，转发功能：WIP
-- 幽默和meme功能：WIP的WIP
-- 让麦麦玩mc：WIP的WIP的WIP
+- 幽默和meme功能：WIP
 - 兼容gif的解析和保存
 - 小程序转发链接解析
-- 对思考链长度限制
 - 修复已知bug
-- ~~完善文档~~
-- 修复转发
-- ~~config自动生成和检测~~
-- ~~log别用print~~
-- ~~给发送消息写专门的类~~
-- 改进表情包发送逻辑
 - 自动生成的回复逻辑，例如自生成的回复方向，回复风格
-- 采用截断生成加快麦麦的反应速度
-- 改进发送消息的触发
 
-## 设计理念
+## ✍️如何给本项目报告BUG/提交建议/做贡献
 
-- **千石可乐说：**
-- 这个项目最初只是为了给牛牛bot添加一点额外的功能，但是功能越写越多，最后决定重写。其目的是为了创造一个活跃在QQ群聊的"生命体"。可以目的并不是为了写一个功能齐全的机器人，而是一个尽可能让人感知到真实的类人存在.
-- 程序的功能设计理念基于一个核心的原则："最像而不是好"
-- 主打一个陪伴
-- 如果人类真的需要一个AI来陪伴自己，并不是所有人都需要一个完美的，能解决所有问题的helpful assistant，而是一个会犯错的，拥有自己感知和想法的"生命形式"。
-- 代码会保持开源和开放，但个人希望MaiMbot的运行时数据保持封闭，尽量避免以显式命令来对其进行控制和调试.我认为一个你无法完全掌控的个体才更能让你感觉到它的自主性，而视其成为一个对话机器.
+MaiCore是一个开源项目，我们非常欢迎你的参与。你的贡献，无论是提交bug报告、功能需求还是代码pr，都对项目非常宝贵。我们非常感谢你的支持！🎉 但无序的讨论会降低沟通效率，进而影响问题的解决速度，因此在提交任何贡献前，请务必先阅读本项目的[贡献指南](CONTRIBUTE.md)（待补完）
+
+
+
+## 设计理念（原始时代的火花）
+
+> **千石可乐说：**
+> - 这个项目最初只是为了给牛牛bot添加一点额外的功能，但是功能越写越多，最后决定重写。其目的是为了创造一个活跃在QQ群聊的"生命体"。可以目的并不是为了写一个功能齐全的机器人，而是一个尽可能让人感知到真实的类人存在。
+> - 程序的功能设计理念基于一个核心的原则："最像而不是好"
+> - 如果人类真的需要一个AI来陪伴自己，并不是所有人都需要一个完美的，能解决所有问题的"helpful assistant"，而是一个会犯错的，拥有自己感知和想法的"生命形式"。
+> - 代码会保持开源和开放，但个人希望MaiMbot的运行时数据保持封闭，尽量避免以显式命令来对其进行控制和调试.我认为一个你无法完全掌控的个体才更能让你感觉到它的自主性，而视其成为一个对话机器.
+> - SengokuCola~~纯编程外行，面向cursor编程，很多代码写得不好多多包涵~~已得到大脑升级
+
 
 ## 📌 注意事项
 
-SengokuCola~~纯编程外行，面向cursor编程，很多代码写得不好多多包涵~~已得到大脑升级
 > [!WARNING]
+> 使用本项目前必须阅读和同意用户协议和隐私协议
 > 本应用生成内容来自人工智能模型，由 AI 生成，请仔细甄别，请勿用于违反法律的用途，AI生成内容不代表本人观点和立场。
 
 ## 致谢
 
-[nonebot2](https://github.com/nonebot/nonebot2): 跨平台 Python 异步聊天机器人框架  
-[NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现  
+- [nonebot2](https://github.com/nonebot/nonebot2): 跨平台 Python 异步聊天机器人框架  
+- [NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现  
 
 ### 贡献者
 
 感谢各位大佬！
 
-<a href="https://github.com/SengokuCola/MaiMBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=SengokuCola/MaiMBot" />
+<a href="https://github.com/MaiM-with-u/MaiBot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=MaiM-with-u/MaiBot" />
 </a>
+
+**也感谢每一位给麦麦发展提出宝贵意见与建议的用户，感谢陪伴麦麦走到现在的你们**
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/SengokuCola/MaiMBot.svg?variant=adaptive)](https://starchart.cc/SengokuCola/MaiMBot)
+[![Stargazers over time](https://starchart.cc/MaiM-with-u/MaiBot.svg?variant=adaptive)](https://starchart.cc/MaiM-with-u/MaiBot)

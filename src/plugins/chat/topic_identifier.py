@@ -1,18 +1,23 @@
 from typing import List, Optional
 
-from nonebot import get_driver
 
 from ..models.utils_model import LLM_request
-from .config import global_config
-from loguru import logger
+from ..config.config import global_config
+from src.common.logger import get_module_logger, LogConfig, TOPIC_STYLE_CONFIG
 
-driver = get_driver()
-config = driver.config
+# 定义日志配置
+topic_config = LogConfig(
+    # 使用海马体专用样式
+    console_format=TOPIC_STYLE_CONFIG["console_format"],
+    file_format=TOPIC_STYLE_CONFIG["file_format"],
+)
+
+logger = get_module_logger("topic_identifier", config=topic_config)
 
 
 class TopicIdentifier:
     def __init__(self):
-        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge)
+        self.llm_topic_judge = LLM_request(model=global_config.llm_topic_judge, request_type="topic")
 
     async def identify_topic_llm(self, text: str) -> Optional[List[str]]:
         """识别消息主题，返回主题列表"""
@@ -24,7 +29,7 @@ class TopicIdentifier:
 消息内容：{text}"""
 
         # 使用 LLM_request 类进行请求
-        topic, _ = await self.llm_topic_judge.generate_response(prompt)
+        topic, _, _ = await self.llm_topic_judge.generate_response(prompt)
 
         if not topic:
             logger.error("LLM API 返回为空")

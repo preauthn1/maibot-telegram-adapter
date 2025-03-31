@@ -1,21 +1,19 @@
 import base64
 import os
 import time
-import aiohttp
 import hashlib
-from typing import Optional, Union
+from typing import Optional
 from PIL import Image
 import io
 
-from loguru import logger
-from nonebot import get_driver
 
 from ...common.database import db
-from ..chat.config import global_config
+from ..config.config import global_config
 from ..models.utils_model import LLM_request
 
-driver = get_driver()
-config = driver.config
+from src.common.logger import get_module_logger
+
+logger = get_module_logger("chat_image")
 
 
 class ImageManager:
@@ -34,7 +32,7 @@ class ImageManager:
             self._ensure_description_collection()
             self._ensure_image_dir()
             self._initialized = True
-            self._llm = LLM_request(model=global_config.vlm, temperature=0.4, max_tokens=300)
+            self._llm = LLM_request(model=global_config.vlm, temperature=0.4, max_tokens=300, request_type="image")
 
     def _ensure_image_dir(self):
         """确保图像存储目录存在"""
@@ -110,7 +108,7 @@ class ImageManager:
             # 查询缓存的描述
             cached_description = self._get_description_from_db(image_hash, "emoji")
             if cached_description:
-                logger.info(f"缓存表情包描述: {cached_description}")
+                logger.debug(f"缓存表情包描述: {cached_description}")
                 return f"[表情包：{cached_description}]"
 
             # 调用AI获取描述
@@ -173,7 +171,7 @@ class ImageManager:
 
             # 调用AI获取描述
             prompt = (
-                "请用中文描述这张图片的内容。如果有文字，请把文字都描述出来。并尝试猜测这个图片的含义。最多200个字。"
+                "请用中文描述这张图片的内容。如果有文字，请把文字都描述出来。并尝试猜测这个图片的含义。最多100个字。"
             )
             description, _ = await self._llm.generate_response_for_image(prompt, image_base64, image_format)
 
@@ -182,7 +180,7 @@ class ImageManager:
                 logger.warning(f"虽然生成了描述，但是找到缓存图片描述 {cached_description}")
                 return f"[图片：{cached_description}]"
 
-            logger.info(f"描述是{description}")
+            logger.debug(f"描述是{description}")
 
             if description is None:
                 logger.warning("AI未能生成图片描述")

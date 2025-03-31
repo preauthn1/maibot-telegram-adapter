@@ -1,17 +1,16 @@
 import time
-import html
-import re
-import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import urllib3
-from loguru import logger
 
 from .utils_image import image_manager
 
-from .message_base import Seg, GroupInfo, UserInfo, BaseMessageInfo, MessageBase
-from .chat_stream import ChatStream, chat_manager
+from ..message.message_base import Seg, UserInfo, BaseMessageInfo, MessageBase
+from .chat_stream import ChatStream
+from src.common.logger import get_module_logger
+
+logger = get_module_logger("chat_message")
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -27,6 +26,7 @@ class Message(MessageBase):
     reply: Optional["Message"] = None
     detailed_plain_text: str = ""
     processed_plain_text: str = ""
+    memorized_times: int = 0
 
     def __init__(
         self,
@@ -71,19 +71,6 @@ class MessageRecv(Message):
             message_dict: MessageCQ序列化后的字典
         """
         self.message_info = BaseMessageInfo.from_dict(message_dict.get("message_info", {}))
-
-        message_segment = message_dict.get("message_segment", {})
-
-        if message_segment.get("data", "") == "[json]":
-            # 提取json消息中的展示信息
-            pattern = r"\[CQ:json,data=(?P<json_data>.+?)\]"
-            match = re.search(pattern, message_dict.get("raw_message", ""))
-            raw_json = html.unescape(match.group("json_data"))
-            try:
-                json_message = json.loads(raw_json)
-            except json.JSONDecodeError:
-                json_message = {}
-            message_segment["data"] = json_message.get("prompt", "")
 
         self.message_segment = Seg.from_dict(message_dict.get("message_segment", {}))
         self.raw_message = message_dict.get("raw_message")
@@ -159,7 +146,7 @@ class MessageRecv(Message):
         user_info = self.message_info.user_info
         name = (
             f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
-            if user_info.user_cardname != ""
+            if user_info.user_cardname != None
             else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
         )
         return f"[{time_str}] {name}: {self.processed_plain_text}\n"
@@ -176,6 +163,7 @@ class MessageProcessBase(Message):
         bot_user_info: UserInfo,
         message_segment: Optional[Seg] = None,
         reply: Optional["MessageRecv"] = None,
+        thinking_start_time: float = 0,
     ):
         # 调用父类初始化
         super().__init__(
@@ -188,7 +176,7 @@ class MessageProcessBase(Message):
         )
 
         # 处理状态相关属性
-        self.thinking_start_time = int(time.time())
+        self.thinking_start_time = thinking_start_time
         self.thinking_time = 0
 
     def update_thinking_time(self) -> float:
@@ -255,7 +243,7 @@ class MessageProcessBase(Message):
         user_info = self.message_info.user_info
         name = (
             f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
-            if user_info.user_cardname != ""
+            if user_info.user_cardname != None
             else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
         )
         return f"[{time_str}] {name}: {self.processed_plain_text}\n"
@@ -271,6 +259,7 @@ class MessageThinking(MessageProcessBase):
         chat_stream: ChatStream,
         bot_user_info: UserInfo,
         reply: Optional["MessageRecv"] = None,
+        thinking_start_time: float = 0,
     ):
         # 调用父类初始化
         super().__init__(
@@ -279,6 +268,7 @@ class MessageThinking(MessageProcessBase):
             bot_user_info=bot_user_info,
             message_segment=None,  # 思考状态不需要消息段
             reply=reply,
+            thinking_start_time=thinking_start_time,
         )
 
         # 思考状态特有属性
@@ -299,6 +289,7 @@ class MessageSending(MessageProcessBase):
         reply: Optional["MessageRecv"] = None,
         is_head: bool = False,
         is_emoji: bool = False,
+        thinking_start_time: float = 0,
     ):
         # 调用父类初始化
         super().__init__(
@@ -307,6 +298,7 @@ class MessageSending(MessageProcessBase):
             bot_user_info=bot_user_info,
             message_segment=message_segment,
             reply=reply,
+            thinking_start_time=thinking_start_time,
         )
 
         # 发送状态特有属性
@@ -328,6 +320,7 @@ class MessageSending(MessageProcessBase):
                     self.message_segment,
                 ],
             )
+        return self
 
     async def process(self) -> None:
         """处理消息内容，生成纯文本和详细文本"""
