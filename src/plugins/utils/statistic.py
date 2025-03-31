@@ -315,7 +315,7 @@ class LLMStatistics:
         """控制台输出循环，每5分钟输出一次最近1小时的统计"""
         while self.running:
                         # 等待5分钟
-            for _ in range(30):  # 5分钟 = 300秒
+            for _ in range(300):  # 5分钟 = 300秒
                 if not self.running:
                     break
                 time.sleep(1)
