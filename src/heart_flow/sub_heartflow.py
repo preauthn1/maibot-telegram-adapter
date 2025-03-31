@@ -149,7 +149,7 @@ class SubHeartflow:
     async def do_thinking_before_reply(self, message_txt):
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
-        mood_info = "你很生气，很愤怒"
+        # mood_info = "你很生气，很愤怒"
         observation = self.observations[0]
         chat_observe_info = observation.observe_info
         # print(f"chat_observe_info：{chat_observe_info}")
