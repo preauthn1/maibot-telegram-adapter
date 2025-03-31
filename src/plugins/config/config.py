@@ -25,7 +25,7 @@ logger = get_module_logger("config", config=config_config)
 
 #考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
 mai_version_main = "0.6.0"
-mai_version_fix = "mmc-2"
+mai_version_fix = "mmc-3"
 mai_version = f"{mai_version_main}-{mai_version_fix}"
 
 def update_config():

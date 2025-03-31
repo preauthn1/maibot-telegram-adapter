@@ -192,7 +192,7 @@ class MessageManager:
                 print(thinking_time)
                 if (
                     message_earliest.is_head
-                    and message_earliest.update_thinking_time() > 8
+                    and message_earliest.update_thinking_time() > 18
                     and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                 ):
                     logger.debug(f"设置回复消息{message_earliest.processed_plain_text}")
@@ -219,7 +219,7 @@ class MessageManager:
                         # print(msg.is_private_message())
                         if (
                             msg.is_head
-                            and msg.update_thinking_time() > 8
+                            and msg.update_thinking_time() > 18
                             and not msg.is_private_message()  # 避免在私聊时插入reply
                         ):
                             logger.debug(f"设置回复消息{msg.processed_plain_text}")
