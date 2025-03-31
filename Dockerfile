@@ -5,7 +5,7 @@ WORKDIR /MaiMBot
 
 # 复制依赖列表
 COPY requirements.txt .
-# 同级目录下需要有 maim_message 文
+# 同级目录下需要有 maim_message
 COPY maim_message /maim_message
 
 # 安装依赖
