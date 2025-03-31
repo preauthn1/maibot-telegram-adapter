@@ -149,6 +149,7 @@ class BotConfig:
     PROMPT_SCHEDULE_GEN = "无日程"
     SCHEDULE_DOING_UPDATE_INTERVAL: int = 300  # 日程表更新间隔 单位秒
     SCHEDULE_TEMPERATURE: float = 0.5  # 日程表温度，建议0.5-1.0
+    TIME_ZONE: str = "Asia/Shanghai"  # 时区
 
     # message
     MAX_CONTEXT_SIZE: int = 15  # 上下文最大消息数
@@ -349,6 +350,7 @@ class BotConfig:
             )
             if config.INNER_VERSION in SpecifierSet(">=1.0.2"):
                 config.SCHEDULE_TEMPERATURE = schedule_config.get("schedule_temperature", config.SCHEDULE_TEMPERATURE)
+                config.TIME_ZONE = schedule_config.get("time_zone", config.TIME_ZONE)
 
         def emoji(parent: dict):
             emoji_config = parent["emoji"]
