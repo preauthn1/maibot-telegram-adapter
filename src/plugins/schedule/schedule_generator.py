@@ -176,21 +176,27 @@ class ScheduleGenerator:
             logger.warning(f"未找到{today_str}的日程记录")
 
     async def move_doing(self, mind_thinking: str = ""):
-        current_time = datetime.datetime.now()
-        if mind_thinking:
-            doing_prompt = self.construct_doing_prompt(current_time, mind_thinking)
-        else:
-            doing_prompt = self.construct_doing_prompt(current_time)
+        try:
+            current_time = datetime.datetime.now()
+            if mind_thinking:
+                doing_prompt = self.construct_doing_prompt(current_time, mind_thinking)
+            else:
+                doing_prompt = self.construct_doing_prompt(current_time)
 
-        # print(doing_prompt)
-        doing_response, _ = await self.llm_scheduler_doing.generate_response_async(doing_prompt)
-        self.today_done_list.append((current_time, doing_response))
+            doing_response, _ = await self.llm_scheduler_doing.generate_response_async(doing_prompt)
+            self.today_done_list.append((current_time, doing_response))
 
-        await self.update_today_done_list()
+            await self.update_today_done_list()
 
-        logger.info(f"当前活动: {doing_response}")
+            logger.info(f"当前活动: {doing_response}")
 
-        return doing_response
+            return doing_response
+        except GeneratorExit:
+            logger.warning("日程生成被中断")
+            return "日程生成被中断"
+        except Exception as e:
+            logger.error(f"生成日程时发生错误: {str(e)}")
+            return "生成日程时发生错误"
 
     async def get_task_from_time_to_time(self, start_time: str, end_time: str):
         """获取指定时间范围内的任务列表

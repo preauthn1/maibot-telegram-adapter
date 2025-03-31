@@ -285,39 +285,46 @@ class LLM_request:
                             usage = None  # 初始化usage变量，避免未定义错误
 
                             async for line_bytes in response.content:
-                                line = line_bytes.decode("utf-8").strip()
-                                if not line:
-                                    continue
-                                if line.startswith("data:"):
-                                    data_str = line[5:].strip()
-                                    if data_str == "[DONE]":
-                                        break
-                                    try:
-                                        chunk = json.loads(data_str)
-                                        if flag_delta_content_finished:
-                                            chunk_usage = chunk.get("usage", None)
-                                            if chunk_usage:
-                                                usage = chunk_usage  # 获取token用量
-                                        else:
-                                            delta = chunk["choices"][0]["delta"]
-                                            delta_content = delta.get("content")
-                                            if delta_content is None:
-                                                delta_content = ""
-                                            accumulated_content += delta_content
-                                            # 检测流式输出文本是否结束
-                                            finish_reason = chunk["choices"][0].get("finish_reason")
-                                            if delta.get("reasoning_content", None):
-                                                reasoning_content += delta["reasoning_content"]
-                                            if finish_reason == "stop":
+                                try:
+                                    line = line_bytes.decode("utf-8").strip()
+                                    if not line:
+                                        continue
+                                    if line.startswith("data:"):
+                                        data_str = line[5:].strip()
+                                        if data_str == "[DONE]":
+                                            break
+                                        try:
+                                            chunk = json.loads(data_str)
+                                            if flag_delta_content_finished:
                                                 chunk_usage = chunk.get("usage", None)
                                                 if chunk_usage:
-                                                    usage = chunk_usage
-                                                    break
-                                                # 部分平台在文本输出结束前不会返回token用量，此时需要再获取一次chunk
-                                                flag_delta_content_finished = True
+                                                    usage = chunk_usage  # 获取token用量
+                                            else:
+                                                delta = chunk["choices"][0]["delta"]
+                                                delta_content = delta.get("content")
+                                                if delta_content is None:
+                                                    delta_content = ""
+                                                accumulated_content += delta_content
+                                                # 检测流式输出文本是否结束
+                                                finish_reason = chunk["choices"][0].get("finish_reason")
+                                                if delta.get("reasoning_content", None):
+                                                    reasoning_content += delta["reasoning_content"]
+                                                if finish_reason == "stop":
+                                                    chunk_usage = chunk.get("usage", None)
+                                                    if chunk_usage:
+                                                        usage = chunk_usage
+                                                        break
+                                                    # 部分平台在文本输出结束前不会返回token用量，此时需要再获取一次chunk
+                                                    flag_delta_content_finished = True
 
-                                    except Exception as e:
-                                        logger.exception(f"解析流式输出错误: {str(e)}")
+                                        except Exception as e:
+                                            logger.exception(f"解析流式输出错误: {str(e)}")
+                                except GeneratorExit:
+                                    logger.warning("流式输出被中断")
+                                    break
+                                except Exception as e:
+                                    logger.error(f"处理流式输出时发生错误: {str(e)}")
+                                    break
                             content = accumulated_content
                             think_match = re.search(r"<think>(.*?)</think>", content, re.DOTALL)
                             if think_match:

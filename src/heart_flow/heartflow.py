@@ -106,7 +106,7 @@ class Heartflow:
         self.current_mind = reponse
         logger.info(f"麦麦的总体脑内状态：{self.current_mind}")
         # logger.info("麦麦想了想，当前活动:")
-        await bot_schedule.move_doing(self.current_mind)
+        # await bot_schedule.move_doing(self.current_mind)
 
         for _, subheartflow in self._subheartflows.items():
             subheartflow.main_heartflow_info = reponse

@@ -58,8 +58,18 @@ class MemoryBuildScheduler:
             weight2 (float): 第二个分布的权重
             total_samples (int): 要生成的总时间点数量
         """
+        # 验证参数
+        if total_samples <= 0:
+            raise ValueError("total_samples 必须大于0")
+        if weight1 < 0 or weight2 < 0:
+            raise ValueError("权重必须为非负数")
+        if std_hours1 < 0 or std_hours2 < 0:
+            raise ValueError("标准差必须为非负数")
+
         # 归一化权重
         total_weight = weight1 + weight2
+        if total_weight == 0:
+            raise ValueError("权重总和不能为0")
         self.weight1 = weight1 / total_weight
         self.weight2 = weight2 / total_weight
 
@@ -73,12 +83,11 @@ class MemoryBuildScheduler:
     def generate_time_samples(self):
         """生成混合分布的时间采样点"""
         # 根据权重计算每个分布的样本数
-        samples1 = int(self.total_samples * self.weight1)
-        samples2 = self.total_samples - samples1
+        samples1 = max(1, int(self.total_samples * self.weight1))
+        samples2 = max(1, self.total_samples - samples1)  # 确保 samples2 至少为1
 
         # 生成两个正态分布的小时偏移
         hours_offset1 = np.random.normal(loc=self.n_hours1, scale=self.std_hours1, size=samples1)
-
         hours_offset2 = np.random.normal(loc=self.n_hours2, scale=self.std_hours2, size=samples2)
 
         # 合并两个分布的偏移

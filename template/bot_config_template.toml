@@ -1,5 +1,5 @@
 [inner]
-version = "1.0.2"
+version = "1.0.3"
 
 
 #以下是给开发人员阅读的，一般用户不需要阅读
@@ -53,7 +53,7 @@ schedule_temperature = 0.5 # 日程表温度，建议0.5-1.0
 nonebot-qq="http://127.0.0.1:18002/api/message"
 
 [heartflow] # 注意：可能会消耗大量token，请谨慎开启
-enable = false
+enable = false #该选项未启用
 sub_heart_flow_update_interval = 60 # 子心流更新频率，间隔 单位秒
 sub_heart_flow_freeze_time = 120 # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
 sub_heart_flow_stop_time = 600 # 子心流停止时间，超过这个时间没有回复，子心流会停止，间隔 单位秒
@@ -63,9 +63,9 @@ heart_flow_update_interval = 300 # 心流更新频率，间隔 单位秒
 
 
 [message]
-max_context_size = 15 # 麦麦获得的上文数量，建议15，太短太长都会导致脑袋尖尖
+max_context_size = 12 # 麦麦获得的上文数量，建议12，太短太长都会导致脑袋尖尖
 emoji_chance = 0.2 # 麦麦使用表情包的概率
-thinking_timeout = 120 # 麦麦最长思考时间，超过这个时间的思考会放弃
+thinking_timeout = 60 # 麦麦最长思考时间，超过这个时间的思考会放弃
 max_response_length = 256 # 麦麦回答的最大token数
 ban_words = [
     # "403","张三"
@@ -87,10 +87,9 @@ response_interested_rate_amplifier = 1 # 麦麦回复兴趣度放大系数,听�
 down_frequency_rate = 3 # 降低回复频率的群组回复意愿降低系数 除法
 emoji_response_penalty = 0.1 # 表情包回复惩罚系数，设为0为不回复单个表情包，减少单独回复表情包的概率
 
-[response]
-model_r1_probability = 0.8 # 麦麦回答时选择主要回复模型1 模型的概率
-model_v3_probability = 0.1 # 麦麦回答时选择次要回复模型2 模型的概率
-model_r1_distill_probability = 0.1 # 麦麦回答时选择次要回复模型3 模型的概率
+[response] #这些选项已无效
+model_r1_probability = 0 # 麦麦回答时选择主要回复模型1 模型的概率
+model_v3_probability = 1.0 # 麦麦回答时选择次要回复模型2 模型的概率
 
 [emoji]
 check_interval = 15 # 检查破损表情包的时间间隔(分钟)
@@ -159,22 +158,16 @@ enable_friend_chat = false # 是否启用好友聊天
 # stream = <true|false> : 用于指定模型是否是使用流式输出
 # 如果不指定，则该项是 False
 
-[model.llm_reasoning] #回复模型1 主要回复模型
+[model.llm_reasoning] #暂时未使用
 name = "Pro/deepseek-ai/DeepSeek-R1"
 # name = "Qwen/QwQ-32B"
 provider = "SILICONFLOW"
 pri_in = 4 #模型的输入价格（非必填，可以记录消耗）
 pri_out = 16 #模型的输出价格（非必填，可以记录消耗）
 
-[model.llm_reasoning_minor] #回复模型3 次要回复模型
-name = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
-provider = "SILICONFLOW"
-pri_in = 1.26 #模型的输入价格（非必填，可以记录消耗）
-pri_out = 1.26 #模型的输出价格（非必填，可以记录消耗）
-
 #非推理模型
 
-[model.llm_normal] #V3 回复模型2 次要回复模型
+[model.llm_normal] #V3 回复模型1 主要回复模型
 name = "Pro/deepseek-ai/DeepSeek-V3"
 provider = "SILICONFLOW"
 pri_in = 2 #模型的输入价格（非必填，可以记录消耗）

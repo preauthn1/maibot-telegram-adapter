@@ -24,26 +24,8 @@ class PromptBuilder:
     async def _build_prompt(
         self, chat_stream, message_txt: str, sender_name: str = "某人", stream_id: Optional[int] = None
     ) -> tuple[str, str]:
-        # 关系（载入当前聊天记录里部分人的关系）
-        # who_chat_in_group = [chat_stream]
-        # who_chat_in_group += get_recent_group_speaker(
-        #     stream_id,
-        #     (chat_stream.user_info.user_id, chat_stream.user_info.platform),
-        #     limit=global_config.MAX_CONTEXT_SIZE,
-        # )
-
-        # outer_world_info = outer_world.outer_world_info
-
+        
         current_mind_info = heartflow.get_subheartflow(stream_id).current_mind
-
-        # relation_prompt = ""
-        # for person in who_chat_in_group:
-        #     relation_prompt += relationship_manager.build_relationship_info(person)
-
-        # relation_prompt_all = (
-        #     f"{relation_prompt}关系等级越大，关系越好，请分析聊天记录，"
-        #     f"根据你和说话者{sender_name}的关系和态度进行回复，明确你的立场和情感。"
-        # )
 
         # 开始构建prompt
 
@@ -70,25 +52,6 @@ class PromptBuilder:
                 chat_in_group = False
                 chat_talking_prompt = chat_talking_prompt
                 # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
-
-        # 使用新的记忆获取方法
-        memory_prompt = ""
-        start_time = time.time()
-
-        # 调用 hippocampus 的 get_relevant_memories 方法
-        relevant_memories = await HippocampusManager.get_instance().get_memory_from_text(
-            text=message_txt, max_memory_num=3, max_memory_length=2, max_depth=2, fast_retrieval=False
-        )
-        memory_str = ""
-        for _topic, memories in relevant_memories:
-            memory_str += f"{memories}\n"
-
-        if relevant_memories:
-            # 格式化记忆内容
-            memory_prompt = f"你回忆起：\n{memory_str}\n"
-
-        end_time = time.time()
-        logger.info(f"回忆耗时: {(end_time - start_time):.3f}秒")
 
         # 类型
         if chat_in_group:
@@ -146,19 +109,18 @@ class PromptBuilder:
 涉及政治敏感以及违法违规的内容请规避。"""
 
         logger.info("开始构建prompt")
+        
         prompt = f"""
 {prompt_info}
-{memory_prompt}
-你刚刚脑子里在想：
-{current_mind_info}
-
 {chat_target}
 {chat_talking_prompt}
-现在"{sender_name}"说的:{message_txt}。引起了你的注意,{mood_prompt}\n
+你刚刚脑子里在想：
+{current_mind_info}
+现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言发言或者回复这条消息。\n
 你的网名叫{global_config.BOT_NICKNAME}，有人也叫你{"/".join(global_config.BOT_ALIAS_NAMES)}，{prompt_personality}。
 你正在{chat_target_2},现在请你读读之前的聊天记录，然后给出日常且口语化的回复，平淡一些，
 尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。{prompt_ger}
-请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景， 
+请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 
 请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只输出回复内容。
 {moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。"""
 
