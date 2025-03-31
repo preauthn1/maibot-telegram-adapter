@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+from dateutil import tz
 
 import tomli
 import tomlkit
@@ -350,7 +351,11 @@ class BotConfig:
             )
             if config.INNER_VERSION in SpecifierSet(">=1.0.2"):
                 config.SCHEDULE_TEMPERATURE = schedule_config.get("schedule_temperature", config.SCHEDULE_TEMPERATURE)
-                config.TIME_ZONE = schedule_config.get("time_zone", config.TIME_ZONE)
+                time_zone = schedule_config.get("time_zone", config.TIME_ZONE)
+                if tz.gettz(time_zone) is None:
+                    logger.error(f"无效的时区: {time_zone}，使用默认值: {config.TIME_ZONE}")
+                else:
+                    config.TIME_ZONE = time_zone
 
         def emoji(parent: dict):
             emoji_config = parent["emoji"]
