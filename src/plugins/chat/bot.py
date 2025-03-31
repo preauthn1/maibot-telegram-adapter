@@ -162,7 +162,7 @@ class ChatBot:
             logger.debug(f"8处理表情包时间: {timer2 - timer1}秒")
 
             timer1 = time.time()
-            await self._update_using_response(message, chat, response_set)
+            await self._update_using_response(message, response_set)
             timer2 = time.time()
             logger.info(f"6更新htfl时间: {timer2 - timer1}秒")
 
@@ -213,7 +213,7 @@ class ChatBot:
                 stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
             )
 
-        heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
+        await heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
 
     async def _send_response_messages(self, message, chat, response_set, thinking_id):
         container = message_manager.get_container(chat.stream_id)

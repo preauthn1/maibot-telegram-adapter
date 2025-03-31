@@ -1,9 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from typing import Dict, Any, Callable, List
+from src.common.logger import get_module_logger
 import aiohttp
 import asyncio
 import uvicorn
 import os
+import traceback
+
+logger = get_module_logger("api")
 
 
 class BaseMessageAPI:
@@ -50,8 +54,9 @@ class BaseMessageAPI:
                 for handler in self.message_handlers:
                     try:
                         await handler(self.cache[0])
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(str(e))
+                        logger.error(traceback.format_exc())
                 self.cache.pop(0)
             if len(self.cache) > 0:
                 await asyncio.sleep(0.1 / len(self.cache))

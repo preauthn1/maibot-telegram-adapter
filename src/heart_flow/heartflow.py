@@ -50,7 +50,9 @@ class Heartflow:
 
             # 检查所有子心流
             for subheartflow_id, subheartflow in self._subheartflows.items():
-                if current_time - subheartflow.last_active_time > global_config.sub_heart_flow_stop_time:  # 10分钟 = 600秒
+                if (
+                    current_time - subheartflow.last_active_time > global_config.sub_heart_flow_stop_time
+                ):  # 10分钟 = 600秒
                     inactive_subheartflows.append(subheartflow_id)
                     logger.info(f"发现不活跃的子心流: {subheartflow_id}")
 
