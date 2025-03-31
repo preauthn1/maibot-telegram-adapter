@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.3] - 2025-3-31
+### Added
+- 新增了心流相关配置项：
+  - `heartflow` 配置项，用于控制心流功能
+
+### Removed
+- 移除了 `response` 配置项中的 `model_r1_probability` 和 `model_v3_probability` 选项
+- 移除了次级推理模型相关配置
+
 ## [1.0.1] - 2025-3-30
 ### Added
 - 增加了流式输出控制项 `stream`

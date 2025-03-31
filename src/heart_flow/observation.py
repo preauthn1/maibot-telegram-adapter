@@ -33,7 +33,7 @@ class ChattingObservation(Observation):
         self.sub_observe = None
 
         self.llm_summary = LLM_request(
-            model=global_config.llm_observation, temperature=0.7, max_tokens=300, request_type="outer_world"
+            model=global_config.llm_observation, temperature=0.7, max_tokens=300, request_type="chat_observation"
         )
 
     # 进行一次观察 返回观察结果observe_info
@@ -52,9 +52,9 @@ class ChattingObservation(Observation):
         new_messages_str = ""
         for msg in new_messages:
             if "detailed_plain_text" in msg:
-                new_messages_str += f"{msg['detailed_plain_text']}\n"
+                new_messages_str += f"{msg['detailed_plain_text']}"
                 
-        print(f"new_messages_str：{new_messages_str}")
+        # print(f"new_messages_str：{new_messages_str}")
 
         # 将新消息添加到talking_message，同时保持列表长度不超过20条
         self.talking_message.extend(new_messages)
@@ -112,7 +112,7 @@ class ChattingObservation(Observation):
         # 基于已经有的talking_summary，和新的talking_message，生成一个summary
         # print(f"更新聊天总结：{self.talking_summary}")
         prompt = ""
-        prompt = f"你正在参与一个qq群聊的讨论，这个群之前在聊的内容是：{self.observe_info}\n"
+        prompt = f"你正在参与一个qq群聊的讨论，你记得这个群之前在聊的内容是：{self.observe_info}\n"
         prompt += f"现在群里的群友们产生了新的讨论，有了新的发言，具体内容如下：{new_messages_str}\n"
         prompt += """以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，
         以及聊天中的一些重要信息，记得不要分点，不要太长，精简的概括成一段文本\n"""

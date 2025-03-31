@@ -47,6 +47,39 @@ class ChatBot:
         if not self._started:
             self._started = True
 
+    async def _create_thinking_message(self, message, chat, userinfo, messageinfo):
+        """创建思考消息
+
+        Args:
+            message: 接收到的消息
+            chat: 聊天流对象
+            userinfo: 用户信息对象
+            messageinfo: 消息信息对象
+
+        Returns:
+            str: thinking_id
+        """
+        bot_user_info = UserInfo(
+            user_id=global_config.BOT_QQ,
+            user_nickname=global_config.BOT_NICKNAME,
+            platform=messageinfo.platform,
+        )
+
+        thinking_time_point = round(time.time(), 2)
+        thinking_id = "mt" + str(thinking_time_point)
+        thinking_message = MessageThinking(
+            message_id=thinking_id,
+            chat_stream=chat,
+            bot_user_info=bot_user_info,
+            reply=message,
+            thinking_start_time=thinking_time_point,
+        )
+
+        message_manager.add_message(thinking_message)
+        willing_manager.change_reply_willing_sent(chat)
+
+        return thinking_id
+
     async def message_process(self, message_data: str) -> None:
         """处理转化后的统一格式消息
         1. 过滤消息
@@ -56,6 +89,8 @@ class ChatBot:
         5. 更新关系
         6. 更新情绪
         """
+        timing_results = {}  # 用于收集所有计时结果
+        response_set = None  # 初始化response_set变量
 
         message = MessageRecv(message_data)
         groupinfo = message.message_info.group_info
@@ -75,10 +110,7 @@ class ChatBot:
         # 创建 心流与chat的观察
         heartflow.create_subheartflow(chat.stream_id)
 
-        timer1 = time.time()
         await message.process()
-        timer2 = time.time()
-        logger.debug(f"2消息处理时间: {timer2 - timer1}秒")
 
         # 过滤词/正则表达式过滤
         if self._check_ban_words(message.processed_plain_text, chat, userinfo) or self._check_ban_regex(
@@ -94,7 +126,7 @@ class ChatBot:
             message.processed_plain_text, fast_retrieval=True
         )
         timer2 = time.time()
-        logger.debug(f"3记忆激活时间: {timer2 - timer1}秒")
+        timing_results["记忆激活"] = timer2 - timer1
 
         is_mentioned = is_mentioned_bot_in_message(message)
 
@@ -118,7 +150,7 @@ class ChatBot:
             sender_id=str(message.message_info.user_info.user_id),
         )
         timer2 = time.time()
-        logger.debug(f"4计算意愿激活时间: {timer2 - timer1}秒")
+        timing_results["意愿激活"] = timer2 - timer1
 
         # 神秘的消息流数据结构处理
         if chat.group_info:
@@ -138,12 +170,30 @@ class ChatBot:
             if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
                 reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
 
+        do_reply = False
         # 开始组织语言
         if random() < reply_probability:
+            do_reply = True
+            
             timer1 = time.time()
-            response_set, thinking_id = await self._generate_response_from_message(message, chat, userinfo, messageinfo)
+            thinking_id = await self._create_thinking_message(message, chat, userinfo, messageinfo)
             timer2 = time.time()
-            logger.info(f"5生成回复时间: {timer2 - timer1}秒")
+            timing_results["创建思考消息"] = timer2 - timer1
+            
+            timer1 = time.time()
+            await heartflow.get_subheartflow(chat.stream_id).do_observe()
+            timer2 = time.time()
+            timing_results["观察"] = timer2 - timer1
+            
+            timer1 = time.time()
+            await heartflow.get_subheartflow(chat.stream_id).do_thinking_before_reply(message.processed_plain_text)
+            timer2 = time.time()
+            timing_results["思考前脑内状态"] = timer2 - timer1
+            
+            timer1 = time.time()
+            response_set = await self.gpt.generate_response(message)
+            timer2 = time.time()
+            timing_results["生成回复"] = timer2 - timer1
 
             if not response_set:
                 logger.info("为什么生成回复失败？")
@@ -153,56 +203,25 @@ class ChatBot:
             timer1 = time.time()
             await self._send_response_messages(message, chat, response_set, thinking_id)
             timer2 = time.time()
-            logger.info(f"7发送消息时间: {timer2 - timer1}秒")
+            timing_results["发送消息"] = timer2 - timer1
 
             # 处理表情包
             timer1 = time.time()
             await self._handle_emoji(message, chat, response_set)
             timer2 = time.time()
-            logger.debug(f"8处理表情包时间: {timer2 - timer1}秒")
+            timing_results["处理表情包"] = timer2 - timer1
 
             timer1 = time.time()
             await self._update_using_response(message, response_set)
             timer2 = time.time()
-            logger.info(f"6更新htfl时间: {timer2 - timer1}秒")
+            timing_results["更新心流"] = timer2 - timer1
 
-            # 更新情绪和关系
-            # await self._update_emotion_and_relationship(message, chat, response_set)
-
-    async def _generate_response_from_message(self, message, chat, userinfo, messageinfo):
-        """生成回复内容
-
-        Args:
-            message: 接收到的消息
-            chat: 聊天流对象
-            userinfo: 用户信息对象
-            messageinfo: 消息信息对象
-
-        Returns:
-            tuple: (response, raw_content) 回复内容和原始内容
-        """
-        bot_user_info = UserInfo(
-            user_id=global_config.BOT_QQ,
-            user_nickname=global_config.BOT_NICKNAME,
-            platform=messageinfo.platform,
-        )
-
-        thinking_time_point = round(time.time(), 2)
-        thinking_id = "mt" + str(thinking_time_point)
-        thinking_message = MessageThinking(
-            message_id=thinking_id,
-            chat_stream=chat,
-            bot_user_info=bot_user_info,
-            reply=message,
-            thinking_start_time=thinking_time_point,
-        )
-
-        message_manager.add_message(thinking_message)
-        willing_manager.change_reply_willing_sent(chat)
-
-        response_set = await self.gpt.generate_response(message)
-
-        return response_set, thinking_id
+        # 在最后统一输出所有计时结果
+        if do_reply:
+            timing_str = " | ".join([f"{step}: {duration:.2f}秒" for step, duration in timing_results.items()])
+            trigger_msg = message.processed_plain_text
+            response_msg = " ".join(response_set) if response_set else "无回复"
+            logger.info(f"触发消息: {trigger_msg[:20]}... | 生成消息: {response_msg[:20]}... | 性能计时: {timing_str}")
 
     async def _update_using_response(self, message, response_set):
         # 更新心流状态
@@ -213,7 +232,7 @@ class ChatBot:
                 stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
             )
 
-        await heartflow.get_subheartflow(stream_id).do_after_reply(response_set, chat_talking_prompt)
+        await heartflow.get_subheartflow(stream_id).do_thinking_after_reply(response_set, chat_talking_prompt)
 
     async def _send_response_messages(self, message, chat, response_set, thinking_id):
         container = message_manager.get_container(chat.stream_id)

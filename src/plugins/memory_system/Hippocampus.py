@@ -697,6 +697,11 @@ class ParahippocampalGyrus:
         start_time = time.time()
         logger.info("[遗忘] 开始检查数据库...")
 
+        # 验证百分比参数
+        if not 0 <= percentage <= 1:
+            logger.warning(f"[遗忘] 无效的遗忘百分比: {percentage}, 使用默认值 0.005")
+            percentage = 0.005
+
         all_nodes = list(self.memory_graph.G.nodes())
         all_edges = list(self.memory_graph.G.edges())
 
@@ -704,11 +709,21 @@ class ParahippocampalGyrus:
             logger.info("[遗忘] 记忆图为空,无需进行遗忘操作")
             return
 
-        check_nodes_count = max(1, int(len(all_nodes) * percentage))
-        check_edges_count = max(1, int(len(all_edges) * percentage))
+        # 确保至少检查1个节点和边，且不超过总数
+        check_nodes_count = max(1, min(len(all_nodes), int(len(all_nodes) * percentage)))
+        check_edges_count = max(1, min(len(all_edges), int(len(all_edges) * percentage)))
 
-        nodes_to_check = random.sample(all_nodes, check_nodes_count)
-        edges_to_check = random.sample(all_edges, check_edges_count)
+        # 只有在有足够的节点和边时才进行采样
+        if len(all_nodes) >= check_nodes_count and len(all_edges) >= check_edges_count:
+            try:
+                nodes_to_check = random.sample(all_nodes, check_nodes_count)
+                edges_to_check = random.sample(all_edges, check_edges_count)
+            except ValueError as e:
+                logger.error(f"[遗忘] 采样错误: {str(e)}")
+                return
+        else:
+            logger.info("[遗忘] 没有足够的节点或边进行遗忘操作")
+            return
 
         # 使用列表存储变化信息
         edge_changes = {
