@@ -1,0 +1,70 @@
+services:
+  adapters:
+    container_name: maim-bot-adapters
+    image: maimbot-adapters:latest
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "18002:18002"
+    volumes:
+      - ./adapters/plugins:/adapters/src/plugins
+      - ./adapters/.env:/adapters/.env
+      - ./data/qq:/app/.config/QQ
+    restart: always
+    networks:
+      - maim_bot
+  core:
+    container_name: maim-bot-core
+    image: maimbot-core:latest
+    environment:
+      - TZ=Asia/Shanghai
+#      - EULA_AGREE=35362b6ea30f12891d46ef545122e84a
+#      - PRIVACY_AGREE=2402af06e133d2d10d9c6c643fdc9333
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./mmc-data:/MaiMBot/data
+      - ./mmc-config/.env:/MaiMBot/.env
+      - ./mmc-config/bot_config.toml:/MaiMBot/config/bot_config.toml
+      - ./data/MaiMBot:/MaiMBot/data
+    restart: always
+    networks:
+      - maim_bot
+  mongodb:
+    container_name: maim-bot-mongo
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "27017:27017"
+    restart: always
+    volumes:
+      - mongodb:/data/db
+      - mongodbCONFIG:/data/configdb
+    image: mongo:latest
+    networks:
+      - maim_bot
+  napcat:
+    environment:
+      - NAPCAT_UID=1000
+      - NAPCAT_GID=1000
+      - TZ=Asia/Shanghai
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "6099:6099"
+      - "8095:8095"
+    volumes:
+      - ./napcat-config:/app/napcat/config
+      - ./data/qq:/app/.config/QQ
+      - ./data/MaiMBot:/MaiMBot/data
+    container_name: maim-bot-napcat
+    restart: always
+    image: mlikiowa/napcat-docker:latest
+    networks:
+      - maim_bot
+networks:
+  maim_bot:
+    driver: bridge
+volumes:
+  mongodb:
+  mongodbCONFIG:
