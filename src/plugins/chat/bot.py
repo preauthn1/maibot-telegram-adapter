@@ -12,8 +12,8 @@ from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
 from .chat_stream import chat_manager
 
 from .message_sender import message_manager  # 导入新的消息管理器
-from .relationship_manager import relationship_manager
-from .storage import MessageStorage
+from ..relationship.relationship_manager import relationship_manager
+from ..storage.storage import MessageStorage
 from .utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
 from .utils_image import image_path_to_base64
 from ..willing.willing_manager import willing_manager  # 导入意愿管理器

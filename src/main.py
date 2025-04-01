@@ -4,13 +4,13 @@ from .plugins.utils.statistic import LLMStatistics
 from .plugins.moods.moods import MoodManager
 from .plugins.schedule.schedule_generator import bot_schedule
 from .plugins.chat.emoji_manager import emoji_manager
-from .plugins.chat.relationship_manager import relationship_manager
+from .plugins.relationship.relationship_manager import relationship_manager
 from .plugins.willing.willing_manager import willing_manager
 from .plugins.chat.chat_stream import chat_manager
 from .heart_flow.heartflow import heartflow
 from .plugins.memory_system.Hippocampus import HippocampusManager
 from .plugins.chat.message_sender import message_manager
-from .plugins.chat.storage import MessageStorage
+from .plugins.storage.storage import MessageStorage
 from .plugins.config.config import global_config
 from .plugins.chat.bot import chat_bot
 from .common.logger import get_module_logger
