@@ -148,7 +148,7 @@ class ThinkFlowChat:
 
         if groupinfo.group_id not in global_config.talk_allowed_groups:
             return
-        logger.info("使用思维流聊天模式")
+        # logger.info("使用思维流聊天模式")
 
         # 创建聊天流
         chat = await chat_manager.get_or_create_stream(
