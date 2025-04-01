@@ -43,6 +43,8 @@ def update_config():
     # 检查配置文件是否存在
     if not old_config_path.exists():
         logger.info("配置文件不存在，从模板创建新配置")
+        #创建文件夹
+        old_config_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(template_path, old_config_path)
         logger.info(f"已创建新配置文件，请填写后重新运行: {old_config_path}")
         # 如果是新创建的配置文件,直接返回
