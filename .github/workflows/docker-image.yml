@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - main-fix
+      - refactor  # 新增 refactor 分支触发
     tags:
       - 'v*'
   workflow_dispatch:
@@ -15,6 +16,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Clone maim_message (refactor branch only)
+        if: github.ref == 'refs/heads/refactor'  # 仅 refactor 分支执行
+        run: git clone https://github.com/MaiM-with-u/maim_message maim_message
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -34,6 +39,8 @@ jobs:
             echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/maimbot:main,${{ secrets.DOCKERHUB_USERNAME }}/maimbot:latest" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref }}" == "refs/heads/main-fix" ]; then
             echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/maimbot:main-fix" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/refactor" ]; then  # 新增 refactor 分支处理
+            echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/maim-core:refactor" >> $GITHUB_OUTPUT
           fi
 
       - name: Build and Push Docker Image
@@ -44,5 +51,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tags.outputs.tags }}
           push: true
-          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/maimbot:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/maimbot:buildcache,mode=max
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/maim-core:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/maim-core:buildcache,mode=max
