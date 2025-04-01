@@ -14,7 +14,7 @@ from .plugins.chat.storage import MessageStorage
 from .plugins.config.config import global_config
 from .plugins.chat.bot import chat_bot
 from .common.logger import get_module_logger
-from .plugins.remote import heartbeat_thread # noqa: F401
+from .plugins.remote import heartbeat_thread  # noqa: F401
 
 
 logger = get_module_logger("main")
@@ -108,7 +108,6 @@ class MainSystem:
                 self.remove_recalled_message_task(),
                 emoji_manager.start_periodic_check(),
                 self.app.run(),
-                self.app.message_process(),
             ]
             await asyncio.gather(*tasks)
 
