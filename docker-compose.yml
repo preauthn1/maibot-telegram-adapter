@@ -1,7 +1,7 @@
 services:
   adapters:
     container_name: maim-bot-adapters
-    image: maimbot-adapters:latest
+    image: sengokucola/maimbot:adapters
     environment:
       - TZ=Asia/Shanghai
     ports:
@@ -15,7 +15,7 @@ services:
       - maim_bot
   core:
     container_name: maim-bot-core
-    image: maimbot-core:latest
+    image: sengokucola/maimbot:refactor
     environment:
       - TZ=Asia/Shanghai
 #      - EULA_AGREE=35362b6ea30f12891d46ef545122e84a  # 同意EULA
@@ -51,9 +51,6 @@ services:
       - NAPCAT_GID=1000
       - TZ=Asia/Shanghai
     ports:
-      - "3000:3000"
-      - "3001:3001"
-      - "6099:6099"
       - "8095:8095"
     volumes:
       - ./napcat-config:/app/napcat/config # 持久化napcat配置文件
