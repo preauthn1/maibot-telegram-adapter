@@ -9,9 +9,9 @@ jobs:
   repo-sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: TG908/fork-sync@v2.0.10
+      - uses: tgymnich/fork-sync@v2.0.10
         with:
-          github_token: ${{ secrets.PERSONAL_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           owner: SengokuCola # fork 的上游仓库 user
           head: refactor # fork 的上游仓库 branch
           base: refactor # 本地仓库 branch
