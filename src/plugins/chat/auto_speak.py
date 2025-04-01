@@ -8,7 +8,7 @@ from .message import MessageSending, MessageThinking, MessageSet, MessageRecv
 from ..message.message_base import UserInfo, Seg
 from .message_sender import message_manager
 from ..moods.moods import MoodManager
-from .llm_generator import ResponseGenerator
+from ..chat_module.reasoning_chat.reasoning_generator import ResponseGenerator
 from src.common.logger import get_module_logger
 from src.heart_flow.heartflow import heartflow
 from ...common.database import db
