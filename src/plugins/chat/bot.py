@@ -89,6 +89,7 @@ class ChatBot:
         5. 更新关系
         6. 更新情绪
         """
+        
         timing_results = {}  # 用于收集所有计时结果
         response_set = None  # 初始化response_set变量
 
@@ -97,6 +98,10 @@ class ChatBot:
         userinfo = message.message_info.user_info
         messageinfo = message.message_info
 
+        if groupinfo.group_id not in global_config.talk_allowed_groups:
+            return
+        
+        
         # 消息过滤，涉及到config有待更新
 
         # 创建聊天流
