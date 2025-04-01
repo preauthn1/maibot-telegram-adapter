@@ -1,7 +1,7 @@
 services:
   adapters:
     container_name: maim-bot-adapters
-    image: sengokucola/maimbot:adapters
+    image: sengokucola/maimbot-adapter:adapter
     environment:
       - TZ=Asia/Shanghai
     ports:
