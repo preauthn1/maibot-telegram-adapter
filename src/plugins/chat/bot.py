@@ -158,6 +158,10 @@ class ChatBot:
         else:
             mes_name = "私聊"
 
+        if message.message_info.additional_config:
+            if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
+                reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
+
         # 打印收到的信息的信息
         current_time = time.strftime("%H:%M:%S", time.localtime(messageinfo.time))
         logger.info(
@@ -165,10 +169,6 @@ class ChatBot:
             f"{chat.user_info.user_nickname}:"
             f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
         )
-
-        if message.message_info.additional_config:
-            if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
-                reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
 
         do_reply = False
         # 开始组织语言
@@ -191,7 +191,7 @@ class ChatBot:
             timing_results["思考前脑内状态"] = timer2 - timer1
             
             timer1 = time.time()
-            response_set = await self.gpt.generate_response(message)
+            response_set, undivided_response = await self.gpt.generate_response(message)
             timer2 = time.time()
             timing_results["生成回复"] = timer2 - timer1
 
@@ -222,6 +222,9 @@ class ChatBot:
             trigger_msg = message.processed_plain_text
             response_msg = " ".join(response_set) if response_set else "无回复"
             logger.info(f"触发消息: {trigger_msg[:20]}... | 生成消息: {response_msg[:20]}... | 性能计时: {timing_str}")
+
+            # 更新情绪和关系
+            await self._update_emotion_and_relationship(message, chat, undivided_response)
 
     async def _update_using_response(self, message, response_set):
         # 更新心流状态
@@ -310,17 +313,15 @@ class ChatBot:
                 )
                 message_manager.add_message(bot_message)
 
-    async def _update_emotion_and_relationship(self, message, chat, response, raw_content):
+    async def _update_emotion_and_relationship(self, message, chat, undivided_response):
         """更新情绪和关系
 
         Args:
             message: 接收到的消息
             chat: 聊天流对象
-            response: 生成的回复
-            raw_content: 原始内容
+            undivided_response: 生成的未分割回复
         """
-        stance, emotion = await self.gpt._get_emotion_tags(raw_content, message.processed_plain_text)
-        logger.debug(f"为 '{response}' 立场为：{stance} 获取到的情感标签为：{emotion}")
+        stance, emotion = await self.gpt._get_emotion_tags(undivided_response, message.processed_plain_text)
         await relationship_manager.calculate_update_relationship_value(chat_stream=chat, label=emotion, stance=stance)
         self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
 

@@ -59,6 +59,7 @@ class ResponseGenerator:
 
         current_model = self.model_normal
         model_response = await self._generate_response_with_model(message, current_model)
+        undivided_response = model_response
 
         # print(f"raw_content: {model_response}")
 
@@ -66,10 +67,10 @@ class ResponseGenerator:
             logger.info(f"{global_config.BOT_NICKNAME}的回复是：{model_response}")
             model_response = await self._process_response(model_response)
 
-            return model_response
+            return model_response, undivided_response
         else:
             logger.info(f"{self.current_model_type}思考，失败")
-            return None
+            return None, None
 
     async def _generate_response_with_model(self, message: MessageThinking, model: LLM_request):
         sender_name = ""
