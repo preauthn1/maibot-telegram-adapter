@@ -23,7 +23,6 @@ class RelationshipManager:
             "开心",
             "惊讶",
             "害羞",
-            "困惑",
         ]
 
         negative_list = [
@@ -37,13 +36,13 @@ class RelationshipManager:
             self.positive_feedback_dict[person_id] = 0
 
         if label in positive_list and stance != "反对":
-            if 6 > self.positive_feedback_dict[person_id] >= 0:
+            if 7 > self.positive_feedback_dict[person_id] >= 0:
                 self.positive_feedback_dict[person_id] += 1
             elif self.positive_feedback_dict[person_id] < 0:
                 self.positive_feedback_dict[person_id] = 0
                 return value
         elif label in negative_list and stance != "支持":
-            if -6 < self.positive_feedback_dict[person_id] <= 0:
+            if -7 < self.positive_feedback_dict[person_id] <= 0:
                 self.positive_feedback_dict[person_id] -= 1
             elif self.positive_feedback_dict[person_id] > 0:
                 self.positive_feedback_dict[person_id] = 0
@@ -51,9 +50,10 @@ class RelationshipManager:
         else:
             return value
 
-        gain_coefficient = [1.1, 1.2, 1.4, 1.7, 1.9, 2.0]
+        gain_coefficient = [1.0, 1.1, 1.2, 1.4, 1.7, 1.9, 2.0]
         value *= gain_coefficient[abs(self.positive_feedback_dict[person_id])-1]
-        logger.info(f"触发增益，当前增益系数：{gain_coefficient[abs(self.positive_feedback_dict[person_id])-1]}")
+        if abs(self.positive_feedback_dict[person_id]) - 1:
+            logger.info(f"触发增益，当前增益系数：{gain_coefficient[abs(self.positive_feedback_dict[person_id])-1]}")
 
         return value
 
