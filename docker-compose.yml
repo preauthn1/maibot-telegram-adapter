@@ -11,6 +11,8 @@ services:
       - ./adapters/.env:/adapters/.env # 持久化adapters配置文件
       - ./data/qq:/app/.config/QQ # 持久化QQ本体并同步qq表情和图片到adapters
     restart: always
+    depends_on:
+      - mongodb
     networks:
       - maim_bot
   core:
@@ -28,6 +30,8 @@ services:
       - ./mmc-config/bot_config.toml:/MaiMBot/config/bot_config.toml # 持久化bot配置文件
       - ./data/MaiMBot:/MaiMBot/data # NapCat 和 NoneBot 共享此卷，否则发送图片会有问题
     restart: always
+    depends_on:
+      - mongodb
     networks:
       - maim_bot
   mongodb:
@@ -51,6 +55,7 @@ services:
       - NAPCAT_GID=1000
       - TZ=Asia/Shanghai
     ports:
+      - "6099:6099"
       - "8095:8095"
     volumes:
       - ./napcat-config:/app/napcat/config # 持久化napcat配置文件
