@@ -137,29 +137,24 @@ class RelationshipManager:
 
         await person_info_manager.update_one_field(person_id, "relationship_value", old_value + value, data)
 
-    def build_relationship_info(self, person) -> str:
-        person_id = person_info_manager.get_person_id(person.user_info.platform, person.user_info.user_id)
-        relationship_value = person_info_manager.get_value(person_id, "relationship_value")
+    async def build_relationship_info(self, person) -> str:
+        person_id = person_info_manager.get_person_id(person[0], person[1])
+        relationship_value = await person_info_manager.get_value(person_id, "relationship_value")
         level_num = self.calculate_level_num(relationship_value)
         relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "暧昧"]
         relation_prompt2_list = [
-            "冷漠回应",
+            "厌恶回应",
             "冷淡回复",
             "保持理性",
             "愿意回复",
             "积极回复",
             "无条件支持",
         ]
-        if person.user_info.user_cardname:
-            return (
-                f"你对昵称为'[({person.user_info.user_id}){person.user_info.user_nickname}]{person.user_info.user_cardname}'的用户的态度为{relationship_level[level_num]}，"
-                f"回复态度为{relation_prompt2_list[level_num]}，关系等级为{level_num}。"
-            )
-        else:
-            return (
-                f"你对昵称为'({person.user_info.user_id}){person.user_info.user_nickname}'的用户的态度为{relationship_level[level_num]}，"
-                f"回复态度为{relation_prompt2_list[level_num]}，关系等级为{level_num}。"
-            )
+
+        return (
+            f"你对昵称为'({person[1]}){person[2]}'的用户的态度为{relationship_level[level_num]}，"
+            f"回复态度为{relation_prompt2_list[level_num]}，关系等级为{level_num}。"
+        )
 
     def calculate_level_num(self, relationship_value) -> int:
         """关系等级计算"""
