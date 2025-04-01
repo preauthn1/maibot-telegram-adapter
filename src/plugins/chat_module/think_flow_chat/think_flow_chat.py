@@ -276,11 +276,11 @@ class ThinkFlowChat:
             timer2 = time.time()
             timing_results["更新心流"] = timer2 - timer1
 
-            # # 更新关系
-            # timer1 = time.time()
-            # await self._update_relationship(message, response_set)
-            # timer2 = time.time()
-            # timing_results["更新关系"] = timer2 - timer1
+            # 更新关系
+            timer1 = time.time()
+            await self._update_relationship(message, response_set)
+            timer2 = time.time()
+            timing_results["更新关系"] = timer2 - timer1
 
         # 输出性能计时结果
         if do_reply:
