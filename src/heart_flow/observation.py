@@ -25,6 +25,8 @@ class ChattingObservation(Observation):
         self.talking_message_str = ""
         
         self.personality_info = " ".join(global_config.PROMPT_PERSONALITY)
+        self.name = global_config.BOT_NICKNAME
+        self.nick_name = global_config.BOT_ALIAS_NAMES
 
         self.observe_times = 0
 
@@ -115,6 +117,7 @@ class ChattingObservation(Observation):
         # print(f"更新聊天总结：{self.talking_summary}")
         prompt = ""
         prompt += f"你{self.personality_info}，请注意识别你自己的聊天发言"
+        prompt += f"你的名字叫：{self.name}，你的昵称是：{self.nick_name}\n"
         prompt += f"你正在参与一个qq群聊的讨论，你记得这个群之前在聊的内容是：{self.observe_info}\n"
         prompt += f"现在群里的群友们产生了新的讨论，有了新的发言，具体内容如下：{new_messages_str}\n"
         prompt += """以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，
