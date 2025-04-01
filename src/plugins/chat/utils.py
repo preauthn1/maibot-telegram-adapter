@@ -366,6 +366,7 @@ def calculate_typing_time(input_string: str, chinese_time: float = 0.2, english_
             total_time += chinese_time
         else:  # 其他字符（如英文）
             total_time += english_time
+    
     return total_time + 0.3  # 加上回车时间
 
 

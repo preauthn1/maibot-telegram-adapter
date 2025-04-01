@@ -2,12 +2,12 @@ import time
 from typing import List, Optional, Tuple, Union
 
 
-from ...common.database import db
-from ..models.utils_model import LLM_request
-from ..config.config import global_config
-from .message import MessageRecv, MessageThinking, Message
-from .prompt_builder import prompt_builder
-from .utils import process_llm_response
+from ....common.database import db
+from ...models.utils_model import LLM_request
+from ...config.config import global_config
+from ...chat.message import MessageRecv, MessageThinking
+from .think_flow_prompt_builder import prompt_builder
+from ...chat.utils import process_llm_response
 from src.common.logger import get_module_logger, LogConfig, LLM_STYLE_CONFIG
 
 # 定义日志配置
@@ -22,36 +22,19 @@ logger = get_module_logger("llm_generator", config=llm_config)
 
 class ResponseGenerator:
     def __init__(self):
-        self.model_reasoning = LLM_request(
-            model=global_config.llm_reasoning,
-            temperature=0.7,
-            max_tokens=3000,
-            request_type="response",
-        )
         self.model_normal = LLM_request(
-            model=global_config.llm_normal, temperature=0.8, max_tokens=256, request_type="response"
+            model=global_config.llm_normal, temperature=0.8, max_tokens=256, request_type="response_heartflow"
         )
 
         self.model_sum = LLM_request(
-            model=global_config.llm_summary_by_topic, temperature=0.7, max_tokens=3000, request_type="relation"
+            model=global_config.llm_summary_by_topic, temperature=0.7, max_tokens=2000, request_type="relation"
         )
         self.current_model_type = "r1"  # 默认使用 R1
         self.current_model_name = "unknown model"
 
     async def generate_response(self, message: MessageThinking) -> Optional[Union[str, List[str]]]:
         """根据当前模型类型选择对应的生成函数"""
-        # 从global_config中获取模型概率值并选择模型
-        # if random.random() < global_config.MODEL_R1_PROBABILITY:
-        #     self.current_model_type = "深深地"
-        #     current_model = self.model_reasoning
-        # else:
-        #     self.current_model_type = "浅浅的"
-        #     current_model = self.model_normal
 
-        # logger.info(
-        #     f"{self.current_model_type}思考:{message.processed_plain_text[:30] + '...' if len(message.processed_plain_text) > 30 else message.processed_plain_text}"
-        # )  # noqa: E501
-        
         
         logger.info(
             f"思考:{message.processed_plain_text[:30] + '...' if len(message.processed_plain_text) > 30 else message.processed_plain_text}"
@@ -197,33 +180,3 @@ class ResponseGenerator:
 
         return processed_response
 
-
-class InitiativeMessageGenerate:
-    def __init__(self):
-        self.model_r1 = LLM_request(model=global_config.llm_reasoning, temperature=0.7)
-        self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.7)
-        self.model_r1_distill = LLM_request(model=global_config.llm_reasoning_minor, temperature=0.7)
-
-    def gen_response(self, message: Message):
-        topic_select_prompt, dots_for_select, prompt_template = prompt_builder._build_initiative_prompt_select(
-            message.group_id
-        )
-        content_select, reasoning, _ = self.model_v3.generate_response(topic_select_prompt)
-        logger.debug(f"{content_select} {reasoning}")
-        topics_list = [dot[0] for dot in dots_for_select]
-        if content_select:
-            if content_select in topics_list:
-                select_dot = dots_for_select[topics_list.index(content_select)]
-            else:
-                return None
-        else:
-            return None
-        prompt_check, memory = prompt_builder._build_initiative_prompt_check(select_dot[1], prompt_template)
-        content_check, reasoning_check, _ = self.model_v3.generate_response(prompt_check)
-        logger.info(f"{content_check} {reasoning_check}")
-        if "yes" not in content_check.lower():
-            return None
-        prompt = prompt_builder._build_initiative_prompt(select_dot, prompt_template, memory)
-        content, reasoning = self.model_r1.generate_response_async(prompt)
-        logger.debug(f"[DEBUG] {content} {reasoning}")
-        return content

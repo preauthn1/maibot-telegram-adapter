@@ -1,8 +1,8 @@
 from .emoji_manager import emoji_manager
-from .relationship_manager import relationship_manager
+from ..relationship.relationship_manager import relationship_manager
 from .chat_stream import chat_manager
 from .message_sender import message_manager
-from .storage import MessageStorage
+from ..storage.storage import MessageStorage
 from .auto_speak import auto_speak_manager
 
 
