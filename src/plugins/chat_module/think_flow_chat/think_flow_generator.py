@@ -147,6 +147,8 @@ class ResponseGenerator:
             - 严格基于文字直接表达的对立关系判断
             """
 
+            logger.info(prompt)
+
             # 调用模型生成结果
             result, _, _ = await self.model_sum.generate_response(prompt)
             result = result.strip()

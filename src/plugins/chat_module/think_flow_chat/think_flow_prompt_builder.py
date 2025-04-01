@@ -6,10 +6,10 @@ from ...memory_system.Hippocampus import HippocampusManager
 from ...moods.moods import MoodManager
 from ...schedule.schedule_generator import bot_schedule
 from ...config.config import global_config
-from ...chat.utils import get_recent_group_detailed_plain_text
+from ...chat.utils import get_recent_group_detailed_plain_text, get_recent_group_speaker
 from ...chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger
-from .relationship_manager import relationship_manager
+from ...person_info.relationship_manager import relationship_manager
 
 from src.heart_flow.heartflow import heartflow
 

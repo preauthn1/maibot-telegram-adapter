@@ -1,5 +1,5 @@
 from src.common.logger import get_module_logger, LogConfig, RELATION_STYLE_CONFIG
-from .chat_stream import ChatStream
+from ..chat.chat_stream import ChatStream
 import math
 from bson.decimal128 import Decimal128
 from .person_info import person_info_manager

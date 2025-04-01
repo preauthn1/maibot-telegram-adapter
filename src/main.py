@@ -4,8 +4,7 @@ from .plugins.utils.statistic import LLMStatistics
 from .plugins.moods.moods import MoodManager
 from .plugins.schedule.schedule_generator import bot_schedule
 from .plugins.chat.emoji_manager import emoji_manager
-from .plugins.chat.person_info import person_info_manager
-from .plugins.relationship.relationship_manager import relationship_manager
+from .plugins.person_info.person_info import person_info_manager
 from .plugins.willing.willing_manager import willing_manager
 from .plugins.chat.chat_stream import chat_manager
 from .heart_flow.heartflow import heartflow
