@@ -5,7 +5,7 @@ import random
 from ....common.database import db
 from ...models.utils_model import LLM_request
 from ...config.config import global_config
-from ...chat.message import MessageRecv, MessageThinking, Message
+from ...chat.message import MessageRecv, MessageThinking
 from .reasoning_prompt_builder import prompt_builder
 from ...chat.utils import process_llm_response
 from src.common.logger import get_module_logger, LogConfig, LLM_STYLE_CONFIG

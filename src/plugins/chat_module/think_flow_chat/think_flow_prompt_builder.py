@@ -2,12 +2,11 @@ import random
 import time
 from typing import Optional
 
-from ....common.database import db
 from ...memory_system.Hippocampus import HippocampusManager
 from ...moods.moods import MoodManager
 from ...schedule.schedule_generator import bot_schedule
 from ...config.config import global_config
-from ...chat.utils import get_embedding, get_recent_group_detailed_plain_text
+from ...chat.utils import get_recent_group_detailed_plain_text
 from ...chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger
 

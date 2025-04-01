@@ -1,25 +1,11 @@
-import re
-import time
-from random import random
 
-from ..memory_system.Hippocampus import HippocampusManager
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from ..config.config import global_config
-from .emoji_manager import emoji_manager  # 导入表情包管理器
 from ..chat_module.reasoning_chat.reasoning_generator import ResponseGenerator
-from .message import MessageSending, MessageRecv, MessageThinking, MessageSet
 
-from .chat_stream import chat_manager
 
-from .message_sender import message_manager  # 导入新的消息管理器
-from ..relationship.relationship_manager import relationship_manager
 from ..storage.storage import MessageStorage  # 修改导入路径
-from .utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
-from .utils_image import image_path_to_base64
-from ..willing.willing_manager import willing_manager  # 导入意愿管理器
-from ..message import UserInfo, Seg
 
-from src.heart_flow.heartflow import heartflow
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ..chat_module.think_flow_chat.think_flow_chat import ThinkFlowChat
 from ..chat_module.reasoning_chat.reasoning_chat import ReasoningChat
