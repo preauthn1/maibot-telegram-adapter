@@ -9,6 +9,7 @@ COPY requirements.txt .
 COPY maim_message /maim_message
 
 # 安装依赖
+RUN pip install --upgrade pip
 RUN pip install -e /maim_message
 RUN pip install --upgrade -r requirements.txt
 
