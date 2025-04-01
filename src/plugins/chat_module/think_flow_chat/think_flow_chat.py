@@ -145,9 +145,10 @@ class ThinkFlowChat:
         userinfo = message.message_info.user_info
         messageinfo = message.message_info
 
-        if groupinfo.group_id not in global_config.talk_allowed_groups:
-            return
-        # logger.info("使用思维流聊天模式")
+        if groupinfo == None and global_config.enable_friend_chat:#如果是私聊
+            pass
+        elif groupinfo.group_id not in global_config.talk_allowed_groups:
+                return
 
         # 创建聊天流
         chat = await chat_manager.get_or_create_stream(
