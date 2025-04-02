@@ -44,7 +44,7 @@ class PersonInfoManager:
         key = "_".join(components)
         return hashlib.md5(key.encode()).hexdigest()
 
-    async def create_person_info(self, person_id:str, data:dict = {}):
+    async def create_person_info(self, person_id:str, data:dict = None):
         """创建一个项"""
         if not person_id:
             logger.debug("创建失败，personid不存在")
@@ -60,9 +60,9 @@ class PersonInfoManager:
 
         db.person_info.insert_one(_person_info_default)
 
-    async def update_one_field(self, person_id:str, field_name:str, value, Data:dict = {}):
+    async def update_one_field(self, person_id:str, field_name:str, value, Data:dict = None):
         """更新某一个字段，会补全"""
-        if not field_name in person_info_default.keys():
+        if field_name not in person_info_default.keys():
             logger.debug(f"更新'{field_name}'失败，未定义的字段")
             return
         
@@ -175,7 +175,6 @@ class PersonInfoManager:
         Args:
             field_name: 目标字段名
             way: 判断函数 (value: Any) -> bool
-            convert_type: 强制类型转换（如float/int等）
             
         Returns:
             {person_id: value} | {}
