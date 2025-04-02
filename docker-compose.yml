@@ -44,7 +44,7 @@ services:
     restart: always
     volumes:
       - mongodb:/data/db #  持久化mongodb数据
-      - ./docker-config/mongodb:/data/configdb # 持久化mongodb配置文件
+      - mongodbCONFIG:/data/configdb # 持久化mongodb配置文件
     image: mongo:latest
     networks:
       - maim_bot
@@ -70,3 +70,4 @@ networks:
     driver: bridge
 volumes:
   mongodb:
+  mongodbCONFIG:
