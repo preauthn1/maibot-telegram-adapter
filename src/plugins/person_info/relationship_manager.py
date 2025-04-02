@@ -14,10 +14,19 @@ logger = get_module_logger("rel_manager", config=relationship_config)
 
 class RelationshipManager:
     def __init__(self):
-        self.positive_feedback_dict = {}  # 正反馈系统
+        self.positive_feedback_value = 0  # 正反馈系统
+        self.gain_coefficient = [1.0, 1.0, 1.1, 1.2, 1.4, 1.7, 1.9, 2.0]
+        self._mood_manager = None
 
-    def positive_feedback_sys(self, person_id, value, label: str, stance: str):
-        """正反馈系统"""
+    @property
+    def mood_manager(self):
+        if self._mood_manager is None:
+            from ..moods.moods import MoodManager  # 延迟导入
+            self._mood_manager = MoodManager.get_instance()
+        return self._mood_manager
+
+    def positive_feedback_sys(self, label: str, stance: str):
+        """正反馈系统，通过正反馈系数增益情绪变化，根据情绪再影响关系变更"""
 
         positive_list = [
             "开心",
@@ -32,29 +41,27 @@ class RelationshipManager:
             "厌恶",
         ]
 
-        if person_id not in self.positive_feedback_dict:
-            self.positive_feedback_dict[person_id] = 0
-
         if label in positive_list and stance != "反对":
-            if 7 > self.positive_feedback_dict[person_id] >= 0:
-                self.positive_feedback_dict[person_id] += 1
-            elif self.positive_feedback_dict[person_id] < 0:
-                self.positive_feedback_dict[person_id] = 0
-                return value
+            if 7 > self.positive_feedback_value >= 0:
+                self.positive_feedback_value += 1
+            elif self.positive_feedback_value < 0:
+                self.positive_feedback_value = 0
         elif label in negative_list and stance != "支持":
-            if -7 < self.positive_feedback_dict[person_id] <= 0:
-                self.positive_feedback_dict[person_id] -= 1
-            elif self.positive_feedback_dict[person_id] > 0:
-                self.positive_feedback_dict[person_id] = 0
-                return value
-        else:
-            return value
+            if -7 < self.positive_feedback_value <= 0:
+                self.positive_feedback_value -= 1
+            elif self.positive_feedback_value > 0:
+                self.positive_feedback_value = 0
+        
+        if abs(self.positive_feedback_value) > 1:
+            logger.info(f"触发mood变更增益，当前增益系数：{self.gain_coefficient[abs(self.positive_feedback_value)]}")
 
-        gain_coefficient = [1.0, 1.1, 1.2, 1.4, 1.7, 1.9, 2.0]
-        value *= gain_coefficient[abs(self.positive_feedback_dict[person_id])-1]
-        if abs(self.positive_feedback_dict[person_id]) - 1:
-            logger.info(f"触发增益，当前增益系数：{gain_coefficient[abs(self.positive_feedback_dict[person_id])-1]}")
-
+    def mood_feedback(self, value):
+        """情绪反馈"""
+        mood_manager = self.mood_manager
+        mood_gain = (mood_manager.get_current_mood().valence) ** 2 \
+                 * math.copysign(1, value * mood_manager.get_current_mood().valence)
+        value += value * mood_gain
+        logger.info(f"当前relationship增益系数：{mood_gain:.3f}")
         return value
 
 
@@ -124,7 +131,8 @@ class RelationshipManager:
             else:
                 value = 0
 
-        value = self.positive_feedback_sys(person_id, value, label, stance)
+        self.positive_feedback_sys(label, stance)
+        value = self.mood_feedback(value)
 
         level_num = self.calculate_level_num(old_value + value)
         relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "暧昧"]
