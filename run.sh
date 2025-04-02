@@ -1,16 +1,5 @@
 #!/bin/bash
 
-<<<<<<< Updated upstream
-# 麦麦Bot一键安装脚本 by Cookie_987
-# 适用于Arch/Ubuntu 24.10/Debian 12/CentOS 9
-# 请小心使用任何一键脚本！
-
-INSTALLER_VERSION="0.0.3"
-LANG=C.UTF-8
-
-# 如无法访问GitHub请修改此处镜像地址
-GITHUB_REPO="https://ghfast.top/https://github.com/SengokuCola/MaiMBot.git"
-=======
 # MaiCore & Nonebot adapter一键安装脚本 by Cookie_987
 # 适用于Arch/Ubuntu 24.10/Debian 12/CentOS 9
 # 请小心使用任何一键脚本！
@@ -20,7 +9,6 @@ LANG=C.UTF-8
 
 # 如无法访问GitHub请修改此处镜像地址
 GITHUB_REPO="https://github.com/MaiM-with-u/MaiBot.git"
->>>>>>> Stashed changes
 
 # 颜色输出
 GREEN="\e[32m"
@@ -41,14 +29,9 @@ declare -A REQUIRED_PACKAGES=(
 DEFAULT_INSTALL_DIR="/opt/maimbot"
 
 # 服务名称
-<<<<<<< Updated upstream
-SERVICE_NAME="maimbot-daemon"
-SERVICE_NAME_WEB="maimbot-web"
-=======
 SERVICE_NAME="maicore"
 SERVICE_NAME_WEB="maicore-web"
 SERVICE_NAME_NBADAPTER="maicore-nonebot-adapter"
->>>>>>> Stashed changes
 
 IS_INSTALL_MONGODB=false
 IS_INSTALL_NAPCAT=false
@@ -61,38 +44,17 @@ check_installed() {
 
 # 加载安装信息
 load_install_info() {
-<<<<<<< Updated upstream
-    if [[ -f /etc/maimbot_install.conf ]]; then
-        source /etc/maimbot_install.conf
-    else
-        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
-        BRANCH="main"
-=======
     if [[ -f /etc/maicore_install.conf ]]; then
         source /etc/maicore_install.conf
     else
         INSTALL_DIR="$DEFAULT_INSTALL_DIR"
         BRANCH="refactor"
->>>>>>> Stashed changes
     fi
 }
 
 # 显示管理菜单
 show_menu() {
     while true; do
-<<<<<<< Updated upstream
-        choice=$(whiptail --title "麦麦Bot管理菜单" --menu "请选择要执行的操作：" 15 60 7 \
-            "1" "启动麦麦Bot" \
-            "2" "停止麦麦Bot" \
-            "3" "重启麦麦Bot" \
-            "4" "启动WebUI" \
-            "5" "停止WebUI" \
-            "6" "重启WebUI" \
-            "7" "更新麦麦Bot及其依赖" \
-            "8" "切换分支" \
-            "9" "更新配置文件" \
-            "10" "退出" 3>&1 1>&2 2>&3)
-=======
         choice=$(whiptail --title "MaiCore管理菜单" --menu "请选择要执行的操作：" 15 60 7 \
             "1" "启动MaiCore" \
             "2" "停止MaiCore" \
@@ -103,36 +65,12 @@ show_menu() {
             "7" "更新MaiCore及其依赖" \
             "8" "切换分支" \
             "9" "退出" 3>&1 1>&2 2>&3)
->>>>>>> Stashed changes
 
         [[ $? -ne 0 ]] && exit 0
 
         case "$choice" in
             1)
                 systemctl start ${SERVICE_NAME}
-<<<<<<< Updated upstream
-                whiptail --msgbox "✅麦麦Bot已启动" 10 60
-                ;;
-            2)
-                systemctl stop ${SERVICE_NAME}
-                whiptail --msgbox "🛑麦麦Bot已停止" 10 60
-                ;;
-            3)
-                systemctl restart ${SERVICE_NAME}
-                whiptail --msgbox "🔄麦麦Bot已重启" 10 60
-                ;;
-            4)
-                systemctl start ${SERVICE_NAME_WEB}
-                whiptail --msgbox "✅WebUI已启动" 10 60
-                ;;
-            5)
-                systemctl stop ${SERVICE_NAME_WEB}
-                whiptail --msgbox "🛑WebUI已停止" 10 60
-                ;;
-            6)
-                systemctl restart ${SERVICE_NAME_WEB}
-                whiptail --msgbox "🔄WebUI已重启" 10 60
-=======
                 whiptail --msgbox "✅MaiCore已启动" 10 60
                 ;;
             2)
@@ -154,7 +92,6 @@ show_menu() {
             6)
                 systemctl restart ${SERVICE_NAME_NBADAPTER}
                 whiptail --msgbox "🔄Nonebot adapter已重启" 10 60
->>>>>>> Stashed changes
                 ;;
             7)
                 update_dependencies
@@ -163,12 +100,6 @@ show_menu() {
                 switch_branch
                 ;;
             9)
-<<<<<<< Updated upstream
-                update_config
-                ;;
-            10)
-=======
->>>>>>> Stashed changes
                 exit 0
                 ;;
             *)
@@ -180,11 +111,7 @@ show_menu() {
 
 # 更新依赖
 update_dependencies() {
-<<<<<<< Updated upstream
-    cd "${INSTALL_DIR}/repo" || {
-=======
     cd "${INSTALL_DIR}/MaiBot" || {
->>>>>>> Stashed changes
         whiptail --msgbox "🚫 无法进入安装目录！" 10 60
         return 1
     }
@@ -211,11 +138,7 @@ switch_branch() {
         return 1
     }
 
-<<<<<<< Updated upstream
-    cd "${INSTALL_DIR}/repo" || {
-=======
     cd "${INSTALL_DIR}/MaiBot" || {
->>>>>>> Stashed changes
         whiptail --msgbox "🚫 无法进入安装目录！" 10 60
         return 1
     }
@@ -239,52 +162,19 @@ switch_branch() {
     pip install -r requirements.txt
     deactivate
 
-<<<<<<< Updated upstream
-    sed -i "s/^BRANCH=.*/BRANCH=${new_branch}/" /etc/maimbot_install.conf
-=======
     sed -i "s/^BRANCH=.*/BRANCH=${new_branch}/" /etc/maicore_install.conf
->>>>>>> Stashed changes
     BRANCH="${new_branch}"
     check_eula
     systemctl restart ${SERVICE_NAME}
     whiptail --msgbox "✅ 已切换到分支 ${new_branch} 并重启服务！" 10 60
 }
 
-<<<<<<< Updated upstream
-# 更新配置文件
-update_config() {
-    cd "${INSTALL_DIR}/repo" || {
-        whiptail --msgbox "🚫 无法进入安装目录！" 10 60
-        return 1
-    }
-    if [[ -f config/bot_config.toml ]]; then
-        cp config/bot_config.toml config/bot_config.toml.bak
-        whiptail --msgbox "📁 原配置文件已备份为 bot_config.toml.bak" 10 60
-        source "${INSTALL_DIR}/venv/bin/activate"
-        python3 config/auto_update.py
-        deactivate
-        whiptail --msgbox "🆕 已更新配置文件，请重启麦麦Bot！" 10 60
-        return 0
-    else
-        whiptail --msgbox "🚫 未找到配置文件 bot_config.toml\n 请先运行一次麦麦Bot" 10 60
-        return 1
-    fi
-}
-
-check_eula() {
-    # 首先计算当前EULA的MD5值
-    current_md5=$(md5sum "${INSTALL_DIR}/repo/EULA.md" | awk '{print $1}')
-
-    # 首先计算当前隐私条款文件的哈希值
-    current_md5_privacy=$(md5sum "${INSTALL_DIR}/repo/PRIVACY.md" | awk '{print $1}')
-=======
 check_eula() {
     # 首先计算当前EULA的MD5值
     current_md5=$(md5sum "${INSTALL_DIR}/MaiBot/EULA.md" | awk '{print $1}')
 
     # 首先计算当前隐私条款文件的哈希值
     current_md5_privacy=$(md5sum "${INSTALL_DIR}/MaiBot/PRIVACY.md" | awk '{print $1}')
->>>>>>> Stashed changes
 
     # 如果当前的md5值为空，则直接返回
     if [[ -z $current_md5 || -z $current_md5_privacy ]]; then
@@ -292,46 +182,27 @@ check_eula() {
     fi
 
     # 检查eula.confirmed文件是否存在
-<<<<<<< Updated upstream
-    if [[ -f ${INSTALL_DIR}/repo/eula.confirmed ]]; then
-        # 如果存在则检查其中包含的md5与current_md5是否一致
-        confirmed_md5=$(cat ${INSTALL_DIR}/repo/eula.confirmed)
-=======
     if [[ -f ${INSTALL_DIR}/MaiBot/eula.confirmed ]]; then
         # 如果存在则检查其中包含的md5与current_md5是否一致
         confirmed_md5=$(cat ${INSTALL_DIR}/MaiBot/eula.confirmed)
->>>>>>> Stashed changes
     else
         confirmed_md5=""
     fi
 
     # 检查privacy.confirmed文件是否存在
-<<<<<<< Updated upstream
-    if [[ -f ${INSTALL_DIR}/repo/privacy.confirmed ]]; then
-        # 如果存在则检查其中包含的md5与current_md5是否一致
-        confirmed_md5_privacy=$(cat ${INSTALL_DIR}/repo/privacy.confirmed)
-=======
     if [[ -f ${INSTALL_DIR}/MaiBot/privacy.confirmed ]]; then
         # 如果存在则检查其中包含的md5与current_md5是否一致
         confirmed_md5_privacy=$(cat ${INSTALL_DIR}/MaiBot/privacy.confirmed)
->>>>>>> Stashed changes
     else
         confirmed_md5_privacy=""
     fi
 
     # 如果EULA或隐私条款有更新，提示用户重新确认
     if [[ $current_md5 != $confirmed_md5 || $current_md5_privacy != $confirmed_md5_privacy ]]; then
-<<<<<<< Updated upstream
-        whiptail --title "📜 使用协议更新" --yesno "检测到麦麦Bot EULA或隐私条款已更新。\nhttps://github.com/SengokuCola/MaiMBot/blob/main/EULA.md\nhttps://github.com/SengokuCola/MaiMBot/blob/main/PRIVACY.md\n\n您是否同意上述协议？ \n\n " 12 70
-        if [[ $? -eq 0 ]]; then
-            echo -n $current_md5 > ${INSTALL_DIR}/repo/eula.confirmed
-            echo -n $current_md5_privacy > ${INSTALL_DIR}/repo/privacy.confirmed
-=======
         whiptail --title "📜 使用协议更新" --yesno "检测到MaiCore EULA或隐私条款已更新。\nhttps://github.com/MaiM-with-u/MaiBot/blob/refactor/EULA.md\nhttps://github.com/MaiM-with-u/MaiBot/blob/refactor/PRIVACY.md\n\n您是否同意上述协议？ \n\n " 12 70
         if [[ $? -eq 0 ]]; then
             echo -n $current_md5 > ${INSTALL_DIR}/MaiBot/eula.confirmed
             echo -n $current_md5_privacy > ${INSTALL_DIR}/MaiBot/privacy.confirmed
->>>>>>> Stashed changes
         else
             exit 1
         fi
@@ -355,20 +226,12 @@ run_installation() {
     fi
 
     # 协议确认
-<<<<<<< Updated upstream
-    if ! (whiptail --title "ℹ️ [1/6] 使用协议" --yes-button "我同意" --no-button "我拒绝" --yesno "使用麦麦Bot及此脚本前请先阅读EULA协议及隐私协议\nhttps://github.com/SengokuCola/MaiMBot/blob/main/EULA.md\nhttps://github.com/SengokuCola/MaiMBot/blob/main/PRIVACY.md\n\n您是否同意上述协议？" 12 70); then
-=======
     if ! (whiptail --title "ℹ️ [1/6] 使用协议" --yes-button "我同意" --no-button "我拒绝" --yesno "使用MaiCore及此脚本前请先阅读EULA协议及隐私协议\nhttps://github.com/MaiM-with-u/MaiBot/blob/refactor/EULA.md\nhttps://github.com/MaiM-with-u/MaiBot/blob/refactor/PRIVACY.md\n\n您是否同意上述协议？" 12 70); then
->>>>>>> Stashed changes
         exit 1
     fi
 
     # 欢迎信息
-<<<<<<< Updated upstream
-    whiptail --title "[2/6] 欢迎使用麦麦Bot一键安装脚本 by Cookie987" --msgbox "检测到您未安装麦麦Bot，将自动进入安装流程，安装完成后再次运行此脚本即可进入管理菜单。\n\n项目处于活跃开发阶段，代码可能随时更改\n文档未完善，有问题可以提交 Issue 或者 Discussion\nQQ机器人存在被限制风险，请自行了解，谨慎使用\n由于持续迭代，可能存在一些已知或未知的bug\n由于开发中，可能消耗较多token\n\n本脚本可能更新不及时，如遇到bug请优先尝试手动部署以确定是否为脚本问题" 17 60
-=======
     whiptail --title "[2/6] 欢迎使用MaiCore一键安装脚本 by Cookie987" --msgbox "检测到您未安装MaiCore，将自动进入安装流程，安装完成后再次运行此脚本即可进入管理菜单。\n\n项目处于活跃开发阶段，代码可能随时更改\n文档未完善，有问题可以提交 Issue 或者 Discussion\nQQ机器人存在被限制风险，请自行了解，谨慎使用\n由于持续迭代，可能存在一些已知或未知的bug\n由于开发中，可能消耗较多token\n\n本脚本可能更新不及时，如遇到bug请优先尝试手动部署以确定是否为脚本问题" 17 60
->>>>>>> Stashed changes
 
     # 系统检查
     check_system() {
@@ -503,24 +366,13 @@ run_installation() {
 
     # 选择分支
     choose_branch() {
-<<<<<<< Updated upstream
-        BRANCH=$(whiptail --title "🔀 [5/6] 选择麦麦Bot分支" --menu "请选择要安装的麦麦Bot分支：" 15 60 2 \
-            "main" "稳定版本（推荐，供下载使用）" \
-            "main-fix" "生产环境紧急修复" 3>&1 1>&2 2>&3)
-        [[ -z "$BRANCH" ]] && BRANCH="main"
-=======
         BRANCH=refactor
->>>>>>> Stashed changes
     }
     choose_branch
 
     # 选择安装路径
     choose_install_dir() {
-<<<<<<< Updated upstream
-        INSTALL_DIR=$(whiptail --title "📂 [6/6] 选择安装路径" --inputbox "请输入麦麦Bot的安装目录：" 10 60 "$DEFAULT_INSTALL_DIR" 3>&1 1>&2 2>&3)
-=======
         INSTALL_DIR=$(whiptail --title "📂 [6/6] 选择安装路径" --inputbox "请输入MaiCore的安装目录：" 10 60 "$DEFAULT_INSTALL_DIR" 3>&1 1>&2 2>&3)
->>>>>>> Stashed changes
         [[ -z "$INSTALL_DIR" ]] && {
             whiptail --title "⚠️ 取消输入" --yesno "未输入安装路径，是否退出安装？" 10 60 && exit 1
             INSTALL_DIR="$DEFAULT_INSTALL_DIR"
@@ -531,11 +383,7 @@ run_installation() {
     # 确认安装
     confirm_install() {
         local confirm_msg="请确认以下信息：\n\n"
-<<<<<<< Updated upstream
-        confirm_msg+="📂 安装麦麦Bot到: $INSTALL_DIR\n"
-=======
         confirm_msg+="📂 安装MaiCore到: $INSTALL_DIR\n"
->>>>>>> Stashed changes
         confirm_msg+="🔀 分支: $BRANCH\n"
         [[ $IS_INSTALL_DEPENDENCIES == true ]] && confirm_msg+="📦 安装依赖：${missing_packages[@]}\n"
         [[ $IS_INSTALL_MONGODB == true || $IS_INSTALL_NAPCAT == true ]] && confirm_msg+="📦 安装额外组件：\n"
@@ -611,16 +459,6 @@ EOF
     python3 -m venv venv
     source venv/bin/activate
 
-<<<<<<< Updated upstream
-    echo -e "${GREEN}克隆仓库...${RESET}"
-    git clone -b "$BRANCH" "$GITHUB_REPO" repo || {
-        echo -e "${RED}克隆仓库失败！${RESET}"
-        exit 1
-    }
-
-    echo -e "${GREEN}安装Python依赖...${RESET}"
-    pip install -r repo/requirements.txt
-=======
     echo -e "${GREEN}克隆MaiCore仓库...${RESET}"
     git clone -b "$BRANCH" "$GITHUB_REPO" MaiBot || {
         echo -e "${RED}克隆MaiCore仓库失败！${RESET}"
@@ -675,20 +513,10 @@ EOF
     cd ..
     cd ..
 
->>>>>>> Stashed changes
 
     echo -e "${GREEN}同意协议...${RESET}"
 
     # 首先计算当前EULA的MD5值
-<<<<<<< Updated upstream
-    current_md5=$(md5sum "repo/EULA.md" | awk '{print $1}')
-
-    # 首先计算当前隐私条款文件的哈希值
-    current_md5_privacy=$(md5sum "repo/PRIVACY.md" | awk '{print $1}')
-
-    echo -n $current_md5 > repo/eula.confirmed
-    echo -n $current_md5_privacy > repo/privacy.confirmed
-=======
     current_md5=$(md5sum "MaiBot/EULA.md" | awk '{print $1}')
 
     # 首先计算当前隐私条款文件的哈希值
@@ -696,26 +524,16 @@ EOF
 
     echo -n $current_md5 > MaiBot/eula.confirmed
     echo -n $current_md5_privacy > MaiBot/privacy.confirmed
->>>>>>> Stashed changes
 
     echo -e "${GREEN}创建系统服务...${RESET}"
     cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF
 [Unit]
-<<<<<<< Updated upstream
-Description=麦麦Bot 主进程
-After=network.target mongod.service
-
-[Service]
-Type=simple
-WorkingDirectory=${INSTALL_DIR}/repo
-=======
 Description=MaiCore
 After=network.target mongod.service ${SERVICE_NAME_NBADAPTER}.service
 
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}/MaiBot
->>>>>>> Stashed changes
 ExecStart=$INSTALL_DIR/venv/bin/python3 bot.py
 Restart=always
 RestartSec=10s
@@ -726,20 +544,12 @@ EOF
 
     cat > /etc/systemd/system/${SERVICE_NAME_WEB}.service <<EOF
 [Unit]
-<<<<<<< Updated upstream
-Description=麦麦Bot WebUI
-=======
 Description=MaiCore WebUI
->>>>>>> Stashed changes
 After=network.target mongod.service ${SERVICE_NAME}.service
 
 [Service]
 Type=simple
-<<<<<<< Updated upstream
-WorkingDirectory=${INSTALL_DIR}/repo
-=======
 WorkingDirectory=${INSTALL_DIR}/MaiBot
->>>>>>> Stashed changes
 ExecStart=$INSTALL_DIR/venv/bin/python3 webui.py
 Restart=always
 RestartSec=10s
@@ -748,8 +558,6 @@ RestartSec=10s
 WantedBy=multi-user.target
 EOF
 
-<<<<<<< Updated upstream
-=======
     cat > /etc/systemd/system/${SERVICE_NAME_NBADAPTER}.service <<EOF
 [Unit]
 Description=Maicore Nonebot adapter
@@ -766,24 +574,15 @@ RestartSec=10s
 WantedBy=multi-user.target
 EOF
 
->>>>>>> Stashed changes
     systemctl daemon-reload
     systemctl enable ${SERVICE_NAME}
 
     # 保存安装信息
-<<<<<<< Updated upstream
-    echo "INSTALLER_VERSION=${INSTALLER_VERSION}" > /etc/maimbot_install.conf
-    echo "INSTALL_DIR=${INSTALL_DIR}" >> /etc/maimbot_install.conf
-    echo "BRANCH=${BRANCH}" >> /etc/maimbot_install.conf
-
-    whiptail --title "🎉 安装完成" --msgbox "麦麦Bot安装完成！\n已创建系统服务：${SERVICE_NAME}，${SERVICE_NAME_WEB}\n\n使用以下命令管理服务：\n启动服务：systemctl start ${SERVICE_NAME}\n查看状态：systemctl status ${SERVICE_NAME}" 14 60
-=======
     echo "INSTALLER_VERSION=${INSTALLER_VERSION}" > /etc/maicore_install.conf
     echo "INSTALL_DIR=${INSTALL_DIR}" >> /etc/maicore_install.conf
     echo "BRANCH=${BRANCH}" >> /etc/maicore_install.conf
 
     whiptail --title "🎉 安装完成" --msgbox "MaiCore安装完成！\n已创建系统服务：${SERVICE_NAME}，${SERVICE_NAME_WEB}\n\n使用以下命令管理服务：\n启动服务：systemctl start ${SERVICE_NAME}\n查看状态：systemctl status ${SERVICE_NAME}" 14 60
->>>>>>> Stashed changes
 }
 
 # ----------- 主执行流程 -----------
@@ -801,16 +600,8 @@ if check_installed; then
 else
     run_installation
     # 安装完成后询问是否启动
-<<<<<<< Updated upstream
-    if whiptail --title "安装完成" --yesno "是否立即启动麦麦Bot服务？" 10 60; then
-        systemctl start ${SERVICE_NAME}
-        whiptail --msgbox "✅ 服务已启动！\n使用 systemctl status ${SERVICE_NAME} 查看状态" 10 60
-    fi
-fi
-=======
     if whiptail --title "安装完成" --yesno "是否立即启动MaiCore服务？" 10 60; then
         systemctl start ${SERVICE_NAME}
         whiptail --msgbox "✅ 服务已启动！\n使用 systemctl status ${SERVICE_NAME} 查看状态" 10 60
     fi
 fi
->>>>>>> Stashed changes
