@@ -18,7 +18,4 @@ COPY . .
 
 EXPOSE 8000
 
-RUN chmod +x /MaiMBot/entrypoint.sh
-ENTRYPOINT ["/MaiMBot/entrypoint.sh"]
-
-CMD [ "python","bot.py" ]
+ENTRYPOINT [ "python","bot.py" ]
