@@ -8,7 +8,7 @@ INSTALLER_VERSION="0.0.1-refactor"
 LANG=C.UTF-8
 
 # 如无法访问GitHub请修改此处镜像地址
-GITHUB_REPO="https://github.com/MaiM-with-u/MaiBot.git"
+GITHUB_REPO="https://ghfast.top/https://github.com"
 
 # 颜色输出
 GREEN="\e[32m"
@@ -26,7 +26,7 @@ declare -A REQUIRED_PACKAGES=(
 )
 
 # 默认项目目录
-DEFAULT_INSTALL_DIR="/opt/maimbot"
+DEFAULT_INSTALL_DIR="/opt/maibot"
 
 # 服务名称
 SERVICE_NAME="maicore"
@@ -382,8 +382,8 @@ run_installation() {
 
     # 确认安装
     confirm_install() {
-        local confirm_msg="请确认以下信息：\n\n"
-        confirm_msg+="📂 安装MaiCore到: $INSTALL_DIR\n"
+        local confirm_msg="请确认以下更改：\n\n"
+        confirm_msg+="📂 安装MaiCore、Nonebot Adapter到: $INSTALL_DIR\n"
         confirm_msg+="🔀 分支: $BRANCH\n"
         [[ $IS_INSTALL_DEPENDENCIES == true ]] && confirm_msg+="📦 安装依赖：${missing_packages[@]}\n"
         [[ $IS_INSTALL_MONGODB == true || $IS_INSTALL_NAPCAT == true ]] && confirm_msg+="📦 安装额外组件：\n"
@@ -460,19 +460,19 @@ EOF
     source venv/bin/activate
 
     echo -e "${GREEN}克隆MaiCore仓库...${RESET}"
-    git clone -b "$BRANCH" "$GITHUB_REPO" MaiBot || {
+    git clone -b "$BRANCH" "$GITHUB_REPO/MaiM-with-u/MaiBot" MaiBot || {
         echo -e "${RED}克隆MaiCore仓库失败！${RESET}"
         exit 1
     }
 
     echo -e "${GREEN}克隆 maim_message 包仓库...${RESET}"
-    git clone https://github.com/MaiM-with-u/maim_message.git || {
+    git clone $GITHUB_REPO/MaiM-with-u/maim_message.git || {
         echo -e "${RED}克隆 maim_message 包仓库失败！${RESET}"
         exit 1
     }
 
     echo -e "${GREEN}克隆 nonebot-plugin-maibot-adapters 仓库...${RESET}"
-    git clone https://github.com/MaiM-with-u/maim_message.git || {
+    git clone $GITHUB_REPO/MaiM-with-u/nonebot-plugin-maibot-adapters.git || {
         echo -e "${RED}克隆 nonebot-plugin-maibot-adapters 仓库失败！${RESET}"
         exit 1
     }
@@ -480,6 +480,9 @@ EOF
 
     echo -e "${GREEN}安装Python依赖...${RESET}"
     pip install -r MaiBot/requirements.txt
+    pip install nb-cli
+    pip install nonebot-adapter-onebot
+    pip install 'nonebot2[fastapi]'
 
     echo -e "${GREEN}安装maim_message依赖...${RESET}"
     cd maim_message
@@ -509,7 +512,7 @@ EOF
 
     echo "Manually created by run.sh" > README.md
     mkdir src
-    cp -r ../../nonebot-plugin-maibot-adapters/nonebot_plugin_maibot_adapters src/plugins
+    cp -r ../../nonebot-plugin-maibot-adapters/nonebot_plugin_maibot_adapters src/plugins/nonebot_plugin_maibot_adapters
     cd ..
     cd ..
 
@@ -582,7 +585,7 @@ EOF
     echo "INSTALL_DIR=${INSTALL_DIR}" >> /etc/maicore_install.conf
     echo "BRANCH=${BRANCH}" >> /etc/maicore_install.conf
 
-    whiptail --title "🎉 安装完成" --msgbox "MaiCore安装完成！\n已创建系统服务：${SERVICE_NAME}，${SERVICE_NAME_WEB}\n\n使用以下命令管理服务：\n启动服务：systemctl start ${SERVICE_NAME}\n查看状态：systemctl status ${SERVICE_NAME}" 14 60
+    whiptail --title "🎉 安装完成" --msgbox "MaiCore安装完成！\n已创建系统服务：${SERVICE_NAME}、${SERVICE_NAME_WEB}、${SERVICE_NAME_NBADAPTER}\n\n使用以下命令管理服务：\n启动服务：systemctl start ${SERVICE_NAME}\n查看状态：systemctl status ${SERVICE_NAME}" 14 60
 }
 
 # ----------- 主执行流程 -----------
