@@ -25,7 +25,7 @@ logger = get_module_logger("config", config=config_config)
 
 #考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
 mai_version_main = "0.6.0"
-mai_version_fix = "mmc-3"
+mai_version_fix = "mmc-4"
 mai_version = f"{mai_version_main}-{mai_version_fix}"
 
 def update_config():
@@ -162,7 +162,7 @@ class BotConfig:
     ban_msgs_regex = set()
     
     #heartflow
-    enable_heartflow: bool = False  # 是否启用心流
+    # enable_heartflow: bool = False  # 是否启用心流
     sub_heart_flow_update_interval: int = 60  # 子心流更新频率，间隔 单位秒
     sub_heart_flow_freeze_time: int = 120  # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
     sub_heart_flow_stop_time: int = 600  # 子心流停止时间，超过这个时间没有回复，子心流会停止，间隔 单位秒
@@ -176,9 +176,10 @@ class BotConfig:
     emoji_response_penalty: float = 0.0  # 表情包回复惩罚
 
     # response
+    response_mode: str = "heart_flow"  # 回复策略
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
-    MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
+    # MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
 
     # emoji
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
@@ -376,6 +377,15 @@ class BotConfig:
             #     "model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY
             # )
             config.max_response_length = response_config.get("max_response_length", config.max_response_length)
+            if config.INNER_VERSION in SpecifierSet(">=1.0.4"):
+                config.response_mode = response_config.get("response_mode", config.response_mode)
+            
+        def heartflow(parent: dict):
+            heartflow_config = parent["heartflow"]
+            config.sub_heart_flow_update_interval = heartflow_config.get("sub_heart_flow_update_interval", config.sub_heart_flow_update_interval)
+            config.sub_heart_flow_freeze_time = heartflow_config.get("sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time)
+            config.sub_heart_flow_stop_time = heartflow_config.get("sub_heart_flow_stop_time", config.sub_heart_flow_stop_time)
+            config.heart_flow_update_interval = heartflow_config.get("heart_flow_update_interval", config.heart_flow_update_interval)
 
         def willing(parent: dict):
             willing_config = parent["willing"]
@@ -549,14 +559,6 @@ class BotConfig:
             if platforms_config and isinstance(platforms_config, dict):
                 for k in platforms_config.keys():
                     config.api_urls[k] = platforms_config[k]
-        
-        def heartflow(parent: dict):
-            heartflow_config = parent["heartflow"]
-            config.enable_heartflow = heartflow_config.get("enable", config.enable_heartflow)
-            config.sub_heart_flow_update_interval = heartflow_config.get("sub_heart_flow_update_interval", config.sub_heart_flow_update_interval)
-            config.sub_heart_flow_freeze_time = heartflow_config.get("sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time)
-            config.sub_heart_flow_stop_time = heartflow_config.get("sub_heart_flow_stop_time", config.sub_heart_flow_stop_time)
-            config.heart_flow_update_interval = heartflow_config.get("heart_flow_update_interval", config.heart_flow_update_interval)
 
         def experimental(parent: dict):
             experimental_config = parent["experimental"]

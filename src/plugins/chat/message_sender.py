@@ -7,7 +7,7 @@ from ...common.database import db
 from ..message.api import global_api
 from .message import MessageSending, MessageThinking, MessageSet
 
-from .storage import MessageStorage
+from ..storage.storage import MessageStorage
 from ..config.config import global_config
 from .utils import truncate_message, calculate_typing_time
 
