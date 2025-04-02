@@ -61,17 +61,14 @@ class ActionPlanner:
         
     async def plan(
         self, 
-        goal: str, 
-        method: str, 
+        goal: str,  
         reasoning: str,
-        action_history: List[Dict[str, str]] = None,
-        chat_observer: Optional[ChatObserver] = None,  # 添加chat_observer参数
+        action_history: List[Dict[str, str]] = None
     ) -> Tuple[str, str]:
         """规划下一步行动
         
         Args:
             goal: 对话目标
-            method: 实现方式
             reasoning: 目标原因
             action_history: 行动历史记录
             
@@ -106,7 +103,6 @@ class ActionPlanner:
         prompt = f"""现在你在参与一场QQ聊天，请分析以下内容，根据信息决定下一步行动：
 {personality_text}
 当前对话目标：{goal}
-实现该对话目标的方式：{method}
 产生该对话目标的原因：{reasoning}
 {time_info}
 最近的对话记录：
@@ -284,10 +280,8 @@ class GoalAnalyzer:
                 if not goal.strip() or not reasoning.strip():
                     logger.error(f"JSON字段内容为空，重试第{retry + 1}次")
                     continue
-                    
-                # 使用默认的方法
-                method = "以友好的态度回应"
-                return goal, method, reasoning
+
+                return goal, reasoning
                 
             except Exception as e:
                 logger.error(f"分析对话目标时出错: {str(e)}，重试第{retry + 1}次")
@@ -444,7 +438,6 @@ class ReplyGenerator:
         
         Args:
             goal: 对话目标
-            method: 实现方式
             chat_history: 聊天历史
             knowledge_cache: 知识缓存
             previous_reply: 上一次生成的回复（如果有）
@@ -565,7 +558,6 @@ class Conversation:
         self.stream_id = stream_id
         self.state = ConversationState.INIT
         self.current_goal: Optional[str] = None
-        self.current_method: Optional[str] = None
         self.goal_reasoning: Optional[str] = None
         self.generated_reply: Optional[str] = None
         self.should_continue = True
@@ -606,7 +598,7 @@ class Conversation:
     async def _conversation_loop(self):
         """对话循环"""
         # 获取最近的消息历史
-        self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
+        self.current_goal, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
         
         while self.should_continue:
             # 执行行动
@@ -614,12 +606,15 @@ class Conversation:
             if not await self.chat_observer.wait_for_update():
                 logger.warning("等待消息更新超时")
             
+            # 如果用户最后发言时间比当前时间晚2秒，说明消息还没到数据库，跳过这次循环
+            if self.chat_observer.last_user_speak_time - time.time() < 1.5:
+                await asyncio.sleep(1)
+                continue
+            
             action, reason = await self.action_planner.plan(
                 self.current_goal,
-                self.current_method,
                 self.goal_reasoning,
                 self.action_history,  # 传入action历史
-                self.chat_observer  # 传入chat_observer
             )
             
             # 执行行动
@@ -664,13 +659,12 @@ class Conversation:
             messages = self.chat_observer.get_message_history(limit=30)
             self.generated_reply, need_replan = await self.reply_generator.generate(
                 self.current_goal,
-                self.current_method,
                 [self._convert_to_message(msg) for msg in messages],
                 self.knowledge_cache
             )
             if need_replan:
                 self.state = ConversationState.RETHINKING
-                self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
+                self.current_goal, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
             else:
                 await self._send_reply()
             
@@ -688,19 +682,18 @@ class Conversation:
             
             self.generated_reply, need_replan = await self.reply_generator.generate(
                 self.current_goal,
-                self.current_method,
                 [self._convert_to_message(msg) for msg in messages],
                 self.knowledge_cache
             )
             if need_replan:
                 self.state = ConversationState.RETHINKING
-                self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
+                self.current_goal, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
             else:
                 await self._send_reply()
         
         elif action == "rethink_goal":
             self.state = ConversationState.RETHINKING
-            self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
+            self.current_goal, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
         
         elif action == "judge_conversation":
             self.state = ConversationState.JUDGING
