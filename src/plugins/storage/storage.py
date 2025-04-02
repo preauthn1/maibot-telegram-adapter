@@ -4,6 +4,7 @@ from ...common.database import db
 from ..chat.message import MessageSending, MessageRecv
 from ..chat.chat_stream import ChatStream
 from src.common.logger import get_module_logger
+from ..message.message_base import BaseMessageInfo, Seg, UserInfo
 
 logger = get_module_logger("message_storage")
 
