@@ -17,4 +17,8 @@ RUN pip install --upgrade -r requirements.txt
 COPY . .
 
 EXPOSE 8000
-ENTRYPOINT [ "python","bot.py" ]
+
+RUN chmod +x /MaiMBot/entrypoint.sh
+ENTRYPOINT ["/MaiMBot/entrypoint.sh"]
+
+CMD [ "python","bot.py" ]
