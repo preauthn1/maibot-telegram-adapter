@@ -216,13 +216,16 @@ run_installation() {
     if ! command -v whiptail &>/dev/null; then
         echo -e "${RED}[1/6] whiptail 未安装，正在安装...${RESET}"
 
-        # 这里的多系统适配很神人，但是能用（）
-
-        apt update && apt install -y whiptail
-
-        pacman -S --noconfirm libnewt
-
-        yum install -y newt
+        if command -v apt-get &>/dev/null; then
+            apt-get update && apt-get install -y whiptail
+        elif command -v pacman &>/dev/null; then
+            pacman -Syu --noconfirm whiptail
+        elif command -v yum &>/dev/null; then
+            yum install -y whiptail
+        else
+            echo -e "${RED}[Error] 无受支持的包管理器，无法安装 whiptail!${RESET}"
+            exit 1
+        fi
     fi
 
     # 协议确认
