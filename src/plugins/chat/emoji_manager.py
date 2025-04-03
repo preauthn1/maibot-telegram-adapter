@@ -38,6 +38,8 @@ class EmojiManager:
         self.llm_emotion_judge = LLM_request(
             model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8, request_type="emoji"
         )  # 更高的温度，更少的token（后续可以根据情绪来调整温度）
+        
+        logger.info("启动表情包管理器")
 
     def _ensure_emoji_dir(self):
         """确保表情存储目录存在"""
@@ -338,7 +340,7 @@ class EmojiManager:
         except Exception:
             logger.exception("[错误] 扫描表情包失败")
 
-    async def _periodic_scan(self):
+    async def start_periodic_register(self):
         """定期扫描新表情包"""
         while True:
             logger.info("[扫描] 开始扫描新表情包...")
