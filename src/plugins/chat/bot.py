@@ -78,6 +78,7 @@ class ChatBot:
         
         message = MessageRecv(message_data)
         groupinfo = message.message_info.group_info
+        logger.debug(f"开始处理消息{message_data}")
 
         if global_config.enable_pfc_chatting:
             try:
@@ -95,9 +96,11 @@ class ChatBot:
                     await self._create_PFC_chat(message)
                 else:
                     if groupinfo.group_id in global_config.talk_allowed_groups:
+                        logger.debug(f"开始群聊模式{message_data}")
                         if global_config.response_mode == "heart_flow":
                             await self.think_flow_chat.process_message(message_data)
                         elif global_config.response_mode == "reasoning":
+                            logger.debug(f"开始推理模式{message_data}")
                             await self.reasoning_chat.process_message(message_data)
                         else:
                             logger.error(f"未知的回复模式，请检查配置文件！！: {global_config.response_mode}")
