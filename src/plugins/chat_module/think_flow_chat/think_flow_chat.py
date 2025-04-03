@@ -191,7 +191,9 @@ class ThinkFlowChat:
         # 计算回复意愿
         current_willing_old = willing_manager.get_willing(chat_stream=chat)
         current_willing_new = (heartflow.get_subheartflow(chat.stream_id).current_state.willing - 5) / 4
-        current_willing = (current_willing_old + current_willing_new) / 2
+        # current_willing = (current_willing_old + current_willing_new) / 2 
+        # 有点bug
+        current_willing = current_willing_old
 
 
         willing_manager.set_willing(chat.stream_id, current_willing)

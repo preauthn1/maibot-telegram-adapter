@@ -50,6 +50,7 @@ class MainSystem:
 
         # 初始化表情管理器
         emoji_manager.initialize()
+        logger.success("表情包管理器初始化成功")
 
         # 启动情绪管理器
         self.mood_manager.start_mood_update(update_interval=global_config.mood_update_interval)
@@ -106,6 +107,7 @@ class MainSystem:
                 self.print_mood_task(),
                 self.remove_recalled_message_task(),
                 emoji_manager.start_periodic_check(),
+                emoji_manager.start_periodic_register(),
                 self.app.run(),
             ]
             await asyncio.gather(*tasks)
