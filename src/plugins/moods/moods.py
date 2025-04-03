@@ -229,9 +229,13 @@ class MoodManager:
         :param intensity: 情绪强度（0.0-1.0）
         """
         if emotion not in self.emotion_map:
+            logger.debug(f"[情绪更新] 未知情绪词: {emotion}")
             return
 
         valence_change, arousal_change = self.emotion_map[emotion]
+        old_valence = self.current_mood.valence
+        old_arousal = self.current_mood.arousal
+        old_mood = self.current_mood.text
 
         valence_change *= relationship_manager.gain_coefficient[relationship_manager.positive_feedback_value]
 
@@ -246,6 +250,8 @@ class MoodManager:
         # 限制范围
         self.current_mood.valence = max(-1.0, min(1.0, self.current_mood.valence))
         self.current_mood.arousal = max(0.0, min(1.0, self.current_mood.arousal))
-
+        
         self._update_mood_text()
+
+        logger.info(f"[情绪变化] {emotion}(强度:{intensity:.2f}) | 愉悦度:{old_valence:.2f}->{self.current_mood.valence:.2f}, 唤醒度:{old_arousal:.2f}->{self.current_mood.arousal:.2f} | 心情:{old_mood}->{self.current_mood.text}")
 

@@ -102,9 +102,13 @@ class ThinkFlowChat:
         """处理表情包"""
         if random() < global_config.emoji_chance:
             emoji_raw = await emoji_manager.get_emoji_for_text(response)
+            # print("11111111111111")
+            # logger.info(emoji_raw)
             if emoji_raw:
                 emoji_path, description = emoji_raw
                 emoji_cq = image_path_to_base64(emoji_path)
+                
+                # logger.info(emoji_cq)
 
                 thinking_time_point = round(message.message_info.time, 2)
 
@@ -123,6 +127,8 @@ class ThinkFlowChat:
                     is_head=False,
                     is_emoji=True,
                 )
+                
+                # logger.info("22222222222222")
                 message_manager.add_message(bot_message)
 
     async def _update_using_response(self, message, response_set):

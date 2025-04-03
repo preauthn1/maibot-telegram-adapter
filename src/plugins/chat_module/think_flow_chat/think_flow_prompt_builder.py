@@ -118,6 +118,7 @@ class PromptBuilder:
         logger.info("开始构建prompt")
         
         prompt = f"""
+        {relation_prompt_all}\n
 {chat_target}
 {chat_talking_prompt}
 你刚刚脑子里在想：

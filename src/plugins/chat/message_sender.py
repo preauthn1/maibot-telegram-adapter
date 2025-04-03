@@ -67,6 +67,8 @@ class Message_Sender:
                 try:
                     end_point = global_config.api_urls.get(message.message_info.platform, None)
                     if end_point:
+                        # logger.info(f"发送消息到{end_point}")
+                        # logger.info(message_json)
                         await global_api.send_message(end_point, message_json)
                     else:
                         raise ValueError(f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件")
