@@ -182,7 +182,7 @@ class RelationshipManager:
             level_num = 5 if relationship_value > 1000 else 0
         return level_num
 
-    def ensure_float(elsf, value, person_id):
+    def ensure_float(self, value, person_id):
         """确保返回浮点数，转换失败返回0.0"""
         if isinstance(value, float):
             return value
