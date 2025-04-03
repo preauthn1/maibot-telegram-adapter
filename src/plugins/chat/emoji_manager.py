@@ -535,9 +535,36 @@ class EmojiManager:
         while True:
             self.check_emoji_file_full()
             self.check_emoji_file_integrity()
+            await self.delete_all_images()
             await asyncio.sleep(global_config.EMOJI_CHECK_INTERVAL * 60)
-
+    
+    async def delete_all_images(self):
+        """删除 data/image 目录下的所有文件"""
+        try:
+            image_dir = os.path.join("data", "image")
+            if not os.path.exists(image_dir):
+                logger.warning(f"[警告] 目录不存在: {image_dir}")
+                return
+                
+            deleted_count = 0
+            failed_count = 0
+            
+            # 遍历目录下的所有文件
+            for filename in os.listdir(image_dir):
+                file_path = os.path.join(image_dir, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        deleted_count += 1
+                        logger.debug(f"[删除] 文件: {file_path}")
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"[错误] 删除文件失败 {file_path}: {str(e)}")
+                    
+            logger.success(f"[清理] 已删除 {deleted_count} 个文件，失败 {failed_count} 个")
+            
+        except Exception as e:
+            logger.error(f"[错误] 删除图片目录失败: {str(e)}")
 
 # 创建全局单例
-
 emoji_manager = EmojiManager()
