@@ -153,7 +153,7 @@ class LLM_request:
 
         # 合并重试策略
         default_retry = {
-            "max_retries": 3,
+            "max_retries": 10,
             "base_wait": 15,
             "retry_codes": [429, 413, 500, 503],
             "abort_codes": [400, 401, 402, 403],
