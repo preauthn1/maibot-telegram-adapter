@@ -468,8 +468,8 @@ class LLM_request:
                     logger.critical(f"请求头: {await self._build_headers(no_key=True)} 请求体: {payload}")
                     raise RuntimeError(f"模型 {self.model_name} API请求失败: {str(e)}") from e
 
-        logger.error(f"模型 {self.model_name} 达到最大重试次数，请求仍然失败")
-        raise RuntimeError(f"模型 {self.model_name} 达到最大重试次数，API请求仍然失败")
+        logger.error(f"模型 {self.model_name} 达到最大重试次数，请求仍然失败，错误: {str(e)}")
+        raise RuntimeError(f"模型 {self.model_name} 达到最大重试次数，API请求仍然失败，错误: {str(e)}")
 
     async def _transform_parameters(self, params: dict) -> dict:
         """
