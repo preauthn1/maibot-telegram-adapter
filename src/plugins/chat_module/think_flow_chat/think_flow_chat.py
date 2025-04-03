@@ -174,15 +174,18 @@ class ThinkFlowChat:
         heartflow.create_subheartflow(chat.stream_id)
 
         await message.process()
-
+        logger.debug(f"消息处理成功{message.processed_plain_text}")
+        
         # 过滤词/正则表达式过滤
         if self._check_ban_words(message.processed_plain_text, chat, userinfo) or self._check_ban_regex(
             message.raw_message, chat, userinfo
         ):
             return
+        logger.debug(f"过滤词/正则表达式过滤成功{message.processed_plain_text}")
 
         await self.storage.store_message(message, chat)
-
+        logger.debug(f"存储成功{message.processed_plain_text}")
+        
         # 记忆激活
         timer1 = time.time()
         interested_rate = await HippocampusManager.get_instance().get_activate_from_text(
