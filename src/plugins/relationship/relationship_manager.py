@@ -4,7 +4,7 @@ from src.common.logger import get_module_logger, LogConfig, RELATION_STYLE_CONFI
 
 from ...common.database import db
 from ..message.message_base import UserInfo
-from .chat_stream import ChatStream
+from ..chat.chat_stream import ChatStream
 import math
 from bson.decimal128 import Decimal128
 

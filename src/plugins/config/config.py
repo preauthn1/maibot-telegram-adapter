@@ -25,8 +25,8 @@ config_config = LogConfig(
 logger = get_module_logger("config", config=config_config)
 
 #考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
-mai_version_main = "0.6.0"
-mai_version_fix = "mmc-3"
+mai_version_main = "test-0.6.0"
+mai_version_fix = "snapshot-7"
 mai_version = f"{mai_version_main}-{mai_version_fix}"
 
 def update_config():
@@ -44,6 +44,8 @@ def update_config():
     # 检查配置文件是否存在
     if not old_config_path.exists():
         logger.info("配置文件不存在，从模板创建新配置")
+        #创建文件夹
+        old_config_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(template_path, old_config_path)
         logger.info(f"已创建新配置文件，请填写后重新运行: {old_config_path}")
         # 如果是新创建的配置文件,直接返回
@@ -162,7 +164,7 @@ class BotConfig:
     ban_msgs_regex = set()
     
     #heartflow
-    enable_heartflow: bool = False  # 是否启用心流
+    # enable_heartflow: bool = False  # 是否启用心流
     sub_heart_flow_update_interval: int = 60  # 子心流更新频率，间隔 单位秒
     sub_heart_flow_freeze_time: int = 120  # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
     sub_heart_flow_stop_time: int = 600  # 子心流停止时间，超过这个时间没有回复，子心流会停止，间隔 单位秒
@@ -176,9 +178,10 @@ class BotConfig:
     emoji_response_penalty: float = 0.0  # 表情包回复惩罚
 
     # response
+    response_mode: str = "heart_flow"  # 回复策略
     MODEL_R1_PROBABILITY: float = 0.8  # R1模型概率
     MODEL_V3_PROBABILITY: float = 0.1  # V3模型概率
-    MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
+    # MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
 
     # emoji
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
@@ -229,7 +232,8 @@ class BotConfig:
 
     # experimental
     enable_friend_chat: bool = False  # 是否启用好友聊天
-    enable_think_flow: bool = False  # 是否启用思考流程
+    # enable_think_flow: bool = False  # 是否启用思考流程
+    enable_pfc_chatting: bool = False  # 是否启用PFC聊天
 
     # 模型配置
     llm_reasoning: Dict[str, str] = field(default_factory=lambda: {})
@@ -332,7 +336,7 @@ class BotConfig:
             personality_config = parent["personality"]
             personality = personality_config.get("prompt_personality")
             if len(personality) >= 2:
-                logger.debug(f"载入自定义人格:{personality}")
+                logger.info(f"载入自定义人格:{personality}")
                 config.PROMPT_PERSONALITY = personality_config.get("prompt_personality", config.PROMPT_PERSONALITY)
 
             config.PERSONALITY_1 = personality_config.get("personality_1_probability", config.PERSONALITY_1)
@@ -381,6 +385,15 @@ class BotConfig:
             #     "model_r1_distill_probability", config.MODEL_R1_DISTILL_PROBABILITY
             # )
             config.max_response_length = response_config.get("max_response_length", config.max_response_length)
+            if config.INNER_VERSION in SpecifierSet(">=1.0.4"):
+                config.response_mode = response_config.get("response_mode", config.response_mode)
+            
+        def heartflow(parent: dict):
+            heartflow_config = parent["heartflow"]
+            config.sub_heart_flow_update_interval = heartflow_config.get("sub_heart_flow_update_interval", config.sub_heart_flow_update_interval)
+            config.sub_heart_flow_freeze_time = heartflow_config.get("sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time)
+            config.sub_heart_flow_stop_time = heartflow_config.get("sub_heart_flow_stop_time", config.sub_heart_flow_stop_time)
+            config.heart_flow_update_interval = heartflow_config.get("heart_flow_update_interval", config.heart_flow_update_interval)
 
         def willing(parent: dict):
             willing_config = parent["willing"]
@@ -554,19 +567,13 @@ class BotConfig:
             if platforms_config and isinstance(platforms_config, dict):
                 for k in platforms_config.keys():
                     config.api_urls[k] = platforms_config[k]
-        
-        def heartflow(parent: dict):
-            heartflow_config = parent["heartflow"]
-            config.enable_heartflow = heartflow_config.get("enable", config.enable_heartflow)
-            config.sub_heart_flow_update_interval = heartflow_config.get("sub_heart_flow_update_interval", config.sub_heart_flow_update_interval)
-            config.sub_heart_flow_freeze_time = heartflow_config.get("sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time)
-            config.sub_heart_flow_stop_time = heartflow_config.get("sub_heart_flow_stop_time", config.sub_heart_flow_stop_time)
-            config.heart_flow_update_interval = heartflow_config.get("heart_flow_update_interval", config.heart_flow_update_interval)
 
         def experimental(parent: dict):
             experimental_config = parent["experimental"]
             config.enable_friend_chat = experimental_config.get("enable_friend_chat", config.enable_friend_chat)
-            config.enable_think_flow = experimental_config.get("enable_think_flow", config.enable_think_flow)
+            # config.enable_think_flow = experimental_config.get("enable_think_flow", config.enable_think_flow)
+            if config.INNER_VERSION in SpecifierSet(">=1.1.0"):
+                config.enable_pfc_chatting = experimental_config.get("pfc_chatting", config.enable_pfc_chatting)
 
         # 版本表达式：>=1.0.0,<2.0.0
         # 允许字段：func: method, support: str, notice: str, necessary: bool
