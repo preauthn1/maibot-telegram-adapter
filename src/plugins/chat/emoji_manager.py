@@ -365,10 +365,10 @@ class EmojiManager:
             if (self.emoji_num > self.emoji_num_max):
                 logger.warning(f"[警告] 表情包数量超过最大限制: {self.emoji_num} > {self.emoji_num_max},跳过注册")
                 if not global_config.max_reach_deletion:
-                    logger.warning(f"表情包数量超过最大限制，终止注册")
+                    logger.warning("表情包数量超过最大限制，终止注册")
                     break
                 else:
-                    logger.warning(f"表情包数量超过最大限制，开始删除表情包")
+                    logger.warning("表情包数量超过最大限制，开始删除表情包")
                     self.check_emoji_file_full()
             else:
                 await self.scan_new_emojis()
