@@ -11,7 +11,6 @@ COPY maim_message /maim_message
 
 # 安装依赖
 RUN uv pip install --system --upgrade pip
-#RUN pip install uv
 RUN uv pip install --system -e /maim_message
 RUN uv pip install --system -r requirements.txt
 
