@@ -10,10 +10,10 @@ COPY requirements.txt .
 COPY maim_message /maim_message
 
 # 安装依赖
-RUN pip install --upgrade pip
+RUN uv pip install --system --upgrade pip
 #RUN pip install uv
-RUN pip install -e /maim_message
-RUN uv pip install -r requirements.txt
+RUN uv pip install --system -e /maim_message
+RUN uv pip install --system -r requirements.txt
 
 # 复制项目代码
 COPY . .
