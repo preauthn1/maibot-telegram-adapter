@@ -153,8 +153,8 @@ class LLM_request:
 
         # 合并重试策略
         default_retry = {
-            "max_retries": 10,
-            "base_wait": 15,
+            "max_retries": 3,
+            "base_wait": 10,
             "retry_codes": [429, 413, 500, 503],
             "abort_codes": [400, 401, 402, 403],
         }
@@ -468,8 +468,8 @@ class LLM_request:
                     logger.critical(f"请求头: {await self._build_headers(no_key=True)} 请求体: {payload}")
                     raise RuntimeError(f"模型 {self.model_name} API请求失败: {str(e)}") from e
 
-        logger.error(f"模型 {self.model_name} 达到最大重试次数，请求仍然失败，错误: {str(e)}")
-        raise RuntimeError(f"模型 {self.model_name} 达到最大重试次数，API请求仍然失败，错误: {str(e)}")
+        logger.error(f"模型 {self.model_name} 达到最大重试次数，请求仍然失败")
+        raise RuntimeError(f"模型 {self.model_name} 达到最大重试次数，API请求仍然失败")
 
     async def _transform_parameters(self, params: dict) -> dict:
         """
