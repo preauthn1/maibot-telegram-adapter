@@ -1,18 +1,22 @@
-FROM nonebot/nb-cli:latest
+FROM python:3.13.2-slim-bookworm
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# 设置工作目录
+# 工作目录
 WORKDIR /MaiMBot
 
-# 先复制依赖列表
+# 复制依赖列表
 COPY requirements.txt .
+# 同级目录下需要有 maim_message
+COPY maim_message /maim_message
 
-# 安装依赖（这层会被缓存直到requirements.txt改变）
-RUN pip install --upgrade -r requirements.txt
+# 安装依赖
+RUN uv pip install --system --upgrade pip
+RUN uv pip install --system -e /maim_message
+RUN uv pip install --system -r requirements.txt
 
-# 然后复制项目代码
+# 复制项目代码
 COPY . .
 
-VOLUME [ "/MaiMBot/config" ]
-VOLUME [ "/MaiMBot/data" ]
-EXPOSE 8080
-ENTRYPOINT [ "nb","run" ]
+EXPOSE 8000
+
+ENTRYPOINT [ "python","bot.py" ]

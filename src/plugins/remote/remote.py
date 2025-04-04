@@ -6,7 +6,7 @@ import os
 import json
 import threading
 from src.common.logger import get_module_logger
-from src.plugins.chat.config import global_config
+from src.plugins.config.config import global_config
 
 logger = get_module_logger("remote")
 
@@ -54,7 +54,11 @@ def send_heartbeat(server_url, client_id):
     sys = platform.system()
     try:
         headers = {"Client-ID": client_id, "User-Agent": f"HeartbeatClient/{client_id[:8]}"}
-        data = json.dumps({"system": sys})
+        data = json.dumps(
+            {"system": sys, "Version": global_config.MAI_VERSION},
+        )
+        logger.debug(f"正在发送心跳到服务器: {server_url}")
+        logger.debug(f"心跳数据: {data}")
         response = requests.post(f"{server_url}/api/clients", headers=headers, data=data)
 
         if response.status_code == 201:
@@ -62,11 +66,11 @@ def send_heartbeat(server_url, client_id):
             logger.debug(f"心跳发送成功。服务器响应: {data}")
             return True
         else:
-            logger.debug(f"心跳发送失败。状态码: {response.status_code}")
+            logger.error(f"心跳发送失败。状态码: {response.status_code}, 响应内容: {response.text}")
             return False
 
     except requests.RequestException as e:
-        logger.debug(f"发送心跳时出错: {e}")
+        logger.error(f"发送心跳时出错: {e}")
         return False
 
 
@@ -79,22 +83,42 @@ class HeartbeatThread(threading.Thread):
         self.interval = interval
         self.client_id = get_unique_id()
         self.running = True
+        self.stop_event = threading.Event()  # 添加事件对象用于可中断的等待
+        self.last_heartbeat_time = 0  # 记录上次发送心跳的时间
 
     def run(self):
         """线程运行函数"""
         logger.debug(f"心跳线程已启动，客户端ID: {self.client_id}")
 
         while self.running:
+            # 发送心跳
             if send_heartbeat(self.server_url, self.client_id):
                 logger.info(f"{self.interval}秒后发送下一次心跳...")
             else:
                 logger.info(f"{self.interval}秒后重试...")
 
-            time.sleep(self.interval)  # 使用同步的睡眠
+            self.last_heartbeat_time = time.time()
+
+            # 使用可中断的等待代替 sleep
+            # 每秒检查一次是否应该停止或发送心跳
+            remaining_wait = self.interval
+            while remaining_wait > 0 and self.running:
+                # 每次最多等待1秒，便于及时响应停止请求
+                wait_time = min(1, remaining_wait)
+                if self.stop_event.wait(wait_time):
+                    break  # 如果事件被设置，立即退出等待
+                remaining_wait -= wait_time
+
+                # 检查是否由于外部原因导致间隔异常延长
+                if time.time() - self.last_heartbeat_time >= self.interval * 1.5:
+                    logger.warning("检测到心跳间隔异常延长，立即发送心跳")
+                    break
 
     def stop(self):
         """停止线程"""
         self.running = False
+        self.stop_event.set()  # 设置事件，中断等待
+        logger.debug("心跳线程已收到停止信号")
 
 
 def main():

@@ -1,19 +1,16 @@
 from typing import Optional
 from src.common.logger import get_module_logger
 
-from ..chat.config import global_config
+from ..config.config import global_config
 from .mode_classical import WillingManager as ClassicalWillingManager
 from .mode_dynamic import WillingManager as DynamicWillingManager
 from .mode_custom import WillingManager as CustomWillingManager
-from src.common.logger import LogConfig
+from src.common.logger import LogConfig, WILLING_STYLE_CONFIG
 
 willing_config = LogConfig(
-    console_format=(
-        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-        "<level>{level: <8}</level> | "
-        "<red>{extra[module]: <12}</red> | "
-        "<level>{message}</level>"
-    ),
+    # 使用消息发送专用样式
+    console_format=WILLING_STYLE_CONFIG["console_format"],
+    file_format=WILLING_STYLE_CONFIG["file_format"],
 )
 
 logger = get_module_logger("willing", config=willing_config)

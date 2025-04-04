@@ -6,6 +6,10 @@ log/
 logs/
 /test
 /src/test
+nonebot-maibot-adapter/
+*.zip
+run.bat
+run.py
 message_queue_content.txt
 message_queue_content.bat
 message_queue_window.bat
@@ -14,10 +18,12 @@ queue_update.txt
 memory_graph.gml
 .env
 .env.*
+.cursor
 config/bot_config_dev.toml
 config/bot_config.toml
 config/bot_config.toml.bak
 src/plugins/remote/client_uuid.json
+run_none.bat
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -217,3 +223,11 @@ OtherRes.txt
 
 /eula.confirmed
 /privacy.confirmed
+
+logs
+
+.ruff_cache
+
+.vscode
+
+/config/*

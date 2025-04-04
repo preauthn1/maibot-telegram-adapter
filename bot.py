@@ -4,15 +4,11 @@ import os
 import shutil
 import sys
 from pathlib import Path
-
-import nonebot
 import time
-
-import uvicorn
-from dotenv import load_dotenv
-from nonebot.adapters.onebot.v11 import Adapter
 import platform
+from dotenv import load_dotenv
 from src.common.logger import get_module_logger
+from src.main import MainSystem
 
 logger = get_module_logger("main_bot")
 
@@ -49,56 +45,25 @@ def init_config():
             logger.info("创建config目录")
 
         shutil.copy("template/bot_config_template.toml", "config/bot_config.toml")
-        logger.info("复制完成，请修改config/bot_config.toml和.env.prod中的配置后重新启动")
+        logger.info("复制完成，请修改config/bot_config.toml和.env中的配置后重新启动")
 
 
 def init_env():
-    # 初始化.env 默认ENVIRONMENT=prod
+    # 检测.env文件是否存在
     if not os.path.exists(".env"):
-        with open(".env", "w") as f:
-            f.write("ENVIRONMENT=prod")
-
-        # 检测.env.prod文件是否存在
-        if not os.path.exists(".env.prod"):
-            logger.error("检测到.env.prod文件不存在")
-            shutil.copy("template.env", "./.env.prod")
-
-    # 检测.env.dev文件是否存在，不存在的话直接复制生产环境配置
-    if not os.path.exists(".env.dev"):
-        logger.error("检测到.env.dev文件不存在")
-        shutil.copy(".env.prod", "./.env.dev")
-
-    # 首先加载基础环境变量.env
-    if os.path.exists(".env"):
-        load_dotenv(".env", override=True)
-        logger.success("成功加载基础环境变量配置")
+        logger.error("检测到.env文件不存在")
+        shutil.copy("template/template.env", "./.env")
+        logger.info("已从template/template.env复制创建.env，请修改配置后重新启动")
 
 
 def load_env():
-    # 使用闭包实现对加载器的横向扩展，避免大量重复判断
-    def prod():
-        logger.success("成功加载生产环境变量配置")
-        load_dotenv(".env.prod", override=True)  # override=True 允许覆盖已存在的环境变量
-
-    def dev():
-        logger.success("成功加载开发环境变量配置")
-        load_dotenv(".env.dev", override=True)  # override=True 允许覆盖已存在的环境变量
-
-    fn_map = {"prod": prod, "dev": dev}
-
-    env = os.getenv("ENVIRONMENT")
-    logger.info(f"[load_env] 当前的 ENVIRONMENT 变量值：{env}")
-
-    if env in fn_map:
-        fn_map[env]()  # 根据映射执行闭包函数
-
-    elif os.path.exists(f".env.{env}"):
-        logger.success(f"加载{env}环境变量配置")
-        load_dotenv(f".env.{env}", override=True)  # override=True 允许覆盖已存在的环境变量
-
+    # 直接加载生产环境变量配置
+    if os.path.exists(".env"):
+        load_dotenv(".env", override=True)
+        logger.success("成功加载环境变量配置")
     else:
-        logger.error(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
-        RuntimeError(f"ENVIRONMENT 配置错误，请检查 .env 文件中的 ENVIRONMENT 变量及对应 .env.{env} 是否存在")
+        logger.error("未找到.env文件，请确保文件存在")
+        raise FileNotFoundError("未找到.env文件，请确保文件存在")
 
 
 def scan_provider(env_config: dict):
@@ -134,11 +99,7 @@ def scan_provider(env_config: dict):
 
 async def graceful_shutdown():
     try:
-        global uvicorn_server
-        if uvicorn_server:
-            uvicorn_server.force_exit = True  # 强制退出
-            await uvicorn_server.shutdown()
-
+        logger.info("正在优雅关闭麦麦...")
         tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
         for task in tasks:
             task.cancel()
@@ -146,22 +107,6 @@ async def graceful_shutdown():
 
     except Exception as e:
         logger.error(f"麦麦关闭失败: {e}")
-
-
-async def uvicorn_main():
-    global uvicorn_server
-    config = uvicorn.Config(
-        app="__main__:app",
-        host=os.getenv("HOST", "127.0.0.1"),
-        port=int(os.getenv("PORT", 8080)),
-        reload=os.getenv("ENVIRONMENT") == "dev",
-        timeout_graceful_shutdown=5,
-        log_config=None,
-        access_log=False,
-    )
-    server = uvicorn.Server(config)
-    uvicorn_server = server
-    await server.serve()
 
 
 def check_eula():
@@ -204,8 +149,8 @@ def check_eula():
             eula_confirmed = True
             eula_updated = False
     if eula_new_hash == os.getenv("EULA_AGREE"):
-            eula_confirmed = True
-            eula_updated = False
+        eula_confirmed = True
+        eula_updated = False
 
     # 检查隐私条款确认文件是否存在
     if privacy_confirm_file.exists():
@@ -214,14 +159,16 @@ def check_eula():
         if privacy_new_hash == confirmed_content:
             privacy_confirmed = True
             privacy_updated = False
-    if privacy_new_hash  == os.getenv("PRIVACY_AGREE"):
-            privacy_confirmed = True
-            privacy_updated = False
+    if privacy_new_hash == os.getenv("PRIVACY_AGREE"):
+        privacy_confirmed = True
+        privacy_updated = False
 
     # 如果EULA或隐私条款有更新，提示用户重新确认
     if eula_updated or privacy_updated:
         print("EULA或隐私条款内容已更新，请在阅读后重新确认，继续运行视为同意更新后的以上两款协议")
-        print(f'输入"同意"或"confirmed"或设置环境变量"EULA_AGREE={eula_new_hash}"和"PRIVACY_AGREE={privacy_new_hash}"继续运行')
+        print(
+            f'输入"同意"或"confirmed"或设置环境变量"EULA_AGREE={eula_new_hash}"和"PRIVACY_AGREE={privacy_new_hash}"继续运行'
+        )
         while True:
             user_input = input().strip().lower()
             if user_input in ["同意", "confirmed"]:
@@ -243,7 +190,6 @@ def check_eula():
 
 def raw_main():
     # 利用 TZ 环境变量设定程序工作的时区
-    # 仅保证行为一致，不依赖 localtime()，实际对生产环境几乎没有作用
     if platform.system().lower() != "windows":
         time.tzset()
 
@@ -254,41 +200,28 @@ def raw_main():
     init_env()
     load_env()
 
-    # load_logger()
-
     env_config = {key: os.getenv(key) for key in os.environ}
     scan_provider(env_config)
 
-    # 设置基础配置
-    base_config = {
-        "websocket_port": int(env_config.get("PORT", 8080)),
-        "host": env_config.get("HOST", "127.0.0.1"),
-        "log_level": "INFO",
-    }
-
-    # 合并配置
-    nonebot.init(**base_config, **env_config)
-
-    # 注册适配器
-    global driver
-    driver = nonebot.get_driver()
-    driver.register_adapter(Adapter)
-
-    # 加载插件
-    nonebot.load_plugins("src/plugins")
+    # 返回MainSystem实例
+    return MainSystem()
 
 
 if __name__ == "__main__":
     try:
-        raw_main()
+        # 获取MainSystem实例
+        main_system = raw_main()
 
-        app = nonebot.get_asgi()
+        # 创建事件循环
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
-            loop.run_until_complete(uvicorn_main())
+            # 执行初始化和任务调度
+            loop.run_until_complete(main_system.initialize())
+            loop.run_until_complete(main_system.schedule_tasks())
         except KeyboardInterrupt:
+            # loop.run_until_complete(global_api.stop())
             logger.warning("收到中断信号，正在优雅关闭...")
             loop.run_until_complete(graceful_shutdown())
         finally:

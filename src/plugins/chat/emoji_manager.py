@@ -9,10 +9,8 @@ from typing import Optional, Tuple
 from PIL import Image
 import io
 
-from nonebot import get_driver
-
 from ...common.database import db
-from ..chat.config import global_config
+from ..config.config import global_config
 from ..chat.utils import get_embedding
 from ..chat.utils_image import ImageManager, image_path_to_base64
 from ..models.utils_model import LLM_request
@@ -21,8 +19,6 @@ from src.common.logger import get_module_logger
 logger = get_module_logger("emoji")
 
 
-driver = get_driver()
-config = driver.config
 image_manager = ImageManager()
 
 
@@ -38,14 +34,32 @@ class EmojiManager:
 
     def __init__(self):
         self._scan_task = None
-        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000, request_type="image")
+        self.vlm = LLM_request(model=global_config.vlm, temperature=0.3, max_tokens=1000, request_type="emoji")
         self.llm_emotion_judge = LLM_request(
-            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8, request_type="image"
+            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8, request_type="emoji"
         )  # 更高的温度，更少的token（后续可以根据情绪来调整温度）
+        
+        self.emoji_num = 0
+        self.emoji_num_max = global_config.max_emoji_num
+        self.emoji_num_max_reach_deletion = global_config.max_reach_deletion
+        
+        logger.info("启动表情包管理器")
 
     def _ensure_emoji_dir(self):
         """确保表情存储目录存在"""
         os.makedirs(self.EMOJI_DIR, exist_ok=True)
+
+    def _update_emoji_count(self):
+        """更新表情包数量统计
+        
+        检查数据库中的表情包数量并更新到 self.emoji_num
+        """
+        try:
+            self._ensure_db()
+            self.emoji_num = db.emoji.count_documents({})
+            logger.info(f"[统计] 当前表情包数量: {self.emoji_num}")
+        except Exception as e:
+            logger.error(f"[错误] 更新表情包数量失败: {str(e)}")
 
     def initialize(self):
         """初始化数据库连接和表情目录"""
@@ -54,6 +68,8 @@ class EmojiManager:
                 self._ensure_emoji_collection()
                 self._ensure_emoji_dir()
                 self._initialized = True
+                # 更新表情包数量
+                self._update_emoji_count()
                 # 启动时执行一次完整性检查
                 self.check_emoji_file_integrity()
             except Exception:
@@ -111,14 +127,18 @@ class EmojiManager:
             if not text_for_search:
                 logger.error("无法获取文本的情绪")
                 return None
-            text_embedding = await get_embedding(text_for_search)
+            text_embedding = await get_embedding(text_for_search, request_type="emoji")
             if not text_embedding:
                 logger.error("无法获取文本的embedding")
                 return None
 
             try:
                 # 获取所有表情包
-                all_emojis = list(db.emoji.find({}, {"_id": 1, "path": 1, "embedding": 1, "description": 1}))
+                all_emojis = [
+                    e
+                    for e in db.emoji.find({}, {"_id": 1, "path": 1, "embedding": 1, "description": 1, "blacklist": 1})
+                    if "blacklist" not in e
+                ]
 
                 if not all_emojis:
                     logger.warning("数据库中没有任何表情包")
@@ -173,7 +193,7 @@ class EmojiManager:
             logger.error(f"[错误] 获取表情包失败: {str(e)}")
             return None
 
-    async def _get_emoji_discription(self, image_base64: str) -> str:
+    async def _get_emoji_description(self, image_base64: str) -> str:
         """获取表情包的标签，使用image_manager的描述生成功能"""
 
         try:
@@ -242,12 +262,32 @@ class EmojiManager:
                 image_hash = hashlib.md5(image_bytes).hexdigest()
                 image_format = Image.open(io.BytesIO(image_bytes)).format.lower()
                 # 检查是否已经注册过
-                existing_emoji = db["emoji"].find_one({"hash": image_hash})
+                existing_emoji_by_path = db["emoji"].find_one({"filename": filename})
+                existing_emoji_by_hash = db["emoji"].find_one({"hash": image_hash})
+                if existing_emoji_by_path and existing_emoji_by_hash:
+                    if existing_emoji_by_path["_id"] != existing_emoji_by_hash["_id"]:
+                        logger.error(f"[错误] 表情包已存在但记录不一致: {filename}")
+                        db.emoji.delete_one({"_id": existing_emoji_by_path["_id"]})
+                        db.emoji.delete_one({"_id": existing_emoji_by_hash["_id"]})
+                        existing_emoji = None
+                    else:
+                        existing_emoji = existing_emoji_by_hash
+                elif existing_emoji_by_hash:
+                    logger.error(f"[错误] 表情包hash已存在但path不存在: {filename}")
+                    db.emoji.delete_one({"_id": existing_emoji_by_hash["_id"]})
+                    existing_emoji = None
+                elif existing_emoji_by_path:
+                    logger.error(f"[错误] 表情包path已存在但hash不存在: {filename}")
+                    db.emoji.delete_one({"_id": existing_emoji_by_path["_id"]})
+                    existing_emoji = None
+                else:
+                    existing_emoji = None
+
                 description = None
 
                 if existing_emoji:
                     # 即使表情包已存在，也检查是否需要同步到images集合
-                    description = existing_emoji.get("discription")
+                    description = existing_emoji.get("description")
                     # 检查是否在images集合中存在
                     existing_image = db.images.find_one({"hash": image_hash})
                     if not existing_image:
@@ -272,7 +312,7 @@ class EmojiManager:
                     description = existing_description
                 else:
                     # 获取表情包的描述
-                    description = await self._get_emoji_discription(image_base64)
+                    description = await self._get_emoji_description(image_base64)
 
                 if global_config.EMOJI_CHECK:
                     check = await self._check_emoji(image_base64, image_format)
@@ -284,13 +324,13 @@ class EmojiManager:
                     logger.info(f"[检查] 表情包检查通过: {check}")
 
                 if description is not None:
-                    embedding = await get_embedding(description)
+                    embedding = await get_embedding(description, request_type="emoji")
                     # 准备数据库记录
                     emoji_record = {
                         "filename": filename,
                         "path": image_path,
                         "embedding": embedding,
-                        "discription": description,
+                        "description": description,
                         "hash": image_hash,
                         "timestamp": int(time.time()),
                     }
@@ -317,13 +357,7 @@ class EmojiManager:
 
         except Exception:
             logger.exception("[错误] 扫描表情包失败")
-
-    async def _periodic_scan(self, interval_MINS: int = 10):
-        """定期扫描新表情包"""
-        while True:
-            logger.info("[扫描] 开始扫描新表情包...")
-            await self.scan_new_emojis()
-            await asyncio.sleep(interval_MINS * 60)  # 每600秒扫描一次
+            
 
     def check_emoji_file_integrity(self):
         """检查表情包文件完整性
@@ -366,6 +400,19 @@ class EmojiManager:
                         logger.warning(f"[检查] 发现缺失记录（缺少hash字段），ID: {emoji.get('_id', 'unknown')}")
                         hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
                         db.emoji.update_one({"_id": emoji["_id"]}, {"$set": {"hash": hash}})
+                    else:
+                        file_hash = hashlib.md5(open(emoji["path"], "rb").read()).hexdigest()
+                        if emoji["hash"] != file_hash:
+                            logger.warning(f"[检查] 表情包文件hash不匹配，ID: {emoji.get('_id', 'unknown')}")
+                            db.emoji.delete_one({"_id": emoji["_id"]})
+                            removed_count += 1
+
+                    # 修复拼写错误
+                    if "discription" in emoji:
+                        desc = emoji["discription"]
+                        db.emoji.update_one(
+                            {"_id": emoji["_id"]}, {"$unset": {"discription": ""}, "$set": {"description": desc}}
+                        )
 
                 except Exception as item_error:
                     logger.error(f"[错误] 处理表情包记录时出错: {str(item_error)}")
@@ -383,12 +430,136 @@ class EmojiManager:
             logger.error(f"[错误] 检查表情包完整性失败: {str(e)}")
             logger.error(traceback.format_exc())
 
-    async def start_periodic_check(self, interval_MINS: int = 120):
+    def check_emoji_file_full(self):
+        """检查表情包文件是否完整，如果数量超出限制且允许删除，则删除多余的表情包
+        
+        删除规则：
+        1. 优先删除创建时间更早的表情包
+        2. 优先删除使用次数少的表情包，但使用次数多的也有小概率被删除
+        """
+        try:
+            self._ensure_db()
+            # 更新表情包数量
+            self._update_emoji_count()
+            
+            # 检查是否超出限制
+            if self.emoji_num <= self.emoji_num_max:
+                return
+                
+            # 如果超出限制但不允许删除，则只记录警告
+            if not global_config.max_reach_deletion:
+                logger.warning(f"[警告] 表情包数量({self.emoji_num})超出限制({self.emoji_num_max})，但未开启自动删除")
+                return
+                
+            # 计算需要删除的数量
+            delete_count = self.emoji_num - self.emoji_num_max
+            logger.info(f"[清理] 需要删除 {delete_count} 个表情包")
+            
+            # 获取所有表情包，按时间戳升序（旧的在前）排序
+            all_emojis = list(db.emoji.find().sort([("timestamp", 1)]))
+            
+            # 计算权重：使用次数越多，被删除的概率越小
+            weights = []
+            max_usage = max((emoji.get("usage_count", 0) for emoji in all_emojis), default=1)
+            for emoji in all_emojis:
+                usage_count = emoji.get("usage_count", 0)
+                # 使用指数衰减函数计算权重，使用次数越多权重越小
+                weight = 1.0 / (1.0 + usage_count / max(1, max_usage))
+                weights.append(weight)
+            
+            # 根据权重随机选择要删除的表情包
+            to_delete = []
+            remaining_indices = list(range(len(all_emojis)))
+            
+            while len(to_delete) < delete_count and remaining_indices:
+                # 计算当前剩余表情包的权重
+                current_weights = [weights[i] for i in remaining_indices]
+                # 归一化权重
+                total_weight = sum(current_weights)
+                if total_weight == 0:
+                    break
+                normalized_weights = [w/total_weight for w in current_weights]
+                
+                # 随机选择一个表情包
+                selected_idx = random.choices(remaining_indices, weights=normalized_weights, k=1)[0]
+                to_delete.append(all_emojis[selected_idx])
+                remaining_indices.remove(selected_idx)
+            
+            # 删除选中的表情包
+            deleted_count = 0
+            for emoji in to_delete:
+                try:
+                    # 删除文件
+                    if "path" in emoji and os.path.exists(emoji["path"]):
+                        os.remove(emoji["path"])
+                        logger.info(f"[删除] 文件: {emoji['path']} (使用次数: {emoji.get('usage_count', 0)})")
+                    
+                    # 删除数据库记录
+                    db.emoji.delete_one({"_id": emoji["_id"]})
+                    deleted_count += 1
+                    
+                    # 同时从images集合中删除
+                    if "hash" in emoji:
+                        db.images.delete_one({"hash": emoji["hash"]})
+                        
+                except Exception as e:
+                    logger.error(f"[错误] 删除表情包失败: {str(e)}")
+                    continue
+            
+            # 更新表情包数量
+            self._update_emoji_count()
+            logger.success(f"[清理] 已删除 {deleted_count} 个表情包，当前数量: {self.emoji_num}")
+            
+        except Exception as e:
+            logger.error(f"[错误] 检查表情包数量失败: {str(e)}")
+            
+    async def start_periodic_check_register(self):
+        """定期检查表情包完整性和数量"""
         while True:
+            logger.info("[扫描] 开始检查表情包完整性...")
             self.check_emoji_file_integrity()
-            await asyncio.sleep(interval_MINS * 60)
-
+            logger.info("[扫描] 开始删除所有图片缓存...")
+            await self.delete_all_images()
+            logger.info("[扫描] 开始扫描新表情包...")
+            if self.emoji_num < self.emoji_num_max:
+                await self.scan_new_emojis()
+            if (self.emoji_num > self.emoji_num_max):
+                logger.warning(f"[警告] 表情包数量超过最大限制: {self.emoji_num} > {self.emoji_num_max},跳过注册")
+                if not global_config.max_reach_deletion:
+                    logger.warning("表情包数量超过最大限制，终止注册")
+                    break
+                else:
+                    logger.warning("表情包数量超过最大限制，开始删除表情包")
+                    self.check_emoji_file_full()
+            await asyncio.sleep(global_config.EMOJI_CHECK_INTERVAL * 60)
+    
+    async def delete_all_images(self):
+        """删除 data/image 目录下的所有文件"""
+        try:
+            image_dir = os.path.join("data", "image")
+            if not os.path.exists(image_dir):
+                logger.warning(f"[警告] 目录不存在: {image_dir}")
+                return
+                
+            deleted_count = 0
+            failed_count = 0
+            
+            # 遍历目录下的所有文件
+            for filename in os.listdir(image_dir):
+                file_path = os.path.join(image_dir, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        deleted_count += 1
+                        logger.debug(f"[删除] 文件: {file_path}")
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"[错误] 删除文件失败 {file_path}: {str(e)}")
+                    
+            logger.success(f"[清理] 已删除 {deleted_count} 个文件，失败 {failed_count} 个")
+            
+        except Exception as e:
+            logger.error(f"[错误] 删除图片目录失败: {str(e)}")
 
 # 创建全局单例
-
 emoji_manager = EmojiManager()

@@ -3,10 +3,6 @@ name = "MaiMaiBot"
 version = "0.1.0"
 description = "MaiMaiBot"
 
-[tool.nonebot]
-plugins = ["src.plugins.chat"]
-plugin_dirs = ["src/plugins"]
-
 [tool.ruff]
 
 include = ["*.py"]
@@ -28,7 +24,7 @@ select = [
     "B", # flake8-bugbear
 ]
 
-ignore = ["E711"]
+ignore = ["E711","E501"]
 
 [tool.ruff.format]
 docstring-code-format = true

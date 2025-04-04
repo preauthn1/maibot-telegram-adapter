@@ -3,10 +3,16 @@ import threading
 import time
 from dataclasses import dataclass
 
-from ..chat.config import global_config
-from src.common.logger import get_module_logger
+from ..config.config import global_config
+from src.common.logger import get_module_logger, LogConfig, MOOD_STYLE_CONFIG
+from ..person_info.relationship_manager import relationship_manager
 
-logger = get_module_logger("mood_manager")
+mood_config = LogConfig(
+    # 使用海马体专用样式
+    console_format=MOOD_STYLE_CONFIG["console_format"],
+    file_format=MOOD_STYLE_CONFIG["file_format"],
+)
+logger = get_module_logger("mood_manager", config=mood_config)
 
 
 @dataclass
@@ -50,13 +56,15 @@ class MoodManager:
 
         # 情绪词映射表 (valence, arousal)
         self.emotion_map = {
-            "happy": (0.8, 0.6),  # 高愉悦度，中等唤醒度
-            "angry": (-0.7, 0.7),  # 负愉悦度，高唤醒度
-            "sad": (-0.6, 0.3),  # 负愉悦度，低唤醒度
-            "surprised": (0.4, 0.8),  # 中等愉悦度，高唤醒度
-            "disgusted": (-0.8, 0.5),  # 高负愉悦度，中等唤醒度
-            "fearful": (-0.7, 0.6),  # 负愉悦度，高唤醒度
-            "neutral": (0.0, 0.5),  # 中性愉悦度，中等唤醒度
+            "开心": (0.21, 0.6),
+            "害羞": (0.15, 0.2),
+            "愤怒": (-0.24, 0.8),
+            "恐惧": (-0.21, 0.7),
+            "悲伤": (-0.21, 0.3),
+            "厌恶": (-0.12, 0.4),
+            "惊讶": (0.06, 0.7),
+            "困惑": (0.0, 0.6),
+            "平静": (0.03, 0.5),
         }
 
         # 情绪文本映射表
@@ -86,7 +94,7 @@ class MoodManager:
             cls._instance = MoodManager()
         return cls._instance
 
-    def start_mood_update(self, update_interval: float = 1.0) -> None:
+    def start_mood_update(self, update_interval: float = 5.0) -> None:
         """
         启动情绪更新线程
         :param update_interval: 更新间隔（秒）
@@ -122,7 +130,7 @@ class MoodManager:
         time_diff = current_time - self.last_update
 
         # Valence 向中性（0）回归
-        valence_target = 0.0
+        valence_target = 0
         self.current_mood.valence = valence_target + (self.current_mood.valence - valence_target) * math.exp(
             -self.decay_rate_valence * time_diff
         )
@@ -221,9 +229,15 @@ class MoodManager:
         :param intensity: 情绪强度（0.0-1.0）
         """
         if emotion not in self.emotion_map:
+            logger.debug(f"[情绪更新] 未知情绪词: {emotion}")
             return
 
         valence_change, arousal_change = self.emotion_map[emotion]
+        old_valence = self.current_mood.valence
+        old_arousal = self.current_mood.arousal
+        old_mood = self.current_mood.text
+
+        valence_change *= relationship_manager.gain_coefficient[relationship_manager.positive_feedback_value]
 
         # 应用情绪强度
         valence_change *= intensity
@@ -236,5 +250,8 @@ class MoodManager:
         # 限制范围
         self.current_mood.valence = max(-1.0, min(1.0, self.current_mood.valence))
         self.current_mood.arousal = max(0.0, min(1.0, self.current_mood.arousal))
-
+        
         self._update_mood_text()
+
+        logger.info(f"[情绪变化] {emotion}(强度:{intensity:.2f}) | 愉悦度:{old_valence:.2f}->{self.current_mood.valence:.2f}, 唤醒度:{old_arousal:.2f}->{self.current_mood.arousal:.2f} | 心情:{old_mood}->{self.current_mood.text}")
+
