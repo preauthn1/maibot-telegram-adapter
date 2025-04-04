@@ -163,7 +163,7 @@ class MassageBuffer:
         if len(message_interval_list) < 1000:
             message_interval_list.append(now_time_ms)
         else:
-            message_interval_list = message_interval_list.pop(0)
+            message_interval_list.pop(0)
             message_interval_list.append(now_time_ms)
         data = {
             "platform" : message.platform,
