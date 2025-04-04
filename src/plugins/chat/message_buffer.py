@@ -122,11 +122,11 @@ class MassageBuffer:
                     keep_msgs = OrderedDict()
                     combined_text = []
                     found = False
-                    is_text = False
+                    type = "text"
                     for msg_id, msg in self.buffer_pool[person_id_].items():
                         if msg_id == message.message_info.message_id:
                             found = True
-                            is_text = msg.message.message_segment.type == "text"
+                            type = msg.message.message_segment.type
                             combined_text.append(msg.message.processed_plain_text)
                             continue
                         if found:
@@ -141,9 +141,15 @@ class MassageBuffer:
                             logger.debug(f"异常未处理信息id： {msg.message.message_info.message_id}")
 
                     # 更新当前消息的processed_plain_text
-                    if combined_text and combined_text[0] != message.processed_plain_text and is_text:
-                        message.processed_plain_text = "".join(combined_text)
-                        logger.debug(f"整合了{len(combined_text)-1}条F消息的内容到当前消息")
+                    if combined_text and combined_text[0] != message.processed_plain_text:
+                        if type == "text":
+                            message.processed_plain_text = "".join(combined_text)
+                            logger.debug(f"整合了{len(combined_text)-1}条F消息的内容到当前消息")
+                        elif type == "image":
+                            combined_text.pop()
+                            message.processed_plain_text = "".join(combined_text)
+                            message.is_emoji = False
+                            logger.debug(f"整合了{len(combined_text)-1}条F消息的内容，覆盖当前image消息")
 
                     self.buffer_pool[person_id_] = keep_msgs
             return result
