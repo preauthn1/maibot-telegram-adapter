@@ -10,6 +10,7 @@ import numpy
 
 import matplotlib.pyplot as plt
 from pathlib import Path
+import pandas as pd
 
 """
 PersonInfoManager 类方法功能摘要：
@@ -232,6 +233,7 @@ class PersonInfoManager:
                 logger.info(f"个人信息推断启动: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
                 # "msg_interval"推断
+                msg_interval_map = False
                 msg_interval_lists = await self.get_specific_value_list(
                     "msg_interval_list", 
                     lambda x: isinstance(x, list) and len(x) >= 100
@@ -241,35 +243,42 @@ class PersonInfoManager:
                         time_interval = []
                         for t1, t2 in zip(msg_interval_list_, msg_interval_list_[1:]):
                             delta = t2 - t1
-                            if delta < 6000:  # 小于6秒
+                            if delta < 6000 and delta > 0:  # 小于6秒
                                 time_interval.append(delta)
 
                         if len(time_interval) > 30:
                             time_interval.sort()
 
                             # 画图(log)
+                            msg_interval_map = True
                             log_dir = Path("logs/person_info")
                             log_dir.mkdir(parents=True, exist_ok=True)
                             plt.figure(figsize=(10, 6))
 
-                            plt.hist(time_interval, bins=30, density=True, alpha=0.5, color='g')
+                            time_series = pd.Series(time_interval)
 
-                            plt.grid(True, alpha=0.3)
+                            # 绘制直方图
+                            plt.hist(time_series, bins=50, density=True, alpha=0.4, color='pink', label='Histogram')
 
-                            plt.title(f"Message Interval Density (User: {person_id[:8]}...)")
+                            # 绘制KDE曲线（使用相同的实际数据）
+                            time_series.plot(kind='kde', color='mediumpurple', linewidth=1, label='Density')
+
+                            plt.grid(True, alpha=0.2)
+                            plt.xlim(0, 6000)
+                            plt.title(f"Message Interval Distribution (User: {person_id[:8]}...)")
                             plt.xlabel("Interval (ms)")
                             plt.ylabel("Density")
+                            plt.legend(framealpha=0.9, facecolor='white')
 
-                            img_path = log_dir / f"interval_density_{person_id[:8]}.png"
+                            img_path = log_dir / f"interval_distribution_{person_id[:8]}.png"
                             plt.savefig(img_path)
                             plt.close()
-                            logger.info(f"已保存分布图到: {img_path}")
                             # 画图
                             
                             filtered_intervals = [t for t in time_interval if t >= 500]
                             if len(filtered_intervals) > 25:
-                                msg_interval = numpy.percentile(filtered_intervals, 90)
-                                await self.update_one_field(person_id, "msg_interval", int(msg_interval))
+                                msg_interval = int(round(numpy.percentile(filtered_intervals, 90)))
+                                await self.update_one_field(person_id, "msg_interval", msg_interval)
                                 logger.debug(f"用户{person_id}的msg_interval已经被更新为{msg_interval}")
                     except Exception as e:
                         logger.debug(f"处理用户{person_id}msg_interval推断时出错: {str(e)}")
@@ -277,6 +286,8 @@ class PersonInfoManager:
 
                 # 其他...
 
+                if msg_interval_map:
+                    logger.info(f"已保存分布图到: logs/person_info")
                 logger.info(f"个人信息推断结束: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 await asyncio.sleep(86400)
 
