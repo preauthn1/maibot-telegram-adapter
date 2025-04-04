@@ -198,7 +198,12 @@ class ThinkFlowChat:
         # 查询缓冲器结果，会整合前面跳过的消息，改变processed_plain_text
         buffer_result = await message_buffer.query_buffer_result(message)
         if not buffer_result:
-            logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
+            if message.message_segment.type == "text":
+                logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
+            elif message.message_segment.type == "image":
+                logger.info(f"触发缓冲，已炸飞表情包/图片")
+            elif message.message_segment.type == "seglist":
+                logger.info(f"触发缓冲，已炸飞消息列")
             return
 
         is_mentioned = is_mentioned_bot_in_message(message)

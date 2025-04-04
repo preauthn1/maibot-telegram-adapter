@@ -4,6 +4,7 @@ import copy
 import hashlib
 from typing import Any, Callable, Dict, TypeVar
 T = TypeVar('T')  # 泛型类型
+import datetime
 
 """
 PersonInfoManager 类方法功能摘要：
@@ -15,6 +16,7 @@ PersonInfoManager 类方法功能摘要：
 6. get_values - 批量获取字段值（任一字段无效则返回空字典）
 7. del_all_undefined_field - 清理全集合中未定义的字段
 8. get_specific_value_list - 根据指定条件，返回person_id,value字典
+9. personal_habit_deduction - 定时推断个人习惯
 """
 
 logger = get_module_logger("person_info")
@@ -30,11 +32,13 @@ person_info_default = {
     # "impression" : None,
     # "gender" : Unkown,
     "konw_time" : 0,
-    "msg_interval": 3000
+    "msg_interval": 3000,
+    "msg_interval_list": []
 }  # 个人信息的各项与默认值在此定义，以下处理会自动创建/补全每一项
 
 class PersonInfoManager:
     def __init__(self):
+        self.start_time = datetime.datetime.now()
         if "person_info" not in db.list_collection_names():
             db.create_collection("person_info")
             db.person_info.create_index("person_id", unique=True)
@@ -109,8 +113,9 @@ class PersonInfoManager:
         if document and field_name in document:
             return document[field_name]
         else:
-            logger.debug(f"获取{person_id}的{field_name}失败，已返回默认值{person_info_default[field_name]}")
-            return person_info_default[field_name]
+            default_value = copy.deepcopy(person_info_default[field_name])
+            logger.debug(f"获取{person_id}的{field_name}失败，已返回默认值{default_value}")
+            return default_value
         
     async def get_values(self, person_id: str, field_names: list) -> dict:
         """获取指定person_id文档的多个字段值，若不存在该字段，则返回该字段的全局默认值"""
@@ -134,7 +139,10 @@ class PersonInfoManager:
 
         result = {}
         for field in field_names:
-            result[field] = document.get(field, person_info_default[field]) if document else person_info_default[field]
+            result[field] = copy.deepcopy(
+                document.get(field, person_info_default[field]) 
+                if document else person_info_default[field]
+            )
 
         return result
     
@@ -210,5 +218,36 @@ class PersonInfoManager:
         except Exception as e:
             logger.error(f"数据库查询失败: {str(e)}", exc_info=True)
             return {}
+        
+    async def personal_habit_deduction(self):
+        """启动个人信息推断，每天根据一定条件推断一次"""
+        try:
+            logger.info(f"个人信息推断启动: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        #     # 初始化日程
+        #     await self.check_and_create_today_schedule()
+        #     self.print_schedule()
+
+        #     while True:
+        #         # print(self.get_current_num_task(1, True))
+
+        #         current_time = datetime.datetime.now()
+
+        #         # 检查是否需要重新生成日程（日期变化）
+        #         if current_time.date() != self.start_time.date():
+        #             logger.info("检测到日期变化，重新生成日程")
+        #             self.start_time = current_time
+        #             await self.check_and_create_today_schedule()
+        #             self.print_schedule()
+
+        #         # 执行当前活动
+        #         # mind_thinking = heartflow.current_state.current_mind
+
+        #         await self.move_doing()
+
+        #         await asyncio.sleep(self.schedule_doing_update_interval)
+
+        except Exception as e:
+            logger.error(f"个人信息推断运行时出错: {str(e)}")
+            logger.exception("详细错误信息：")
 
 person_info_manager =  PersonInfoManager()
