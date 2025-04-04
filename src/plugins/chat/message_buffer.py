@@ -1,12 +1,11 @@
 from ..person_info.person_info import person_info_manager
 from src.common.logger import get_module_logger
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from .message import MessageRecv
 from ..message.message_base import BaseMessageInfo
 import hashlib
 from typing import Dict
-from dataclasses import field
 from collections import OrderedDict
 import random
 import time
@@ -59,7 +58,7 @@ class MessageBuffer:
                 return
 
             # 标记该用户之前的未处理消息
-            for cache_msg in self.buffer_pool[person_id_].values:
+            for cache_msg in self.buffer_pool[person_id_].values():
                 if cache_msg.result == "U":
                     cache_msg.result = "F"
                     cache_msg.cache_determination.set()
