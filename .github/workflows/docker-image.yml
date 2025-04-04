@@ -61,12 +61,3 @@ jobs:
           labels: |
             org.opencontainers.image.created=${{ steps.tags.outputs.date_tag }}
             org.opencontainers.image.revision=${{ github.sha }}
-
-      - name: Docker Hub Description
-        #这里是通过md文件自动生成dockerhub描述的模块，也可以不需要
-        uses: peter-evans/dockerhub-description@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: MaiM-with-u/MaiBot
-          readme-filepath: ./README.md
