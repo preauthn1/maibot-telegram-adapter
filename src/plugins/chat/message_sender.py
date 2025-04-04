@@ -69,9 +69,14 @@ class Message_Sender:
                     if end_point:
                         # logger.info(f"发送消息到{end_point}")
                         # logger.info(message_json)
-                        await global_api.send_message(end_point, message_json)
+                        await global_api.send_message_REST(end_point, message_json)
                     else:
-                        raise ValueError(f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件")
+                        try:
+                            await global_api.send_message(message)
+                        except Exception as e:
+                            raise ValueError(
+                                f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件"
+                            ) from e
                     logger.success(f"发送消息“{message_preview}”成功")
                 except Exception as e:
                     logger.error(f"发送消息“{message_preview}”失败: {str(e)}")
@@ -192,11 +197,13 @@ class MessageManager:
                 thinking_time = message_earliest.update_thinking_time()
                 thinking_start_time = message_earliest.thinking_start_time
                 now_time = time.time()
-                thinking_messages_count, thinking_messages_length = count_messages_between(start_time=thinking_start_time, end_time=now_time, stream_id=message_earliest.chat_stream.stream_id)
+                thinking_messages_count, thinking_messages_length = count_messages_between(
+                    start_time=thinking_start_time, end_time=now_time, stream_id=message_earliest.chat_stream.stream_id
+                )
                 # print(thinking_time)
                 # print(thinking_messages_count)
                 # print(thinking_messages_length)
-                
+
                 if (
                     message_earliest.is_head
                     and (thinking_messages_count > 4 or thinking_messages_length > 250)
@@ -224,7 +231,9 @@ class MessageManager:
                         thinking_time = msg.update_thinking_time()
                         thinking_start_time = msg.thinking_start_time
                         now_time = time.time()
-                        thinking_messages_count, thinking_messages_length = count_messages_between(start_time=thinking_start_time, end_time=now_time, stream_id=msg.chat_stream.stream_id)
+                        thinking_messages_count, thinking_messages_length = count_messages_between(
+                            start_time=thinking_start_time, end_time=now_time, stream_id=msg.chat_stream.stream_id
+                        )
                         # print(thinking_time)
                         # print(thinking_messages_count)
                         # print(thinking_messages_length)
