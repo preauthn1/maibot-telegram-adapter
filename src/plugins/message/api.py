@@ -29,7 +29,10 @@ class BaseMessageHandler:
             try:
                 tasks.append(handler(message))
             except Exception as e:
-                raise RuntimeError(str(e)) from e
+                logger.error(f"消息处理出错: {str(e)}")
+                logger.error(traceback.format_exc())
+                # 不抛出异常，而是记录错误并继续处理其他消息
+                continue
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
