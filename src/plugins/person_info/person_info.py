@@ -2,7 +2,7 @@ from src.common.logger import get_module_logger
 from ...common.database import db
 import copy
 import hashlib
-from typing import Any, Callable, Dict, TypeVar
+from typing import Any, Callable, Dict
 import datetime
 import asyncio
 import numpy
@@ -286,7 +286,7 @@ class PersonInfoManager:
                 # 其他...
 
                 if msg_interval_map:
-                    logger.info(f"已保存分布图到: logs/person_info")
+                    logger.info("已保存分布图到: logs/person_info")
                 logger.info(f"个人信息推断结束: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 await asyncio.sleep(86400)
 
