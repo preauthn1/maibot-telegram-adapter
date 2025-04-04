@@ -46,6 +46,13 @@ class MessageBuffer:
             if person_id_ not in self.buffer_pool:
                 self.buffer_pool[person_id_] = OrderedDict()
 
+            # 标记该用户之前的未处理消息
+            for cache_msg in self.buffer_pool[person_id_].values():
+                if cache_msg.result == "U":
+                    cache_msg.result = "F"
+                    cache_msg.cache_determination.set()
+                    logger.debug(f"被新消息覆盖信息id: {cache_msg.message.message_info.message_id}")
+
             # 查找最近的处理成功消息(T)
             recent_F_count = 0
             for msg_id in reversed(self.buffer_pool[person_id_]):
@@ -62,13 +69,6 @@ class MessageBuffer:
                 self.buffer_pool[person_id_][message.message_info.message_id] = new_msg
                 logger.debug(f"快速处理消息(已堆积{recent_F_count}条F): {message.message_info.message_id}")
                 return
-
-            # 标记该用户之前的未处理消息
-            for cache_msg in self.buffer_pool[person_id_].values():
-                if cache_msg.result == "U":
-                    cache_msg.result = "F"
-                    cache_msg.cache_determination.set()
-                    logger.debug(f"被新消息覆盖信息id: {cache_msg.message.message_info.message_id}")
             
             # 添加新消息
             self.buffer_pool[person_id_][message.message_info.message_id] = CacheMessages(message=message)
@@ -93,7 +93,7 @@ class MessageBuffer:
         async with self.lock:
             if (person_id_ not in self.buffer_pool or 
                 message_id not in self.buffer_pool[person_id_]):
-                logger.debug(f"消息异常被清理，msgid: {message_id}")
+                logger.debug(f"消息已被清理，msgid: {message_id}")
                 return
             
             cache_msg = self.buffer_pool[person_id_][message_id]
