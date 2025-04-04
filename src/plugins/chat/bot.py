@@ -96,11 +96,11 @@ class ChatBot:
                         await self._create_PFC_chat(message)
                     else:
                         if groupinfo.group_id in global_config.talk_allowed_groups:
-                            logger.debug(f"开始群聊模式{message_data}")
+                            logger.debug(f"开始群聊模式{str(message_data)[:50]}...")
                             if global_config.response_mode == "heart_flow":
                                 await self.think_flow_chat.process_message(message_data)
                             elif global_config.response_mode == "reasoning":
-                                logger.debug(f"开始推理模式{message_data}")
+                                logger.debug(f"开始推理模式{str(message_data)[:50]}...")
                                 await self.reasoning_chat.process_message(message_data)
                             else:
                                 logger.error(f"未知的回复模式，请检查配置文件！！: {global_config.response_mode}")
