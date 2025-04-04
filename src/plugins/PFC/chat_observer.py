@@ -57,6 +57,15 @@ class ChatObserver:
         self._update_event = asyncio.Event()  # 触发更新的事件
         self._update_complete = asyncio.Event()  # 更新完成的事件
     
+    def check(self) -> bool:
+        """检查距离上一次观察之后是否有了新消息
+        
+        Returns:
+            bool: 是否有新消息
+        """
+        return self.new_message_after(self.last_check_time)
+    
+    
     def new_message_after(self, time_point: float) -> bool:
         """判断是否在指定时间点后有新消息
         

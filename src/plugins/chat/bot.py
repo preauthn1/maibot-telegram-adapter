@@ -42,11 +42,24 @@ class ChatBot:
             
             if global_config.enable_pfc_chatting:
                 # 获取或创建对话实例
-                conversation = Conversation.get_instance(chat_id)
+                conversation = await Conversation.get_instance(chat_id)
+                if conversation is None:
+                    logger.error(f"创建或获取对话实例失败: {chat_id}")
+                    return
+                    
                 # 如果是新创建的实例，启动对话系统
                 if conversation.state == ConversationState.INIT:
                     asyncio.create_task(conversation.start())
                     logger.info(f"为聊天 {chat_id} 创建新的对话实例")
+                elif conversation.state == ConversationState.ENDED:
+                    # 如果实例已经结束，重新创建
+                    await Conversation.remove_instance(chat_id)
+                    conversation = await Conversation.get_instance(chat_id)
+                    if conversation is None:
+                        logger.error(f"重新创建对话实例失败: {chat_id}")
+                        return
+                    asyncio.create_task(conversation.start())
+                    logger.info(f"为聊天 {chat_id} 重新创建对话实例")
         except Exception as e:
             logger.error(f"创建PFC聊天流失败: {e}")
 
