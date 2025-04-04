@@ -9,7 +9,7 @@ from .message import MessageSending, MessageThinking, MessageSet
 
 from ..storage.storage import MessageStorage
 from ..config.config import global_config
-from .utils import truncate_message, calculate_typing_time
+from .utils import truncate_message, calculate_typing_time, count_messages_between
 
 from src.common.logger import LogConfig, SENDER_STYLE_CONFIG
 
@@ -69,9 +69,14 @@ class Message_Sender:
                     if end_point:
                         # logger.info(f"发送消息到{end_point}")
                         # logger.info(message_json)
-                        await global_api.send_message(end_point, message_json)
+                        await global_api.send_message_REST(end_point, message_json)
                     else:
-                        raise ValueError(f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件")
+                        try:
+                            await global_api.send_message(message)
+                        except Exception as e:
+                            raise ValueError(
+                                f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件"
+                            ) from e
                     logger.success(f"发送消息“{message_preview}”成功")
                 except Exception as e:
                     logger.error(f"发送消息“{message_preview}”失败: {str(e)}")
@@ -85,16 +90,16 @@ class MessageContainer:
         self.max_size = max_size
         self.messages = []
         self.last_send_time = 0
-        self.thinking_timeout = 10  # 思考等待超时时间（秒）
+        self.thinking_wait_timeout = 20  # 思考等待超时时间（秒）
 
     def get_timeout_messages(self) -> List[MessageSending]:
-        """获取所有超时的Message_Sending对象（思考时间超过30秒），按thinking_start_time排序"""
+        """获取所有超时的Message_Sending对象（思考时间超过20秒），按thinking_start_time排序"""
         current_time = time.time()
         timeout_messages = []
 
         for msg in self.messages:
             if isinstance(msg, MessageSending):
-                if current_time - msg.thinking_start_time > self.thinking_timeout:
+                if current_time - msg.thinking_start_time > self.thinking_wait_timeout:
                     timeout_messages.append(msg)
 
         # 按thinking_start_time排序，时间早的在前面
@@ -172,6 +177,7 @@ class MessageManager:
             message_earliest = container.get_earliest_message()
 
             if isinstance(message_earliest, MessageThinking):
+                """取得了思考消息"""
                 message_earliest.update_thinking_time()
                 thinking_time = message_earliest.thinking_time
                 # print(thinking_time)
@@ -187,14 +193,20 @@ class MessageManager:
                     container.remove_message(message_earliest)
 
             else:
-                # print(message_earliest.is_head)
-                # print(message_earliest.update_thinking_time())
-                # print(message_earliest.is_private_message())
+                """取得了发送消息"""
                 thinking_time = message_earliest.update_thinking_time()
-                print(thinking_time)
+                thinking_start_time = message_earliest.thinking_start_time
+                now_time = time.time()
+                thinking_messages_count, thinking_messages_length = count_messages_between(
+                    start_time=thinking_start_time, end_time=now_time, stream_id=message_earliest.chat_stream.stream_id
+                )
+                # print(thinking_time)
+                # print(thinking_messages_count)
+                # print(thinking_messages_length)
+
                 if (
                     message_earliest.is_head
-                    and message_earliest.update_thinking_time() > 18
+                    and (thinking_messages_count > 4 or thinking_messages_length > 250)
                     and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                 ):
                     logger.debug(f"设置回复消息{message_earliest.processed_plain_text}")
@@ -216,12 +228,18 @@ class MessageManager:
                         continue
 
                     try:
-                        # print(msg.is_head)
-                        print(msg.update_thinking_time())
-                        # print(msg.is_private_message())
+                        thinking_time = msg.update_thinking_time()
+                        thinking_start_time = msg.thinking_start_time
+                        now_time = time.time()
+                        thinking_messages_count, thinking_messages_length = count_messages_between(
+                            start_time=thinking_start_time, end_time=now_time, stream_id=msg.chat_stream.stream_id
+                        )
+                        # print(thinking_time)
+                        # print(thinking_messages_count)
+                        # print(thinking_messages_length)
                         if (
                             msg.is_head
-                            and msg.update_thinking_time() > 18
+                            and (thinking_messages_count > 4 or thinking_messages_length > 250)
                             and not msg.is_private_message()  # 避免在私聊时插入reply
                         ):
                             logger.debug(f"设置回复消息{msg.processed_plain_text}")
