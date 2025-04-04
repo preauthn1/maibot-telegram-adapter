@@ -16,7 +16,7 @@
 - MongoDB 提供数据持久化支持
 - 可扩展，可支持多种平台和多种功能
 
-**最新版本: v0.6.0** ([查看更新日志](changelog.md))
+**最新版本: v0.6.0** ([查看更新日志](changelogs/changelog.md))
 > [!WARNING]
 > 次版本MaiBot将基于MaiCore运行，不再依赖于nonebot相关组件运行。
 > MaiBot将通过nonebot的插件与nonebot建立联系，然后nonebot与QQ建立联系，实现MaiBot与QQ的交互
