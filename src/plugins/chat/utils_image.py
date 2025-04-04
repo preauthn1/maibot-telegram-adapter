@@ -5,8 +5,6 @@ import hashlib
 from typing import Optional
 from PIL import Image
 import io
-import math
-import numpy as np
 
 
 from ...common.database import db
