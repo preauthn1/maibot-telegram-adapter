@@ -348,19 +348,18 @@ class ReplyGenerator:
         knowledge_cache: Dict[str, str],
         previous_reply: Optional[str] = None,
         retry_count: int = 0
-    ) -> Tuple[str, bool]:
+    ) -> str:
         """生成回复
         
         Args:
             goal: 对话目标
-            method: 实现方式
             chat_history: 聊天历史
             knowledge_cache: 知识缓存
             previous_reply: 上一次生成的回复（如果有）
             retry_count: 当前重试次数
             
         Returns:
-            Tuple[str, bool]: (生成的回复, 是否需要重新规划)
+            str: 生成的回复
         """
         # 构建提示词
         logger.debug(f"开始生成回复：当前目标: {goal}")
@@ -421,29 +420,40 @@ class ReplyGenerator:
         try:
             content, _ = await self.llm.generate_response_async(prompt)
             logger.info(f"生成的回复: {content}")
+            is_new = self.chat_observer.check()
+            logger.debug(f"再看一眼聊天记录，{'有' if is_new else '没有'}新消息")
             
-            # 检查生成的回复是否合适
-            is_suitable, reason, need_replan = await self.reply_checker.check(
-                content, goal, retry_count
-            )
-            
-            if not is_suitable:
-                logger.warning(f"生成的回复不合适，原因: {reason}")
-                if need_replan:
-                    logger.info("需要重新规划对话目标")
-                    return "让我重新思考一下...", True
-                else:
-                    # 递归调用，将当前回复作为previous_reply传入
-                    return await self.generate(
-                        goal, chat_history, knowledge_cache, 
-                        content, retry_count + 1
-                    )
+            # 如果有新消息,重新生成回复
+            if is_new:
+                logger.info("检测到新消息,重新生成回复")
+                return await self.generate(
+                    goal, chat_history, knowledge_cache,
+                    None, retry_count
+                )
                 
-            return content, False
+            return content
             
         except Exception as e:
             logger.error(f"生成回复时出错: {e}")
-            return "抱歉，我现在有点混乱，让我重新思考一下...", True
+            return "抱歉，我现在有点混乱，让我重新思考一下..."
+
+    async def check_reply(
+        self,
+        reply: str,
+        goal: str,
+        retry_count: int = 0
+    ) -> Tuple[bool, str, bool]:
+        """检查回复是否合适
+        
+        Args:
+            reply: 生成的回复
+            goal: 对话目标
+            retry_count: 当前重试次数
+            
+        Returns:
+            Tuple[bool, str, bool]: (是否合适, 原因, 是否需要重新规划)
+        """
+        return await self.reply_checker.check(reply, goal, retry_count)
 
 
 class Conversation:
@@ -620,17 +630,53 @@ class Conversation:
         if action == "direct_reply":
             self.state = ConversationState.GENERATING
             messages = self.chat_observer.get_message_history(limit=30)
-            self.generated_reply, need_replan = await self.reply_generator.generate(
+            self.generated_reply = await self.reply_generator.generate(
                 self.current_goal,
                 self.current_method,
                 [self._convert_to_message(msg) for msg in messages],
                 self.knowledge_cache
             )
-            if need_replan:
-                self.state = ConversationState.RETHINKING
-                self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
-            else:
-                await self._send_reply()
+            
+            # 检查回复是否合适
+            is_suitable, reason, need_replan = await self.reply_generator.check_reply(
+                self.generated_reply,
+                self.current_goal
+            )
+            
+            if not is_suitable:
+                    logger.warning(f"生成的回复不合适，原因: {reason}")
+                    if need_replan:
+                        self.state = ConversationState.RETHINKING
+                        self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
+                        return
+                    else:
+                        # 重新生成回复
+                        self.generated_reply = await self.reply_generator.generate(
+                            self.current_goal,
+                            self.current_method,
+                            [self._convert_to_message(msg) for msg in messages],
+                            self.knowledge_cache,
+                            self.generated_reply  # 将不合适的回复作为previous_reply传入
+                        )
+            
+            while self.chat_observer.check():
+                if not is_suitable:
+                    logger.warning(f"生成的回复不合适，原因: {reason}")
+                    if need_replan:
+                        self.state = ConversationState.RETHINKING
+                        self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
+                        return
+                    else:
+                        # 重新生成回复
+                        self.generated_reply = await self.reply_generator.generate(
+                            self.current_goal,
+                            self.current_method,
+                            [self._convert_to_message(msg) for msg in messages],
+                            self.knowledge_cache,
+                            self.generated_reply  # 将不合适的回复作为previous_reply传入
+                        )
+            
+            await self._send_reply()
             
         elif action == "fetch_knowledge":
             self.state = ConversationState.GENERATING
@@ -644,17 +690,36 @@ class Conversation:
             if knowledge != "未找到相关知识":
                 self.knowledge_cache[sources] = knowledge
             
-            self.generated_reply, need_replan = await self.reply_generator.generate(
+            self.generated_reply = await self.reply_generator.generate(
                 self.current_goal,
                 self.current_method,
                 [self._convert_to_message(msg) for msg in messages],
                 self.knowledge_cache
             )
-            if need_replan:
-                self.state = ConversationState.RETHINKING
-                self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
-            else:
-                await self._send_reply()
+            
+            # 检查回复是否合适
+            is_suitable, reason, need_replan = await self.reply_generator.check_reply(
+                self.generated_reply,
+                self.current_goal
+            )
+            
+            if not is_suitable:
+                logger.warning(f"生成的回复不合适，原因: {reason}")
+                if need_replan:
+                    self.state = ConversationState.RETHINKING
+                    self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
+                    return
+                else:
+                    # 重新生成回复
+                    self.generated_reply = await self.reply_generator.generate(
+                        self.current_goal,
+                        self.current_method,
+                        [self._convert_to_message(msg) for msg in messages],
+                        self.knowledge_cache,
+                        self.generated_reply  # 将不合适的回复作为previous_reply传入
+                    )
+            
+            await self._send_reply()
         
         elif action == "rethink_goal":
             self.state = ConversationState.RETHINKING
