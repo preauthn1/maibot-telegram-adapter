@@ -181,9 +181,9 @@ class ReasoningChat:
             if message.message_segment.type == "text":
                 logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
             elif message.message_segment.type == "image":
-                logger.info(f"触发缓冲，已炸飞表情包/图片")
+                logger.info("触发缓冲，已炸飞表情包/图片")
             elif message.message_segment.type == "seglist":
-                logger.info(f"触发缓冲，已炸飞消息列")
+                logger.info("触发缓冲，已炸飞消息列")
             return
 
         is_mentioned = is_mentioned_bot_in_message(message)

@@ -3,14 +3,13 @@ from ...common.database import db
 import copy
 import hashlib
 from typing import Any, Callable, Dict, TypeVar
-T = TypeVar('T')  # 泛型类型
 import datetime
 import asyncio
 import numpy
-
 import matplotlib.pyplot as plt
 from pathlib import Path
 import pandas as pd
+
 
 """
 PersonInfoManager 类方法功能摘要：

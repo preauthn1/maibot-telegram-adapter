@@ -6,7 +6,7 @@ from .message import MessageRecv
 from ..message.message_base import BaseMessageInfo
 import hashlib
 from typing import Dict
-from dataclasses import dataclass, field
+from dataclasses import field
 from collections import OrderedDict
 import random
 import time
@@ -20,7 +20,7 @@ class CacheMessages:
     result: str = "U"
 
 
-class MassageBuffer:
+class MessageBuffer:
     def __init__(self):
         self.buffer_pool: Dict[str, OrderedDict[str, CacheMessages]] = {}
         self.lock = asyncio.Lock()
@@ -59,7 +59,7 @@ class MassageBuffer:
                 return
 
             # 标记该用户之前的未处理消息
-            for msg_id, cache_msg in self.buffer_pool[person_id_].items():
+            for cache_msg in self.buffer_pool[person_id_].values:
                 if cache_msg.result == "U":
                     cache_msg.result = "F"
                     cache_msg.cache_determination.set()
@@ -174,4 +174,4 @@ class MassageBuffer:
         await person_info_manager.update_one_field(person_id, "msg_interval_list", message_interval_list, data)
 
 
-message_buffer = MassageBuffer()
+message_buffer = MessageBuffer()
