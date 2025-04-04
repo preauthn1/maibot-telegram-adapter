@@ -30,6 +30,7 @@ person_info_default = {
     # "impression" : None,
     # "gender" : Unkown,
     "konw_time" : 0,
+    "msg_interval": 3000
 }  # 个人信息的各项与默认值在此定义，以下处理会自动创建/补全每一项
 
 class PersonInfoManager:

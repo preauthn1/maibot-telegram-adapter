@@ -18,6 +18,7 @@ from src.heart_flow.heartflow import heartflow
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ...chat.chat_stream import chat_manager
 from ...person_info.relationship_manager import relationship_manager
+from ...chat.message_buffer import message_buffer
 
 # 定义日志配置
 chat_config = LogConfig(
@@ -161,6 +162,8 @@ class ThinkFlowChat:
         userinfo = message.message_info.user_info
         messageinfo = message.message_info
 
+        # 消息加入缓冲池
+        await message_buffer.start_caching_messages(message)
 
         # 创建聊天流
         chat = await chat_manager.get_or_create_stream(
@@ -192,7 +195,14 @@ class ThinkFlowChat:
         timing_results["记忆激活"] = timer2 - timer1
         logger.debug(f"记忆激活: {interested_rate}")
 
+        # 查询缓冲器结果，会整合前面跳过的消息，改变processed_plain_text
+        buffer_result = await message_buffer.query_buffer_result(message)
+        if not buffer_result:
+            logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
+            return
+
         is_mentioned = is_mentioned_bot_in_message(message)
+
 
         # 计算回复意愿
         current_willing_old = willing_manager.get_willing(chat_stream=chat)
