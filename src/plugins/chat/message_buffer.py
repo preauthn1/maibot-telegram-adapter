@@ -9,6 +9,7 @@ from typing import Dict
 from collections import OrderedDict
 import random
 import time
+from ..config.config import global_config
 
 logger = get_module_logger("message_buffer")
 
@@ -32,6 +33,11 @@ class MessageBuffer:
 
     async def start_caching_messages(self, message:MessageRecv):
         """添加消息，启动缓冲"""
+        if not global_config.message_buffer:
+            person_id = person_info_manager.get_person_id(message.message_info.user_info.platform,
+                                                      message.message_info.user_info.user_id)
+            asyncio.create_task(self.save_message_interval(person_id, message.message_info))
+            return
         person_id_ = self.get_person_id_(message.message_info.platform,
                                              message.message_info.user_info.user_id,
                                              message.message_info.group_info.group_id)
@@ -98,6 +104,8 @@ class MessageBuffer:
 
     async def query_buffer_result(self, message:MessageRecv) -> bool:
         """查询缓冲结果，并清理"""
+        if not global_config.message_buffer:
+            return True
         person_id_ = self.get_person_id_(message.message_info.platform,
                                          message.message_info.user_info.user_id,
                                          message.message_info.group_info.group_id)
@@ -122,6 +130,7 @@ class MessageBuffer:
                     combined_text = []
                     found = False
                     type = "text"
+                    is_update = True
                     for msg_id, msg in self.buffer_pool[person_id_].items():
                         if msg_id == message.message_info.message_id:
                             found = True
@@ -133,14 +142,16 @@ class MessageBuffer:
                         elif msg.result == "F":
                             # 收集F消息的文本内容
                             if (hasattr(msg.message, 'processed_plain_text') 
-                                and msg.message.message_segment.type == "text"
                                 and msg.message.processed_plain_text):
-                                combined_text.append(msg.message.processed_plain_text)
+                                if  msg.message.message_segment.type == "text":
+                                    combined_text.append(msg.message.processed_plain_text)
+                                elif msg.message.message_segment.type != "text":
+                                    is_update = False
                         elif msg.result == "U":
                             logger.debug(f"异常未处理信息id： {msg.message.message_info.message_id}")
 
                     # 更新当前消息的processed_plain_text
-                    if combined_text and combined_text[0] != message.processed_plain_text:
+                    if combined_text and combined_text[0] != message.processed_plain_text and is_update:
                         if type == "text":
                             message.processed_plain_text = "".join(combined_text)
                             logger.debug(f"整合了{len(combined_text)-1}条F消息的内容到当前消息")

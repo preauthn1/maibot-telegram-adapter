@@ -242,7 +242,7 @@ class PersonInfoManager:
                         time_interval = []
                         for t1, t2 in zip(msg_interval_list_, msg_interval_list_[1:]):
                             delta = t2 - t1
-                            if delta < 6000 and delta > 0:  # 小于6秒
+                            if delta < 8000 and delta > 0:  # 小于8秒
                                 time_interval.append(delta)
 
                         if len(time_interval) > 30:
@@ -263,7 +263,7 @@ class PersonInfoManager:
                             time_series.plot(kind='kde', color='mediumpurple', linewidth=1, label='Density')
 
                             plt.grid(True, alpha=0.2)
-                            plt.xlim(0, 6000)
+                            plt.xlim(0, 8000)
                             plt.title(f"Message Interval Distribution (User: {person_id[:8]}...)")
                             plt.xlabel("Interval (ms)")
                             plt.ylabel("Density")

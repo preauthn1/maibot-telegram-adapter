@@ -159,6 +159,7 @@ class BotConfig:
     emoji_chance: float = 0.2  # 发送表情包的基础概率
     thinking_timeout: int = 120  # 思考时间
     max_response_length: int = 1024  # 最大回复长度
+    message_buffer: bool = True  # 消息缓冲器
 
     ban_words = set()
     ban_msgs_regex = set()
@@ -502,6 +503,8 @@ class BotConfig:
 
             if config.INNER_VERSION in SpecifierSet(">=0.0.11"):
                 config.max_response_length = msg_config.get("max_response_length", config.max_response_length)
+            if config.INNER_VERSION in SpecifierSet(">=1.1.4"):
+                config.message_buffer = msg_config.get("message_buffer", config.message_buffer)
 
         def memory(parent: dict):
             memory_config = parent["memory"]
