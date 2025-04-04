@@ -21,7 +21,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Clone maim_message (refactor branch only)
+      - name: Clone maim_message
         run: git clone https://github.com/MaiM-with-u/maim_message maim_message
 
       - name: Set up Docker Buildx
@@ -44,7 +44,7 @@ jobs:
             echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/maimbot:classical,${{ secrets.DOCKERHUB_USERNAME }}/maimbot:classical-$(date -u +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref }}" == "refs/heads/dev" ]; then
             echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/maimbot:dev,${{ secrets.DOCKERHUB_USERNAME }}/maimbot:dev-$(date -u +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
-          elif [ "${{ github.ref }}" == "refs/heads/knowledge" ]; then 
+          elif [ "${{ github.ref }}" == "refs/heads/new_knowledge" ]; then 
             echo "tags=${{ secrets.DOCKERHUB_USERNAME }}/maimbot:knowledge,${{ secrets.DOCKERHUB_USERNAME }}/maimbot:knowledge-$(date -u +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
           fi
 
