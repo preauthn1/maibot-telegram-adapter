@@ -20,6 +20,9 @@
 
 **最新版本: v0.6.0** ([查看更新日志](changelogs/changelog.md))
 > [!WARNING]
+> 请阅读教程后更新！！！！！！！
+> 请阅读教程后更新！！！！！！！
+> 请阅读教程后更新！！！！！！！
 > 次版本MaiBot将基于MaiCore运行，不再依赖于nonebot相关组件运行。
 > MaiBot将通过nonebot的插件与nonebot建立联系，然后nonebot与QQ建立联系，实现MaiBot与QQ的交互
 
