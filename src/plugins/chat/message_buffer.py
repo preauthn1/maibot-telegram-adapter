@@ -155,11 +155,11 @@ class MessageBuffer:
                         if type == "text":
                             message.processed_plain_text = "".join(combined_text)
                             logger.debug(f"整合了{len(combined_text)-1}条F消息的内容到当前消息")
-                        elif type == "image":
+                        elif type == "emoji":
                             combined_text.pop()
                             message.processed_plain_text = "".join(combined_text)
                             message.is_emoji = False
-                            logger.debug(f"整合了{len(combined_text)-1}条F消息的内容，覆盖当前image消息")
+                            logger.debug(f"整合了{len(combined_text)-1}条F消息的内容，覆盖当前emoji消息")
 
                     self.buffer_pool[person_id_] = keep_msgs
             return result
