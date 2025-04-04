@@ -369,7 +369,18 @@ run_installation() {
 
     # 选择分支
     choose_branch() {
-        BRANCH=refactor
+        BRANCH=$(whiptail --title "🔀 选择分支" --radiolist "请选择要安装的分支：" 15 60 4 \
+            "main" "稳定最新版（推荐）" ON \
+            "classical" "经典版" OFF \
+            "custom" "自定义分支" OFF 3>&1 1>&2 2>&3)
+
+        if [[ "$BRANCH" == "custom" ]]; then
+            BRANCH=$(whiptail --title "🔀 自定义分支" --inputbox "请输入自定义分支名称：" 10 60 "refactor" 3>&1 1>&2 2>&3)
+            [[ -z "$BRANCH" ]] && {
+            whiptail --msgbox "🚫 分支名称不能为空！" 10 60
+            exit 1
+            }
+        fi
     }
     choose_branch
 
