@@ -95,6 +95,8 @@ class ThinkFlowChat:
             )
             if not mark_head:
                 mark_head = True
+                
+            # print(f"thinking_start_time:{bot_message.thinking_start_time}")
             message_set.add_message(bot_message)
         message_manager.add_message(message_set)
 
@@ -272,11 +274,11 @@ class ThinkFlowChat:
             timer2 = time.time()
             timing_results["发送消息"] = timer2 - timer1
 
-            # 处理表情包
+            # 发送表情包
             timer1 = time.time()
             await self._handle_emoji(message, chat, response_set)
             timer2 = time.time()
-            timing_results["处理表情包"] = timer2 - timer1
+            timing_results["发送表情包"] = timer2 - timer1
 
             # 更新心流
             timer1 = time.time()
