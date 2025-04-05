@@ -95,6 +95,8 @@ class ThinkFlowChat:
             )
             if not mark_head:
                 mark_head = True
+                
+            # print(f"thinking_start_time:{bot_message.thinking_start_time}")
             message_set.add_message(bot_message)
         message_manager.add_message(message_set)
 
