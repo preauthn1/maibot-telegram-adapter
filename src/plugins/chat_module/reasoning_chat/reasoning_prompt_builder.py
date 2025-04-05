@@ -167,30 +167,30 @@ class PromptBuilder:
         
         # 1. 先从LLM获取主题，类似于记忆系统的做法
         topics = []
-        try:
-            # 先尝试使用记忆系统的方法获取主题
-            hippocampus = HippocampusManager.get_instance()._hippocampus
-            topic_num = min(5, max(1, int(len(message) * 0.1)))
-            topics_response = await hippocampus.llm_topic_judge.generate_response(hippocampus.find_topic_llm(message, topic_num))
+        # try:
+        #     # 先尝试使用记忆系统的方法获取主题
+        #     hippocampus = HippocampusManager.get_instance()._hippocampus
+        #     topic_num = min(5, max(1, int(len(message) * 0.1)))
+        #     topics_response = await hippocampus.llm_topic_judge.generate_response(hippocampus.find_topic_llm(message, topic_num))
             
-            # 提取关键词
-            topics = re.findall(r"<([^>]+)>", topics_response[0])
-            if not topics:
-                topics = []
-            else:
-                topics = [
-                    topic.strip()
-                    for topic in ",".join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
-                    if topic.strip()
-                ]
+        #     # 提取关键词
+        #     topics = re.findall(r"<([^>]+)>", topics_response[0])
+        #     if not topics:
+        #         topics = []
+        #     else:
+        #         topics = [
+        #             topic.strip()
+        #             for topic in ",".join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
+        #             if topic.strip()
+        #         ]
             
-            logger.info(f"从LLM提取的主题: {', '.join(topics)}")
-        except Exception as e:
-            logger.error(f"从LLM提取主题失败: {str(e)}")
-            # 如果LLM提取失败，使用jieba分词提取关键词作为备选
-            words = jieba.cut(message)
-            topics = [word for word in words if len(word) > 1][:5]
-            logger.info(f"使用jieba提取的主题: {', '.join(topics)}")
+        #     logger.info(f"从LLM提取的主题: {', '.join(topics)}")
+        # except Exception as e:
+        #     logger.error(f"从LLM提取主题失败: {str(e)}")
+        #     # 如果LLM提取失败，使用jieba分词提取关键词作为备选
+        #     words = jieba.cut(message)
+        #     topics = [word for word in words if len(word) > 1][:5]
+        #     logger.info(f"使用jieba提取的主题: {', '.join(topics)}")
         
         # 如果无法提取到主题，直接使用整个消息
         if not topics:
