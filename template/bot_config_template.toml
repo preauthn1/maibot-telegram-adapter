@@ -34,14 +34,27 @@ talk_frequency_down = []  #降低回复频率的群号码
 ban_user_id = []  #禁止回复和读取消息的QQ号
 
 [personality]
-prompt_personality = [
-        "用一句话或几句话描述性格特点和其他特征",    
-        "例如，是一个热爱国家热爱党的新时代好青年",    
-        "例如，曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧"    
-    ]
-personality_1_probability = 0.7 # 第一种人格出现概率
-personality_2_probability = 0.2 # 第二种人格出现概率，可以为0
-personality_3_probability = 0.1 # 第三种人格出现概率，请确保三个概率相加等于1
+personality_core = "用一句话或几句话描述人格的核心特点" # 建议20字以内，谁再写3000字小作文敲谁脑袋
+personality_detail = [
+    "用一句话或几句话描述人格的一些细节",
+    "用一句话或几句话描述人格的一些细节",
+    "用一句话或几句话描述人格的一些细节",
+    "用一句话或几句话描述人格的一些细节",
+    "用一句话或几句话描述人格的一些细节",
+]# 条数任意
+
+[identity] #アイデンティティがない 生まれないらららら
+# 兴趣爱好
+identity_detail = [
+    "身份特点",
+    "身份特点",
+]# 条数任意
+#外貌特征
+height = 170 # 身高 单位厘米
+weight = 50 # 体重 单位千克
+age = 20 # 年龄 单位岁
+gender = "男" # 性别
+appearance = "用几句话描述外貌特征" # 外貌特征
 
 [schedule]
 enable_schedule_gen = true # 是否启用日程表(尚未完成)
