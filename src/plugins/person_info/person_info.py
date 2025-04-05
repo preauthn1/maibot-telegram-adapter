@@ -276,7 +276,7 @@ class PersonInfoManager:
                             
                             filtered_intervals = [t for t in time_interval if t >= 500]
                             if len(filtered_intervals) > 25:
-                                msg_interval = int(round(numpy.percentile(filtered_intervals, 90)))
+                                msg_interval = int(round(numpy.percentile(filtered_intervals, 80)))
                                 await self.update_one_field(person_id, "msg_interval", msg_interval)
                                 logger.debug(f"用户{person_id}的msg_interval已经被更新为{msg_interval}")
                     except Exception as e:
