@@ -1,7 +1,6 @@
 from typing import Dict, List
 import json
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 import sys
 import toml
@@ -18,9 +17,9 @@ with open(config_path, "r", encoding="utf-8") as f:
     config = toml.load(f)
 
 # 现在可以导入src模块
-from src.individuality.scene import get_scene_by_factor, PERSONALITY_SCENES
-from src.individuality.questionnaire import FACTOR_DESCRIPTIONS
-from src.individuality.offline_llm import LLM_request_off
+from src.individuality.scene import get_scene_by_factor, PERSONALITY_SCENES #noqa E402
+from src.individuality.questionnaire import FACTOR_DESCRIPTIONS #noqa E402
+from src.individuality.offline_llm import LLM_request_off #noqa E402
 
 # 加载环境变量
 env_path = os.path.join(root_path, ".env")
@@ -190,7 +189,7 @@ class PersonalityEvaluator_direct:
         total_scenarios = len(self.scenarios)
         progress_bar = tqdm(total=total_scenarios, desc="场景进度", ncols=100, bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]')
 
-        for i, scenario_data in enumerate(self.scenarios, 1):
+        for _i, scenario_data in enumerate(self.scenarios, 1):
             # print(f"\n{'-' * 20} 场景 {i}/{total_scenarios} - {scenario_data['场景编号']} {'-' * 20}")
             
             # 改编场景，使其更适合当前角色
