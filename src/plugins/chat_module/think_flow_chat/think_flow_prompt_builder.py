@@ -26,23 +26,10 @@ class PromptBuilder:
     ) -> tuple[str, str]:
         
         current_mind_info = heartflow.get_subheartflow(stream_id).current_mind
-
-        # 开始构建prompt
-        prompt_personality = "你"
-        #person
+        
         individuality = Individuality.get_instance()
-        
-        personality_core = individuality.personality.personality_core
-        prompt_personality += personality_core
-        
-        personality_sides = individuality.personality.personality_sides
-        random.shuffle(personality_sides)
-        prompt_personality += f",{personality_sides[0]}"
-        
-        identity_detail = individuality.identity.identity_detail
-        random.shuffle(identity_detail)
-        prompt_personality += f",{identity_detail[0]}"
-
+        prompt_personality = individuality.get_prompt(type = "personality",x_person = 2,level = 1)
+        prompt_identity = individuality.get_prompt(type = "identity",x_person = 2,level = 1)
         # 关系
         who_chat_in_group = [(chat_stream.user_info.platform, 
                               chat_stream.user_info.user_id, 
@@ -124,7 +111,7 @@ class PromptBuilder:
 你刚刚脑子里在想：
 {current_mind_info}
 现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言发言或者回复这条消息。\n
-你的网名叫{global_config.BOT_NICKNAME}，有人也叫你{"/".join(global_config.BOT_ALIAS_NAMES)}，{prompt_personality}。
+你的网名叫{global_config.BOT_NICKNAME}，有人也叫你{"/".join(global_config.BOT_ALIAS_NAMES)}，{prompt_personality} {prompt_identity}。
 你正在{chat_target_2},现在请你读读之前的聊天记录，然后给出日常且口语化的回复，平淡一些，
 尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。{prompt_ger}
 请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 

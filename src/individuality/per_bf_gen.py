@@ -25,9 +25,9 @@ env_path = project_root / ".env"
 root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 sys.path.append(root_path)
 
-from src.plugins.personality.scene import get_scene_by_factor, PERSONALITY_SCENES  # noqa: E402
-from src.plugins.personality.questionnaire import FACTOR_DESCRIPTIONS  # noqa: E402
-from src.plugins.personality.offline_llm import LLMModel  # noqa: E402
+from src.individuality.scene import get_scene_by_factor, PERSONALITY_SCENES  # noqa: E402
+from src.individuality.questionnaire import FACTOR_DESCRIPTIONS  # noqa: E402
+from src.individuality.offline_llm import LLMModel  # noqa: E402
 
 # 加载环境变量
 if env_path.exists():
