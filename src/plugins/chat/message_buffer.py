@@ -3,7 +3,7 @@ from src.common.logger import get_module_logger
 import asyncio
 from dataclasses import dataclass, field
 from .message import MessageRecv
-from ..message.message_base import BaseMessageInfo
+from ..message.message_base import BaseMessageInfo, GroupInfo
 import hashlib
 from typing import Dict
 from collections import OrderedDict
@@ -25,9 +25,12 @@ class MessageBuffer:
         self.buffer_pool: Dict[str, OrderedDict[str, CacheMessages]] = {}
         self.lock = asyncio.Lock()
 
-    def get_person_id_(self, platform:str, user_id:str, group_id:str):
+    def get_person_id_(self, platform:str, user_id:str, group_info:GroupInfo):
         """获取唯一id"""
-        group_id = group_id or "私聊"
+        if group_info:
+            group_id = group_info.group_id
+        else:
+            group_id = "私聊"
         key = f"{platform}_{user_id}_{group_id}"
         return hashlib.md5(key.encode()).hexdigest()
 
@@ -40,7 +43,7 @@ class MessageBuffer:
             return
         person_id_ = self.get_person_id_(message.message_info.platform,
                                              message.message_info.user_info.user_id,
-                                             message.message_info.group_info.group_id)
+                                             message.message_info.group_info)
 
         async with self.lock:
             if person_id_ not in self.buffer_pool:
@@ -108,7 +111,7 @@ class MessageBuffer:
             return True
         person_id_ = self.get_person_id_(message.message_info.platform,
                                          message.message_info.user_info.user_id,
-                                         message.message_info.group_info.group_id)
+                                         message.message_info.group_info)
                                         
         
         async with self.lock:
