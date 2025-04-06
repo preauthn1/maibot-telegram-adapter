@@ -35,7 +35,7 @@ ban_user_id = []  #禁止回复和读取消息的QQ号
 
 [personality]
 personality_core = "用一句话或几句话描述人格的核心特点" # 建议20字以内，谁再写3000字小作文敲谁脑袋
-personality_detail = [
+personality_sides = [
     "用一句话或几句话描述人格的一些细节",
     "用一句话或几句话描述人格的一些细节",
     "用一句话或几句话描述人格的一些细节",

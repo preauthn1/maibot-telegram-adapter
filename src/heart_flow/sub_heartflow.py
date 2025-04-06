@@ -11,6 +11,8 @@ from src.common.logger import get_module_logger, LogConfig, SUB_HEARTFLOW_STYLE_
 from src.plugins.chat.utils import get_embedding
 from src.common.database import db
 from typing import Union
+from src.individuality.individuality import Individuality
+import random
 
 subheartflow_config = LogConfig(
     # 使用海马体专用样式
@@ -51,7 +53,6 @@ class SubHeartflow:
         if not self.current_mind:
             self.current_mind = "你什么也没想"
 
-        self.personality_info = " ".join(global_config.PROMPT_PERSONALITY)
 
         self.is_active = False
 
@@ -159,6 +160,25 @@ class SubHeartflow:
         chat_observe_info = observation.observe_info
         # print(f"chat_observe_info：{chat_observe_info}")
 
+        # 开始构建prompt
+        prompt_personality = "你"
+        #person
+        individuality = Individuality.get_instance()
+        
+        personality_core = individuality.personality.personality_core
+        prompt_personality += personality_core
+        
+        personality_sides = individuality.personality.personality_sides
+        random.shuffle(personality_sides)
+        prompt_personality += f",{personality_sides[0]}"
+        
+        identity_detail = individuality.identity.identity_detail
+        random.shuffle(identity_detail)
+        prompt_personality += f",{identity_detail[0]}"
+
+
+
+
         # 调取记忆
         related_memory = await HippocampusManager.get_instance().get_memory_from_text(
             text=chat_observe_info, max_memory_num=2, max_memory_length=2, max_depth=3, fast_retrieval=False
@@ -184,7 +204,7 @@ class SubHeartflow:
 
         prompt = ""
         # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
-        prompt += f"你{self.personality_info}\n"
+        prompt += f"{prompt_personality}\n"
         prompt += f"你刚刚在做的事情是：{schedule_info}\n"
         if related_memory_info:
             prompt += f"你想起来你之前见过的回忆：{related_memory_info}。\n以上是你的回忆，不一定是目前聊天里的人说的，也不一定是现在发生的事情，请记住。\n"
@@ -207,6 +227,25 @@ class SubHeartflow:
 
     async def do_thinking_after_reply(self, reply_content, chat_talking_prompt):
         # print("麦麦回复之后脑袋转起来了")
+        
+        # 开始构建prompt
+        prompt_personality = "你"
+        #person
+        individuality = Individuality.get_instance()
+        
+        personality_core = individuality.personality.personality_core
+        prompt_personality += personality_core
+        
+        personality_sides = individuality.personality.personality_sides
+        random.shuffle(personality_sides)
+        prompt_personality += f",{personality_sides[0]}"
+        
+        identity_detail = individuality.identity.identity_detail
+        random.shuffle(identity_detail)
+        prompt_personality += f",{identity_detail[0]}"
+        
+        
+        
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
 
@@ -219,7 +258,7 @@ class SubHeartflow:
 
         prompt = ""
         # prompt += f"你现在正在做的事情是：{schedule_info}\n"
-        prompt += f"你{self.personality_info}\n"
+        prompt += f"{prompt_personality}\n"
         prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{chat_observe_info}\n"
         prompt += f"刚刚你的想法是{current_thinking_info}。"
         prompt += f"你现在看到了网友们发的新消息:{message_new_info}\n"
@@ -238,12 +277,30 @@ class SubHeartflow:
         self.last_reply_time = time.time()
 
     async def judge_willing(self):
+        # 开始构建prompt
+        prompt_personality = "你"
+        #person
+        individuality = Individuality.get_instance()
+        
+        personality_core = individuality.personality.personality_core
+        prompt_personality += personality_core
+        
+        personality_sides = individuality.personality.personality_sides
+        random.shuffle(personality_sides)
+        prompt_personality += f",{personality_sides[0]}"
+        
+        identity_detail = individuality.identity.identity_detail
+        random.shuffle(identity_detail)
+        prompt_personality += f",{identity_detail[0]}"
+        
+        
+        
         # print("麦麦闹情绪了1")
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         # print("麦麦闹情绪了2")
         prompt = ""
-        prompt += f"{self.personality_info}\n"
+        prompt += f"{prompt_personality}\n"
         prompt += "现在你正在上网，和qq群里的网友们聊天"
         prompt += f"你现在的想法是{current_thinking_info}。"
         prompt += f"你现在{mood_info}。"

@@ -149,20 +149,11 @@ class BotConfig:
 
     # personality
     personality_core = "用一句话或几句话描述人格的核心特点" # 建议20字以内，谁再写3000字小作文敲谁脑袋
-    personality_detail: List[str] = field(default_factory=lambda: [
-        "用一句话或几句话描述人格的一些细节",
-        "用一句话或几句话描述人格的一些细节", 
-        "用一句话或几句话描述人格的一些细节",
-        "用一句话或几句话描述人格的一些细节",
-        "用一句话或几句话描述人格的一些细节"
+    personality_sides: List[str] = field(default_factory=lambda: [
+        "用一句话或几句话描述人格的一些侧面",
+        "用一句话或几句话描述人格的一些侧面",
+        "用一句话或几句话描述人格的一些侧面"
     ])
-    
-    traits: List[str] = field(default_factory=lambda: [
-        "用一个词描述性格",
-        "用一个词描述性格",
-        "用一个词描述性格",
-    ])
-
     # identity
     identity_detail: List[str] = field(default_factory=lambda: [
         "身份特点",
@@ -173,11 +164,6 @@ class BotConfig:
     age: int = 20  # 年龄 单位岁
     gender: str = "男"  # 性别
     appearance: str = "用几句话描述外貌特征"  # 外貌特征
-    interests: List[str] = field(default_factory=lambda: [
-        "兴趣爱好1",
-        "兴趣爱好2", 
-        "兴趣爱好3"
-    ])
 
     # schedule
     ENABLE_SCHEDULE_GEN: bool = False  # 是否启用日程生成
@@ -371,7 +357,7 @@ class BotConfig:
             personality_config = parent["personality"]
             if config.INNER_VERSION in SpecifierSet(">=1.2.4"):
                 config.personality_core = personality_config.get("personality_core", config.personality_core)
-                config.personality_detail = personality_config.get("personality_detail", config.personality_detail)
+                config.personality_sides = personality_config.get("personality_sides", config.personality_sides)
 
         def identity(parent: dict):
             identity_config = parent["identity"]
@@ -382,7 +368,6 @@ class BotConfig:
                 config.age = identity_config.get("age", config.age)
                 config.gender = identity_config.get("gender", config.gender)
                 config.appearance = identity_config.get("appearance", config.appearance)
-                config.interests = identity_config.get("interests", config.interests)
 
         def schedule(parent: dict):
             schedule_config = parent["schedule"]

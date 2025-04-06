@@ -1,14 +1,13 @@
 import random
 import time
 from typing import Optional, Union
-import re
-import jieba
 import numpy as np
 
 from ....common.database import db
 from ...chat.utils import get_embedding, get_recent_group_detailed_plain_text, get_recent_group_speaker
 from ...chat.chat_stream import chat_manager
 from ...moods.moods import MoodManager
+from ....individuality.individuality import Individuality
 from ...memory_system.Hippocampus import HippocampusManager
 from ...schedule.schedule_generator import bot_schedule
 from ...config.config import global_config
@@ -28,7 +27,23 @@ class PromptBuilder:
     ) -> tuple[str, str]:
     
         # 开始构建prompt
-
+        prompt_personality = "你"
+        #person
+        individuality = Individuality.get_instance()
+        
+        personality_core = individuality.personality.personality_core
+        prompt_personality += personality_core
+        
+        personality_sides = individuality.personality.personality_sides
+        random.shuffle(personality_sides)
+        prompt_personality += f",{personality_sides[0]}"
+        
+        identity_detail = individuality.identity.identity_detail
+        random.shuffle(identity_detail)
+        prompt_personality += f",{identity_detail[0]}"
+        
+        
+            
         # 关系
         who_chat_in_group = [(chat_stream.user_info.platform, 
                               chat_stream.user_info.user_id, 
@@ -104,20 +119,6 @@ class PromptBuilder:
                         f"检测到以下关键词之一：{rule.get('keywords', [])}，触发反应：{rule.get('reaction', '')}"
                     )
                     keywords_reaction_prompt += rule.get("reaction", "") + "，"
-
-        # 人格选择
-        personality = global_config.PROMPT_PERSONALITY
-        probability_1 = global_config.PERSONALITY_1
-        probability_2 = global_config.PERSONALITY_2
-
-        personality_choice = random.random()
-
-        if personality_choice < probability_1:  # 第一种风格
-            prompt_personality = personality[0]
-        elif personality_choice < probability_1 + probability_2:  # 第二种风格
-            prompt_personality = personality[1]
-        else:  # 第三种人格
-            prompt_personality = personality[2]
 
         # 中文高手(新加的好玩功能)
         prompt_ger = ""
