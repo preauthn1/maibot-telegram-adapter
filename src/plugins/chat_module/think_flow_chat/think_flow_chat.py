@@ -225,7 +225,7 @@ class ThinkFlowChat:
         else:
             if not is_mentioned:
                 is_mentioned = is_mentioned_bot_in_message(message)
-            if is_mentioned and global_config.metioned_bot_inevitable_reply:
+            if is_mentioned and global_config.mentioned_bot_inevitable_reply:
                 reply_probability = 1
                 logger.info("被提及，回复概率设置为100%")
 
