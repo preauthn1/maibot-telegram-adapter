@@ -186,7 +186,8 @@ class ReasoningChat:
                 logger.info("触发缓冲，已炸飞消息列")
             return
 
-        is_mentioned = is_mentioned_bot_in_message(message)
+        # 处理提及
+        is_mentioned, reply_probability = is_mentioned_bot_in_message(message)
 
         # 计算回复意愿
         current_willing = willing_manager.get_willing(chat_stream=chat)
@@ -194,7 +195,7 @@ class ReasoningChat:
 
         # 意愿激活
         timer1 = time.time()
-        reply_probability = await willing_manager.change_reply_willing_received(
+        real_reply_probability = await willing_manager.change_reply_willing_received(
             chat_stream=chat,
             is_mentioned_bot=is_mentioned,
             config=global_config,
@@ -202,6 +203,8 @@ class ReasoningChat:
             interested_rate=interested_rate,
             sender_id=str(message.message_info.user_info.user_id),
         )
+        if reply_probability != 1 or (groupinfo and (groupinfo.group_id not in global_config.talk_allowed_groups)):
+            reply_probability = real_reply_probability
         timer2 = time.time()
         timing_results["意愿激活"] = timer2 - timer1
 
