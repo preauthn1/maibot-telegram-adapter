@@ -25,9 +25,9 @@ config_config = LogConfig(
 logger = get_module_logger("config", config=config_config)
 
 #考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
-is_test = False
-mai_version_main = "0.6.1"
-mai_version_fix = ""
+is_test = True
+mai_version_main = "0.6.2"
+mai_version_fix = "snapshot-1"
 if mai_version_fix:
     if is_test:
         mai_version = f"test-{mai_version_main}-{mai_version_fix}"
@@ -441,6 +441,7 @@ class BotConfig:
                 config.emoji_response_penalty = willing_config.get(
                     "emoji_response_penalty", config.emoji_response_penalty
                 )
+            if config.INNER_VERSION in SpecifierSet(">=1.2.5"):
                 config.mentioned_bot_inevitable_reply = willing_config.get(
                     "mentioned_bot_inevitable_reply", config.mentioned_bot_inevitable_reply
                 )
