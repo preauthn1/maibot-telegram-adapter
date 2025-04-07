@@ -805,19 +805,32 @@ class Conversation:
         """初始化实例（在后台运行）"""
         try:
             logger.info(f"开始初始化对话实例: {self.stream_id}")
+            
+            start_time = time.time()
+            logger.info("启动观察器...")
             self.chat_observer.start()  # 启动观察器
+            logger.info(f"观察器启动完成，耗时: {time.time() - start_time:.2f}秒")
+            
             await asyncio.sleep(1)  # 给观察器一些启动时间
             
             # 获取初始目标
+            logger.info("开始分析初始对话目标...")
+            goal_start_time = time.time()
             self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
+            logger.info(f"目标分析完成，耗时: {time.time() - goal_start_time:.2f}秒")
             
             # 标记初始化完成
+            logger.info("标记初始化完成...")
             self.__class__._initializing[self.stream_id] = False
             if self.stream_id in self.__class__._init_events:
                 self.__class__._init_events[self.stream_id].set()
                 
             # 启动对话循环
+            logger.info("启动对话循环...")
             asyncio.create_task(self._conversation_loop())
+            
+            total_time = time.time() - start_time
+            logger.info(f"实例初始化完成，总耗时: {total_time:.2f}秒")
             
         except Exception as e:
             logger.error(f"初始化对话实例失败: {e}")
