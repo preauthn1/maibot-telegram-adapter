@@ -2,10 +2,8 @@ import os
 import sys
 import toml
 import customtkinter as ctk
-from tkinter import messagebox, StringVar, Text, filedialog
+from tkinter import messagebox, StringVar, filedialog
 import json
-from typing import Dict, Any, List, Union, Optional
-import re
 import datetime
 import shutil
 
@@ -734,7 +732,7 @@ class ConfigUI(ctk.CTk):
         """保存配置文件"""
         # 更新配置数据
         updated = False
-        error_path = None
+        _error_path = None
         
         for path, (var, var_type, *args) in self.config_vars.items():
             parts = path.split(".")
@@ -753,26 +751,22 @@ class ConfigUI(ctk.CTk):
                         target[parts[-1]] = var.get()
                         updated = True
                 elif var_type == "number":
-                    try:
-                        # 获取原始类型（int或float）
-                        num_type = args[0] if args else int
-                        new_value = num_type(var.get())
-                        if target[parts[-1]] != new_value:
-                            target[parts[-1]] = new_value
-                            updated = True
-                    except ValueError:
-                        error_path = path
-                        raise ValueError(f"{path} 必须是一个有效的数字！")
+
+                    # 获取原始类型（int或float）
+                    num_type = args[0] if args else int
+                    new_value = num_type(var.get())
+                    if target[parts[-1]] != new_value:
+                        target[parts[-1]] = new_value
+                        updated = True
+
                 elif var_type == "list":
-                    try:
-                        # 解析JSON字符串为列表
-                        new_value = json.loads(var.get())
-                        if json.dumps(target[parts[-1]], sort_keys=True) != json.dumps(new_value, sort_keys=True):
-                            target[parts[-1]] = new_value
-                            updated = True
-                    except json.JSONDecodeError:
-                        error_path = path
-                        raise ValueError(f"{path} 必须是有效的JSON格式！")
+
+                    # 解析JSON字符串为列表
+                    new_value = json.loads(var.get())
+                    if json.dumps(target[parts[-1]], sort_keys=True) != json.dumps(new_value, sort_keys=True):
+                        target[parts[-1]] = new_value
+                        updated = True
+
                 else:
                     if target[parts[-1]] != var.get():
                         target[parts[-1]] = var.get()
@@ -978,7 +972,7 @@ class ConfigUI(ctk.CTk):
         backup_frame.pack(padx=10, pady=10, fill="both", expand=True)
         
         # 添加备份文件项
-        for i, (filename, filepath, mod_time) in enumerate(backup_files):
+        for _i, (filename, filepath, mod_time) in enumerate(backup_files):
             # 格式化时间为可读格式
             time_str = datetime.datetime.fromtimestamp(mod_time).strftime("%Y-%m-%d %H:%M:%S")
             
@@ -1144,7 +1138,7 @@ class ConfigUI(ctk.CTk):
                     # 配置项路径
                     path_parts = full_path.split(".")
                     section = path_parts[0] if len(path_parts) > 0 else ""
-                    key = path_parts[-1] if len(path_parts) > 0 else ""
+                    _key = path_parts[-1] if len(path_parts) > 0 else ""
                     
                     # 获取描述
                     description = get_description(full_path)
@@ -1368,15 +1362,14 @@ def main():
     except Exception as e:
         print(f"程序发生错误: {e}")
         # 显示错误对话框
-        try:
-            import tkinter as tk
-            from tkinter import messagebox
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror("程序错误", f"程序运行时发生错误:\n{e}")
-            root.destroy()
-        except:
-            pass
+
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("程序错误", f"程序运行时发生错误:\n{e}")
+        root.destroy()
+
 
 if __name__ == "__main__":
     main()
