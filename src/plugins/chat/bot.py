@@ -40,14 +40,14 @@ class ChatBot:
     async def _create_PFC_chat(self, message: MessageRecv):
         try:
             chat_id = str(message.chat_stream.stream_id)
-            
+
             if global_config.enable_pfc_chatting:
                 # 获取或创建对话实例
                 conversation = await Conversation.get_instance(chat_id)
                 if conversation is None:
                     logger.error(f"创建或获取对话实例失败: {chat_id}")
                     return
-                    
+
                 # 如果是新创建的实例，启动对话系统
                 if conversation.state == ConversationState.INIT:
                     asyncio.create_task(conversation.start())
@@ -71,16 +71,16 @@ class ChatBot:
            - 包含思维流状态管理
            - 在回复前进行观察和状态更新
            - 回复后更新思维流状态
-        
+
         2. reasoning模式：使用推理系统进行回复
            - 直接使用意愿管理器计算回复概率
            - 没有思维流相关的状态管理
            - 更简单直接的回复逻辑
-        
+
         3. pfc_chatting模式：仅进行消息处理
            - 不进行任何回复
            - 只处理和存储消息
-        
+
         所有模式都包含：
         - 消息过滤
         - 记忆激活
@@ -98,7 +98,7 @@ class ChatBot:
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
                 return
-            
+
             if global_config.enable_pfc_chatting:
                 try:
                     if groupinfo is None and global_config.enable_friend_chat:
@@ -127,7 +127,7 @@ class ChatBot:
                     logger.error(f"处理PFC消息失败: {e}")
             else:
                 if groupinfo is None and global_config.enable_friend_chat:
-                    # 私聊处理流程 
+                    # 私聊处理流程
                     # await self._handle_private_chat(message)
                     if global_config.response_mode == "heart_flow":
                         await self.think_flow_chat.process_message(message_data)
