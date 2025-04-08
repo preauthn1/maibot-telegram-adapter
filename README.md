@@ -13,9 +13,13 @@
   </div>
 
 <p align="center">
-  <!-- <a href="https://github.com/shaojintian/Best_README_template/">
+  <a href="https://github.com/MaiM-with-u/MaiBot/">
     <img src="depends-data/maimai.png" alt="Logo" width="200">
-  </a> -->
+  </a>
+  <br />
+  <a href="https://space.bilibili.com/123456783">
+    画师：略nd
+  </a>
 
   <h3 align="center">MaiBot(麦麦)</h3>
   <p align="center">
@@ -24,11 +28,11 @@
     <a href="https://docs.mai-mai.org"><strong>探索本项目的文档 »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/shaojintian/Best_README_template">查看Demo</a>
+    <!-- <a href="https://github.com/shaojintian/Best_README_template">查看Demo</a>
+    · -->
+    <a href="https://github.com/MaiM-with-u/MaiBot/issues">报告Bug</a>
     ·
-    <a href="https://github.com/shaojintian/Best_README_template/issues">报告Bug</a>
-    ·
-    <a href="https://github.com/shaojintian/Best_README_template/issues">提出新特性</a>
+    <a href="https://github.com/MaiM-with-u/MaiBot/issues">提出新特性</a>
   </p>
   
 </p>
