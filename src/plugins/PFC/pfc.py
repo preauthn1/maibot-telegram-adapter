@@ -2,8 +2,7 @@
 #Prefrontal cortex
 import datetime
 import asyncio
-from typing import List, Optional, Dict, Any, Tuple, Literal, Set
-from enum import Enum
+from typing import List, Optional, Tuple, TYPE_CHECKING
 from src.common.logger import get_module_logger
 from ..chat.chat_stream import ChatStream
 from ..message.message_base import UserInfo, Seg
@@ -14,33 +13,19 @@ from src.plugins.chat.message import MessageSending
 from ..message.api import global_api
 from ..storage.storage import MessageStorage
 from .chat_observer import ChatObserver
-from .reply_generator import ReplyGenerator
 from .pfc_utils import get_items_from_json
 from src.individuality.individuality import Individuality
 from .chat_states import NotificationHandler, Notification, NotificationType
+from .waiter import Waiter
+from .message_sender import DirectMessageSender
+from .notification_handler import PFCNotificationHandler
 import time
-from dataclasses import dataclass, field
-from .conversation import Conversation
+
+if TYPE_CHECKING:
+    from .conversation import Conversation
 
 logger = get_module_logger("pfc")
 
-
-class ConversationState(Enum):
-    """对话状态"""
-    INIT = "初始化"
-    RETHINKING = "重新思考"
-    ANALYZING = "分析历史"
-    PLANNING = "规划目标"
-    GENERATING = "生成回复"
-    CHECKING = "检查回复"
-    SENDING = "发送消息"
-    WAITING = "等待"
-    LISTENING = "倾听"
-    ENDED = "结束"
-    JUDGING = "判断"
-
-
-ActionType = Literal["direct_reply", "fetch_knowledge", "wait"]
 
 class GoalAnalyzer:
     """对话目标分析器"""
@@ -249,42 +234,33 @@ class GoalAnalyzer:
 {{
     "goal_achieved": true,
     "stop_conversation": false,
-    "reason": "用户已经得到了满意的回答，但我仍希望继续聊天"
+    "reason": "虽然目标已达成，但对话仍然有继续的价值"
 }}"""
-        logger.debug(f"发送到LLM的提示词: {prompt}")
+
         try:
             content, _ = await self.llm.generate_response_async(prompt)
             logger.debug(f"LLM原始返回内容: {content}")
             
-            # 使用简化函数提取JSON内容
+            # 尝试解析JSON
             success, result = get_items_from_json(
                 content,
                 "goal_achieved", "stop_conversation", "reason",
-                required_types={
-                    "goal_achieved": bool,
-                    "stop_conversation": bool,
-                    "reason": str
-                }
+                required_types={"goal_achieved": bool, "stop_conversation": bool, "reason": str}
             )
             
             if not success:
-                return False, False, "确保对话顺利进行"
+                logger.error("无法解析对话分析结果JSON")
+                return False, False, "解析结果失败"
+                
+            goal_achieved = result["goal_achieved"]
+            stop_conversation = result["stop_conversation"]
+            reason = result["reason"]
             
-            # 如果当前目标达成，从目标列表中移除
-            if result["goal_achieved"] and not result["stop_conversation"]:
-                for i, (g, _, _) in enumerate(self.goals):
-                    if g == goal:
-                        self.goals.pop(i)
-                        # 如果还有其他目标，不停止对话
-                        if self.goals:
-                            result["stop_conversation"] = False
-                        break
-            
-            return result["goal_achieved"], result["stop_conversation"], result["reason"]
+            return goal_achieved, stop_conversation, reason
             
         except Exception as e:
-            logger.error(f"分析对话目标时出错: {str(e)}")
-            return False, False, "确保对话顺利进行"
+            logger.error(f"分析对话状态时出错: {str(e)}")
+            return False, False, f"分析出错: {str(e)}"
 
 
 class Waiter:
@@ -317,63 +293,6 @@ class Waiter:
                 
             await asyncio.sleep(1)
             logger.info("等待中...")
-
-
-class PFCNotificationHandler(NotificationHandler):
-    """PFC的通知处理器"""
-    
-    def __init__(self, conversation: 'Conversation'):
-        self.conversation = conversation
-        self.logger = get_module_logger("pfc_notification")
-        self.decision_info = conversation.decision_info
-        
-    async def handle_notification(self, notification: Notification):
-        """处理通知"""
-        try:
-            if not notification or not hasattr(notification, 'data') or notification.data is None:
-                self.logger.error("收到无效的通知：notification 或 data 为空")
-                return
-                
-            if notification.type == NotificationType.NEW_MESSAGE:
-                # 处理新消息通知
-                message = notification.data
-                if not isinstance(message, dict):
-                    self.logger.error(f"无效的消息格式: {type(message)}")
-                    return
-                    
-                content = message.get('content', '')
-                self.logger.info(f"收到新消息通知: {content[:30] if content else ''}...")
-                
-                # 更新决策信息
-                try:
-                    self.decision_info.update_from_message(message)
-                except Exception as e:
-                    self.logger.error(f"更新决策信息失败: {e}")
-                    return
-                    
-                # 触发对话系统更新
-                self.conversation.chat_observer.trigger_update()
-                
-            elif notification.type == NotificationType.COLD_CHAT:
-                # 处理冷场通知
-                try:
-                    is_cold = bool(notification.data.get("is_cold", False))
-                    # 更新决策信息
-                    self.decision_info.update_cold_chat_status(is_cold, time.time())
-                    
-                    if is_cold:
-                        self.logger.info("检测到对话冷场")
-                    else:
-                        self.logger.info("对话恢复活跃")
-                except Exception as e:
-                    self.logger.error(f"处理冷场状态失败: {e}")
-                    return
-                    
-        except Exception as e:
-            self.logger.error(f"处理通知时出错: {str(e)}")
-            # 添加更详细的错误信息
-            self.logger.error(f"通知类型: {getattr(notification, 'type', None)}")
-            self.logger.error(f"通知数据: {getattr(notification, 'data', None)}")
 
 
 

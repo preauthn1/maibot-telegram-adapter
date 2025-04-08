@@ -2,21 +2,31 @@ import asyncio
 import datetime
 from typing import Dict, Any
 from ..chat.message import Message
-from .pfc import ConversationState, ChatObserver,GoalAnalyzer, Waiter, DirectMessageSender, PFCNotificationHandler
+from .pfc_types import ConversationState
+from .pfc import ChatObserver, GoalAnalyzer, Waiter, DirectMessageSender, PFCNotificationHandler
 from src.common.logger import get_module_logger
 from .action_planner import ActionPlanner
-from .decision_info import DecisionInfo
+from .observation_info import ObservationInfo
 from .reply_generator import ReplyGenerator
 from ..chat.chat_stream import ChatStream
 from ..message.message_base import UserInfo
 from ..config.config import global_config
 from src.plugins.chat.chat_stream import chat_manager
 from .pfc_KnowledgeFetcher import KnowledgeFetcher
+from .chat_states import NotificationType
 import time
 import traceback
 
 logger = get_module_logger("pfc_conversation")
 
+class ConversationInfo:
+    def __init__(self):
+        self.done_action = []
+        self.goal_list = []
+        self.knowledge_list = []
+        self.memory_list = []
+        
+        
 
 class Conversation:
     """对话类，负责管理单个对话的状态和行为"""
@@ -31,96 +41,86 @@ class Conversation:
         self.state = ConversationState.INIT
         self.should_continue = False
         
-        # 目标和规划        
-        self.current_goal = "保持友好的对话"
-        self.current_method = "以友好的态度回应"
-        self.goal_reasoning = "确保对话顺利进行"
-        
-        # 知识缓存和行动历史
-        self.knowledge_cache = {}
-        self.action_history = []
-        
         # 回复相关
         self.generated_reply = ""
     
     async def _initialize(self):
         """初始化实例，注册所有组件"""
+        
         try:
-            
-            self.chat_observer = ChatObserver.get_instance(self.stream_id)
             self.action_planner = ActionPlanner(self.stream_id)
             self.goal_analyzer = GoalAnalyzer(self.stream_id)
             self.reply_generator = ReplyGenerator(self.stream_id)
             self.knowledge_fetcher = KnowledgeFetcher()
             self.waiter = Waiter(self.stream_id)
             self.direct_sender = DirectMessageSender()
-            
+        
             # 获取聊天流信息
             self.chat_stream = chat_manager.get_stream(self.stream_id)
             
-            # 决策信息
-            self.decision_info = DecisionInfo()
-            self.decision_info.bot_id = global_config.BOT_QQ
-            
             # 创建通知处理器
             self.notification_handler = PFCNotificationHandler(self)
-        
+            
+            self.stop_action_planner = False
         except Exception as e:
-            logger.error(f"初始化对话实例：注册组件失败: {e}")
+            logger.error(f"初始化对话实例：注册运行组件失败: {e}")
             logger.error(traceback.format_exc())
             raise
+        
         
         try:
-            start_time = time.time()
-            self.chat_observer.start()  # 启动观察器
-            logger.info(f"观察器启动完成，耗时: {time.time() - start_time:.2f}秒")
+            #决策所需要的信息，包括自身自信和观察信息两部分
+            #注册观察器和观测信息
+            self.chat_observer = ChatObserver.get_instance(self.stream_id)
+            self.chat_observer.start()
+            self.observation_info = ObservationInfo()
+            self.observation_info.bind_to_chat_observer(self.stream_id)
             
-            await asyncio.sleep(1)  # 给观察器一些启动时间
-            
-            total_time = time.time() - start_time
-            logger.info(f"实例初始化完成，总耗时: {total_time:.2f}秒")
-            
-            self.should_continue = True
-            asyncio.create_task(self.start())
-            
+            #对话信息
+            self.conversation_info = ConversationInfo()
         except Exception as e:
-            logger.error(f"初始化对话实例失败: {e}")
+            logger.error(f"初始化对话实例：注册信息组件失败: {e}")
             logger.error(traceback.format_exc())
             raise
+            
+        # 组件准备完成，启动该论对话
+        self.should_continue = True
+        asyncio.create_task(self.start())
+            
     
     async def start(self):
         """开始对话流程"""
         try:
-            logger.info("对话系统启动")
-            while self.should_continue:
-                await self._do_a_step()
+            logger.info("对话系统启动中...")
+            asyncio.create_task(self._plan_and_action_loop())
         except Exception as e:
             logger.error(f"启动对话系统失败: {e}")
             raise
-
-    async def _do_a_step(self):
-        """思考步"""
+        
+        
+    async def _plan_and_action_loop(self):
+        """思考步，PFC核心循环模块"""
         # 获取最近的消息历史
-        self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
-        
-        self.chat_observer.trigger_update()  # 触发立即更新
-        if not await self.chat_observer.wait_for_update():
-            logger.warning("等待消息更新超时")
-        
-        # 使用决策信息来辅助行动规划
-        action, reason = await self.action_planner.plan(
-            self.current_goal,
-            self.current_method,
-            self.goal_reasoning,
-            self.action_history,
-            self.decision_info  # 传入决策信息
-        )
-        
-        # 执行行动
-        await self._handle_action(action, reason)
-        
-        # # 清理已处理的消息
-        # self.decision_info.clear_unprocessed_messages()
+        while self.should_continue:
+            # 使用决策信息来辅助行动规划
+            action, reason = await self.action_planner.plan(
+                self.observation_info,
+                self.conversation_info
+            )
+            if self._check_new_messages_after_planning():
+                continue
+
+            # 执行行动
+            await self._handle_action(action, reason, self.observation_info, self.conversation_info)
+
+    async def _check_new_messages_after_planning(self):
+        """检查在规划后是否有新消息"""
+        if self.observation_info.new_messages_count > 0:
+            logger.info(f"发现{self.observation_info.new_messages_count}条新消息，可能需要重新考虑行动")
+            # 如果需要，可以在这里添加逻辑来根据新消息重新决定行动
+            return True
+        return False
+            
             
     def _convert_to_message(self, msg_dict: Dict[str, Any]) -> Message:
         """将消息字典转换为Message对象"""
@@ -141,20 +141,18 @@ class Conversation:
             logger.warning(f"转换消息时出错: {e}")
             raise
 
-    async def _handle_action(self, action: str, reason: str):
+    async def _handle_action(self, action: str, reason: str, observation_info: ObservationInfo, conversation_info: ConversationInfo):
         """处理规划的行动"""
         logger.info(f"执行行动: {action}, 原因: {reason}")
         
-        # 记录action历史
-        self.action_history.append({
+        # 记录action历史，先设置为stop，完成后再设置为done
+        conversation_info.action_history.append({
             "action": action,
             "reason": reason,
+            "status": "stop",
             "time": datetime.datetime.now().strftime("%H:%M:%S")
         })
         
-        # 只保留最近的10条记录
-        if len(self.action_history) > 10:
-            self.action_history = self.action_history[-10:]
         
         if action == "direct_reply":
             self.state = ConversationState.GENERATING
@@ -174,37 +172,34 @@ class Conversation:
             
             await self._send_reply()
             
-        elif action == "fetch_knowledge":
-            self.state = ConversationState.GENERATING
-            messages = self.chat_observer.get_message_history(limit=30)
-            knowledge, sources = await self.knowledge_fetcher.fetch(
-                self.current_goal,
-                [self._convert_to_message(msg) for msg in messages]
-            )
-            logger.info(f"获取到知识，来源: {sources}")
+            conversation_info.action_history.append({
+                "action": action,
+                "reason": reason,
+                "status": "done",
+                "time": datetime.datetime.now().strftime("%H:%M:%S")
+            })
             
-            if knowledge != "未找到相关知识":
-                self.knowledge_cache[sources] = knowledge
+        elif action == "fetch_knowledge":
+            self.state = ConversationState.FETCHING
+            knowledge = "TODO:知识"
+            topic = "TODO:关键词"
+            
+            logger.info(f"假装获取到知识{knowledge}，关键词是: {topic}")
+            
+            if knowledge:
+                if topic not in self.conversation_info.knowledge_list:
+                    self.conversation_info.knowledge_list.append({
+                        "topic": topic,
+                        "knowledge": knowledge
+                    })
+                else:
+                    self.conversation_info.knowledge_list[topic] += knowledge
         
         elif action == "rethink_goal":
             self.state = ConversationState.RETHINKING
-            self.current_goal, self.current_method, self.goal_reasoning = await self.goal_analyzer.analyze_goal()
-        
-        elif action == "judge_conversation":
-            self.state = ConversationState.JUDGING
-            self.goal_achieved, self.stop_conversation, self.reason = await self.goal_analyzer.analyze_conversation(self.current_goal, self.goal_reasoning)
-            
-            # 如果当前目标达成但还有其他目标
-            if self.goal_achieved and not self.stop_conversation:
-                alternative_goals = await self.goal_analyzer.get_alternative_goals()
-                if alternative_goals:
-                    # 切换到下一个目标
-                    self.current_goal, self.current_method, self.goal_reasoning = alternative_goals[0]
-                    logger.info(f"当前目标已达成，切换到新目标: {self.current_goal}")
-                    return
-            
-            if self.stop_conversation:
-                await self._stop_conversation()
+            goal_list = observation_info.goal_list
+            new_goal_list = await self.goal_analyzer.analyze_goal(goal_list)
+            observation_info.goal_list = new_goal_list
             
         elif action == "listening":
             self.state = ConversationState.LISTENING
@@ -230,7 +225,7 @@ class Conversation:
             latest_message = self._convert_to_message(messages[0])
             await self.direct_sender.send_message(
                 chat_stream=self.chat_stream,
-                content="抱歉，由于等待时间过长，我需要先去忙别的了。下次再聊吧~",
+                content="TODO:超时消息",
                 reply_to_message=latest_message
             )
         except Exception as e:

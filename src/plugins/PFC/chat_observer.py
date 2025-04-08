@@ -69,6 +69,11 @@ class ChatObserver:
         self.cold_chat_threshold: float = 60.0  # 60秒无消息判定为冷场
         self.last_cold_chat_check: float = time.time()
         self.is_cold_chat_state: bool = False
+        
+        self.update_event = asyncio.Event()
+        self.update_interval = 5  # 更新间隔（秒）
+        self.message_cache = []
+        self.update_running = False
     
     async def check(self) -> bool:
         """检查距离上一次观察之后是否有了新消息
@@ -368,3 +373,71 @@ class ChatObserver:
             time_info += f"\n距离对方上次发言已经过去了{int(user_speak_ago)}秒"
             
         return time_info
+
+    def start_periodic_update(self):
+        """启动观察器的定期更新"""
+        if not self.update_running:
+            self.update_running = True
+            asyncio.create_task(self._periodic_update())
+        
+    async def _periodic_update(self):
+        """定期更新消息历史"""
+        try:
+            while self.update_running:
+                await self._update_message_history()
+                await asyncio.sleep(self.update_interval)
+        except Exception as e:
+            logger.error(f"定期更新消息历史时出错: {str(e)}")
+            
+    async def _update_message_history(self) -> bool:
+        """更新消息历史
+        
+        Returns:
+            bool: 是否有新消息
+        """
+        try:
+            messages = await self.message_storage.get_messages_for_stream(
+                self.stream_id,
+                limit=50
+            )
+            
+            if not messages:
+                return False
+                
+            # 检查是否有新消息
+            has_new_messages = False
+            if messages and (not self.message_cache or messages[0]["message_id"] != self.message_cache[0]["message_id"]):
+                has_new_messages = True
+                
+            self.message_cache = messages
+            
+            if has_new_messages:
+                self.update_event.set()
+                self.update_event.clear()
+                return True
+            return False
+            
+        except Exception as e:
+            logger.error(f"更新消息历史时出错: {str(e)}")
+            return False
+            
+    def get_message_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """获取消息历史
+        
+        Args:
+            limit: 获取的最大消息数量
+            
+        Returns:
+            List[Dict[str, Any]]: 消息历史列表
+        """
+        return self.message_cache[:limit]
+        
+    def get_last_message(self) -> Optional[Dict[str, Any]]:
+        """获取最后一条消息
+        
+        Returns:
+            Optional[Dict[str, Any]]: 最后一条消息，如果没有则返回None
+        """
+        if not self.message_cache:
+            return None
+        return self.message_cache[0]
