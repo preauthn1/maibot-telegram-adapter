@@ -1,14 +1,13 @@
 from ..moods.moods import MoodManager  # 导入情绪管理器
 from ..config.config import global_config
 from .message import MessageRecv
-from ..PFC.pfc import Conversation, ConversationState
+from ..PFC.pfc_manager import PFCManager
 from .chat_stream import chat_manager
 from ..chat_module.only_process.only_message_process import MessageProcessor
 
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ..chat_module.think_flow_chat.think_flow_chat import ThinkFlowChat
 from ..chat_module.reasoning_chat.reasoning_chat import ReasoningChat
-import asyncio
 import traceback
 
 # 定义日志配置
@@ -31,10 +30,15 @@ class ChatBot:
         self.think_flow_chat = ThinkFlowChat()
         self.reasoning_chat = ReasoningChat()
         self.only_process_chat = MessageProcessor()
+        
+        # 创建初始化PFC管理器的任务，会在_ensure_started时执行
+        self.pfc_manager = PFCManager.get_instance()
 
     async def _ensure_started(self):
         """确保所有任务已启动"""
         if not self._started:
+            logger.info("确保ChatBot所有任务已启动")
+                    
             self._started = True
 
     async def _create_PFC_chat(self, message: MessageRecv):
@@ -42,27 +46,11 @@ class ChatBot:
             chat_id = str(message.chat_stream.stream_id)
             
             if global_config.enable_pfc_chatting:
-                # 获取或创建对话实例
-                conversation = await Conversation.get_instance(chat_id)
-                if conversation is None:
-                    logger.error(f"创建或获取对话实例失败: {chat_id}")
-                    return
-                    
-                # 如果是新创建的实例，启动对话系统
-                if conversation.state == ConversationState.INIT:
-                    asyncio.create_task(conversation.start())
-                    logger.info(f"为聊天 {chat_id} 创建新的对话实例")
-                elif conversation.state == ConversationState.ENDED:
-                    # 如果实例已经结束，重新创建
-                    await Conversation.remove_instance(chat_id)
-                    conversation = await Conversation.get_instance(chat_id)
-                    if conversation is None:
-                        logger.error(f"重新创建对话实例失败: {chat_id}")
-                        return
-                    asyncio.create_task(conversation.start())
-                    logger.info(f"为聊天 {chat_id} 重新创建对话实例")
+                
+                await self.pfc_manager.get_or_create_conversation(chat_id)
+                
         except Exception as e:
-            logger.error(f"创建PFC聊天流失败: {e}")
+            logger.error(f"创建PFC聊天失败: {e}")
 
     async def message_process(self, message_data: str) -> None:
         """处理转化后的统一格式消息
@@ -90,6 +78,9 @@ class ChatBot:
         - 性能计时
         """
         try:
+            # 确保所有任务已启动
+            await self._ensure_started()
+            
             message = MessageRecv(message_data)
             groupinfo = message.message_info.group_info
             userinfo = message.message_info.user_info

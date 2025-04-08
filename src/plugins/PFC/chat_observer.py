@@ -2,7 +2,6 @@ import time
 import asyncio
 from typing import Optional, Dict, Any, List, Tuple 
 from src.common.logger import get_module_logger
-from src.common.database import db
 from ..message.message_base import UserInfo
 from ..config.config import global_config
 from .chat_states import NotificationManager, create_new_message_notification, create_cold_chat_notification
