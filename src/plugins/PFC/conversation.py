@@ -3,30 +3,20 @@ import datetime
 from typing import Dict, Any
 from ..chat.message import Message
 from .pfc_types import ConversationState
-from .pfc import ChatObserver, GoalAnalyzer, Waiter, DirectMessageSender, PFCNotificationHandler
+from .pfc import ChatObserver, GoalAnalyzer, Waiter, DirectMessageSender
 from src.common.logger import get_module_logger
 from .action_planner import ActionPlanner
 from .observation_info import ObservationInfo
+from .conversation_info import ConversationInfo
 from .reply_generator import ReplyGenerator
 from ..chat.chat_stream import ChatStream
 from ..message.message_base import UserInfo
-from ..config.config import global_config
 from src.plugins.chat.chat_stream import chat_manager
 from .pfc_KnowledgeFetcher import KnowledgeFetcher
-from .chat_states import NotificationType
-import time
 import traceback
 
 logger = get_module_logger("pfc_conversation")
 
-class ConversationInfo:
-    def __init__(self):
-        self.done_action = []
-        self.goal_list = []
-        self.knowledge_list = []
-        self.memory_list = []
-        
-        
 
 class Conversation:
     """对话类，负责管理单个对话的状态和行为"""
@@ -57,9 +47,6 @@ class Conversation:
         
             # 获取聊天流信息
             self.chat_stream = chat_manager.get_stream(self.stream_id)
-            
-            # 创建通知处理器
-            self.notification_handler = PFCNotificationHandler(self)
             
             self.stop_action_planner = False
         except Exception as e:
@@ -113,7 +100,7 @@ class Conversation:
             # 执行行动
             await self._handle_action(action, reason, self.observation_info, self.conversation_info)
 
-    async def _check_new_messages_after_planning(self):
+    def _check_new_messages_after_planning(self):
         """检查在规划后是否有新消息"""
         if self.observation_info.new_messages_count > 0:
             logger.info(f"发现{self.observation_info.new_messages_count}条新消息，可能需要重新考虑行动")
@@ -146,33 +133,33 @@ class Conversation:
         logger.info(f"执行行动: {action}, 原因: {reason}")
         
         # 记录action历史，先设置为stop，完成后再设置为done
-        conversation_info.action_history.append({
+        conversation_info.done_action.append({
             "action": action,
             "reason": reason,
-            "status": "stop",
+            "status": "start",
             "time": datetime.datetime.now().strftime("%H:%M:%S")
         })
         
         
         if action == "direct_reply":
             self.state = ConversationState.GENERATING
-            messages = self.chat_observer.get_message_history(limit=30)
             self.generated_reply = await self.reply_generator.generate(
-                self.current_goal,
-                self.current_method,
-                [self._convert_to_message(msg) for msg in messages],
-                self.knowledge_cache
+                observation_info,
+                conversation_info
             )
             
-            # 检查回复是否合适
-            is_suitable, reason, need_replan = await self.reply_generator.check_reply(
-                self.generated_reply,
-                self.current_goal
-            )
+            # # 检查回复是否合适
+            # is_suitable, reason, need_replan = await self.reply_generator.check_reply(
+            #     self.generated_reply,
+            #     self.current_goal
+            # )
+            
+            if self._check_new_messages_after_planning():
+                return None
             
             await self._send_reply()
             
-            conversation_info.action_history.append({
+            conversation_info.done_action.append({
                 "action": action,
                 "reason": reason,
                 "status": "done",
@@ -197,9 +184,8 @@ class Conversation:
         
         elif action == "rethink_goal":
             self.state = ConversationState.RETHINKING
-            goal_list = observation_info.goal_list
-            new_goal_list = await self.goal_analyzer.analyze_goal(goal_list)
-            observation_info.goal_list = new_goal_list
+            await self.goal_analyzer.analyze_goal(conversation_info, observation_info)
+
             
         elif action == "listening":
             self.state = ConversationState.LISTENING

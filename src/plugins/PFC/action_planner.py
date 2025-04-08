@@ -1,14 +1,12 @@
-import datetime
-from typing import List, Dict, Tuple
+from typing import Tuple
 from src.common.logger import get_module_logger
-from ..message.message_base import UserInfo
 from ..models.utils_model import LLM_request
 from ..config.config import global_config
 from .chat_observer import ChatObserver
 from .pfc_utils import get_items_from_json
 from src.individuality.individuality import Individuality
 from .observation_info import ObservationInfo
-from .conversation import ConversationInfo
+from .conversation_info import ConversationInfo
 
 logger = get_module_logger("action_planner")
 
@@ -78,7 +76,7 @@ class ActionPlanner:
         personality_text = f"你的名字是{self.name}，{self.personality_info}"
         
         # 构建action历史文本
-        action_history_list = conversation_info.action_history
+        action_history_list = conversation_info.done_action
         action_history_text = "你之前做的事情是："
         for action in action_history_list:
             action_history_text += f"{action}\n"

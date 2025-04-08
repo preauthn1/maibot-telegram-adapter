@@ -1,13 +1,12 @@
-import datetime
-from typing import List, Optional, Dict, Tuple
+from typing import Tuple
 from src.common.logger import get_module_logger
-from ..message.message_base import UserInfo
-from ..chat.message import Message
 from ..models.utils_model import LLM_request
 from ..config.config import global_config
 from .chat_observer import ChatObserver
 from .reply_checker import ReplyChecker
 from src.individuality.individuality import Individuality
+from .observation_info import ObservationInfo
+from .conversation_info import ConversationInfo
 
 logger = get_module_logger("reply_generator")
 
@@ -29,11 +28,8 @@ class ReplyGenerator:
         
     async def generate(
         self,
-        goal: str,
-        chat_history: List[Message],
-        knowledge_cache: Dict[str, str],
-        previous_reply: Optional[str] = None,
-        retry_count: int = 0
+        observation_info: ObservationInfo,
+        conversation_info: ConversationInfo
     ) -> str:
         """生成回复
         
@@ -48,44 +44,33 @@ class ReplyGenerator:
             str: 生成的回复
         """
         # 构建提示词
-        logger.debug(f"开始生成回复：当前目标: {goal}")
-        self.chat_observer.trigger_update()  # 触发立即更新
-        if not await self.chat_observer.wait_for_update():
-            logger.warning("等待消息更新超时")
-                
-        messages = self.chat_observer.get_message_history(limit=20)
+        logger.debug(f"开始生成回复：当前目标: {conversation_info.goal_list}")
+
+        goal_list = conversation_info.goal_list
+        goal_text = ""
+        for goal, reason in goal_list:
+            goal_text += f"目标：{goal};"
+            goal_text += f"原因：{reason}\n"
+        
+        # 获取聊天历史记录
+        chat_history_list = observation_info.chat_history
         chat_history_text = ""
-        for msg in messages:
-            time_str = datetime.datetime.fromtimestamp(msg["time"]).strftime("%H:%M:%S")
-            user_info = UserInfo.from_dict(msg.get("user_info", {}))
-            sender = user_info.user_nickname or f"用户{user_info.user_id}"
-            if sender == self.name:
-                sender = "你说"
-            chat_history_text += f"{time_str},{sender}:{msg.get('processed_plain_text', '')}\n"
+        for msg in chat_history_list:
+            chat_history_text += f"{msg}\n"
+            
         
         # 整理知识缓存
         knowledge_text = ""
-        if knowledge_cache:
-            knowledge_text = "\n相关知识："
-            if isinstance(knowledge_cache, dict):
-                for _source, content in knowledge_cache.items():
-                    knowledge_text += f"\n{content}"
-            elif isinstance(knowledge_cache, list):
-                for item in knowledge_cache:
-                    knowledge_text += f"\n{item}"
+        knowledge_list = conversation_info.knowledge_list
+        for knowledge in knowledge_list:
+            knowledge_text += f"知识：{knowledge}\n"
                 
-        # 添加上一次生成的回复信息
-        previous_reply_text = ""
-        if previous_reply:
-            previous_reply_text = f"\n上一次生成的回复（需要改进）：\n{previous_reply}"
-        
         personality_text = f"你的名字是{self.name}，{self.personality_info}"
         
         prompt = f"""{personality_text}。现在你在参与一场QQ聊天，请根据以下信息生成回复：
 
-当前对话目标：{goal}
+当前对话目标：{goal_text}
 {knowledge_text}
-{previous_reply_text}
 最近的聊天记录：
 {chat_history_text}
 
@@ -94,7 +79,6 @@ class ReplyGenerator:
 2. 体现你的性格特征
 3. 自然流畅，像正常聊天一样，简短
 4. 适当利用相关知识，但不要生硬引用
-{'5. 改进上一次回复中的问题' if previous_reply else ''}
 
 请注意把握聊天内容，不要回复的太有条理，可以有个性。请分清"你"和对方说的话，不要把"你"说的话当做对方说的话，这是你自己说的话。
 请你回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 

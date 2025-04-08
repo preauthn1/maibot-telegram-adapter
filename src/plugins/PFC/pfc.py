@@ -15,14 +15,12 @@ from ..storage.storage import MessageStorage
 from .chat_observer import ChatObserver
 from .pfc_utils import get_items_from_json
 from src.individuality.individuality import Individuality
-from .chat_states import NotificationHandler, Notification, NotificationType
-from .waiter import Waiter
-from .message_sender import DirectMessageSender
-from .notification_handler import PFCNotificationHandler
+from .conversation_info import ConversationInfo
+from .observation_info import ObservationInfo
 import time
 
 if TYPE_CHECKING:
-    from .conversation import Conversation
+    pass
 
 logger = get_module_logger("pfc")
 
@@ -45,42 +43,55 @@ class GoalAnalyzer:
         self.max_goals = 3  # 同时保持的最大目标数量
         self.current_goal_and_reason = None
 
-    async def analyze_goal(self) -> Tuple[str, str, str]:
+    async def analyze_goal(self, conversation_info: ConversationInfo, observation_info: ObservationInfo):
         """分析对话历史并设定目标
 
         Args:
-            chat_history: 聊天历史记录列表
-
+            conversation_info: 对话信息
+            observation_info: 观察信息
+            
         Returns:
             Tuple[str, str, str]: (目标, 方法, 原因)
         """
-        max_retries = 3
-        for retry in range(max_retries):
-            try:
-                # 构建提示词
-                messages = self.chat_observer.get_message_history(limit=20)
-                chat_history_text = ""
-                for msg in messages:
-                    time_str = datetime.datetime.fromtimestamp(msg["time"]).strftime("%H:%M:%S")
-                    user_info = UserInfo.from_dict(msg.get("user_info", {}))
-                    sender = user_info.user_nickname or f"用户{user_info.user_id}"
-                    if sender == self.name:
-                        sender = "你说"
-                    chat_history_text += f"{time_str},{sender}:{msg.get('processed_plain_text', '')}\n"
-
-                personality_text = f"你的名字是{self.name}，{self.personality_info}"
-
-                # 构建当前已有目标的文本
-                existing_goals_text = ""
-                if self.goals:
-                    existing_goals_text = "当前已有的对话目标:\n"
-                    for i, (goal, _, reason) in enumerate(self.goals):
-                        existing_goals_text += f"{i + 1}. 目标: {goal}, 原因: {reason}\n"
-
-                prompt = f"""{personality_text}。现在你在参与一场QQ聊天，请分析以下聊天记录，并根据你的性格特征确定多个明确的对话目标。
+         #构建对话目标
+        goal_list = conversation_info.goal_list
+        goal_text = ""
+        for goal, reason in goal_list:
+            goal_text += f"目标：{goal};"
+            goal_text += f"原因：{reason}\n"
+            
+            
+        # 获取聊天历史记录
+        chat_history_list = observation_info.chat_history
+        chat_history_text = ""
+        for msg in chat_history_list:
+            chat_history_text += f"{msg}\n"
+        
+        if observation_info.new_messages_count > 0:
+            new_messages_list = observation_info.unprocessed_messages
+            
+            chat_history_text += f"有{observation_info.new_messages_count}条新消息：\n"
+            for msg in new_messages_list:
+                chat_history_text += f"{msg}\n"
+            
+            observation_info.clear_unprocessed_messages()
+                
+            
+        personality_text = f"你的名字是{self.name}，{self.personality_info}"
+        
+        # 构建action历史文本
+        action_history_list = conversation_info.done_action
+        action_history_text = "你之前做的事情是："
+        for action in action_history_list:
+            action_history_text += f"{action}\n"
+            
+            
+        prompt = f"""{personality_text}。现在你在参与一场QQ聊天，请分析以下聊天记录，并根据你的性格特征确定多个明确的对话目标。
 这些目标应该反映出对话的不同方面和意图。
 
-{existing_goals_text}
+{action_history_text}
+当前对话目标：
+{goal_text}
 
 聊天记录：
 {chat_history_text}
@@ -91,54 +102,37 @@ class GoalAnalyzer:
 3. 添加新目标
 4. 删除不再相关的目标
 
-请以JSON格式输出一个当前最主要的对话目标，包含以下字段：
+请以JSON格式输出当前的所有对话目标，包含以下字段：
 1. goal: 对话目标（简短的一句话）
 2. reasoning: 对话原因，为什么设定这个目标（简要解释）
 
 输出格式示例：
 {{
-    "goal": "回答用户关于Python编程的具体问题",
-    "reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
+"goal": "回答用户关于Python编程的具体问题",
+"reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
+}},
+{{
+"goal": "回答用户关于python安装的具体问题",
+"reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
 }}"""
 
-                logger.debug(f"发送到LLM的提示词: {prompt}")
-                content, _ = await self.llm.generate_response_async(prompt)
-                logger.debug(f"LLM原始返回内容: {content}")
+        logger.debug(f"发送到LLM的提示词: {prompt}")
+        content, _ = await self.llm.generate_response_async(prompt)
+        logger.debug(f"LLM原始返回内容: {content}")
+        
+        # 使用简化函数提取JSON内容
+        success, result = get_items_from_json(
+            content,
+            "goal", "reasoning",
+            required_types={"goal": str, "reasoning": str}
+        )
+        #TODO
+        
+        
+        conversation_info.goal_list.append(result)
 
-                # 使用简化函数提取JSON内容
-                success, result = get_items_from_json(
-                    content, "goal", "reasoning", required_types={"goal": str, "reasoning": str}
-                )
-
-                if not success:
-                    logger.error(f"无法解析JSON，重试第{retry + 1}次")
-                    continue
-
-                goal = result["goal"]
-                reasoning = result["reasoning"]
-
-                # 使用默认的方法
-                method = "以友好的态度回应"
-
-                # 更新目标列表
-                await self._update_goals(goal, method, reasoning)
-
-                # 返回当前最主要的目标
-                if self.goals:
-                    current_goal, current_method, current_reasoning = self.goals[0]
-                    return current_goal, current_method, current_reasoning
-                else:
-                    return goal, method, reasoning
-
-            except Exception as e:
-                logger.error(f"分析对话目标时出错: {str(e)}，重试第{retry + 1}次")
-                if retry == max_retries - 1:
-                    return "保持友好的对话", "以友好的态度回应", "确保对话顺利进行"
-                continue
-
-        # 所有重试都失败后的默认返回
-        return "保持友好的对话", "以友好的态度回应", "确保对话顺利进行"
-
+        
+    
     async def _update_goals(self, new_goal: str, method: str, reasoning: str):
         """更新目标列表
 
