@@ -298,7 +298,9 @@ class ThinkFlowChat:
                 try:
                     timer1 = time.time()
                     current_mind,past_mind = await heartflow.get_subheartflow(chat.stream_id).do_thinking_before_reply(
-                        message.processed_plain_text
+                        message_txt = message.processed_plain_text,
+                        sender_name = message.message_info.user_info.user_nickname,
+                        chat_stream = chat
                     )
                     timer2 = time.time()
                     timing_results["思考前脑内状态"] = timer2 - timer1
