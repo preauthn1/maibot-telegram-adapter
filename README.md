@@ -178,7 +178,6 @@ MaiCore是一个开源项目，我们非常欢迎你的参与。你的贡献，�
 
 ## 致谢
 
-- [nonebot2](https://github.com/nonebot/nonebot2): 跨平台 Python 异步聊天机器人框架  
 - [NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现  
 
 ### 贡献者

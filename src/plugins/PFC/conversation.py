@@ -204,7 +204,7 @@ class Conversation:
     async def _send_timeout_message(self):
         """发送超时结束消息"""
         try:
-            messages = self.chat_observer.get_message_history(limit=1)
+            messages = self.chat_observer.get_cached_messages(limit=1)
             if not messages:
                 return
                 
@@ -223,7 +223,7 @@ class Conversation:
             logger.warning("没有生成回复")
             return
             
-        messages = self.chat_observer.get_message_history(limit=1)
+        messages = self.chat_observer.get_cached_messages(limit=1)
         if not messages:
             logger.warning("没有最近的消息可以回复")
             return

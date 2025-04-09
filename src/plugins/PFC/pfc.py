@@ -198,7 +198,7 @@ class GoalAnalyzer:
         return self.goals[1:].copy()
 
     async def analyze_conversation(self, goal, reasoning):
-        messages = self.chat_observer.get_message_history()
+        messages = self.chat_observer.get_cached_messages()
         chat_history_text = ""
         for msg in messages:
             time_str = datetime.datetime.fromtimestamp(msg["time"]).strftime("%H:%M:%S")
