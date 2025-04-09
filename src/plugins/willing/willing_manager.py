@@ -78,7 +78,7 @@ class BaseWillingManager(ABC):
         except (ImportError, AttributeError, TypeError) as e:
             module = importlib.import_module(".mode_classical", __package__)
             manager_class = module.ClassicalWillingManager
-            logger.info("未找到当前意愿模式对应文件，使用经典配方~")
+            logger.info(f"载入当前意愿模式{manager_type}失败，使用经典配方~~~~")
             return manager_class()
     
     def __init__(self):
