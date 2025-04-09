@@ -22,7 +22,7 @@ subheartflow_config = LogConfig(
 logger = get_module_logger("subheartflow", config=subheartflow_config)
 
 
-class CuttentState:
+class CurrentState:
     def __init__(self):
         self.willing = 0
         self.current_state_info = ""
@@ -40,7 +40,7 @@ class SubHeartflow:
 
         self.current_mind = ""
         self.past_mind = []
-        self.current_state: CuttentState = CuttentState()
+        self.current_state: CurrentState = CurrentState()
         self.llm_model = LLM_request(
             model=global_config.llm_sub_heartflow, temperature=0.7, max_tokens=600, request_type="sub_heart_flow"
         )
@@ -143,11 +143,11 @@ class SubHeartflow:
     #     prompt += f"你现在{mood_info}\n"
     #     prompt += "现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，"
     #     prompt += "但是记得结合上述的消息，要记得维持住你的人设，关注聊天和新内容，不要思考太多:"
-    #     reponse, reasoning_content = await self.llm_model.generate_response_async(prompt)
+    #     response, reasoning_content = await self.llm_model.generate_response_async(prompt)
 
-    #     self.update_current_mind(reponse)
+    #     self.update_current_mind(response)
 
-    #     self.current_mind = reponse
+    #     self.current_mind = response
     #     logger.debug(f"prompt:\n{prompt}\n")
     #     logger.info(f"麦麦的脑内状态：{self.current_mind}")
 
@@ -217,11 +217,14 @@ class SubHeartflow:
         prompt += f"你注意到有人刚刚说：{message_txt}\n"
         prompt += "现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，"
         prompt += "记得结合上述的消息，要记得维持住你的人设，注意自己的名字，关注有人刚刚说的内容，不要思考太多:"
-        reponse, reasoning_content = await self.llm_model.generate_response_async(prompt)
+        try:
+            response, reasoning_content = await self.llm_model.generate_response_async(prompt)
+        except Exception as e:
+            logger.error(f"回复前内心独白获取失败: {e}")
+            response = ""
+        self.update_current_mind(response)
 
-        self.update_current_mind(reponse)
-
-        self.current_mind = reponse
+        self.current_mind = response
         logger.debug(f"prompt:\n{prompt}\n")
         logger.info(f"麦麦的思考前脑内状态：{self.current_mind}")
 
@@ -264,12 +267,14 @@ class SubHeartflow:
         prompt += f"你现在{mood_info}"
         prompt += "现在你接下去继续思考，产生新的想法，记得保留你刚刚的想法，不要分点输出，输出连贯的内心独白"
         prompt += "不要太长，但是记得结合上述的消息，要记得你的人设，关注聊天和新内容，关注你回复的内容，不要思考太多:"
+        try:
+            response, reasoning_content = await self.llm_model.generate_response_async(prompt)
+        except Exception as e:
+            logger.error(f"回复后内心独白获取失败: {e}")
+            response = ""
+        self.update_current_mind(response)
 
-        reponse, reasoning_content = await self.llm_model.generate_response_async(prompt)
-
-        self.update_current_mind(reponse)
-
-        self.current_mind = reponse
+        self.current_mind = response
         logger.info(f"麦麦回复后的脑内状态：{self.current_mind}")
 
         self.last_reply_time = time.time()
@@ -302,10 +307,13 @@ class SubHeartflow:
         prompt += f"你现在{mood_info}。"
         prompt += "现在请你思考，你想不想发言或者回复，请你输出一个数字，1-10，1表示非常不想，10表示非常想。"
         prompt += "请你用<>包裹你的回复意愿，输出<1>表示不想回复，输出<10>表示非常想回复。请你考虑，你完全可以不回复"
-
-        response, reasoning_content = await self.llm_model.generate_response_async(prompt)
-        # 解析willing值
-        willing_match = re.search(r"<(\d+)>", response)
+        try:
+            response, reasoning_content = await self.llm_model.generate_response_async(prompt)
+            # 解析willing值
+            willing_match = re.search(r"<(\d+)>", response)
+        except Exception as e:
+            logger.error(f"意愿判断获取失败: {e}")
+            willing_match = None
         if willing_match:
             self.current_state.willing = int(willing_match.group(1))
         else:
@@ -313,9 +321,9 @@ class SubHeartflow:
 
         return self.current_state.willing
 
-    def update_current_mind(self, reponse):
+    def update_current_mind(self, response):
         self.past_mind.append(self.current_mind)
-        self.current_mind = reponse
+        self.current_mind = response
 
     async def get_prompt_info(self, message: str, threshold: float):
         start_time = time.time()
