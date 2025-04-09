@@ -164,7 +164,7 @@ response_max_sentence_num = 4 # 回复允许的最大句子数
 [remote] #发送统计信息，主要是看全球有多少只麦麦
 enable = true
 
-[experimental]
+[experimental] #实验性功能，不一定完善或者根本不能用
 enable_friend_chat = false # 是否启用好友聊天
 pfc_chatting = false # 是否启用PFC聊天，该功能仅作用于私聊，与回复模式独立
 

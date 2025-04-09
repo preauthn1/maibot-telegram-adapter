@@ -200,7 +200,7 @@ class Heartflow:
             logger.error(f"创建 subheartflow 失败: {e}")
             return None
 
-    def get_subheartflow(self, observe_chat_id):
+    def get_subheartflow(self, observe_chat_id) -> SubHeartflow:
         """获取指定ID的SubHeartflow实例"""
         return self._subheartflows.get(observe_chat_id)
 

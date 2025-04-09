@@ -96,40 +96,39 @@ class ResponseGenerator:
             return None
 
         # 保存到数据库
-        self._save_to_db(
-            message=message,
-            sender_name=sender_name,
-            prompt=prompt,
-            content=content,
-            reasoning_content=reasoning_content,
-            # reasoning_content_check=reasoning_content_check if global_config.enable_kuuki_read else ""
-        )
+        # self._save_to_db(
+        #     message=message,
+        #     sender_name=sender_name,
+        #     prompt=prompt,
+        #     content=content,
+        #     reasoning_content=reasoning_content,
+        #     # reasoning_content_check=reasoning_content_check if global_config.enable_kuuki_read else ""
+        # )
 
         return content
 
-    # def _save_to_db(self, message: Message, sender_name: str, prompt: str, prompt_check: str,
-    #                 content: str, content_check: str, reasoning_content: str, reasoning_content_check: str):
-    def _save_to_db(
-        self,
-        message: MessageRecv,
-        sender_name: str,
-        prompt: str,
-        content: str,
-        reasoning_content: str,
-    ):
-        """保存对话记录到数据库"""
-        db.reasoning_logs.insert_one(
-            {
-                "time": time.time(),
-                "chat_id": message.chat_stream.stream_id,
-                "user": sender_name,
-                "message": message.processed_plain_text,
-                "model": self.current_model_name,
-                "reasoning": reasoning_content,
-                "response": content,
-                "prompt": prompt,
-            }
-        )
+
+    # def _save_to_db(
+    #     self,
+    #     message: MessageRecv,
+    #     sender_name: str,
+    #     prompt: str,
+    #     content: str,
+    #     reasoning_content: str,
+    # ):
+    #     """保存对话记录到数据库"""
+    #     db.reasoning_logs.insert_one(
+    #         {
+    #             "time": time.time(),
+    #             "chat_id": message.chat_stream.stream_id,
+    #             "user": sender_name,
+    #             "message": message.processed_plain_text,
+    #             "model": self.current_model_name,
+    #             "reasoning": reasoning_content,
+    #             "response": content,
+    #             "prompt": prompt,
+    #         }
+    #     )
 
     async def _get_emotion_tags(self, content: str, processed_plain_text: str):
         """提取情感标签，结合立场和情绪"""

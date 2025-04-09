@@ -42,7 +42,7 @@ class SubHeartflow:
         self.past_mind = []
         self.current_state: CuttentState = CuttentState()
         self.llm_model = LLM_request(
-            model=global_config.llm_sub_heartflow, temperature=0.7, max_tokens=600, request_type="sub_heart_flow"
+            model=global_config.llm_sub_heartflow, temperature=0.5, max_tokens=600, request_type="sub_heart_flow"
         )
 
         self.main_heartflow_info = ""
@@ -221,9 +221,9 @@ class SubHeartflow:
 
         self.update_current_mind(reponse)
 
-        self.current_mind = reponse
         logger.debug(f"prompt:\n{prompt}\n")
         logger.info(f"麦麦的思考前脑内状态：{self.current_mind}")
+        return self.current_mind ,self.past_mind
 
     async def do_thinking_after_reply(self, reply_content, chat_talking_prompt):
         # print("麦麦回复之后脑袋转起来了")
