@@ -42,7 +42,7 @@ class SubHeartflow:
         self.past_mind = []
         self.current_state: CurrentState = CurrentState()
         self.llm_model = LLM_request(
-            model=global_config.llm_sub_heartflow, temperature=0.7, max_tokens=600, request_type="sub_heart_flow"
+            model=global_config.llm_sub_heartflow, temperature=0.5, max_tokens=600, request_type="sub_heart_flow"
         )
 
         self.main_heartflow_info = ""
@@ -217,6 +217,7 @@ class SubHeartflow:
         prompt += f"你注意到有人刚刚说：{message_txt}\n"
         prompt += "现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，"
         prompt += "记得结合上述的消息，要记得维持住你的人设，注意自己的名字，关注有人刚刚说的内容，不要思考太多:"
+
         try:
             response, reasoning_content = await self.llm_model.generate_response_async(prompt)
         except Exception as e:
@@ -225,8 +226,10 @@ class SubHeartflow:
         self.update_current_mind(response)
 
         self.current_mind = response
+
         logger.debug(f"prompt:\n{prompt}\n")
         logger.info(f"麦麦的思考前脑内状态：{self.current_mind}")
+        return self.current_mind ,self.past_mind
 
     async def do_thinking_after_reply(self, reply_content, chat_talking_prompt):
         # print("麦麦回复之后脑袋转起来了")
