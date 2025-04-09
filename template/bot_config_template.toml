@@ -98,9 +98,7 @@ ban_msgs_regex = [
 ]
 
 [willing]
-willing_mode = "classical" # 回复意愿模式 经典模式
-# willing_mode = "dynamic" # 动态模式(不兼容，需要维护)
-# willing_mode = "custom" # 自定义模式（可自行调整
+willing_mode = "classical" # 回复意愿模式 —— 经典模式：classical，动态模式：dynamic，自定义模式：custom
 response_willing_amplifier = 1 # 麦麦回复意愿放大系数，一般为1
 response_interested_rate_amplifier = 1 # 麦麦回复兴趣度放大系数,听到记忆里的内容时放大系数
 down_frequency_rate = 3 # 降低回复频率的群组回复意愿降低系数 除法
