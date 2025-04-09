@@ -78,6 +78,7 @@ class BaseWillingManager(ABC):
         except (ImportError, AttributeError, TypeError) as e:
             module = importlib.import_module(".mode_classical", __package__)
             manager_class = module.ClassicalWillingManager
+            logger.debug(f"加载willing模式{manager_type}失败，原因: {str(e)}。")
             logger.info("未找到当前意愿模式对应文件，使用经典配方~")
             return manager_class()
     
