@@ -4,6 +4,8 @@ from datetime import datetime
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.config.config import global_config
 from src.common.database import db
+from src.individuality.individuality import Individuality
+import random
 
 
 # 所有观察的基类
@@ -23,8 +25,7 @@ class ChattingObservation(Observation):
 
         self.talking_message = []
         self.talking_message_str = ""
-        
-        self.personality_info = " ".join(global_config.PROMPT_PERSONALITY)
+
         self.name = global_config.BOT_NICKNAME
         self.nick_name = global_config.BOT_ALIAS_NAMES
 
@@ -57,7 +58,7 @@ class ChattingObservation(Observation):
         for msg in new_messages:
             if "detailed_plain_text" in msg:
                 new_messages_str += f"{msg['detailed_plain_text']}"
-                
+
         # print(f"new_messages_str：{new_messages_str}")
 
         # 将新消息添加到talking_message，同时保持列表长度不超过20条
@@ -115,8 +116,26 @@ class ChattingObservation(Observation):
     async def update_talking_summary(self, new_messages_str):
         # 基于已经有的talking_summary，和新的talking_message，生成一个summary
         # print(f"更新聊天总结：{self.talking_summary}")
+        # 开始构建prompt
+        prompt_personality = "你"
+        # person
+        individuality = Individuality.get_instance()
+
+        personality_core = individuality.personality.personality_core
+        prompt_personality += personality_core
+
+        personality_sides = individuality.personality.personality_sides
+        random.shuffle(personality_sides)
+        prompt_personality += f",{personality_sides[0]}"
+
+        identity_detail = individuality.identity.identity_detail
+        random.shuffle(identity_detail)
+        prompt_personality += f",{identity_detail[0]}"
+
+        personality_info = prompt_personality
+
         prompt = ""
-        prompt += f"你{self.personality_info}，请注意识别你自己的聊天发言"
+        prompt += f"{personality_info}，请注意识别你自己的聊天发言"
         prompt += f"你的名字叫：{self.name}，你的昵称是：{self.nick_name}\n"
         prompt += f"你正在参与一个qq群聊的讨论，你记得这个群之前在聊的内容是：{self.observe_info}\n"
         prompt += f"现在群里的群友们产生了新的讨论，有了新的发言，具体内容如下：{new_messages_str}\n"
@@ -126,7 +145,6 @@ class ChattingObservation(Observation):
         self.observe_info, reasoning_content = await self.llm_summary.generate_response_async(prompt)
         print(f"prompt：{prompt}")
         print(f"self.observe_info：{self.observe_info}")
-        
 
     def translate_message_list_to_str(self):
         self.talking_message_str = ""

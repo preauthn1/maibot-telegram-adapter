@@ -26,8 +26,9 @@ logger = get_module_logger("config", config=config_config)
 
 #考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
 is_test = True
-mai_version_main = "0.6.1"
-mai_version_fix = "snapshot-2"
+mai_version_main = "0.6.2"
+mai_version_fix = "snapshot-1"
+
 if mai_version_fix:
     if is_test:
         mai_version = f"test-{mai_version_main}-{mai_version_fix}"
@@ -38,6 +39,7 @@ else:
         mai_version = f"test-{mai_version_main}"
     else:
         mai_version = mai_version_main
+
 
 def update_config():
     # 获取根目录路径
@@ -54,7 +56,7 @@ def update_config():
     # 检查配置文件是否存在
     if not old_config_path.exists():
         logger.info("配置文件不存在，从模板创建新配置")
-        #创建文件夹
+        # 创建文件夹
         old_config_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(template_path, old_config_path)
         logger.info(f"已创建新配置文件，请填写后重新运行: {old_config_path}")
@@ -84,7 +86,7 @@ def update_config():
     # 生成带时间戳的新文件名
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     old_backup_path = old_config_dir / f"bot_config_{timestamp}.toml"
-    
+
     # 移动旧配置文件到old目录
     shutil.move(old_config_path, old_backup_path)
     logger.info(f"已备份旧配置文件到: {old_backup_path}")
@@ -127,6 +129,7 @@ def update_config():
         f.write(tomlkit.dumps(new_config))
     logger.info("配置文件更新完成")
 
+
 logger = get_module_logger("config")
 
 
@@ -148,14 +151,26 @@ class BotConfig:
     ban_user_id = set()
 
     # personality
-    PROMPT_PERSONALITY = [
-        "用一句话或几句话描述性格特点和其他特征",
-        "例如，是一个热爱国家热爱党的新时代好青年",
-        "例如，曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧",
-    ]
-    PERSONALITY_1: float = 0.6  # 第一种人格概率
-    PERSONALITY_2: float = 0.3  # 第二种人格概率
-    PERSONALITY_3: float = 0.1  # 第三种人格概率
+    personality_core = "用一句话或几句话描述人格的核心特点"  # 建议20字以内，谁再写3000字小作文敲谁脑袋
+    personality_sides: List[str] = field(
+        default_factory=lambda: [
+            "用一句话或几句话描述人格的一些侧面",
+            "用一句话或几句话描述人格的一些侧面",
+            "用一句话或几句话描述人格的一些侧面",
+        ]
+    )
+    # identity
+    identity_detail: List[str] = field(
+        default_factory=lambda: [
+            "身份特点",
+            "身份特点",
+        ]
+    )
+    height: int = 170  # 身高 单位厘米
+    weight: int = 50  # 体重 单位千克
+    age: int = 20  # 年龄 单位岁
+    gender: str = "男"  # 性别
+    appearance: str = "用几句话描述外貌特征"  # 外貌特征
 
     # schedule
     ENABLE_SCHEDULE_GEN: bool = False  # 是否启用日程生成
@@ -173,20 +188,22 @@ class BotConfig:
 
     ban_words = set()
     ban_msgs_regex = set()
-    
-    #heartflow
+
+    # heartflow
     # enable_heartflow: bool = False  # 是否启用心流
     sub_heart_flow_update_interval: int = 60  # 子心流更新频率，间隔 单位秒
     sub_heart_flow_freeze_time: int = 120  # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
     sub_heart_flow_stop_time: int = 600  # 子心流停止时间，超过这个时间没有回复，子心流会停止，间隔 单位秒
     heart_flow_update_interval: int = 300  # 心流更新频率，间隔 单位秒
-    
+
     # willing
     willing_mode: str = "classical"  # 意愿模式
     response_willing_amplifier: float = 1.0  # 回复意愿放大系数
     response_interested_rate_amplifier: float = 1.0  # 回复兴趣度放大系数
     down_frequency_rate: float = 3  # 降低回复频率的群组回复意愿降低系数
     emoji_response_penalty: float = 0.0  # 表情包回复惩罚
+    mentioned_bot_inevitable_reply: bool = False  # 提及 bot 必然回复
+    at_bot_inevitable_reply: bool = False  # @bot 必然回复
 
     # response
     response_mode: str = "heart_flow"  # 回复策略
@@ -344,17 +361,21 @@ class BotConfig:
         """从TOML配置文件加载配置"""
         config = cls()
 
-
         def personality(parent: dict):
             personality_config = parent["personality"]
-            personality = personality_config.get("prompt_personality")
-            if len(personality) >= 2:
-                logger.info(f"载入自定义人格:{personality}")
-                config.PROMPT_PERSONALITY = personality_config.get("prompt_personality", config.PROMPT_PERSONALITY)
+            if config.INNER_VERSION in SpecifierSet(">=1.2.4"):
+                config.personality_core = personality_config.get("personality_core", config.personality_core)
+                config.personality_sides = personality_config.get("personality_sides", config.personality_sides)
 
-            config.PERSONALITY_1 = personality_config.get("personality_1_probability", config.PERSONALITY_1)
-            config.PERSONALITY_2 = personality_config.get("personality_2_probability", config.PERSONALITY_2)
-            config.PERSONALITY_3 = personality_config.get("personality_3_probability", config.PERSONALITY_3)
+        def identity(parent: dict):
+            identity_config = parent["identity"]
+            if config.INNER_VERSION in SpecifierSet(">=1.2.4"):
+                config.identity_detail = identity_config.get("identity_detail", config.identity_detail)
+                config.height = identity_config.get("height", config.height)
+                config.weight = identity_config.get("weight", config.weight)
+                config.age = identity_config.get("age", config.age)
+                config.gender = identity_config.get("gender", config.gender)
+                config.appearance = identity_config.get("appearance", config.appearance)
 
         def schedule(parent: dict):
             schedule_config = parent["schedule"]
@@ -403,13 +424,21 @@ class BotConfig:
             config.max_response_length = response_config.get("max_response_length", config.max_response_length)
             if config.INNER_VERSION in SpecifierSet(">=1.0.4"):
                 config.response_mode = response_config.get("response_mode", config.response_mode)
-            
+
         def heartflow(parent: dict):
             heartflow_config = parent["heartflow"]
-            config.sub_heart_flow_update_interval = heartflow_config.get("sub_heart_flow_update_interval", config.sub_heart_flow_update_interval)
-            config.sub_heart_flow_freeze_time = heartflow_config.get("sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time)
-            config.sub_heart_flow_stop_time = heartflow_config.get("sub_heart_flow_stop_time", config.sub_heart_flow_stop_time)
-            config.heart_flow_update_interval = heartflow_config.get("heart_flow_update_interval", config.heart_flow_update_interval)
+            config.sub_heart_flow_update_interval = heartflow_config.get(
+                "sub_heart_flow_update_interval", config.sub_heart_flow_update_interval
+            )
+            config.sub_heart_flow_freeze_time = heartflow_config.get(
+                "sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time
+            )
+            config.sub_heart_flow_stop_time = heartflow_config.get(
+                "sub_heart_flow_stop_time", config.sub_heart_flow_stop_time
+            )
+            config.heart_flow_update_interval = heartflow_config.get(
+                "heart_flow_update_interval", config.heart_flow_update_interval
+            )
 
         def willing(parent: dict):
             willing_config = parent["willing"]
@@ -425,6 +454,13 @@ class BotConfig:
                 config.down_frequency_rate = willing_config.get("down_frequency_rate", config.down_frequency_rate)
                 config.emoji_response_penalty = willing_config.get(
                     "emoji_response_penalty", config.emoji_response_penalty
+                )
+            if config.INNER_VERSION in SpecifierSet(">=1.2.5"):
+                config.mentioned_bot_inevitable_reply = willing_config.get(
+                    "mentioned_bot_inevitable_reply", config.mentioned_bot_inevitable_reply
+                )
+                config.at_bot_inevitable_reply = willing_config.get(
+                    "at_bot_inevitable_reply", config.at_bot_inevitable_reply
                 )
 
         def model(parent: dict):
@@ -611,6 +647,7 @@ class BotConfig:
             "bot": {"func": bot, "support": ">=0.0.0"},
             "groups": {"func": groups, "support": ">=0.0.0"},
             "personality": {"func": personality, "support": ">=0.0.0"},
+            "identity": {"func": identity, "support": ">=1.2.4"},
             "schedule": {"func": schedule, "support": ">=0.0.11", "necessary": False},
             "message": {"func": message, "support": ">=0.0.0"},
             "willing": {"func": willing, "support": ">=0.0.9", "necessary": False},

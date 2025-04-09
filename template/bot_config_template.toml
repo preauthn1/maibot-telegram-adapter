@@ -1,5 +1,5 @@
 [inner]
-version = "1.2.4"
+version = "1.2.5"
 
 
 #以下是给开发人员阅读的，一般用户不需要阅读
@@ -33,15 +33,28 @@ talk_allowed = [
 talk_frequency_down = []  #降低回复频率的群号码
 ban_user_id = []  #禁止回复和读取消息的QQ号
 
-[personality]
-prompt_personality = [
-        "用一句话或几句话描述性格特点和其他特征",    
-        "例如，是一个热爱国家热爱党的新时代好青年",    
-        "例如，曾经是一个学习地质的女大学生，现在学习心理学和脑科学，你会刷贴吧"    
-    ]
-personality_1_probability = 0.7 # 第一种人格出现概率
-personality_2_probability = 0.2 # 第二种人格出现概率，可以为0
-personality_3_probability = 0.1 # 第三种人格出现概率，请确保三个概率相加等于1
+[personality] #未完善
+personality_core = "用一句话或几句话描述人格的核心特点" # 建议20字以内，谁再写3000字小作文敲谁脑袋
+personality_sides = [
+    "用一句话或几句话描述人格的一些细节",
+    "用一句话或几句话描述人格的一些细节",
+    "用一句话或几句话描述人格的一些细节",
+    "用一句话或几句话描述人格的一些细节",
+    "用一句话或几句话描述人格的一些细节",
+]# 条数任意
+
+[identity] #アイデンティティがない 生まれないらららら
+# 兴趣爱好 未完善，有些条目未使用
+identity_detail = [
+    "身份特点",
+    "身份特点",
+]# 条数任意
+#外貌特征
+height = 170 # 身高 单位厘米
+weight = 50 # 体重 单位千克
+age = 20 # 年龄 单位岁
+gender = "男" # 性别
+appearance = "用几句话描述外貌特征" # 外貌特征
 
 [schedule]
 enable_schedule_gen = true # 是否启用日程表(尚未完成)
@@ -60,7 +73,7 @@ response_mode = "heart_flow" # 回复策略，可选值：heart_flow（心流）
 model_r1_probability = 0.7 # 麦麦回答时选择主要回复模型1 模型的概率
 model_v3_probability = 0.3 # 麦麦回答时选择次要回复模型2 模型的概率
 
-[heartflow] # 注意：可能会消耗大量token，请谨慎开启
+[heartflow] # 注意：可能会消耗大量token，请谨慎开启，仅会使用v3模型
 sub_heart_flow_update_interval = 60 # 子心流更新频率，间隔 单位秒
 sub_heart_flow_freeze_time = 120 # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
 sub_heart_flow_stop_time = 600 # 子心流停止时间，超过这个时间没有回复，子心流会停止，间隔 单位秒
@@ -86,13 +99,14 @@ ban_msgs_regex = [
 
 [willing]
 willing_mode = "classical" # 回复意愿模式 经典模式
-# willing_mode = "dynamic" # 动态模式(可能不兼容)
+# willing_mode = "dynamic" # 动态模式(不兼容，需要维护)
 # willing_mode = "custom" # 自定义模式（可自行调整
 response_willing_amplifier = 1 # 麦麦回复意愿放大系数，一般为1
 response_interested_rate_amplifier = 1 # 麦麦回复兴趣度放大系数,听到记忆里的内容时放大系数
 down_frequency_rate = 3 # 降低回复频率的群组回复意愿降低系数 除法
 emoji_response_penalty = 0.1 # 表情包回复惩罚系数，设为0为不回复单个表情包，减少单独回复表情包的概率
-
+mentioned_bot_inevitable_reply = false # 提及 bot 必然回复
+at_bot_inevitable_reply = false # @bot 必然回复
 
 [emoji]
 max_emoji_num = 120 # 表情包最大数量
@@ -152,7 +166,7 @@ enable = true
 
 [experimental]
 enable_friend_chat = false # 是否启用好友聊天
-pfc_chatting = false # 是否启用PFC聊天
+pfc_chatting = false # 是否启用PFC聊天，该功能仅作用于私聊，与回复模式独立
 
 #下面的模型若使用硅基流动则不需要更改，使用ds官方则改成.env自定义的宏，使用自定义模型则选择定位相似的模型自己填写
 #推理模型
