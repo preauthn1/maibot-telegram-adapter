@@ -421,15 +421,15 @@ class ChatObserver:
             logger.error(f"更新消息历史时出错: {str(e)}")
             return False
             
-    def get_message_history(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """获取消息历史
+    def get_cached_messages(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """获取缓存的消息历史
         
         Args:
-            limit: 获取的最大消息数量
+            limit: 获取的最大消息数量，默认50
             
         Returns:
-            List[Dict[str, Any]]: 消息历史列表
-        """
+            List[Dict[str, Any]]: 缓存的消息历史列表
+        """        
         return self.message_cache[:limit]
         
     def get_last_message(self) -> Optional[Dict[str, Any]]:

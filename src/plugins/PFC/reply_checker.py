@@ -33,7 +33,7 @@ class ReplyChecker:
             Tuple[bool, str, bool]: (是否合适, 原因, 是否需要重新规划)
         """
         # 获取最新的消息记录
-        messages = self.chat_observer.get_message_history(limit=5)
+        messages = self.chat_observer.get_cached_messages(limit=5)
         chat_history_text = ""
         for msg in messages:
             time_str = datetime.datetime.fromtimestamp(msg["time"]).strftime("%H:%M:%S")
