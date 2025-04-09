@@ -16,7 +16,7 @@ class ClassicalWillingManager(BaseWillingManager):
                 self.chat_reply_willing[chat_id] = max(0, self.chat_reply_willing[chat_id] * 0.9)
 
     async def async_task_starter(self):
-        if self._decay_task is None or self._decay_task.done():
+        if self._decay_task is None:
             self._decay_task = asyncio.create_task(self._decay_reply_willing())
 
     async def get_reply_probability(self, message_id):
