@@ -1,10 +1,12 @@
 import asyncio
 from .willing_manager import BaseWillingManager
+import time
 
 
 class ClassicalWillingManager(BaseWillingManager):
     def __init__(self):
         super().__init__()
+        self._decay_task: asyncio.Task = None
 
     async def _decay_reply_willing(self):
         """定期衰减回复意愿"""
@@ -12,10 +14,10 @@ class ClassicalWillingManager(BaseWillingManager):
             await asyncio.sleep(1)
             for chat_id in self.chat_reply_willing:
                 self.chat_reply_willing[chat_id] = max(0, self.chat_reply_willing[chat_id] * 0.9)
-                self.logger.info(self.chat_reply_willing[chat_id])
 
     async def async_task_starter(self):
-        asyncio.create_task(self._decay_reply_willing)
+        if self._decay_task is None or self._decay_task.done():
+            self._decay_task = asyncio.create_task(self._decay_reply_willing())
 
     async def get_reply_probability(self, message_id):
         willing_info = self.ongoing_messages[message_id]
@@ -32,11 +34,12 @@ class ClassicalWillingManager(BaseWillingManager):
         elif willing_info.is_mentioned_bot:
             current_willing += 0.05
 
+        is_emoji_not_reply = False
         if willing_info.is_emoji:
             if self.global_config.emoji_response_penalty != 0:
                 current_willing *= self.global_config.emoji_response_penalty
             else:
-                return 0
+                is_emoji_not_reply = True
 
         self.chat_reply_willing[chat_id] = min(current_willing, 3.0)
 
@@ -45,6 +48,18 @@ class ClassicalWillingManager(BaseWillingManager):
         # 检查群组权限（如果是群聊）
         if willing_info.group_info and willing_info.group_info.group_id in self.global_config.talk_frequency_down_groups:
             reply_probability = reply_probability / self.global_config.down_frequency_rate
+
+        if is_emoji_not_reply:
+            reply_probability = 0
+
+        # 打印消息信息
+        mes_name = willing_info.chat.group_info.group_name if willing_info.chat.group_info else "私聊"
+        current_time = time.strftime("%H:%M:%S", time.localtime(willing_info.message.message_info.time))
+        self.logger.info(
+            f"[{current_time}][{mes_name}]"
+            f"{willing_info.chat.user_info.user_nickname}:"
+            f"{willing_info.message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
+        )
 
         return reply_probability
     

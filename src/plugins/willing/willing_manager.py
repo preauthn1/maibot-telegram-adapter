@@ -71,6 +71,8 @@ class BaseWillingManager(ABC):
             if not issubclass(manager_class, cls):
                 manager_class = getattr(module, "ClassicalWillingManager")
                 logger.info("未找到当前意愿模式对应文件，使用经典配方~")
+            else:
+                logger.info(f"成功载入willing模式：{manager_type}")
             return manager_class()
         except (ImportError, AttributeError) as e:
             logger.error(f"Failed to create willing manager: {str(e)}")
