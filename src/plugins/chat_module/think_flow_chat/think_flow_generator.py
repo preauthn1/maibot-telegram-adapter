@@ -10,6 +10,8 @@ from ...chat.utils import process_llm_response
 from src.common.logger import get_module_logger, LogConfig, LLM_STYLE_CONFIG
 from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 
+from src.plugins.moods.moods import MoodManager
+
 # 定义日志配置
 llm_config = LogConfig(
     # 使用消息发送专用样式
@@ -39,8 +41,12 @@ class ResponseGenerator:
         logger.info(
             f"思考:{message.processed_plain_text[:30] + '...' if len(message.processed_plain_text) > 30 else message.processed_plain_text}"
         )
-
+        
+        arousal_multiplier = MoodManager.get_instance().get_arousal_multiplier()
+        
+        
         current_model = self.model_normal
+        current_model.temperature = 0.7 * arousal_multiplier #激活度越高，温度越高
         model_response = await self._generate_response_with_model(message, current_model,thinking_id)
 
         # print(f"raw_content: {model_response}")
