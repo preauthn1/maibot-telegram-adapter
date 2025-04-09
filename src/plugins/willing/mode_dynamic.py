@@ -235,3 +235,9 @@ class DynamicWillingManager(BaseWillingManager):
 
             self.chat_reply_willing[chat_id] = min(2.0, current_willing + willing_increase)
 
+    async def bombing_buffer_message_handle(self, message_id):
+        return await super().bombing_buffer_message_handle(message_id)
+    
+    async def after_generate_reply_handle(self, message_id):
+        return await super().after_generate_reply_handle(message_id)
+

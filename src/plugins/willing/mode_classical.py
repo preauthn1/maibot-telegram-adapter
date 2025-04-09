@@ -73,5 +73,11 @@ class ClassicalWillingManager(BaseWillingManager):
         current_willing = self.chat_reply_willing.get(chat_id, 0)
         if current_willing < 1:
             self.chat_reply_willing[chat_id] = min(1, current_willing + 0.4)
+
+    async def bombing_buffer_message_handle(self, message_id):
+        return await super().bombing_buffer_message_handle(message_id)
+
+    async def not_reply_handle(self, message_id):
+        return await super().not_reply_handle(message_id)
             
             
