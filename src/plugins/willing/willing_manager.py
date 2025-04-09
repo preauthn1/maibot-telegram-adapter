@@ -69,14 +69,15 @@ class BaseWillingManager(ABC):
             module = importlib.import_module(f".mode_{manager_type}", __package__)
             manager_class = getattr(module, f"{manager_type.capitalize()}WillingManager")
             if not issubclass(manager_class, cls):
-                manager_class = getattr(module, "ClassicalWillingManager")
-                logger.info("未找到当前意愿模式对应文件，使用经典配方~")
+                raise
             else:
                 logger.info(f"成功载入willing模式：{manager_type}")
             return manager_class()
-        except (ImportError, AttributeError) as e:
-            logger.error(f"Failed to create willing manager: {str(e)}")
-            raise ValueError(f"Invalid willing manager type: {manager_type}") from e
+        except:
+            module = importlib.import_module(f".mode_classical", __package__)
+            manager_class = getattr(module, "ClassicalWillingManager")
+            logger.info("未找到当前意愿模式对应文件，使用经典配方~")
+            return manager_class()
     
     def __init__(self):
         self.chat_reply_willing: Dict[str, float] = {}  # 存储每个聊天流的回复意愿(chat_id)

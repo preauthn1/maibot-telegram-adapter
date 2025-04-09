@@ -187,6 +187,7 @@ class ReasoningChat:
         # 处理缓冲器结果
         if not buffer_result:
             await willing_manager.bombing_buffer_message_handle(message.message_info.message_id)
+            willing_manager.delete(message.message_info.message_id)
             if message.message_segment.type == "text":
                 logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
             elif message.message_segment.type == "image":
