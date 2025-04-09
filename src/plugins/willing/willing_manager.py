@@ -69,13 +69,15 @@ class BaseWillingManager(ABC):
             module = importlib.import_module(f".mode_{manager_type}", __package__)
             manager_class = getattr(module, f"{manager_type.capitalize()}WillingManager")
             if not issubclass(manager_class, cls):
-                raise
+                raise TypeError(
+                    f"Manager class {manager_class.__name__} is not a subclass of {cls.__name__}"
+                )
             else:
                 logger.info(f"成功载入willing模式：{manager_type}")
             return manager_class()
-        except:
-            module = importlib.import_module(f".mode_classical", __package__)
-            manager_class = getattr(module, "ClassicalWillingManager")
+        except (ImportError, AttributeError, TypeError) as e:
+            module = importlib.import_module(".mode_classical", __package__)
+            manager_class = module.ClassicalWillingManager
             logger.info("未找到当前意愿模式对应文件，使用经典配方~")
             return manager_class()
     
@@ -105,18 +107,22 @@ class BaseWillingManager(ABC):
         if not del_message:
             logger.debug(f"删除异常，当前消息{message_id}不存在")
 
+    @abstractmethod
     async def async_task_starter(self) -> None:
         """抽象方法：异步任务启动器"""
         pass
 
+    @abstractmethod
     async def before_generate_reply_handle(self, message_id: str):
         """抽象方法：回复前处理"""
         pass
 
+    @abstractmethod
     async def after_generate_reply_handle(self, message_id: str):
         """抽象方法：回复后处理"""
         pass
 
+    @abstractmethod
     async def not_reply_handle(self, message_id: str):
         """抽象方法：不回复处理"""
         pass
@@ -126,6 +132,7 @@ class BaseWillingManager(ABC):
         """抽象方法：获取回复概率"""
         raise NotImplementedError
     
+    @abstractmethod
     async def bombing_buffer_message_handle(self, message_id: str):
         """抽象方法：炸飞消息处理"""
         pass
