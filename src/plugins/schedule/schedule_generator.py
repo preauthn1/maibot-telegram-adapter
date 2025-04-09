@@ -121,7 +121,11 @@ class ScheduleGenerator:
             self.today_done_list = []
         if not self.today_schedule_text:
             logger.info(f"{today.strftime('%Y-%m-%d')}的日程不存在，准备生成新的日程")
-            self.today_schedule_text = await self.generate_daily_schedule(target_date=today)
+            try:
+                self.today_schedule_text = await self.generate_daily_schedule(target_date=today)
+            except Exception as e:
+                logger.error(f"生成日程时发生错误: {str(e)}")
+                self.today_schedule_text = ""
 
         self.save_today_schedule_to_db()
 
