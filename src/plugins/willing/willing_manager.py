@@ -79,6 +79,7 @@ class BaseWillingManager(ABC):
             module = importlib.import_module(".mode_classical", __package__)
             manager_class = module.ClassicalWillingManager
             logger.info(f"载入当前意愿模式{manager_type}失败，使用经典配方~~~~")
+            logger.debug(f"加载willing模式{manager_type}失败，原因: {str(e)}。")
             return manager_class()
     
     def __init__(self):
