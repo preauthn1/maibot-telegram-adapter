@@ -158,7 +158,7 @@ class WillingManager:
             logger.debug(f"被提及, 当前意愿: {current_willing}")
 
         if is_emoji:
-            current_willing *= 0.1
+            current_willing = global_config.emoji_response_penalty * 0.1
             logger.debug(f"表情包, 当前意愿: {current_willing}")
 
         # 根据话题兴趣度适当调整
@@ -180,7 +180,7 @@ class WillingManager:
             base_probability = 0.30 if msg_count >= 15 else 0.03 * min(msg_count, 10)
 
         # 考虑回复意愿的影响
-        reply_probability = base_probability * current_willing
+        reply_probability = base_probability * current_willing * config.response_willing_amplifier
 
         # 检查群组权限（如果是群聊）
         if chat_stream.group_info and config:
