@@ -47,8 +47,8 @@ class ChattingObservation(Observation):
         new_messages = list(
             db.messages.find({"chat_id": self.chat_id, "time": {"$gt": self.last_observe_time}})
             .sort("time", 1)
-            .limit(20)
-        )  # 按时间正序排列，最多20条
+            .limit(15)
+        )  # 按时间正序排列，最多15条
 
         if not new_messages:
             return self.observe_info  # 没有新消息，返回上次观察结果
@@ -63,8 +63,8 @@ class ChattingObservation(Observation):
 
         # 将新消息添加到talking_message，同时保持列表长度不超过20条
         self.talking_message.extend(new_messages)
-        if len(self.talking_message) > 20:
-            self.talking_message = self.talking_message[-20:]  # 只保留最新的20条
+        if len(self.talking_message) > 15:
+            self.talking_message = self.talking_message[-15:]  # 只保留最新的15条
         self.translate_message_list_to_str()
 
         # 更新观察次数
