@@ -17,7 +17,7 @@ from src.plugins.chat.chat_stream import ChatStream
 from src.plugins.person_info.relationship_manager import relationship_manager
 from src.plugins.chat.utils import get_recent_group_speaker
 import json
-from src.heart_flow.tool_use import ToolUser   
+from src.do_tool.tool_use import ToolUser   
 
 subheartflow_config = LogConfig(
     # 使用海马体专用样式
@@ -133,14 +133,13 @@ class SubHeartflow:
         tool_result = await self.tool_user.use_tool(message_txt, sender_name, chat_stream)
         
         # 如果工具被使用且获得了结果，将收集到的信息合并到思考中
+        collected_info = ""
         if tool_result.get("used_tools", False):
             logger.info("使用工具收集了信息")
             
             # 如果有收集到的信息，将其添加到当前思考中
             if "collected_info" in tool_result:
                 collected_info = tool_result["collected_info"]
-        
-        
 
         # 开始构建prompt
         prompt_personality = f"你的名字是{self.bot_name},你"
@@ -178,6 +177,7 @@ class SubHeartflow:
         )
 
         prompt = ""
+        # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
         if tool_result.get("used_tools", False):
             prompt += f"{collected_info}\n"
         prompt += f"{relation_prompt_all}\n"
@@ -187,10 +187,10 @@ class SubHeartflow:
         prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{chat_observe_info}\n"
         prompt += f"你现在{mood_info}\n"
         prompt += f"你注意到{sender_name}刚刚说：{message_txt}\n"
-        prompt += "现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，"
-        prompt += "思考时可以想想如何对群聊内容进行回复。回复的要求是：平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 ，注意只输出回复内容。"
-        prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，"
-        prompt += f"记得结合上述的消息，生成符合内心想法的内心独白，文字不要浮夸，注意你就是{self.bot_name}，{self.bot_name}指的就是你。"
+        prompt += "现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白"
+        prompt += "思考时可以想想如何对群聊内容进行回复。回复的要求是：平淡一些，简短一些，说中文，尽量不要说你说过的话\n"
+        prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，其他描述等)，"
+        prompt += f"记得结合上述的消息，生成内心想法，文字不要浮夸，注意你就是{self.bot_name}，{self.bot_name}指的就是你。"
 
         try:
             response, reasoning_content = await self.llm_model.generate_response_async(prompt)

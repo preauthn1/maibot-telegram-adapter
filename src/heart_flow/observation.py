@@ -68,20 +68,24 @@ class ChattingObservation(Observation):
         self.translate_message_list_to_str()
 
         # 更新观察次数
-        self.observe_times += 1
+        # self.observe_times += 1
         self.last_observe_time = new_messages[-1]["time"]
 
         # 检查是否需要更新summary
-        current_time = int(datetime.now().timestamp())
-        if current_time - self.last_summary_time >= 30:  # 如果超过30秒，重置计数
-            self.summary_count = 0
-            self.last_summary_time = current_time
+        # current_time = int(datetime.now().timestamp())
+        # if current_time - self.last_summary_time >= 30:  # 如果超过30秒，重置计数
+        #     self.summary_count = 0
+        #     self.last_summary_time = current_time
 
-        if self.summary_count < self.max_update_in_30s:  # 如果30秒内更新次数小于2次
-            await self.update_talking_summary(new_messages_str)
-            self.summary_count += 1
+        # if self.summary_count < self.max_update_in_30s:  # 如果30秒内更新次数小于2次
+        #     await self.update_talking_summary(new_messages_str)
+        #     print(f"更新聊天总结：{self.observe_info}11111111111111")
+        #     self.summary_count += 1
+        updated_observe_info = await self.update_talking_summary(new_messages_str)
+        print(f"更新聊天总结：{updated_observe_info}11111111111111")
+        self.observe_info = updated_observe_info
 
-        return self.observe_info
+        return updated_observe_info
 
     async def carefully_observe(self):
         # 查找新消息，限制最多40条
@@ -110,43 +114,46 @@ class ChattingObservation(Observation):
         self.observe_times += 1
         self.last_observe_time = new_messages[-1]["time"]
 
-        await self.update_talking_summary(new_messages_str)
-        return self.observe_info
+        updated_observe_info = await self.update_talking_summary(new_messages_str)
+        self.observe_info = updated_observe_info
+        return updated_observe_info
 
     async def update_talking_summary(self, new_messages_str):
         # 基于已经有的talking_summary，和新的talking_message，生成一个summary
         # print(f"更新聊天总结：{self.talking_summary}")
         # 开始构建prompt
-        prompt_personality = "你"
-        # person
-        individuality = Individuality.get_instance()
+        # prompt_personality = "你"
+        # # person
+        # individuality = Individuality.get_instance()
 
-        personality_core = individuality.personality.personality_core
-        prompt_personality += personality_core
+        # personality_core = individuality.personality.personality_core
+        # prompt_personality += personality_core
 
-        personality_sides = individuality.personality.personality_sides
-        random.shuffle(personality_sides)
-        prompt_personality += f",{personality_sides[0]}"
+        # personality_sides = individuality.personality.personality_sides
+        # random.shuffle(personality_sides)
+        # prompt_personality += f",{personality_sides[0]}"
 
-        identity_detail = individuality.identity.identity_detail
-        random.shuffle(identity_detail)
-        prompt_personality += f",{identity_detail[0]}"
+        # identity_detail = individuality.identity.identity_detail
+        # random.shuffle(identity_detail)
+        # prompt_personality += f",{identity_detail[0]}"
 
-        personality_info = prompt_personality
+        # personality_info = prompt_personality
 
         prompt = ""
-        prompt += f"{personality_info}，请注意识别你自己的聊天发言"
-        prompt += f"你的名字叫：{self.name}，你的昵称是：{self.nick_name}\n"
+        # prompt += f"{personality_info}"
+        prompt += f"你的名字叫：{self.name}\n，标识'{self.name}'的都是你自己说的话"
         prompt += f"你正在参与一个qq群聊的讨论，你记得这个群之前在聊的内容是：{self.observe_info}\n"
         prompt += f"现在群里的群友们产生了新的讨论，有了新的发言，具体内容如下：{new_messages_str}\n"
-        prompt += """以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，
-        以及聊天中的一些重要信息，注意识别你自己的发言，记得不要分点，不要太长，精简的概括成一段文本\n"""
+        prompt += """以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，目前最新讨论的话题
+        以及聊天中的一些重要信息，记得不要分点，精简的概括成一段文本\n"""
         prompt += "总结概括："
         try:
-            self.observe_info, reasoning_content = await self.llm_summary.generate_response_async(prompt)
+            updated_observe_info, reasoning_content = await self.llm_summary.generate_response_async(prompt)
         except Exception as e:
             print(f"获取总结失败: {e}")
-            self.observe_info = ""
+            updated_observe_info = ""
+            
+        return updated_observe_info
         # print(f"prompt：{prompt}")
         # print(f"self.observe_info：{self.observe_info}")
 
