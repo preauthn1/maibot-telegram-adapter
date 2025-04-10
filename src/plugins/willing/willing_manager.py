@@ -148,6 +148,16 @@ class BaseWillingManager(ABC):
         async with self.lock:
             self.chat_reply_willing[chat_id] = willing
 
+    @abstractmethod
+    async def get_variable_parameters(self) -> Dict[str, str]:
+        """抽象方法：获取可变参数"""
+        pass
+
+    @abstractmethod
+    async def set_variable_parameters(self, parameters: Dict[str, any]):
+        """抽象方法：设置可变参数"""
+        pass
+
 
 def init_willing_manager() -> BaseWillingManager:
     """
