@@ -45,7 +45,7 @@ class SubHeartflow:
         self.past_mind = []
         self.current_state: CurrentState = CurrentState()
         self.llm_model = LLM_request(
-            model=global_config.llm_sub_heartflow, temperature=0.3, max_tokens=600, request_type="sub_heart_flow"
+            model=global_config.llm_sub_heartflow, temperature=0.2, max_tokens=600, request_type="sub_heart_flow"
         )
 
         self.main_heartflow_info = ""
@@ -185,19 +185,20 @@ class SubHeartflow:
         # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
         prompt += f"{relation_prompt_all}\n"
         prompt += f"{prompt_personality}\n"
-        prompt += f"你刚刚在做的事情是：{schedule_info}\n"
-        if related_memory_info:
-            prompt += f"你想起来你之前见过的回忆：{related_memory_info}。\n以上是你的回忆，不一定是目前聊天里的人说的，也不一定是现在发生的事情，请记住。\n"
-        if related_info:
-            prompt += f"你想起你知道：{related_info}\n"
-        prompt += f"刚刚你的想法是{current_thinking_info}。\n"
+        # prompt += f"你刚刚在做的事情是：{schedule_info}\n"
+        # if related_memory_info:
+            # prompt += f"你想起来你之前见过的回忆：{related_memory_info}。\n以上是你的回忆，不一定是目前聊天里的人说的，也不一定是现在发生的事情，请记住。\n"
+        # if related_info:
+            # prompt += f"你想起你知道：{related_info}\n"
+        prompt += f"刚刚你的想法是{current_thinking_info}。如果有新的内容，记得转换话题\n"
         prompt += "-----------------------------------\n"
         prompt += f"现在你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：{chat_observe_info}\n"
         prompt += f"你现在{mood_info}\n"
         prompt += f"你注意到{sender_name}刚刚说：{message_txt}\n"
-        prompt += "现在你接下去继续浅浅思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，"
-        prompt += "思考时可以想想如何对群聊内容进行回复。请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，"
-        prompt += f"记得结合上述的消息，要记得维持住你的人设，注意你就是{self.bot_name}，{self.bot_name}指的就是你。"
+        prompt += "现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白，不要太长，"
+        prompt += "思考时可以想想如何对群聊内容进行回复。回复的要求是：平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 ，注意只输出回复内容。"
+        prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，"
+        prompt += f"记得结合上述的消息，生成符合内心想法的内心独白，文字不要浮夸，注意你就是{self.bot_name}，{self.bot_name}指的就是你。"
 
         try:
             response, reasoning_content = await self.llm_model.generate_response_async(prompt)
@@ -208,7 +209,7 @@ class SubHeartflow:
 
         self.current_mind = response
 
-        logger.debug(f"prompt:\n{prompt}\n")
+        logger.info(f"prompt:\n{prompt}\n")
         logger.info(f"麦麦的思考前脑内状态：{self.current_mind}")
         return self.current_mind ,self.past_mind
 

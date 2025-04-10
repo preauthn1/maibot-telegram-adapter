@@ -147,8 +147,8 @@ class ChattingObservation(Observation):
         except Exception as e:
             print(f"获取总结失败: {e}")
             self.observe_info = ""
-        print(f"prompt：{prompt}")
-        print(f"self.observe_info：{self.observe_info}")
+        # print(f"prompt：{prompt}")
+        # print(f"self.observe_info：{self.observe_info}")
 
     def translate_message_list_to_str(self):
         self.talking_message_str = ""
