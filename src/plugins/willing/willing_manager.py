@@ -12,12 +12,14 @@ import asyncio
 
 """
 基类方法概览：
+以下6个方法是你必须在子类重写的（哪怕什么都不干）：
 async_task_starter 在程序启动时执行，在其中用asyncio.create_task启动你想要执行的异步任务
 before_generate_reply_handle 确定要回复后，在生成回复前的处理
 after_generate_reply_handle 确定要回复后，在生成回复后的处理
 not_reply_handle 确定不回复后的处理
-get_reply_probability 获取回复概率(必须实现)
+get_reply_probability 获取回复概率
 bombing_buffer_message_handle 缓冲器炸飞消息后的处理
+以下2个方法根据你的实现可以做调整：
 get_willing 获取某聊天流意愿
 set_willing 设置某聊天流意愿
 规范说明：
