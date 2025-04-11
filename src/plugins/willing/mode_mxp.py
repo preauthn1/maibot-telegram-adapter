@@ -1,13 +1,21 @@
 """
-Mxp 模式（MxpWillingManager）是一个基于意愿值动态调整的回复管理器。
-其主要特点包括：
-1. 通过消息频率、提及、兴趣度等多种因素动态调整回复意愿值。
-2. 支持意愿值的衰减机制，确保意愿值不会无限增长。
-3. 提供对单聊、群聊等不同场景的特殊处理。
-4. 结合关系等级、表情包惩罚等多种参数，计算最终的回复概率。
-5. 支持异步任务，用于定期更新意愿值和基础意愿值。
+Mxp 模式：梦溪畔独家赞助
+此模式的一些参数不会在配置文件中显示，要修改请在可变参数下修改
+同时一些全局设置对此模式无效
+此模式的可变参数暂时比较草率，需要调参仙人的大手
+此模式的特点：
+1.每个聊天流的每个用户的意愿是独立的
+2.接入关系系统，关系会影响意愿值
+3.会根据群聊的热度来调整基础意愿值
+4.限制同时思考的消息数量，防止喷射
+5.拥有单聊增益，无论在群里还是私聊，只要bot一直和你聊，就会增加意愿值
+6.意愿分为衰减意愿+临时意愿
 
-该模式适用于需要精细化控制回复行为的场景，能够根据用户行为和聊天环境动态调整回复策略。
+如果你发现本模式出现了bug
+上上策是询问智慧的小草神（）
+上策是询问万能的千石可乐
+中策是发issue
+下下策是询问一个菜鸟（@梦溪畔）
 """
 from .willing_manager import BaseWillingManager
 from typing import Dict
@@ -22,6 +30,7 @@ class MxpWillingManager(BaseWillingManager):
         self.chat_person_reply_willing: Dict[str, Dict[str, float]] = {}  # chat_id: {person_id: 意愿值}
         self.chat_new_message_time: Dict[str, list[float]] = {}  # 聊天流ID: 消息时间
         self.last_response_person: list = ["", "", 0]  # 上次回复的用户信息
+        self.temporary_willing: float = 0  # 临时意愿值
 
         # 可变参数
         self.intention_decay_rate = 0.93  # 意愿衰减率
@@ -107,14 +116,7 @@ class MxpWillingManager(BaseWillingManager):
             if w_info.group_info and w_info.group_info.group_id in self.global_config.talk_frequency_down_groups:
                 probability /= self.down_frequency_rate
 
-            # 打印消息信息
-            mes_name = w_info.chat.group_info.group_name if w_info.chat.group_info else "私聊"
-            current_time = time.strftime("%H:%M:%S", time.localtime(w_info.message.message_info.time))
-            self.logger.info(
-                f"[{current_time}][{mes_name}]"
-                f"{w_info.chat.user_info.user_nickname}:"
-                f"{w_info.message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{probability * 100:.1f}%]"
-            )
+            self.temporary_willing = current_willing
 
             return probability
 
@@ -149,7 +151,6 @@ class MxpWillingManager(BaseWillingManager):
         if chat.stream_id not in self.chat_new_message_time:
             self.chat_new_message_time[chat.stream_id] = []
         self.chat_new_message_time[chat.stream_id].append(time.time())
-        self.logger.info(self.chat_new_message_time[chat.stream_id])
         if len(self.chat_new_message_time[chat.stream_id]) > self.number_of_message_storage:
             self.chat_new_message_time[chat.stream_id].pop(0)
 
@@ -229,3 +230,5 @@ class MxpWillingManager(BaseWillingManager):
             level_num = 5 if relationship_value > 1000 else 0
         return level_num - 2
 
+    async def get_willing(self, chat_id):
+        return self.temporary_willing
