@@ -1,7 +1,5 @@
 import asyncio
 from .willing_manager import BaseWillingManager
-import time
-
 
 class ClassicalWillingManager(BaseWillingManager):
     def __init__(self):
