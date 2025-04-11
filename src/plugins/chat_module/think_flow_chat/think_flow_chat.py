@@ -236,6 +236,15 @@ class ThinkFlowChat:
                 if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
                     reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
 
+        # 打印消息信息
+        mes_name = chat.group_info.group_name if chat.group_info else "私聊"
+        current_time = time.strftime("%H:%M:%S", time.localtime(message.message_info.time))
+        logger.info(
+            f"[{current_time}][{mes_name}]"
+            f"{chat.user_info.user_nickname}:"
+            f"{message.processed_plain_text}[回复意愿:{await willing_manager.get_willing(chat.stream_id):.2f}][概率:{reply_probability * 100:.1f}%]"
+        )
+
         do_reply = False
         if random() < reply_probability:
             try:

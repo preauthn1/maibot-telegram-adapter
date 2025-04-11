@@ -52,15 +52,6 @@ class ClassicalWillingManager(BaseWillingManager):
         if is_emoji_not_reply:
             reply_probability = 0
 
-        # 打印消息信息
-        mes_name = willing_info.chat.group_info.group_name if willing_info.chat.group_info else "私聊"
-        current_time = time.strftime("%H:%M:%S", time.localtime(willing_info.message.message_info.time))
-        self.logger.info(
-            f"[{current_time}][{mes_name}]"
-            f"{willing_info.chat.user_info.user_nickname}:"
-            f"{willing_info.message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
-        )
-
         return reply_probability
     
     async def before_generate_reply_handle(self, message_id):
