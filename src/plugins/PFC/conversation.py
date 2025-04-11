@@ -60,9 +60,10 @@ class Conversation:
             self.chat_observer = ChatObserver.get_instance(self.stream_id)
             self.chat_observer.start()
             self.observation_info = ObservationInfo()
-            self.observation_info.bind_to_chat_observer(self.stream_id)
+            self.observation_info.bind_to_chat_observer(self.chat_observer)
+            # print(self.chat_observer.get_cached_messages(limit=)
 
-            # 对话信息
+            
             self.conversation_info = ConversationInfo()
         except Exception as e:
             logger.error(f"初始化对话实例：注册信息组件失败: {e}")
@@ -140,6 +141,7 @@ class Conversation:
         if action == "direct_reply":
             self.state = ConversationState.GENERATING
             self.generated_reply = await self.reply_generator.generate(observation_info, conversation_info)
+            print(f"生成回复: {self.generated_reply}")
 
             # # 检查回复是否合适
             # is_suitable, reason, need_replan = await self.reply_generator.check_reply(
@@ -148,6 +150,7 @@ class Conversation:
             # )
 
             if self._check_new_messages_after_planning():
+                logger.info("333333发现新消息，重新考虑行动")
                 return None
 
             await self._send_reply()
@@ -212,15 +215,9 @@ class Conversation:
             logger.warning("没有生成回复")
             return
 
-        messages = self.chat_observer.get_cached_messages(limit=1)
-        if not messages:
-            logger.warning("没有最近的消息可以回复")
-            return
-
-        latest_message = self._convert_to_message(messages[0])
         try:
             await self.direct_sender.send_message(
-                chat_stream=self.chat_stream, content=self.generated_reply, reply_to_message=latest_message
+                chat_stream=self.chat_stream, content=self.generated_reply
             )
             self.chat_observer.trigger_update()  # 触发立即更新
             if not await self.chat_observer.wait_for_update():

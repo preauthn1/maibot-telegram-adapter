@@ -99,19 +99,21 @@ class GoalAnalyzer:
 3. 添加新目标
 4. 删除不再相关的目标
 
-请以JSON格式输出当前的所有对话目标，包含以下字段：
+请以JSON数组格式输出当前的所有对话目标，每个目标包含以下字段：
 1. goal: 对话目标（简短的一句话）
 2. reasoning: 对话原因，为什么设定这个目标（简要解释）
 
 输出格式示例：
-{{
-"goal": "回答用户关于Python编程的具体问题",
-"reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
-}},
-{{
-"goal": "回答用户关于python安装的具体问题",
-"reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
-}}"""
+[
+  {{
+    "goal": "回答用户关于Python编程的具体问题",
+    "reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
+  }},
+  {{
+    "goal": "回答用户关于python安装的具体问题",
+    "reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
+  }}
+]"""
 
         logger.debug(f"发送到LLM的提示词: {prompt}")
         try:
@@ -120,13 +122,37 @@ class GoalAnalyzer:
         except Exception as e:
             logger.error(f"分析对话目标时出错: {str(e)}")
             content = ""
-        # 使用简化函数提取JSON内容
+            
+        # 使用改进后的get_items_from_json函数处理JSON数组
         success, result = get_items_from_json(
-            content, "goal", "reasoning", required_types={"goal": str, "reasoning": str}
+            content, "goal", "reasoning", 
+            required_types={"goal": str, "reasoning": str},
+            allow_array=True
         )
-        # TODO
-
-        conversation_info.goal_list.append(result)
+        
+        if success:
+            # 判断结果是单个字典还是字典列表
+            if isinstance(result, list):
+                # 清空现有目标列表并添加新目标
+                conversation_info.goal_list = []
+                for item in result:
+                    goal = item.get("goal", "")
+                    reasoning = item.get("reasoning", "")
+                    conversation_info.goal_list.append((goal, reasoning))
+                
+                # 返回第一个目标作为当前主要目标（如果有）
+                if result:
+                    first_goal = result[0]
+                    return (first_goal.get("goal", ""), "", first_goal.get("reasoning", ""))
+            else:
+                # 单个目标的情况
+                goal = result.get("goal", "")
+                reasoning = result.get("reasoning", "")
+                conversation_info.goal_list.append((goal, reasoning))
+                return (goal, "", reasoning)
+        
+        # 如果解析失败，返回默认值
+        return ("", "", "")
 
     async def _update_goals(self, new_goal: str, method: str, reasoning: str):
         """更新目标列表

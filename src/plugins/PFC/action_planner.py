@@ -45,7 +45,19 @@ class ActionPlanner:
 
         # 构建对话目标
         if conversation_info.goal_list:
-            goal, reasoning = conversation_info.goal_list[-1]
+            last_goal = conversation_info.goal_list[-1]
+            print(last_goal)
+            # 处理字典或元组格式
+            if isinstance(last_goal, tuple) and len(last_goal) == 2:
+                goal, reasoning = last_goal
+            elif isinstance(last_goal, dict) and 'goal' in last_goal and 'reasoning' in last_goal:
+                # 处理字典格式
+                goal = last_goal.get('goal', "目前没有明确对话目标")
+                reasoning = last_goal.get('reasoning', "目前没有明确对话目标，最好思考一个对话目标")
+            else:
+                # 处理未知格式
+                goal = "目前没有明确对话目标"
+                reasoning = "目前没有明确对话目标，最好思考一个对话目标"
         else:
             goal = "目前没有明确对话目标"
             reasoning = "目前没有明确对话目标，最好思考一个对话目标"
@@ -54,14 +66,14 @@ class ActionPlanner:
         chat_history_list = observation_info.chat_history
         chat_history_text = ""
         for msg in chat_history_list:
-            chat_history_text += f"{msg}\n"
+            chat_history_text += f"{msg.get('detailed_plain_text', '')}\n"
 
         if observation_info.new_messages_count > 0:
             new_messages_list = observation_info.unprocessed_messages
 
             chat_history_text += f"有{observation_info.new_messages_count}条新消息：\n"
             for msg in new_messages_list:
-                chat_history_text += f"{msg}\n"
+                chat_history_text += f"{msg.get('detailed_plain_text', '')}\n"
 
             observation_info.clear_unprocessed_messages()
 
