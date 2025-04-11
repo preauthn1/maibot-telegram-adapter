@@ -3,7 +3,7 @@ import datetime
 from typing import Dict, Any
 from ..chat.message import Message
 from .pfc_types import ConversationState
-from .pfc import ChatObserver, GoalAnalyzer, Waiter, DirectMessageSender
+from .pfc import ChatObserver, GoalAnalyzer, DirectMessageSender
 from src.common.logger import get_module_logger
 from .action_planner import ActionPlanner
 from .observation_info import ObservationInfo
@@ -13,6 +13,8 @@ from ..chat.chat_stream import ChatStream
 from ..message.message_base import UserInfo
 from src.plugins.chat.chat_stream import chat_manager
 from .pfc_KnowledgeFetcher import KnowledgeFetcher
+from .waiter import Waiter
+
 import traceback
 
 logger = get_module_logger("pfc_conversation")
@@ -94,6 +96,15 @@ class Conversation:
 
             # 执行行动
             await self._handle_action(action, reason, self.observation_info, self.conversation_info)
+            
+            for goal in self.conversation_info.goal_list:
+                # 检查goal是否为元组类型，如果是元组则使用索引访问，如果是字典则使用get方法
+                if isinstance(goal, tuple):
+                    # 假设元组的第一个元素是目标内容
+                    print(f"goal: {goal}")
+                    if goal[0] == "结束对话":
+                        self.should_continue = False
+                        break
 
     def _check_new_messages_after_planning(self):
         """检查在规划后是否有新消息"""
@@ -151,14 +162,19 @@ class Conversation:
 
             if self._check_new_messages_after_planning():
                 logger.info("333333发现新消息，重新考虑行动")
+                conversation_info.done_action[-1].update(
+                    {
+                        "status": "recall",
+                        "time": datetime.datetime.now().strftime("%H:%M:%S"),
+                    }
+                )
                 return None
 
             await self._send_reply()
 
-            conversation_info.done_action.append(
+            
+            conversation_info.done_action[-1].update(
                 {
-                    "action": action,
-                    "reason": reason,
                     "status": "done",
                     "time": datetime.datetime.now().strftime("%H:%M:%S"),
                 }
@@ -184,16 +200,17 @@ class Conversation:
         elif action == "listening":
             self.state = ConversationState.LISTENING
             logger.info("倾听对方发言...")
-            if await self.waiter.wait():  # 如果返回True表示超时
-                await self._send_timeout_message()
-                await self._stop_conversation()
+            await self.waiter.wait_listening(conversation_info)
+
+
+        elif action == "end_conversation":
+            self.should_continue = False
+            logger.info("决定结束对话...")
 
         else:  # wait
             self.state = ConversationState.WAITING
             logger.info("等待更多信息...")
-            if await self.waiter.wait():  # 如果返回True表示超时
-                await self._send_timeout_message()
-                await self._stop_conversation()
+            await self.waiter.wait(self.conversation_info)
 
     async def _send_timeout_message(self):
         """发送超时结束消息"""

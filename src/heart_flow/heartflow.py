@@ -21,11 +21,14 @@ logger = get_module_logger("heartflow", config=heartflow_config)
 
 class CurrentState:
     def __init__(self):
-        self.willing = 0
+
         self.current_state_info = ""
 
         self.mood_manager = MoodManager()
         self.mood = self.mood_manager.get_prompt()
+        
+        self.attendance_factor = 0
+        self.engagement_factor = 0
 
     def update_current_state_info(self):
         self.current_state_info = self.mood_manager.get_current_mood()
@@ -41,7 +44,9 @@ class Heartflow:
         )
 
         self._subheartflows: Dict[Any, SubHeartflow] = {}
-        self.active_subheartflows_nums = 0
+        
+        
+        
 
     async def _cleanup_inactive_subheartflows(self):
         """定期清理不活跃的子心流"""
@@ -63,11 +68,8 @@ class Heartflow:
                 logger.info(f"已清理不活跃的子心流: {subheartflow_id}")
 
             await asyncio.sleep(30)  # 每分钟检查一次
-
-    async def heartflow_start_working(self):
-        # 启动清理任务
-        asyncio.create_task(self._cleanup_inactive_subheartflows())
-
+            
+    async def _sub_heartflow_update(self):
         while True:
             # 检查是否存在子心流
             if not self._subheartflows:
@@ -77,6 +79,17 @@ class Heartflow:
 
             await self.do_a_thinking()
             await asyncio.sleep(global_config.heart_flow_update_interval)  # 5分钟思考一次
+
+    async def heartflow_start_working(self):
+        
+        # 启动清理任务
+        asyncio.create_task(self._cleanup_inactive_subheartflows())
+
+        # 启动子心流更新任务
+        asyncio.create_task(self._sub_heartflow_update())
+        
+    async def _update_current_state(self):
+        print("TODO")
 
     async def do_a_thinking(self):
         logger.debug("麦麦大脑袋转起来了")
@@ -188,17 +201,13 @@ class Heartflow:
 
         try:
             if subheartflow_id not in self._subheartflows:
-                logger.debug(f"创建 subheartflow: {subheartflow_id}")
                 subheartflow = SubHeartflow(subheartflow_id)
                 # 创建一个观察对象，目前只可以用chat_id创建观察对象
                 logger.debug(f"创建 observation: {subheartflow_id}")
                 observation = ChattingObservation(subheartflow_id)
-
-                logger.debug("添加 observation ")
                 subheartflow.add_observation(observation)
                 logger.debug("添加 observation 成功")
                 # 创建异步任务
-                logger.debug("创建异步任务")
                 asyncio.create_task(subheartflow.subheartflow_start_working())
                 logger.debug("创建异步任务 成功")
                 self._subheartflows[subheartflow_id] = subheartflow

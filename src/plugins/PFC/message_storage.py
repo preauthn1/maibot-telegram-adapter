@@ -54,7 +54,7 @@ class MongoDBMessageStorage(MessageStorage):
 
     async def get_messages_after(self, chat_id: str, message_time: float) -> List[Dict[str, Any]]:
         query = {"chat_id": chat_id}
-        print(f"storage_check_message: {message_time}")
+        # print(f"storage_check_message: {message_time}")
 
         query["time"] = {"$gt": message_time}
 

@@ -157,8 +157,8 @@ class ObservationInfo:
         Args:
             message: 消息数据
         """
-        print("1919810-----------------------------------------------------")
-        logger.debug(f"更新信息from_message: {message}")
+        # print("1919810-----------------------------------------------------")
+        # logger.debug(f"更新信息from_message: {message}")
         self.last_message_time = message["time"]
         self.last_message_id = message["message_id"]
         
