@@ -41,7 +41,7 @@ class MxpWillingManager(BaseWillingManager):
         self.interest_willing_gain = 0.3  # 兴趣意愿增益
         self.emoji_response_penalty = self.global_config.emoji_response_penalty # 表情包回复惩罚
         self.down_frequency_rate = self.global_config.down_frequency_rate # 降低回复频率的群组惩罚系数
-        self.single_chat_gain = 0.15  # 单聊增益
+        self.single_chat_gain = 0.12  # 单聊增益
 
     async def async_task_starter(self) -> None:
         """异步任务启动器"""
@@ -74,7 +74,8 @@ class MxpWillingManager(BaseWillingManager):
             if w_info.is_mentioned_bot:
                 self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] += 0.2
             if self.last_response_person[0] == w_info.chat_id and self.last_response_person[1] == w_info.person_id:
-                self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] += self.single_chat_gain *self.last_response_person[2]
+                self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] +=\
+                self.single_chat_gain * (2 * self.last_response_person[2] - 1) if self.last_response_person[2] else 0
 
     async def get_reply_probability(self, message_id: str):
         """获取回复概率"""
@@ -95,7 +96,7 @@ class MxpWillingManager(BaseWillingManager):
             current_willing += rel_level * 0.1
 
             if self.last_response_person[0] == w_info.chat_id and self.last_response_person[1] == w_info.person_id:
-                current_willing += self.single_chat_gain * self.last_response_person[2]
+                current_willing += self.single_chat_gain * (2 * self.last_response_person[2] - 1) if self.last_response_person[2] else 0
 
             chat_ongoing_messages = [msg for msg in self.ongoing_messages.values() if msg.chat_id == w_info.chat_id]
             chat_person_ogoing_messages = [msg for msg in chat_ongoing_messages if msg.person_id == w_info.person_id]
