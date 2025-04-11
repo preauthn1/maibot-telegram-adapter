@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from src.common.database import db
-import time
 
 class MessageStorage(ABC):
     """消息存储接口"""
