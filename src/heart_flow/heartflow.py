@@ -4,6 +4,7 @@ from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.config.config import global_config
 from src.plugins.schedule.schedule_generator import bot_schedule
+from src.plugins.utils.prompt_builder import Prompt, global_prompt_manager
 import asyncio
 from src.common.logger import get_module_logger, LogConfig, HEARTFLOW_STYLE_CONFIG  # noqa: E402
 from src.individuality.individuality import Individuality
@@ -17,6 +18,27 @@ heartflow_config = LogConfig(
     file_format=HEARTFLOW_STYLE_CONFIG["file_format"],
 )
 logger = get_module_logger("heartflow", config=heartflow_config)
+
+
+def init_prompt():
+    prompt = ""
+    prompt += "你刚刚在做的事情是：{schedule_info}\n"
+    prompt += "{personality_info}\n"
+    prompt += "你想起来{related_memory_info}。"
+    prompt += "刚刚你的主要想法是{current_thinking_info}。"
+    prompt += "你还有一些小想法，因为你在参加不同的群聊天，这是你正在做的事情：{sub_flows_info}\n"
+    prompt += "你现在{mood_info}。"
+    prompt += "现在你接下去继续思考，产生新的想法，但是要基于原有的主要想法，不要分点输出，"
+    prompt += "输出连贯的内心独白，不要太长，但是记得结合上述的消息，关注新内容:"
+    Prompt(prompt, "thinking_prompt")
+    prompt = ""
+    prompt += "{personality_info}\n"
+    prompt += "现在{bot_name}的想法是：{current_mind}\n"
+    prompt += "现在{bot_name}在qq群里进行聊天，聊天的话题如下：{minds_str}\n"
+    prompt += "你现在{mood_info}\n"
+    prompt += """现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白
+    不要太长，但是记得结合上述的消息，要记得你的人设，关注新内容:"""
+    Prompt(prompt, "mind_summary_prompt")
 
 
 class CurrentState:
@@ -111,15 +133,18 @@ class Heartflow:
 
         schedule_info = bot_schedule.get_current_num_task(num=4, time_info=True)
 
-        prompt = ""
-        prompt += f"你刚刚在做的事情是：{schedule_info}\n"
-        prompt += f"{personality_info}\n"
-        prompt += f"你想起来{related_memory_info}。"
-        prompt += f"刚刚你的主要想法是{current_thinking_info}。"
-        prompt += f"你还有一些小想法，因为你在参加不同的群聊天，这是你正在做的事情：{sub_flows_info}\n"
-        prompt += f"你现在{mood_info}。"
-        prompt += "现在你接下去继续思考，产生新的想法，但是要基于原有的主要想法，不要分点输出，"
-        prompt += "输出连贯的内心独白，不要太长，但是记得结合上述的消息，关注新内容:"
+        # prompt = ""
+        # prompt += f"你刚刚在做的事情是：{schedule_info}\n"
+        # prompt += f"{personality_info}\n"
+        # prompt += f"你想起来{related_memory_info}。"
+        # prompt += f"刚刚你的主要想法是{current_thinking_info}。"
+        # prompt += f"你还有一些小想法，因为你在参加不同的群聊天，这是你正在做的事情：{sub_flows_info}\n"
+        # prompt += f"你现在{mood_info}。"
+        # prompt += "现在你接下去继续思考，产生新的想法，但是要基于原有的主要想法，不要分点输出，"
+        # prompt += "输出连贯的内心独白，不要太长，但是记得结合上述的消息，关注新内容:"
+        prompt = global_prompt_manager.get_prompt("thinking_prompt").format(
+            schedule_info, personality_info, related_memory_info, current_thinking_info, sub_flows_info, mood_info
+        )
 
         try:
             response, reasoning_content = await self.llm_model.generate_response_async(prompt)
@@ -167,13 +192,16 @@ class Heartflow:
         personality_info = prompt_personality
         mood_info = self.current_state.mood
 
-        prompt = ""
-        prompt += f"{personality_info}\n"
-        prompt += f"现在{global_config.BOT_NICKNAME}的想法是：{self.current_mind}\n"
-        prompt += f"现在{global_config.BOT_NICKNAME}在qq群里进行聊天，聊天的话题如下：{minds_str}\n"
-        prompt += f"你现在{mood_info}\n"
-        prompt += """现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白
-        不要太长，但是记得结合上述的消息，要记得你的人设，关注新内容:"""
+        # prompt = ""
+        # prompt += f"{personality_info}\n"
+        # prompt += f"现在{global_config.BOT_NICKNAME}的想法是：{self.current_mind}\n"
+        # prompt += f"现在{global_config.BOT_NICKNAME}在qq群里进行聊天，聊天的话题如下：{minds_str}\n"
+        # prompt += f"你现在{mood_info}\n"
+        # prompt += """现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白
+        # 不要太长，但是记得结合上述的消息，要记得你的人设，关注新内容:"""
+        prompt = global_prompt_manager.get_prompt("mind_summary_prompt").format(
+            personality_info, global_config.BOT_NICKNAME, self.current_mind, minds_str, mood_info
+        )
 
         response, reasoning_content = await self.llm_model.generate_response_async(prompt)
 
@@ -213,5 +241,6 @@ class Heartflow:
         return self._subheartflows.get(observe_chat_id)
 
 
+init_prompt()
 # 创建一个全局的管理器实例
 heartflow = Heartflow()
