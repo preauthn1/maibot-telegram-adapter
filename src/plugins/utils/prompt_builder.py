@@ -116,16 +116,14 @@ class Prompt(str):
                 template = template.format(**formatted_kwargs)
             return template
         except (IndexError, KeyError) as e:
-            raise ValueError(
-                f"格式化模板失败: {template}, args={formatted_args}, kwargs={formatted_kwargs} {str(e)} keys:{template_args}"
-            ) from e
+            raise ValueError(f"格式化模板失败: {template}, args={formatted_args}, kwargs={formatted_kwargs}") from e
 
     def format(self, *args, **kwargs) -> "Prompt":
         """支持位置参数和关键字参数的格式化，使用"""
         ret = type(self)(
             self.template, self.name, args=list(args) if args else self._args, **kwargs if kwargs else self._kwargs
         )
-        print(f"prompt build result: {ret}  name: {ret.name} ")
+        # print(f"prompt build result: {ret}  name: {ret.name} ")
         return ret
 
     def __str__(self) -> str:
