@@ -150,6 +150,8 @@ class Conversation:
         )
 
         if action == "direct_reply":
+            self.waiter.wait_accumulated_time = 0
+            
             self.state = ConversationState.GENERATING
             self.generated_reply = await self.reply_generator.generate(observation_info, conversation_info)
             print(f"生成回复: {self.generated_reply}")
@@ -181,6 +183,8 @@ class Conversation:
             )
 
         elif action == "fetch_knowledge":
+            self.waiter.wait_accumulated_time = 0
+            
             self.state = ConversationState.FETCHING
             knowledge = "TODO:知识"
             topic = "TODO:关键词"
@@ -194,6 +198,8 @@ class Conversation:
                     self.conversation_info.knowledge_list[topic] += knowledge
 
         elif action == "rethink_goal":
+            self.waiter.wait_accumulated_time = 0
+            
             self.state = ConversationState.RETHINKING
             await self.goal_analyzer.analyze_goal(conversation_info, observation_info)
 
