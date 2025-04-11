@@ -29,7 +29,7 @@ class MxpWillingManager(BaseWillingManager):
         super().__init__()
         self.chat_person_reply_willing: Dict[str, Dict[str, float]] = {}  # chat_id: {person_id: 意愿值}
         self.chat_new_message_time: Dict[str, list[float]] = {}  # 聊天流ID: 消息时间
-        self.last_response_person: list = ["", "", 0]  # 上次回复的用户信息
+        self.last_response_person: Dict[str, tuple[str, int]] = {} # 上次回复的用户信息
         self.temporary_willing: float = 0  # 临时意愿值
 
         # 可变参数
@@ -60,12 +60,12 @@ class MxpWillingManager(BaseWillingManager):
             rel_level = self._get_relationship_level_num(rel_value)
             self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] += rel_level * 0.05
 
-            if (w_info.chat_id == self.last_response_person[0] 
-                and w_info.person_id == self.last_response_person[1] 
-                and self.last_response_person[2] < 3):
-                self.last_response_person[2] += 1
+            now_chat_new_person = self.last_response_person.get(w_info.chat_id, ["", 0])
+            if now_chat_new_person[0] == w_info.person_id:
+                if now_chat_new_person[1] < 2:
+                    now_chat_new_person[1] += 1
             else:
-                self.last_response_person = [w_info.chat_id, w_info.person_id, 0]
+                self.last_response_person[w_info.chat_id] = [w_info.person_id, 0]
 
     async def not_reply_handle(self, message_id: str):
         """不回复处理"""
@@ -73,9 +73,9 @@ class MxpWillingManager(BaseWillingManager):
             w_info = self.ongoing_messages[message_id]
             if w_info.is_mentioned_bot:
                 self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] += 0.2
-            if self.last_response_person[0] == w_info.chat_id and self.last_response_person[1] == w_info.person_id:
+            if w_info.chat_id in self.last_response_person and self.last_response_person[w_info.chat_id][0] == w_info.person_id:
                 self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] +=\
-                self.single_chat_gain * (2 * self.last_response_person[2] - 1) if self.last_response_person[2] else 0
+                self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] + 1)
 
     async def get_reply_probability(self, message_id: str):
         """获取回复概率"""
@@ -95,8 +95,8 @@ class MxpWillingManager(BaseWillingManager):
             rel_level = self._get_relationship_level_num(rel_value)
             current_willing += rel_level * 0.1
 
-            if self.last_response_person[0] == w_info.chat_id and self.last_response_person[1] == w_info.person_id:
-                current_willing += self.single_chat_gain * (2 * self.last_response_person[2] - 1) if self.last_response_person[2] else 0
+            if w_info.chat_id in self.last_response_person and self.last_response_person[w_info.chat_id][0] == w_info.person_id:
+                current_willing += self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] + 1)
 
             chat_ongoing_messages = [msg for msg in self.ongoing_messages.values() if msg.chat_id == w_info.chat_id]
             chat_person_ogoing_messages = [msg for msg in chat_ongoing_messages if msg.person_id == w_info.person_id]
