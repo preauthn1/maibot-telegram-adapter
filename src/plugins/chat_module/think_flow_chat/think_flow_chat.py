@@ -229,6 +229,7 @@ class ThinkFlowChat:
         # current_willing = current_willing_old
 
         # 获取回复概率
+        is_willing = False
         if reply_probability != 1:
             is_willing = True
             reply_probability = await willing_manager.get_reply_probability(message.message_info.message_id)
