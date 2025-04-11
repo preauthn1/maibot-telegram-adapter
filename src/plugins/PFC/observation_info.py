@@ -132,11 +132,6 @@ class ObservationInfo:
             stream_id: 聊天流ID
         """
         self.chat_observer = chat_observer
-        print(f"1919810----------------------绑定-----------------------------")
-        print(self.chat_observer)
-        print(f"1919810--------------------绑定-----------------------------")
-        print(self.chat_observer.notification_manager)
-        print(f"1919810-------------------绑定-----------------------------")
         self.chat_observer.notification_manager.register_handler(
             target="observation_info", notification_type=NotificationType.NEW_MESSAGE, handler=self.handler
         )
@@ -144,9 +139,6 @@ class ObservationInfo:
             target="observation_info", notification_type=NotificationType.COLD_CHAT, handler=self.handler
         )
         print("1919810------------------------绑定-----------------------------")
-        print(f"1919810--------------------绑定-----------------------------")
-        print(self.chat_observer.notification_manager)
-        print(f"1919810-------------------绑定-----------------------------")
 
     def unbind_from_chat_observer(self):
         """解除与chat_observer的绑定"""
@@ -235,10 +227,10 @@ class ObservationInfo:
         """清空未处理消息列表"""
         # 将未处理消息添加到历史记录中
         for message in self.unprocessed_messages:
-            if "processed_plain_text" in message:
-                self.chat_history.append(message["processed_plain_text"])
+            self.chat_history.append(message)
         # 清空未处理消息列表
         self.has_unread_messages = False
         self.unprocessed_messages.clear()
+        self.chat_history_count = len(self.chat_history)
         self.new_messages_count = 0
 

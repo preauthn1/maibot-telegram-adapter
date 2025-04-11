@@ -18,38 +18,36 @@ class ChatObserver:
     _instances: Dict[str, "ChatObserver"] = {}
 
     @classmethod
-    def get_instance(cls, stream_id: str, message_storage: Optional[MessageStorage] = None) -> "ChatObserver":
+    def get_instance(cls, stream_id: str) -> "ChatObserver":
         """获取或创建观察器实例
 
         Args:
             stream_id: 聊天流ID
-            message_storage: 消息存储实现，如果为None则使用MongoDB实现
 
         Returns:
             ChatObserver: 观察器实例
         """
         if stream_id not in cls._instances:
-            cls._instances[stream_id] = cls(stream_id, message_storage)
+            cls._instances[stream_id] = cls(stream_id)
         return cls._instances[stream_id]
 
-    def __init__(self, stream_id: str, message_storage: Optional[MessageStorage] = None):
+    def __init__(self, stream_id: str):
         """初始化观察器
 
         Args:
             stream_id: 聊天流ID
-            message_storage: 消息存储实现，如果为None则使用MongoDB实现
         """
         if stream_id in self._instances:
             raise RuntimeError(f"ChatObserver for {stream_id} already exists. Use get_instance() instead.")
 
         self.stream_id = stream_id
-        self.message_storage = message_storage or MongoDBMessageStorage()
+        self.message_storage = MongoDBMessageStorage()
 
         # self.last_user_speak_time: Optional[float] = None  # 对方上次发言时间
         # self.last_bot_speak_time: Optional[float] = None  # 机器人上次发言时间
         # self.last_check_time: float = time.time()  # 上次查看聊天记录时间
-        self.last_message_read: Optional[str] = None  # 最后读取的消息ID
-        self.last_message_time: Optional[float] = None  # 最后一条消息的时间戳
+        self.last_message_read: Optional[Dict[str, Any]] = None  # 最后读取的消息ID
+        self.last_message_time: float = time.time()
 
         self.waiting_start_time: float = time.time()  # 等待开始时间，初始化为当前时间
 
@@ -133,12 +131,6 @@ class ChatObserver:
             notification = create_cold_chat_notification(sender="chat_observer", target="pfc", is_cold=is_cold)
             await self.notification_manager.send_notification(notification)
 
-    async def get_new_message(self) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """获取上一次观察的时间点后的新消息，插入到历史记录中，并返回新消息和历史记录两个对象"""
-        messages = await self.message_storage.get_messages_after(self.stream_id, self.last_message_read)
-        for message in messages:
-            await self._add_message_to_history(message)
-        return messages, self.message_history
 
     def new_message_after(self, time_point: float) -> bool:
         """判断是否在指定时间点后有新消息
@@ -200,12 +192,13 @@ class ChatObserver:
         Returns:
             List[Dict[str, Any]]: 新消息列表
         """
-        new_messages = await self.message_storage.get_messages_after(self.stream_id, self.last_message_read)
+        new_messages = await self.message_storage.get_messages_after(self.stream_id, self.last_message_time)
 
         if new_messages:
-            self.last_message_read = new_messages[-1]["message_id"]
+            self.last_message_read = new_messages[-1]
+            self.last_message_time = new_messages[-1]["time"]
             
-        print(f"获取111111111122222222新消息: {new_messages}")
+        print(f"获取数据库中找到的新消息: {new_messages}")
 
         return new_messages
 
@@ -267,6 +260,7 @@ class ChatObserver:
 
             except Exception as e:
                 logger.error(f"更新循环出错: {e}")
+                logger.error(traceback.format_exc())
                 self._update_complete.set()  # 即使出错也要设置完成事件
 
     def trigger_update(self):

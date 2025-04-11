@@ -66,14 +66,14 @@ class ActionPlanner:
         chat_history_list = observation_info.chat_history
         chat_history_text = ""
         for msg in chat_history_list:
-            chat_history_text += f"{msg}\n"
+            chat_history_text += f"{msg.get('detailed_plain_text', '')}\n"
 
         if observation_info.new_messages_count > 0:
             new_messages_list = observation_info.unprocessed_messages
 
             chat_history_text += f"有{observation_info.new_messages_count}条新消息：\n"
             for msg in new_messages_list:
-                chat_history_text += f"{msg}\n"
+                chat_history_text += f"{msg.get('detailed_plain_text', '')}\n"
 
             observation_info.clear_unprocessed_messages()
 
