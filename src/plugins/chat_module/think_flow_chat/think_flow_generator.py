@@ -26,11 +26,11 @@ logger = get_module_logger("llm_generator", config=llm_config)
 class ResponseGenerator:
     def __init__(self):
         self.model_normal = LLM_request(
-            model=global_config.llm_normal, temperature=0.3, max_tokens=256, request_type="response_heartflow"
+            model=global_config.llm_normal, temperature=0.15, max_tokens=256, request_type="response_heartflow"
         )
 
         self.model_sum = LLM_request(
-            model=global_config.llm_summary_by_topic, temperature=0.7, max_tokens=2000, request_type="relation"
+            model=global_config.llm_summary_by_topic, temperature=0.6, max_tokens=2000, request_type="relation"
         )
         self.current_model_type = "r1"  # 默认使用 R1
         self.current_model_name = "unknown model"

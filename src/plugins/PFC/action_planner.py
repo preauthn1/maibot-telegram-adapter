@@ -45,7 +45,19 @@ class ActionPlanner:
 
         # 构建对话目标
         if conversation_info.goal_list:
-            goal, reasoning = conversation_info.goal_list[-1]
+            last_goal = conversation_info.goal_list[-1]
+            print(last_goal)
+            # 处理字典或元组格式
+            if isinstance(last_goal, tuple) and len(last_goal) == 2:
+                goal, reasoning = last_goal
+            elif isinstance(last_goal, dict) and 'goal' in last_goal and 'reasoning' in last_goal:
+                # 处理字典格式
+                goal = last_goal.get('goal', "目前没有明确对话目标")
+                reasoning = last_goal.get('reasoning', "目前没有明确对话目标，最好思考一个对话目标")
+            else:
+                # 处理未知格式
+                goal = "目前没有明确对话目标"
+                reasoning = "目前没有明确对话目标，最好思考一个对话目标"
         else:
             goal = "目前没有明确对话目标"
             reasoning = "目前没有明确对话目标，最好思考一个对话目标"
