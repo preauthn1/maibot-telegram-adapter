@@ -106,6 +106,18 @@ class PromptBuilder:
                         f"检测到以下关键词之一：{rule.get('keywords', [])}，触发反应：{rule.get('reaction', '')}"
                     )
                     keywords_reaction_prompt += rule.get("reaction", "") + "，"
+                else:
+                    for pattern in rule.get("regex", []):
+                        result = pattern.search(message_txt)
+                        if result:
+                            reaction = rule.get('reaction', '')
+                            for name, content in result.groupdict().items():
+                                reaction = reaction.replace(f'[{name}]', content)
+                            logger.info(
+                                f"匹配到以下正则表达式：{pattern}，触发反应：{reaction}"
+                            )
+                            keywords_reaction_prompt += reaction + "，"
+                            break
 
         # 中文高手(新加的好玩功能)
         prompt_ger = ""
@@ -160,7 +172,7 @@ class PromptBuilder:
 
         individuality = Individuality.get_instance()
         prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
-        prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
+        # prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
 
         # 日程构建
         # schedule_prompt = f'''你现在正在做的事情是：{bot_schedule.get_current_num_task(num = 1,time_info = False)}'''
@@ -231,7 +243,7 @@ class PromptBuilder:
         content: str = "",
     ) -> tuple[str, str]:
         individuality = Individuality.get_instance()
-        prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
+        # prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
         prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
 
         # chat_target = "你正在qq群里聊天，"
