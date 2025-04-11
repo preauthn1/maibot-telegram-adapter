@@ -108,7 +108,7 @@ class PromptBuilder:
 
         individuality = Individuality.get_instance()
         prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
-        prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
+        # prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
 
 
         # 日程构建
@@ -166,7 +166,7 @@ class PromptBuilder:
     ) -> tuple[str, str]:
 
         individuality = Individuality.get_instance()
-        prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
+        # prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
         prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
 
 
