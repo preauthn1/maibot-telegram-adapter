@@ -198,7 +198,7 @@ class ChatObserver:
             self.last_message_read = new_messages[-1]
             self.last_message_time = new_messages[-1]["time"]
             
-        print(f"获取数据库中找到的新消息: {new_messages}")
+        # print(f"获取数据库中找到的新消息: {new_messages}")
 
         return new_messages
 

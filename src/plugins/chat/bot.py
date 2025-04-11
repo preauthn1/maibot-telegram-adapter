@@ -91,18 +91,19 @@ class ChatBot:
 
             if global_config.enable_pfc_chatting:
                 try:
-                    if groupinfo is None and global_config.enable_friend_chat:
-                        userinfo = message.message_info.user_info
-                        messageinfo = message.message_info
-                        # 创建聊天流
-                        chat = await chat_manager.get_or_create_stream(
-                            platform=messageinfo.platform,
-                            user_info=userinfo,
-                            group_info=groupinfo,
-                        )
-                        message.update_chat_stream(chat)
-                        await self.only_process_chat.process_message(message)
-                        await self._create_PFC_chat(message)
+                    if groupinfo is None:
+                        if global_config.enable_friend_chat:
+                            userinfo = message.message_info.user_info
+                            messageinfo = message.message_info
+                            # 创建聊天流
+                            chat = await chat_manager.get_or_create_stream(
+                                platform=messageinfo.platform,
+                                user_info=userinfo,
+                                group_info=groupinfo,
+                            )
+                            message.update_chat_stream(chat)
+                            await self.only_process_chat.process_message(message)
+                            await self._create_PFC_chat(message)
                     else:
                         if groupinfo.group_id in global_config.talk_allowed_groups:
                             # logger.debug(f"开始群聊模式{str(message_data)[:50]}...")
@@ -116,15 +117,16 @@ class ChatBot:
                 except Exception as e:
                     logger.error(f"处理PFC消息失败: {e}")
             else:
-                if groupinfo is None and global_config.enable_friend_chat:
-                    # 私聊处理流程
-                    # await self._handle_private_chat(message)
-                    if global_config.response_mode == "heart_flow":
-                        await self.think_flow_chat.process_message(message_data)
-                    elif global_config.response_mode == "reasoning":
-                        await self.reasoning_chat.process_message(message_data)
-                    else:
-                        logger.error(f"未知的回复模式，请检查配置文件！！: {global_config.response_mode}")
+                if groupinfo is None:
+                    if global_config.enable_friend_chat:
+                        # 私聊处理流程
+                        # await self._handle_private_chat(message)
+                        if global_config.response_mode == "heart_flow":
+                            await self.think_flow_chat.process_message(message_data)
+                        elif global_config.response_mode == "reasoning":
+                            await self.reasoning_chat.process_message(message_data)
+                        else:
+                            logger.error(f"未知的回复模式，请检查配置文件！！: {global_config.response_mode}")
                 else:  # 群聊处理
                     if groupinfo.group_id in global_config.talk_allowed_groups:
                         if global_config.response_mode == "heart_flow":

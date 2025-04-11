@@ -24,7 +24,7 @@ class ActionPlanner:
 
     def __init__(self, stream_id: str):
         self.llm = LLM_request(
-            model=global_config.llm_normal, temperature=0.7, max_tokens=1000, request_type="action_planning"
+            model=global_config.llm_normal, temperature=0.2, max_tokens=1000, request_type="action_planning"
         )
         self.personality_info = Individuality.get_instance().get_prompt(type="personality", x_person=2, level=2)
         self.name = global_config.BOT_NICKNAME
@@ -44,26 +44,31 @@ class ActionPlanner:
         logger.debug(f"开始规划行动：当前目标: {conversation_info.goal_list}")
 
         # 构建对话目标
+        goals_str = ""
         if conversation_info.goal_list:
-            last_goal = conversation_info.goal_list[-1]
-            print(last_goal)
-            # 处理字典或元组格式
-            if isinstance(last_goal, tuple) and len(last_goal) == 2:
-                goal, reasoning = last_goal
-            elif isinstance(last_goal, dict) and 'goal' in last_goal and 'reasoning' in last_goal:
-                # 处理字典格式
-                goal = last_goal.get('goal', "目前没有明确对话目标")
-                reasoning = last_goal.get('reasoning', "目前没有明确对话目标，最好思考一个对话目标")
-            else:
-                # 处理未知格式
-                goal = "目前没有明确对话目标"
-                reasoning = "目前没有明确对话目标，最好思考一个对话目标"
+            for goal_reason in conversation_info.goal_list:
+                # 处理字典或元组格式
+                if isinstance(goal_reason, tuple):
+                    # 假设元组的第一个元素是目标，第二个元素是原因
+                    goal = goal_reason[0]
+                    reasoning = goal_reason[1] if len(goal_reason) > 1 else "没有明确原因"
+                elif isinstance(goal_reason, dict):
+                    goal = goal_reason.get('goal')
+                    reasoning = goal_reason.get('reasoning', "没有明确原因")
+                else:
+                    # 如果是其他类型，尝试转为字符串
+                    goal = str(goal_reason)
+                    reasoning = "没有明确原因"
+                
+                goal_str = f"目标：{goal}，产生该对话目标的原因：{reasoning}\n"
+                goals_str += goal_str
         else:
             goal = "目前没有明确对话目标"
             reasoning = "目前没有明确对话目标，最好思考一个对话目标"
+            goals_str = f"目标：{goal}，产生该对话目标的原因：{reasoning}\n"
 
         # 获取聊天历史记录
-        chat_history_list = observation_info.chat_history
+        chat_history_list = observation_info.chat_history[-20:] if len(observation_info.chat_history) >= 20 else observation_info.chat_history
         chat_history_text = ""
         for msg in chat_history_list:
             chat_history_text += f"{msg.get('detailed_plain_text', '')}\n"
@@ -80,15 +85,30 @@ class ActionPlanner:
         personality_text = f"你的名字是{self.name}，{self.personality_info}"
 
         # 构建action历史文本
-        action_history_list = conversation_info.done_action
+        action_history_list = conversation_info.done_action[-10:] if len(conversation_info.done_action) >= 10 else conversation_info.done_action
         action_history_text = "你之前做的事情是："
         for action in action_history_list:
-            action_history_text += f"{action}\n"
+            if isinstance(action, dict):
+                action_type = action.get('action')
+                action_reason = action.get('reason')
+                action_status = action.get('status')
+                if action_status == "recall":
+                    action_history_text += f"原本打算：{action_type}，但是因为有新消息，你发现这个行动不合适，所以你没做\n"
+                elif action_status == "done":
+                    action_history_text += f"你之前做了：{action_type}，原因：{action_reason}\n"
+            elif isinstance(action, tuple):
+                # 假设元组的格式是(action_type, action_reason, action_status)
+                action_type = action[0] if len(action) > 0 else "未知行动"
+                action_reason = action[1] if len(action) > 1 else "未知原因"
+                action_status = action[2] if len(action) > 2 else "done"
+                if action_status == "recall":
+                    action_history_text += f"原本打算：{action_type}，但是因为有新消息，你发现这个行动不合适，所以你没做\n"
+                elif action_status == "done":
+                    action_history_text += f"你之前做了：{action_type}，原因：{action_reason}\n"
 
         prompt = f"""{personality_text}。现在你在参与一场QQ聊天，请分析以下内容，根据信息决定下一步行动：
 
-当前对话目标：{goal}
-产生该对话目标的原因：{reasoning}
+当前对话目标：{goals_str}
 
 {action_history_text}
 
@@ -98,10 +118,11 @@ class ActionPlanner:
 请你接下去想想要你要做什么，可以发言，可以等待，可以倾听，可以调取知识。注意不同行动类型的要求，不要重复发言：
 行动类型：
 fetch_knowledge: 需要调取知识，当需要专业知识或特定信息时选择
-wait: 当你做出了发言,对方尚未回复时等待对方的回复
+wait: 当你做出了发言,对方尚未回复时暂时等待对方的回复
 listening: 倾听对方发言，当你认为对方发言尚未结束时采用
 direct_reply: 不符合上述情况，回复对方，注意不要过多或者重复发言
 rethink_goal: 重新思考对话目标，当发现对话目标不合适时选择，会重新思考对话目标
+end_conversation: 结束对话，长时间没回复或者当你觉得谈话暂时结束时选择，停止该场对话
 
 请以JSON格式输出，包含以下字段：
 1. action: 行动类型，注意你之前的行为
@@ -126,7 +147,7 @@ rethink_goal: 重新思考对话目标，当发现对话目标不合适时选择
             reason = result["reason"]
 
             # 验证action类型
-            if action not in ["direct_reply", "fetch_knowledge", "wait", "listening", "rethink_goal"]:
+            if action not in ["direct_reply", "fetch_knowledge", "wait", "listening", "rethink_goal", "end_conversation"]:
                 logger.warning(f"未知的行动类型: {action}，默认使用listening")
                 action = "listening"
 
