@@ -1,14 +1,17 @@
 import time
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional
+import random
 
 
-from ....common.database import db
 from ...models.utils_model import LLM_request
 from ...config.config import global_config
-from ...chat.message import MessageRecv, MessageThinking
+from ...chat.message import MessageRecv
 from .think_flow_prompt_builder import prompt_builder
 from ...chat.utils import process_llm_response
 from src.common.logger import get_module_logger, LogConfig, LLM_STYLE_CONFIG
+from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
+
+from src.plugins.moods.moods import MoodManager
 
 # 定义日志配置
 llm_config = LogConfig(
@@ -23,38 +26,65 @@ logger = get_module_logger("llm_generator", config=llm_config)
 class ResponseGenerator:
     def __init__(self):
         self.model_normal = LLM_request(
-            model=global_config.llm_normal, temperature=0.8, max_tokens=256, request_type="response_heartflow"
+            model=global_config.llm_normal, temperature=0.15, max_tokens=256, request_type="response_heartflow"
         )
 
         self.model_sum = LLM_request(
-            model=global_config.llm_summary_by_topic, temperature=0.7, max_tokens=2000, request_type="relation"
+            model=global_config.llm_summary_by_topic, temperature=0.6, max_tokens=2000, request_type="relation"
         )
         self.current_model_type = "r1"  # 默认使用 R1
         self.current_model_name = "unknown model"
 
-    async def generate_response(self, message: MessageThinking) -> Optional[Union[str, List[str]]]:
+    async def generate_response(self, message: MessageRecv,thinking_id:str) -> Optional[List[str]]:
         """根据当前模型类型选择对应的生成函数"""
+        
 
         logger.info(
             f"思考:{message.processed_plain_text[:30] + '...' if len(message.processed_plain_text) > 30 else message.processed_plain_text}"
         )
+        
+        arousal_multiplier = MoodManager.get_instance().get_arousal_multiplier()
+        
+        time1 = time.time()
+        
+        checked = False
+        if random.random() > 0:
+            checked = False
+            current_model = self.model_normal
+            current_model.temperature = 0.3 * arousal_multiplier #激活度越高，温度越高
+            model_response = await self._generate_response_with_model(message, current_model,thinking_id,mode="normal")
+            
+            model_checked_response = model_response
+        else:
+            checked = True
+            current_model = self.model_normal
+            current_model.temperature = 0.3 * arousal_multiplier #激活度越高，温度越高
+            print(f"生成{message.processed_plain_text}回复温度是：{current_model.temperature}")
+            model_response = await self._generate_response_with_model(message, current_model,thinking_id,mode="simple")
+            
+            current_model.temperature = 0.3
+            model_checked_response = await self._check_response_with_model(message, model_response, current_model,thinking_id)
 
-        current_model = self.model_normal
-        model_response = await self._generate_response_with_model(message, current_model)
-
-        # print(f"raw_content: {model_response}")
+        time2 = time.time()
 
         if model_response:
-            logger.info(f"{global_config.BOT_NICKNAME}的回复是：{model_response}")
-            model_response = await self._process_response(model_response)
+            if checked:
+                logger.info(f"{global_config.BOT_NICKNAME}的回复是：{model_response}，思忖后，回复是：{model_checked_response},生成回复时间: {time2 - time1}秒")
+            else:
+                logger.info(f"{global_config.BOT_NICKNAME}的回复是：{model_response},生成回复时间: {time2 - time1}秒")
+            
+            model_processed_response = await self._process_response(model_checked_response)
 
-            return model_response
+            return model_processed_response
         else:
             logger.info(f"{self.current_model_type}思考，失败")
             return None
 
-    async def _generate_response_with_model(self, message: MessageThinking, model: LLM_request):
+    async def _generate_response_with_model(self, message: MessageRecv, model: LLM_request,thinking_id:str,mode:str = "normal") -> str:
         sender_name = ""
+        
+        info_catcher = info_catcher_manager.get_info_catcher(thinking_id)
+        
         if message.chat_stream.user_info.user_cardname and message.chat_stream.user_info.user_nickname:
             sender_name = (
                 f"[({message.chat_stream.user_info.user_id}){message.chat_stream.user_info.user_nickname}]"
@@ -65,59 +95,87 @@ class ResponseGenerator:
         else:
             sender_name = f"用户({message.chat_stream.user_info.user_id})"
 
-        logger.debug("开始使用生成回复-2")
         # 构建prompt
         timer1 = time.time()
-        prompt = await prompt_builder._build_prompt(
-            message.chat_stream,
-            message_txt=message.processed_plain_text,
-            sender_name=sender_name,
-            stream_id=message.chat_stream.stream_id,
-        )
+        if mode == "normal":
+            prompt = await prompt_builder._build_prompt(
+                message.chat_stream,
+                message_txt=message.processed_plain_text,
+                sender_name=sender_name,
+                stream_id=message.chat_stream.stream_id,
+            )
+        elif mode == "simple":
+            prompt = await prompt_builder._build_prompt_simple(
+                message.chat_stream,
+                message_txt=message.processed_plain_text,
+                sender_name=sender_name,
+                stream_id=message.chat_stream.stream_id,
+            )
         timer2 = time.time()
-        logger.info(f"构建prompt时间: {timer2 - timer1}秒")
+        logger.info(f"构建{mode}prompt时间: {timer2 - timer1}秒")
 
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
+        
+            
+            info_catcher.catch_after_llm_generated(
+                prompt=prompt,
+                response=content,
+                reasoning_content=reasoning_content,
+                model_name=self.current_model_name)
+            
         except Exception:
             logger.exception("生成回复时出错")
             return None
 
-        # 保存到数据库
-        self._save_to_db(
-            message=message,
-            sender_name=sender_name,
-            prompt=prompt,
-            content=content,
-            reasoning_content=reasoning_content,
-            # reasoning_content_check=reasoning_content_check if global_config.enable_kuuki_read else ""
-        )
 
         return content
-
-    # def _save_to_db(self, message: Message, sender_name: str, prompt: str, prompt_check: str,
-    #                 content: str, content_check: str, reasoning_content: str, reasoning_content_check: str):
-    def _save_to_db(
-        self,
-        message: MessageRecv,
-        sender_name: str,
-        prompt: str,
-        content: str,
-        reasoning_content: str,
-    ):
-        """保存对话记录到数据库"""
-        db.reasoning_logs.insert_one(
-            {
-                "time": time.time(),
-                "chat_id": message.chat_stream.stream_id,
-                "user": sender_name,
-                "message": message.processed_plain_text,
-                "model": self.current_model_name,
-                "reasoning": reasoning_content,
-                "response": content,
-                "prompt": prompt,
-            }
+    
+    async def _check_response_with_model(self, message: MessageRecv, content:str, model: LLM_request,thinking_id:str) -> str:
+        
+        _info_catcher = info_catcher_manager.get_info_catcher(thinking_id)
+        
+        sender_name = ""
+        if message.chat_stream.user_info.user_cardname and message.chat_stream.user_info.user_nickname:
+            sender_name = (
+                f"[({message.chat_stream.user_info.user_id}){message.chat_stream.user_info.user_nickname}]"
+                f"{message.chat_stream.user_info.user_cardname}"
+            )
+        elif message.chat_stream.user_info.user_nickname:
+            sender_name = f"({message.chat_stream.user_info.user_id}){message.chat_stream.user_info.user_nickname}"
+        else:
+            sender_name = f"用户({message.chat_stream.user_info.user_id})"
+            
+            
+        # 构建prompt
+        timer1 = time.time()
+        prompt = await prompt_builder._build_prompt_check_response(
+            message.chat_stream,
+            message_txt=message.processed_plain_text,
+            sender_name=sender_name,
+            stream_id=message.chat_stream.stream_id,
+            content=content
         )
+        timer2 = time.time()
+        logger.info(f"构建check_prompt: {prompt}")
+        logger.info(f"构建check_prompt时间: {timer2 - timer1}秒")
+
+        try:
+            checked_content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
+        
+            
+            # info_catcher.catch_after_llm_generated(
+            #     prompt=prompt,
+            #     response=content,
+            #     reasoning_content=reasoning_content,
+            #     model_name=self.current_model_name)
+            
+        except Exception:
+            logger.exception("检查回复时出错")
+            return None
+
+
+        return checked_content
 
     async def _get_emotion_tags(self, content: str, processed_plain_text: str):
         """提取情感标签，结合立场和情绪"""
@@ -168,10 +226,10 @@ class ResponseGenerator:
             logger.debug(f"获取情感标签时出错: {e}")
             return "中立", "平静"  # 出错时返回默认值
 
-    async def _process_response(self, content: str) -> Tuple[List[str], List[str]]:
+    async def _process_response(self, content: str) -> List[str]:
         """处理响应内容，返回处理后的内容和情感标签"""
         if not content:
-            return None, []
+            return None
 
         processed_response = process_llm_response(content)
 

@@ -30,7 +30,7 @@ class ChatBot:
         self.think_flow_chat = ThinkFlowChat()
         self.reasoning_chat = ReasoningChat()
         self.only_process_chat = MessageProcessor()
-        
+
         # 创建初始化PFC管理器的任务，会在_ensure_started时执行
         self.pfc_manager = PFCManager.get_instance()
 
@@ -38,7 +38,7 @@ class ChatBot:
         """确保所有任务已启动"""
         if not self._started:
             logger.info("确保ChatBot所有任务已启动")
-                    
+
             self._started = True
 
     async def _create_PFC_chat(self, message: MessageRecv):
@@ -46,7 +46,6 @@ class ChatBot:
             chat_id = str(message.chat_stream.stream_id)
 
             if global_config.enable_pfc_chatting:
-                
                 await self.pfc_manager.get_or_create_conversation(chat_id)
 
         except Exception as e:
@@ -80,11 +79,11 @@ class ChatBot:
         try:
             # 确保所有任务已启动
             await self._ensure_started()
-            
+
             message = MessageRecv(message_data)
             groupinfo = message.message_info.group_info
             userinfo = message.message_info.user_info
-            logger.debug(f"处理消息:{str(message_data)[:80]}...")
+            logger.debug(f"处理消息:{str(message_data)[:120]}...")
 
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
@@ -106,11 +105,11 @@ class ChatBot:
                         await self._create_PFC_chat(message)
                     else:
                         if groupinfo.group_id in global_config.talk_allowed_groups:
-                            logger.debug(f"开始群聊模式{str(message_data)[:50]}...")
+                            # logger.debug(f"开始群聊模式{str(message_data)[:50]}...")
                             if global_config.response_mode == "heart_flow":
                                 await self.think_flow_chat.process_message(message_data)
                             elif global_config.response_mode == "reasoning":
-                                logger.debug(f"开始推理模式{str(message_data)[:50]}...")
+                                # logger.debug(f"开始推理模式{str(message_data)[:50]}...")
                                 await self.reasoning_chat.process_message(message_data)
                             else:
                                 logger.error(f"未知的回复模式，请检查配置文件！！: {global_config.response_mode}")
