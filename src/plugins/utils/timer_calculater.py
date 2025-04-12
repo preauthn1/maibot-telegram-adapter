@@ -12,7 +12,7 @@ class TimerTypeError(TypeError):
 
 
 class Timer:
-    """支持多种模式的计时器（类型安全+人类可读）"""
+    """支持上下文+装饰器的计时器"""
 
     def __init__(self, name: Optional[str] = None, storage: Optional[Dict[str, float]] = None, auto_unit: bool = True):
         self._validate_types(name, storage)
