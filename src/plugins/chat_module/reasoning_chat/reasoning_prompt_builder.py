@@ -195,7 +195,7 @@ class PromptBuilder:
         prompt = await global_prompt_manager.format_prompt(
             "reasoning_prompt_main",
             relation_prompt_all=await global_prompt_manager.get_prompt_async("relationship_prompt"),
-            replation_prompt=relation_prompt,
+            relation_prompt=relation_prompt,
             sender_name=sender_name,
             memory_prompt=memory_prompt,
             prompt_info=prompt_info,
