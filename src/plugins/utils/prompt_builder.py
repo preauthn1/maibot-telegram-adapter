@@ -94,7 +94,7 @@ class Prompt(str):
         # 如果传入的是元组，转换为列表
         if isinstance(args, tuple):
             args = list(args)
-
+        should_register = kwargs.pop("_should_register", True)
         # 解析模板
         template_args = []
         result = re.findall(r"\{(.*?)\}", fstr)
@@ -116,13 +116,14 @@ class Prompt(str):
         obj._kwargs = kwargs
 
         # 修改自动注册逻辑
-        if global_prompt_manager._context._current_context:
-            # 如果存在当前上下文，则注册到上下文中
-            # asyncio.create_task(global_prompt_manager._context.register_async(obj))
-            pass
-        else:
-            # 否则注册到全局管理器
-            global_prompt_manager.register(obj)
+        if should_register:
+            if global_prompt_manager._context._current_context:
+                # 如果存在当前上下文，则注册到上下文中
+                # asyncio.create_task(global_prompt_manager._context.register_async(obj))
+                pass
+            else:
+                # 否则注册到全局管理器
+                global_prompt_manager.register(obj)
         return obj
 
     @classmethod
@@ -180,10 +181,15 @@ class Prompt(str):
     def format(self, *args, **kwargs) -> "Prompt":
         """支持位置参数和关键字参数的格式化，使用"""
         ret = type(self)(
-            self.template, self.name, args=list(args) if args else self._args, **kwargs if kwargs else self._kwargs
+            self.template,
+            self.name,
+            args=list(args) if args else self._args,
+            _should_register=False,
+            **kwargs if kwargs else self._kwargs,
         )
         ret.template = str(ret)
-        # print(f"prompt build result: {ret}  name: {ret.name} ")
+        print(f"prompt build result: {ret}  name: {ret.name} ")
+        print(global_prompt_manager._prompts["schedule_prompt"])
         return ret
 
     def __str__(self) -> str:
