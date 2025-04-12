@@ -76,6 +76,9 @@ class MxpWillingManager(BaseWillingManager):
             if w_info.chat_id in self.last_response_person and self.last_response_person[w_info.chat_id][0] == w_info.person_id:
                 self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] +=\
                 self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] + 1)
+            now_chat_new_person = self.last_response_person.get(w_info.chat_id, ["", 0])
+            if now_chat_new_person[0] != w_info.person_id:
+                self.last_response_person[w_info.chat_id] = [w_info.person_id, 0]
 
     async def get_reply_probability(self, message_id: str):
         """获取回复概率"""
