@@ -5,33 +5,39 @@ import asyncio
 
 """
 # 更好的计时器
+支持上下文和装饰器
 感谢D指导
 
 # 用法：
 
--
-@Timer()
-def func():
-    pass
-
--
+- 装饰器
 time_dict = {}
 @Timer("计数", time_dict)
 def func():
     pass
+print(time_dict)
 
--
+- 上下文_1
 def func():
     with Timer() as t:
         pass
+    print(t)
+    print(t.human_readable)    
 
--
+- 上下文_2
 def func():
     time_dict = {}
-    with Timer("计数", time_dict) as t:
+    with Timer("计数", time_dict):
         pass
+    print(time_dict)
+
+参数：
+- name：计时器的名字，默认为None
+- time_dict：计时器结果存储字典，默认为None
+- auto_unit： 自动选择单位（为毫秒或秒/一直为秒），默认为True（为毫秒或秒）
 
 属性：human_readable
+
 自定义错误：TimerTypeError
 """
 
