@@ -6,36 +6,39 @@ import asyncio
 """
 # 更好的计时器
 支持上下文和装饰器
-感谢D指导
 
-# 用法：
+使用方式：
 
-- 装饰器
+【装饰器】
 time_dict = {}
 @Timer("计数", time_dict)
 def func():
     pass
 print(time_dict)
 
-- 上下文_1
+【上下文_1】
 def func():
     with Timer() as t:
         pass
     print(t)
-    print(t.human_readable)    
+    print(t.human_readable)
 
-- 上下文_2
+【上下文_2】
 def func():
     time_dict = {}
     with Timer("计数", time_dict):
         pass
     print(time_dict)
 
-参数：
-- name：计时器的名字，默认为None
-- time_dict：计时器结果存储字典，默认为None
-- auto_unit： 自动选择单位（为毫秒或秒/一直为秒），默认为True（为毫秒或秒）
+【直接实例化】
+a = Timer()
+print(a)         # 直接输出当前 perf_counter 值
 
+参数：
+- name：计时器的名字，默认为 None
+- storage：计时器结果存储字典，默认为 None
+- auto_unit：自动选择单位（毫秒或秒），默认为 True（自动根据时间切换毫秒或秒）
+    
 属性：human_readable
 
 自定义错误：TimerTypeError
@@ -50,7 +53,12 @@ class TimerTypeError(TypeError):
 
 
 class Timer:
-    """支持上下文+装饰器的计时器"""
+    """
+    Timer 支持三种模式：
+      1. 装饰器模式：用于测量函数/协程运行时间
+      2. 上下文管理器模式：用于 with 语句块内部计时
+      3. 直接实例化：如果不调用 __enter__，打印对象时将显示当前 perf_counter 的值
+    """
 
     def __init__(self, name: Optional[str] = None, storage: Optional[Dict[str, float]] = None, auto_unit: bool = True):
         self._validate_types(name, storage)
@@ -59,7 +67,6 @@ class Timer:
         self.storage = storage
         self.elapsed = None
         self.auto_unit = auto_unit
-        self._is_context = False
 
     def _validate_types(self, name, storage):
         """类型检查"""
@@ -90,14 +97,12 @@ class Timer:
 
     def __enter__(self):
         """上下文管理器入口"""
-        self._is_context = True
         self.start = perf_counter()
         return self
 
     def __exit__(self, *args):
         self.elapsed = perf_counter() - self.start
         self._record_time()
-        self._is_context = False
         return False
 
     def _record_time(self):
@@ -116,4 +121,12 @@ class Timer:
         return f"{self.elapsed:.4f}秒"
 
     def __str__(self):
-        return f"<Timer {self.name or '匿名'} [{self.human_readable}]>"
+        if hasattr(self, "start"):
+            if self.elapsed is None:
+                # 如果计时尚未结束，显示当前经过时间
+                current_elapsed = perf_counter() - self.start
+                return f"<Timer {self.name or '匿名'} [计时中: {current_elapsed:.4f}秒]>"
+            return f"<Timer {self.name or '匿名'} [{self.human_readable}]>"
+        else:
+            # 未使用 as 上下文，直接返回当前 perf_counter()
+            return f"{perf_counter()}"
