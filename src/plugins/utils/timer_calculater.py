@@ -46,6 +46,7 @@ print(a)         # 直接输出当前 perf_counter 值
 - name：计时器的名字，默认为 None
 - storage：计时器结果存储字典，默认为 None
 - auto_unit：自动选择单位（毫秒或秒），默认为 True（自动根据时间切换毫秒或秒）
+- do_type_check：是否进行类型检查，默认为 False（不进行类型检查）
     
 属性：human_readable
 
@@ -55,6 +56,8 @@ print(a)         # 直接输出当前 perf_counter 值
 
 class TimerTypeError(TypeError):
     """自定义类型错误"""
+
+    __slots__ = ()
 
     def __init__(self, param, expected_type, actual_type):
         super().__init__(f"参数 '{param}' 类型错误，期望 {expected_type}，实际得到 {actual_type.__name__}")
@@ -68,13 +71,24 @@ class Timer:
       3. 直接实例化：如果不调用 __enter__，打印对象时将显示当前 perf_counter 的值
     """
 
-    def __init__(self, name: Optional[str] = None, storage: Optional[Dict[str, float]] = None, auto_unit: bool = True):
-        self._validate_types(name, storage)
+    __slots__ = ("name", "storage", "elapsed", "auto_unit", "start")
+
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        storage: Optional[Dict[str, float]] = None,
+        auto_unit: bool = True,
+        do_type_check: bool = False,
+    ):
+        if do_type_check:
+            self._validate_types(name, storage)
 
         self.name = name
         self.storage = storage
         self.elapsed = None
+
         self.auto_unit = auto_unit
+        self.start = None
 
     def _validate_types(self, name, storage):
         """类型检查"""
@@ -129,12 +143,9 @@ class Timer:
         return f"{self.elapsed:.4f}秒"
 
     def __str__(self):
-        if hasattr(self, "start"):
+        if self.start is not None:
             if self.elapsed is None:
-                # 如果计时尚未结束，显示当前经过时间
                 current_elapsed = perf_counter() - self.start
                 return f"<Timer {self.name or '匿名'} [计时中: {current_elapsed:.4f}秒]>"
             return f"<Timer {self.name or '匿名'} [{self.human_readable}]>"
-        else:
-            # 未使用 as 上下文，直接返回当前 perf_counter()
-            return f"{perf_counter()}"
+        return f"{perf_counter()}"
