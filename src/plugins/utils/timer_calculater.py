@@ -17,6 +17,8 @@ class TimerTypeError(TypeError):
 
 class Timer:
     def __init__(self, name: Optional[str] = None, storage: Optional[Dict[str, float]] = None):
+        self._validate_types(name, storage)
+
         self.name = name  # 计时器名称
         self.storage = storage  # 计时结果存储
         self.elapsed = None  # 计时结果
