@@ -337,7 +337,7 @@ class LLMStatistics:
                 stats_output = self._format_stats_section_lite(
                     hour_stats, "最近1小时统计：详细信息见根目录文件：llm_statistics.txt"
                 )
-                logger.info("\n" + stats_output + "\n" + "=" * 50)
+                logger.debug("\n" + stats_output + "\n" + "=" * 50)
 
             except Exception:
                 logger.exception("控制台统计数据输出失败")

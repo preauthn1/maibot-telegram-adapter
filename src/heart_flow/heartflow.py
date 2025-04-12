@@ -43,12 +43,11 @@ def init_prompt():
 
 class CurrentState:
     def __init__(self):
-
         self.current_state_info = ""
 
         self.mood_manager = MoodManager()
         self.mood = self.mood_manager.get_prompt()
-        
+
         self.attendance_factor = 0
         self.engagement_factor = 0
 
@@ -66,9 +65,6 @@ class Heartflow:
         )
 
         self._subheartflows: Dict[Any, SubHeartflow] = {}
-        
-        
-        
 
     async def _cleanup_inactive_subheartflows(self):
         """定期清理不活跃的子心流"""
@@ -90,7 +86,7 @@ class Heartflow:
                 logger.info(f"已清理不活跃的子心流: {subheartflow_id}")
 
             await asyncio.sleep(30)  # 每分钟检查一次
-            
+
     async def _sub_heartflow_update(self):
         while True:
             # 检查是否存在子心流
@@ -103,13 +99,12 @@ class Heartflow:
             await asyncio.sleep(global_config.heart_flow_update_interval)  # 5分钟思考一次
 
     async def heartflow_start_working(self):
-        
         # 启动清理任务
         asyncio.create_task(self._cleanup_inactive_subheartflows())
 
         # 启动子心流更新任务
         asyncio.create_task(self._sub_heartflow_update())
-        
+
     async def _update_current_state(self):
         print("TODO")
 
@@ -155,7 +150,7 @@ class Heartflow:
         # prompt += f"你现在{mood_info}。"
         # prompt += "现在你接下去继续思考，产生新的想法，但是要基于原有的主要想法，不要分点输出，"
         # prompt += "输出连贯的内心独白，不要太长，但是记得结合上述的消息，关注新内容:"
-        prompt = global_prompt_manager.get_prompt("thinking_prompt").format(
+        prompt = (await global_prompt_manager.get_prompt_async("thinking_prompt")).format(
             schedule_info, personality_info, related_memory_info, current_thinking_info, sub_flows_info, mood_info
         )
 
@@ -212,7 +207,7 @@ class Heartflow:
         # prompt += f"你现在{mood_info}\n"
         # prompt += """现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白
         # 不要太长，但是记得结合上述的消息，要记得你的人设，关注新内容:"""
-        prompt = global_prompt_manager.get_prompt("mind_summary_prompt").format(
+        prompt = (await global_prompt_manager.get_prompt_async("mind_summary_prompt")).format(
             personality_info, global_config.BOT_NICKNAME, self.current_mind, minds_str, mood_info
         )
 

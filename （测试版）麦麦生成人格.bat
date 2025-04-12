@@ -42,8 +42,8 @@ if errorlevel 2 (
     echo Conda 环境 "!CONDA_ENV!" 激活成功
     python src/individuality/per_bf_gen.py
 ) else (
-    if exist "venv\Scripts\python.exe" (
-        venv\Scripts\python src/individuality/per_bf_gen.py
+    if exist "..\maibot_env\Scripts\python.exe" (
+        ..\maibot_env\Scripts\python src/individuality/per_bf_gen.py
     ) else (
         echo ======================================
         echo 错误: venv环境不存在，请先创建虚拟环境
