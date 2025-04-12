@@ -144,12 +144,10 @@ class PromptBuilder:
                     for pattern in rule.get("regex", []):
                         result = pattern.search(message_txt)
                         if result:
-                            reaction = rule.get('reaction', '')
+                            reaction = rule.get("reaction", "")
                             for name, content in result.groupdict().items():
-                                reaction = reaction.replace(f'[{name}]', content)
-                            logger.info(
-                                f"匹配到以下正则表达式：{pattern}，触发反应：{reaction}"
-                            )
+                                reaction = reaction.replace(f"[{name}]", content)
+                            logger.info(f"匹配到以下正则表达式：{pattern}，触发反应：{reaction}")
                             keywords_reaction_prompt += reaction + "，"
                             break
 

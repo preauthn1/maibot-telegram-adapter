@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, List, Union
 from contextlib import asynccontextmanager
 import asyncio
 
+
 class PromptContext:
     def __init__(self):
         self._context_prompts: Dict[str, Dict[str, "Prompt"]] = {}
@@ -129,7 +130,9 @@ class Prompt(str):
         return obj
 
     @classmethod
-    async def create_async(cls, fstr: str, name: Optional[str] = None, args: Union[List[Any], tuple[Any, ...]] = None, **kwargs):
+    async def create_async(
+        cls, fstr: str, name: Optional[str] = None, args: Union[List[Any], tuple[Any, ...]] = None, **kwargs
+    ):
         """异步创建Prompt实例"""
         prompt = cls(fstr, name, args, **kwargs)
         if global_prompt_manager._context._current_context:
