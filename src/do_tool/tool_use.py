@@ -43,7 +43,7 @@ class ToolUser:
         prompt += "你正在思考如何回复群里的消息。\n"
         prompt += f"你注意到{sender_name}刚刚说：{message_txt}\n"
         prompt += f"注意你就是{bot_name}，{bot_name}指的就是你。"
-        prompt += "你现在需要对群里的聊天内容进行回复，现在请你思考，你是否需要额外的信息，或者一些工具来帮你回复，比如回忆或者搜寻已有的知识，或者了解你现在正在做什么，请输出你需要的工具，或者你需要的额外信息。"
+        prompt += "你现在需要对群里的聊天内容进行回复，现在请你思考，你是否需要额外的信息，或者一些工具来帮你回复，不要使用危险功能（比如文件操作或者系统操作爬虫），比如回忆或者搜寻已有的知识，或者了解你现在正在做什么，请输出你需要的工具，或者你需要的额外信息。"
         
         return prompt
     
@@ -106,6 +106,7 @@ class ToolUser:
             
             # 定义可用工具
             tools = self._define_tools()
+            print(tools)
             
             # 使用llm_model_tool发送带工具定义的请求
             payload = {
