@@ -106,7 +106,7 @@ class PromptBuilder:
             for memory in related_memory:
                 related_memory_info += memory[1]
             # memory_prompt = f"你想起你之前见过的事情：{related_memory_info}。\n以上是你的回忆，不一定是目前聊天里的人说的，也不一定是现在发生的事情，请记住。\n"
-            memory_prompt = global_prompt_manager.format_prompt(
+            memory_prompt = await global_prompt_manager.format_prompt(
                 "memory_prompt", related_memory_info=related_memory_info
             )
         else:
@@ -168,7 +168,7 @@ class PromptBuilder:
         prompt_info = await self.get_prompt_info(message_txt, threshold=0.38)
         if prompt_info:
             # prompt_info = f"""\n你有以下这些**知识**：\n{prompt_info}\n请你**记住上面的知识**，之后可能会用到。\n"""
-            prompt_info = global_prompt_manager.format_prompt("knowledge_prompt", prompt_info=prompt_info)
+            prompt_info = await global_prompt_manager.format_prompt("knowledge_prompt", prompt_info=prompt_info)
 
         end_time = time.time()
         logger.debug(f"知识检索耗时: {(end_time - start_time):.3f}秒")
@@ -194,22 +194,22 @@ class PromptBuilder:
         # 请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只输出回复内容。
         # {moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。"""
 
-        prompt = global_prompt_manager.format_prompt(
+        prompt = await global_prompt_manager.format_prompt(
             "reasoning_prompt_main",
-            relation_prompt_all=global_prompt_manager.get_prompt("relationship_prompt"),
+            relation_prompt_all=await global_prompt_manager.get_prompt_async("relationship_prompt"),
             replation_prompt=relation_prompt,
             sender_name=sender_name,
             memory_prompt=memory_prompt,
             prompt_info=prompt_info,
-            schedule_prompt=global_prompt_manager.format_prompt(
+            schedule_prompt=await global_prompt_manager.format_prompt(
                 "schedule_prompt", schedule_info=bot_schedule.get_current_num_task(num=1, time_info=False)
             ),
-            chat_target=global_prompt_manager.get_prompt("chat_target_group1")
+            chat_target=await global_prompt_manager.get_prompt_async("chat_target_group1")
             if chat_in_group
-            else global_prompt_manager.get_prompt("chat_target_private1"),
-            chat_target_2=global_prompt_manager.get_prompt("chat_target_group2")
+            else await global_prompt_manager.get_prompt_async("chat_target_private1"),
+            chat_target_2=await global_prompt_manager.get_prompt_async("chat_target_group2")
             if chat_in_group
-            else global_prompt_manager.get_prompt("chat_target_private2"),
+            else await global_prompt_manager.get_prompt_async("chat_target_private2"),
             chat_talking_prompt=chat_talking_prompt,
             message_txt=message_txt,
             bot_name=global_config.BOT_NICKNAME,
@@ -220,7 +220,7 @@ class PromptBuilder:
             mood_prompt=mood_prompt,
             keywords_reaction_prompt=keywords_reaction_prompt,
             prompt_ger=prompt_ger,
-            moderation_prompt=global_prompt_manager.get_prompt("moderation_prompt"),
+            moderation_prompt=await global_prompt_manager.get_prompt_async("moderation_prompt"),
         )
 
         return prompt

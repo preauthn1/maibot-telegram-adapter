@@ -155,7 +155,7 @@ class Heartflow:
         # prompt += f"你现在{mood_info}。"
         # prompt += "现在你接下去继续思考，产生新的想法，但是要基于原有的主要想法，不要分点输出，"
         # prompt += "输出连贯的内心独白，不要太长，但是记得结合上述的消息，关注新内容:"
-        prompt = global_prompt_manager.get_prompt("thinking_prompt").format(
+        prompt = (await global_prompt_manager.get_prompt_async("thinking_prompt")).format(
             schedule_info, personality_info, related_memory_info, current_thinking_info, sub_flows_info, mood_info
         )
 
@@ -212,7 +212,7 @@ class Heartflow:
         # prompt += f"你现在{mood_info}\n"
         # prompt += """现在请你总结这些聊天内容，注意关注聊天内容对原有的想法的影响，输出连贯的内心独白
         # 不要太长，但是记得结合上述的消息，要记得你的人设，关注新内容:"""
-        prompt = global_prompt_manager.get_prompt("mind_summary_prompt").format(
+        prompt = (await global_prompt_manager.get_prompt_async("mind_summary_prompt")).format(
             personality_info, global_config.BOT_NICKNAME, self.current_mind, minds_str, mood_info
         )
 
