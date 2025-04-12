@@ -42,8 +42,8 @@ if errorlevel 2 (
     echo Conda 环境 "!CONDA_ENV!" 激活成功
     python src/plugins/zhishi/knowledge_library.py
 ) else (
-    if exist "venvvenv\Scripts\python.exe" (
-        venvvenv\Scripts\python src/plugins/zhishi/knowledge_library.py
+    if exist "venv\Scripts\python.exe" (
+        venv\Scripts\python src/plugins/zhishi/knowledge_library.py
     ) else (
         echo ======================================
         echo 错误: venv环境不存在，请先创建虚拟环境

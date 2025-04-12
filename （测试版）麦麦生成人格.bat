@@ -43,7 +43,7 @@ if errorlevel 2 (
     python src/individuality/per_bf_gen.py
 ) else (
     if exist "venv\Scripts\python.exe" (
-        venvvenv\Scripts\python src/individuality/per_bf_gen.py
+        venv\Scripts\python src/individuality/per_bf_gen.py
     ) else (
         echo ======================================
         echo 错误: venv环境不存在，请先创建虚拟环境
