@@ -1,4 +1,3 @@
-import time
 from typing import List, Optional, Tuple, Union
 import random
 
@@ -90,7 +89,7 @@ class ResponseGenerator:
                 sender_name=sender_name,
                 stream_id=message.chat_stream.stream_id,
             )
-        logger.info(f"构建prompt时间: {t_build_prompt.human_readable()}")
+        logger.info(f"构建prompt时间: {t_build_prompt.human_readable}")
 
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)

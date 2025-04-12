@@ -72,11 +72,11 @@ class ResponseGenerator:
         if model_response:
             if checked:
                 logger.info(
-                    f"{global_config.BOT_NICKNAME}的回复是：{model_response}，思忖后，回复是：{model_checked_response},生成回复时间: {t_generate_response.human_readable()}"
+                    f"{global_config.BOT_NICKNAME}的回复是：{model_response}，思忖后，回复是：{model_checked_response},生成回复时间: {t_generate_response.human_readable}"
                 )
             else:
                 logger.info(
-                    f"{global_config.BOT_NICKNAME}的回复是：{model_response},生成回复时间: {t_generate_response.human_readable()}"
+                    f"{global_config.BOT_NICKNAME}的回复是：{model_response},生成回复时间: {t_generate_response.human_readable}"
                 )
 
             model_processed_response = await self._process_response(model_checked_response)
@@ -119,7 +119,7 @@ class ResponseGenerator:
                     sender_name=sender_name,
                     stream_id=message.chat_stream.stream_id,
                 )
-        logger.info(f"构建{mode}prompt时间: {t_build_prompt.human_readable()}")
+        logger.info(f"构建{mode}prompt时间: {t_build_prompt.human_readable}")
 
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
@@ -160,7 +160,7 @@ class ResponseGenerator:
                 content=content,
             )
         logger.info(f"构建check_prompt: {prompt}")
-        logger.info(f"构建check_prompt时间: {t_build_prompt_check.human_readable()}")
+        logger.info(f"构建check_prompt时间: {t_build_prompt_check.human_readable}")
 
         try:
             checked_content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
