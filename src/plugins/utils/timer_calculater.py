@@ -3,6 +3,38 @@ from functools import wraps
 from typing import Optional, Dict, Callable
 import asyncio
 
+"""
+# 更好的计时器
+感谢D指导
+
+# 用法：
+
+-
+@Timer()
+def func():
+    pass
+
+-
+time_dict = {}
+@Timer("计数", time_dict)
+def func():
+    pass
+
+-
+def func():
+    with Timer() as t:
+        pass
+
+-
+def func():
+    time_dict = {}
+    with Timer("计数", time_dict) as t:
+        pass
+
+属性：human_readable
+自定义错误：TimerTypeError
+"""
+
 
 class TimerTypeError(TypeError):
     """自定义类型错误"""
