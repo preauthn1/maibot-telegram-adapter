@@ -99,11 +99,15 @@ class Prompt(str):
         if isinstance(args, tuple):
             args = list(args)
         should_register = kwargs.pop("_should_register", True)
+
+        # 预处理模板字符串，替换转义的花括号
+        processed_fstr = fstr
+
         # 解析模板
         template_args = []
-        result = re.findall(r"\{(.*?)\}", fstr)
+        result = re.findall(r"\{(.*?)\}", processed_fstr)
         for expr in result:
-            if expr and expr not in template_args:
+            if expr and expr not in template_args and not cls._is_escaped(processed_fstr, expr):
                 template_args.append(expr)
 
         # 如果提供了初始参数，立即格式化
@@ -130,6 +134,48 @@ class Prompt(str):
                 global_prompt_manager.register(obj)
         return obj
 
+    @staticmethod
+    def _is_escaped(s: str, expr: str) -> bool:
+        """判断表达式是否被转义"""
+        pattern = r"\\{" + re.escape(expr) + r"}"
+        return bool(re.search(pattern, s))
+
+    @staticmethod
+    def _preprocess_template(template: str) -> tuple[str, dict]:
+        """预处理模板，替换转义的花括号为临时标记"""
+        placeholders = {}
+        counter = 0
+
+        # 处理转义的左花括号 \{
+        def replace_escaped_left_brace(match):
+            nonlocal counter
+            placeholder = f"__ESC_LEFT_BRACE_{counter}__"
+            placeholders[placeholder] = "{"
+            counter += 1
+            return placeholder
+
+        processed = re.sub(r"\\{", replace_escaped_left_brace, template)
+
+        # 处理转义的右花括号 \}
+        def replace_escaped_right_brace(match):
+            nonlocal counter
+            placeholder = f"__ESC_RIGHT_BRACE_{counter}__"
+            placeholders[placeholder] = "}"
+            counter += 1
+            return placeholder
+
+        processed = re.sub(r"\\}", replace_escaped_right_brace, processed)
+
+        return processed, placeholders
+
+    @staticmethod
+    def _restore_template(template: str, placeholders: dict) -> str:
+        """还原预处理后的模板"""
+        result = template
+        for placeholder, value in placeholders.items():
+            result = result.replace(placeholder, value)
+        return result
+
     @classmethod
     async def create_async(
         cls, fstr: str, name: Optional[str] = None, args: Union[List[Any], tuple[Any, ...]] = None, **kwargs
@@ -142,11 +188,15 @@ class Prompt(str):
 
     @classmethod
     def _format_template(cls, template: str, args: List[Any] = None, kwargs: Dict[str, Any] = None) -> str:
+        # 预处理模板，替换转义的花括号
+        processed_template, placeholders = cls._preprocess_template(template)
+
         template_args = []
-        result = re.findall(r"\{(.*?)\}", template)
+        result = re.findall(r"\{(.*?)\}", processed_template)
         for expr in result:
             if expr and expr not in template_args:
                 template_args.append(expr)
+
         formatted_args = {}
         formatted_kwargs = {}
 
@@ -177,13 +227,15 @@ class Prompt(str):
 
         try:
             # 先用位置参数格式化
-
             if args:
-                template = template.format(**formatted_args)
+                processed_template = processed_template.format(**formatted_args)
             # 再用关键字参数格式化
             if kwargs:
-                template = template.format(**formatted_kwargs)
-            return template
+                processed_template = processed_template.format(**formatted_kwargs)
+
+            # 还原转义的花括号
+            final_result = cls._restore_template(processed_template, placeholders)
+            return final_result
         except (IndexError, KeyError) as e:
             raise ValueError(
                 f"格式化模板失败: {template}, args={formatted_args}, kwargs={formatted_kwargs} {str(e)}"
@@ -198,8 +250,10 @@ class Prompt(str):
             _should_register=False,
             **kwargs if kwargs else self._kwargs,
         )
+        ret.template = str(ret)
         # print(f"prompt build result: {ret}  name: {ret.name} ")
-        return str(ret)
+        # print(global_prompt_manager._prompts["schedule_prompt"])
+        return ret
 
     def __str__(self) -> str:
         if self._kwargs or self._args:
