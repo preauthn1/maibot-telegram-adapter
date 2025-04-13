@@ -328,12 +328,12 @@ def process_llm_response(text: str) -> List[str]:
     # 对西文字符段落的回复长度设置为汉字字符的两倍
     max_length = global_config.response_max_length
     max_sentence_num = global_config.response_max_sentence_num
-    if len(text) > max_length and not is_western_paragraph(text):
-        logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
-        return ["懒得说"]
-    elif len(text) > 200:
-        logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
-        return ["懒得说"]
+    # if len(text) > max_length and not is_western_paragraph(text):
+    #     logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
+    #     return ["懒得说"]
+    # elif len(text) > 200:
+    #     logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
+    #     return ["懒得说"]
     # 处理长消息
     typo_generator = ChineseTypoGenerator(
         error_rate=global_config.chinese_typo_error_rate,
