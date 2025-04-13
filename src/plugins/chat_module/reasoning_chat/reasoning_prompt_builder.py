@@ -144,12 +144,10 @@ class PromptBuilder:
                     for pattern in rule.get("regex", []):
                         result = pattern.search(message_txt)
                         if result:
-                            reaction = rule.get('reaction', '')
+                            reaction = rule.get("reaction", "")
                             for name, content in result.groupdict().items():
-                                reaction = reaction.replace(f'[{name}]', content)
-                            logger.info(
-                                f"匹配到以下正则表达式：{pattern}，触发反应：{reaction}"
-                            )
+                                reaction = reaction.replace(f"[{name}]", content)
+                            logger.info(f"匹配到以下正则表达式：{pattern}，触发反应：{reaction}")
                             keywords_reaction_prompt += reaction + "，"
                             break
 
@@ -197,7 +195,7 @@ class PromptBuilder:
         prompt = await global_prompt_manager.format_prompt(
             "reasoning_prompt_main",
             relation_prompt_all=await global_prompt_manager.get_prompt_async("relationship_prompt"),
-            replation_prompt=relation_prompt,
+            relation_prompt=relation_prompt,
             sender_name=sender_name,
             memory_prompt=memory_prompt,
             prompt_info=prompt_info,

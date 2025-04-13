@@ -5,9 +5,11 @@ from src.plugins.models.utils_model import LLM_request
 from src.plugins.config.config import global_config
 import re
 import time
+
 # from src.plugins.schedule.schedule_generator import bot_schedule
 # from src.plugins.memory_system.Hippocampus import HippocampusManager
 from src.common.logger import get_module_logger, LogConfig, SUB_HEARTFLOW_STYLE_CONFIG  # noqa: E402
+
 # from src.plugins.chat.utils import get_embedding
 # from src.common.database import db
 # from typing import Union
@@ -17,7 +19,7 @@ from src.plugins.chat.chat_stream import ChatStream
 from src.plugins.person_info.relationship_manager import relationship_manager
 from src.plugins.chat.utils import get_recent_group_speaker
 from src.do_tool.tool_use import ToolUser
-from ..plugins.utils.prompt_builder import Prompt,global_prompt_manager   
+from ..plugins.utils.prompt_builder import Prompt, global_prompt_manager
 
 subheartflow_config = LogConfig(
     # 使用海马体专用样式
@@ -25,6 +27,7 @@ subheartflow_config = LogConfig(
     file_format=SUB_HEARTFLOW_STYLE_CONFIG["file_format"],
 )
 logger = get_module_logger("subheartflow", config=subheartflow_config)
+
 
 def init_prompt():
     prompt = ""
@@ -41,7 +44,7 @@ def init_prompt():
     prompt += "思考时可以想想如何对群聊内容进行回复。回复的要求是：平淡一些，简短一些，说中文，尽量不要说你说过的话\n"
     prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，等)，不要带有括号和动作描写"
     prompt += "记得结合上述的消息，生成内心想法，文字不要浮夸，注意你就是{bot_name}，{bot_name}指的就是你。"
-    Prompt(prompt,"sub_heartflow_prompt_before")
+    Prompt(prompt, "sub_heartflow_prompt_before")
     prompt = ""
     # prompt += f"你现在正在做的事情是：{schedule_info}\n"
     prompt += "{prompt_personality}\n"
@@ -52,8 +55,7 @@ def init_prompt():
     prompt += "你现在{mood_info}"
     prompt += "现在你接下去继续思考，产生新的想法，记得保留你刚刚的想法，不要分点输出，输出连贯的内心独白"
     prompt += "不要太长，但是记得结合上述的消息，要记得你的人设，关注聊天和新内容，关注你回复的内容，不要思考太多:"
-    Prompt(prompt,'sub_heartflow_prompt_after')
-    
+    Prompt(prompt, "sub_heartflow_prompt_after")
 
 
 class CurrentState:
@@ -78,7 +80,6 @@ class SubHeartflow:
         self.llm_model = LLM_request(
             model=global_config.llm_sub_heartflow, temperature=0.2, max_tokens=600, request_type="sub_heart_flow"
         )
-        
 
         self.main_heartflow_info = ""
 
@@ -93,9 +94,9 @@ class SubHeartflow:
         self.observations: list[Observation] = []
 
         self.running_knowledges = []
-        
+
         self.bot_name = global_config.BOT_NICKNAME
-        
+
         self.tool_user = ToolUser()
 
     def add_observation(self, observation: Observation):
@@ -145,12 +146,12 @@ class SubHeartflow:
             ):  # 5分钟无回复/不在场，销毁
                 logger.info(f"子心流 {self.subheartflow_id} 已经5分钟没有激活，正在销毁...")
                 break  # 退出循环，销毁自己
+
     async def do_observe(self):
         observation = self.observations[0]
         await observation.observe()
 
-
-    async def do_thinking_before_reply(self, message_txt:str, sender_name:str, chat_stream:ChatStream):
+    async def do_thinking_before_reply(self, message_txt: str, sender_name: str, chat_stream: ChatStream):
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         # mood_info = "你很生气，很愤怒"
@@ -160,12 +161,12 @@ class SubHeartflow:
 
         # 首先尝试使用工具获取更多信息
         tool_result = await self.tool_user.use_tool(message_txt, sender_name, chat_stream)
-        
+
         # 如果工具被使用且获得了结果，将收集到的信息合并到思考中
         collected_info = ""
         if tool_result.get("used_tools", False):
             logger.info("使用工具收集了信息")
-            
+
             # 如果有收集到的信息，将其添加到当前思考中
             if "collected_info" in tool_result:
                 collected_info = tool_result["collected_info"]
@@ -185,7 +186,7 @@ class SubHeartflow:
         identity_detail = individuality.identity.identity_detail
         random.shuffle(identity_detail)
         prompt_personality += f",{identity_detail[0]}"
-        
+
         # 关系
         who_chat_in_group = [
             (chat_stream.user_info.platform, chat_stream.user_info.user_id, chat_stream.user_info.user_nickname)
@@ -204,9 +205,9 @@ class SubHeartflow:
         #     f"{relation_prompt}关系等级越大，关系越好，请分析聊天记录，"
         #     f"根据你和说话者{sender_name}的关系和态度进行回复，明确你的立场和情感。"
         # )
-        relation_prompt_all = (await global_prompt_manager.get_prompt_async('relationship_prompt')).format(
-            relation_prompt,sender_name
-            )
+        relation_prompt_all = (await global_prompt_manager.get_prompt_async("relationship_prompt")).format(
+            relation_prompt, sender_name
+        )
 
         # prompt = ""
         # # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
@@ -224,9 +225,16 @@ class SubHeartflow:
         # prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，等)，不要带有括号和动作描写"
         # prompt += f"记得结合上述的消息，生成内心想法，文字不要浮夸，注意你就是{self.bot_name}，{self.bot_name}指的就是你。"
 
-        prompt= (await global_prompt_manager.get_prompt_async("sub_heartflow_prompt_before")).format(
-            collected_info,relation_prompt_all,prompt_personality,current_thinking_info,chat_observe_info,mood_info,sender_name,
-            message_txt,self.bot_name
+        prompt = (await global_prompt_manager.get_prompt_async("sub_heartflow_prompt_before")).format(
+            collected_info,
+            relation_prompt_all,
+            prompt_personality,
+            current_thinking_info,
+            chat_observe_info,
+            mood_info,
+            sender_name,
+            message_txt,
+            self.bot_name,
         )
 
         try:
@@ -281,10 +289,10 @@ class SubHeartflow:
         # prompt += f"你现在{mood_info}"
         # prompt += "现在你接下去继续思考，产生新的想法，记得保留你刚刚的想法，不要分点输出，输出连贯的内心独白"
         # prompt += "不要太长，但是记得结合上述的消息，要记得你的人设，关注聊天和新内容，关注你回复的内容，不要思考太多:"
-        prompt=(await global_prompt_manager.get_prompt_async('sub_heartflow_prompt_after')).format(
-            prompt_personality,chat_observe_info,current_thinking_info,message_new_info,reply_info,mood_info
+        prompt = (await global_prompt_manager.get_prompt_async("sub_heartflow_prompt_after")).format(
+            prompt_personality, chat_observe_info, current_thinking_info, message_new_info, reply_info, mood_info
         )
-        
+
         try:
             response, reasoning_content = await self.llm_model.generate_response_async(prompt)
         except Exception as e:
@@ -342,6 +350,7 @@ class SubHeartflow:
     def update_current_mind(self, response):
         self.past_mind.append(self.current_mind)
         self.current_mind = response
+
 
 init_prompt()
 # subheartflow = SubHeartflow()

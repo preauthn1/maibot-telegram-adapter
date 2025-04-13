@@ -8,7 +8,7 @@ from ..chat_module.only_process.only_message_process import MessageProcessor
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ..chat_module.think_flow_chat.think_flow_chat import ThinkFlowChat
 from ..chat_module.reasoning_chat.reasoning_chat import ReasoningChat
-from ..utils.prompt_builder import Prompt,global_prompt_manager
+from ..utils.prompt_builder import Prompt, global_prompt_manager
 import traceback
 
 # 定义日志配置
@@ -89,17 +89,17 @@ class ChatBot:
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
                 return
-            
+
             if message.message_info.template_info and not message.message_info.template_info.template_default:
-                template_group_name=message.message_info.template_info.template_name
-                template_items=message.message_info.template_info.template_items
+                template_group_name = message.message_info.template_info.template_name
+                template_items = message.message_info.template_info.template_items
                 async with global_prompt_manager.async_message_scope(template_group_name):
-                    if isinstance(template_items,dict):
+                    if isinstance(template_items, dict):
                         for k in template_items.keys():
-                            await Prompt.create_async(template_items[k],k)
+                            await Prompt.create_async(template_items[k], k)
                             print(f"注册{template_items[k]},{k}")
             else:
-                template_group_name=None
+                template_group_name = None
 
             async def preprocess():
                 if global_config.enable_pfc_chatting:
