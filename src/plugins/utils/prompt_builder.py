@@ -90,6 +90,20 @@ global_prompt_manager = PromptManager()
 
 
 class Prompt(str):
+    # 临时标记，作为类常量
+    _TEMP_LEFT_BRACE = "__ESCAPED_LEFT_BRACE__"
+    _TEMP_RIGHT_BRACE = "__ESCAPED_RIGHT_BRACE__"
+
+    @staticmethod
+    def _process_escaped_braces(template: str) -> str:
+        """处理模板中的转义花括号，将 \{ 和 \} 替换为临时标记"""
+        return template.replace("\\{", Prompt._TEMP_LEFT_BRACE).replace("\\}", Prompt._TEMP_RIGHT_BRACE)
+
+    @staticmethod
+    def _restore_escaped_braces(template: str) -> str:
+        """将临时标记还原为实际的花括号字符"""
+        return template.replace(Prompt._TEMP_LEFT_BRACE, "{").replace(Prompt._TEMP_RIGHT_BRACE, "}")
+
     def __new__(cls, fstr: str, name: Optional[str] = None, args: Union[List[Any], tuple[Any, ...]] = None, **kwargs):
         # 如果传入的是元组，转换为列表
         if isinstance(args, tuple):
@@ -97,10 +111,7 @@ class Prompt(str):
         should_register = kwargs.pop("_should_register", True)
 
         # 预处理模板中的转义花括号
-        processed_fstr = fstr
-        temp_left = "__ESCAPED_LEFT_BRACE__"
-        temp_right = "__ESCAPED_RIGHT_BRACE__"
-        processed_fstr = processed_fstr.replace("\\{", temp_left).replace("\\}", temp_right)
+        processed_fstr = cls._process_escaped_braces(fstr)
 
         # 解析模板
         template_args = []
@@ -146,11 +157,7 @@ class Prompt(str):
     @classmethod
     def _format_template(cls, template: str, args: List[Any] = None, kwargs: Dict[str, Any] = None) -> str:
         # 预处理模板中的转义花括号
-        processed_template = template
-        # 临时替换转义的花括号
-        temp_left = "__ESCAPED_LEFT_BRACE__"
-        temp_right = "__ESCAPED_RIGHT_BRACE__"
-        processed_template = processed_template.replace("\\{", temp_left).replace("\\}", temp_right)
+        processed_template = cls._process_escaped_braces(template)
 
         template_args = []
         result = re.findall(r"\{(.*?)\}", processed_template)
@@ -187,7 +194,7 @@ class Prompt(str):
                 processed_template = processed_template.format(**formatted_kwargs)
 
             # 将临时标记还原为实际的花括号
-            result = processed_template.replace(temp_left, "{").replace(temp_right, "}")
+            result = cls._restore_escaped_braces(processed_template)
             return result
         except (IndexError, KeyError) as e:
             raise ValueError(
