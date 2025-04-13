@@ -142,35 +142,54 @@ class Prompt(str):
 
     @staticmethod
     def _preprocess_template(template: str) -> tuple[str, dict]:
-        """预处理模板，替换转义的花括号为临时标记"""
+        """
+        预处理模板，将转义的花括号替换为唯一的临时标记
+
+        Args:
+            template: 原始模板字符串
+
+        Returns:
+            tuple: (处理后的模板, 占位符映射字典)
+        """
         placeholders = {}
         counter = 0
+        processed = template
+
+        # 定义替换函数 - 用于生成唯一占位符
+        def create_placeholder(char_type):
+            nonlocal counter
+            placeholder = f"__ESC_{char_type}_{counter}__"
+            counter += 1
+            return placeholder
 
         # 处理转义的左花括号 \{
-        def replace_escaped_left_brace(match):
-            nonlocal counter
-            placeholder = f"__ESC_LEFT_BRACE_{counter}__"
+        left_brace_pattern = r"\\{"
+        while re.search(left_brace_pattern, processed):
+            placeholder = create_placeholder("LEFT_BRACE")
             placeholders[placeholder] = "{"
-            counter += 1
-            return placeholder
-
-        processed = re.sub(r"\\{", replace_escaped_left_brace, template)
+            processed = re.sub(left_brace_pattern, placeholder, processed, count=1)
 
         # 处理转义的右花括号 \}
-        def replace_escaped_right_brace(match):
-            nonlocal counter
-            placeholder = f"__ESC_RIGHT_BRACE_{counter}__"
+        right_brace_pattern = r"\\}"
+        while re.search(right_brace_pattern, processed):
+            placeholder = create_placeholder("RIGHT_BRACE")
             placeholders[placeholder] = "}"
-            counter += 1
-            return placeholder
-
-        processed = re.sub(r"\\}", replace_escaped_right_brace, processed)
+            processed = re.sub(right_brace_pattern, placeholder, processed, count=1)
 
         return processed, placeholders
 
     @staticmethod
     def _restore_template(template: str, placeholders: dict) -> str:
-        """还原预处理后的模板"""
+        """
+        还原预处理后的模板中的占位符为实际字符
+
+        Args:
+            template: 处理后的模板字符串
+            placeholders: 占位符映射字典
+
+        Returns:
+            str: 还原后的字符串
+        """
         result = template
         for placeholder, value in placeholders.items():
             result = result.replace(placeholder, value)
@@ -188,9 +207,19 @@ class Prompt(str):
 
     @classmethod
     def _format_template(cls, template: str, args: List[Any] = None, kwargs: Dict[str, Any] = None) -> str:
-        # 预处理模板，替换转义的花括号
+        """
+        格式化模板字符串，同时处理转义的花括号
+
+        处理流程:
+        1. 预处理模板，替换转义的花括号为临时占位符
+        2. 解析模板中的参数
+        3. 应用参数进行格式化
+        4. 还原临时占位符为实际花括号
+        """
+        # 1. 预处理：替换转义的花括号为临时占位符
         processed_template, placeholders = cls._preprocess_template(template)
 
+        # 2. 解析参数
         template_args = []
         result = re.findall(r"\{(.*?)\}", processed_template)
         for expr in result:
@@ -200,7 +229,7 @@ class Prompt(str):
         formatted_args = {}
         formatted_kwargs = {}
 
-        # 处理位置参数
+        # 3. 处理位置参数
         if args:
             # print(len(template_args), len(args), template_args, args)
             for i in range(len(args)):
@@ -226,14 +255,13 @@ class Prompt(str):
                     formatted_kwargs[key] = value
 
         try:
-            # 先用位置参数格式化
+            # 应用格式化
             if args:
                 processed_template = processed_template.format(**formatted_args)
-            # 再用关键字参数格式化
             if kwargs:
                 processed_template = processed_template.format(**formatted_kwargs)
 
-            # 还原转义的花括号
+            # 4. 还原占位符为实际的花括号
             final_result = cls._restore_template(processed_template, placeholders)
             return final_result
         except (IndexError, KeyError) as e:
