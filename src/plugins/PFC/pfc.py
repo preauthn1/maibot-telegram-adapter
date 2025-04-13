@@ -298,13 +298,13 @@ class DirectMessageSender:
     def __init__(self):
         self.logger = get_module_logger("direct_sender")
         self.storage = MessageStorage()
-        
+
     async def send_via_ws(self, message: MessageSending) -> None:
         try:
             await global_api.send_message(message)
         except Exception as e:
             raise ValueError(f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件") from e
-        
+
     async def send_message(
         self,
         chat_stream: ChatStream,
@@ -340,7 +340,7 @@ class DirectMessageSender:
 
         # 处理消息
         await message.process()
-        
+
         message_json = message.to_dict()
 
         # 发送消息
