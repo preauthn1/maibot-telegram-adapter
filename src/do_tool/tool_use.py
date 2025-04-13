@@ -104,7 +104,7 @@ class ToolUser:
 
             # 定义可用工具
             tools = self._define_tools()
-            
+
             # 使用llm_model_tool发送带工具定义的请求
             payload = {
                 "model": self.llm_model_tool.model_name,
