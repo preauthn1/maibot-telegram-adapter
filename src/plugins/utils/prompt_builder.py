@@ -2,6 +2,10 @@ from typing import Dict, Any, Optional, List, Union
 import re
 from contextlib import asynccontextmanager
 import asyncio
+from src.common.logger import get_module_logger
+import traceback
+
+logger = get_module_logger("prompt_build")
 
 
 class PromptContext:
@@ -148,12 +152,19 @@ class Prompt(str):
 
         # 处理位置参数
         if args:
+            # print(len(template_args), len(args), template_args, args)
             for i in range(len(args)):
-                arg = args[i]
-                if isinstance(arg, Prompt):
-                    formatted_args[template_args[i]] = arg.format(**kwargs)
+                if i < len(template_args):
+                    arg = args[i]
+                    if isinstance(arg, Prompt):
+                        formatted_args[template_args[i]] = arg.format(**kwargs)
+                    else:
+                        formatted_args[template_args[i]] = arg
                 else:
-                    formatted_args[template_args[i]] = arg
+                    logger.error(
+                        f"构建提示词模板失败，解析到的参数列表{template_args}，长度为{len(template_args)}，输入的参数列表为{args}，提示词模板为{template}"
+                    )
+                    raise ValueError("格式化模板失败")
 
         # 处理关键字参数
         if kwargs:
@@ -178,7 +189,7 @@ class Prompt(str):
                 f"格式化模板失败: {template}, args={formatted_args}, kwargs={formatted_kwargs} {str(e)}"
             ) from e
 
-    def format(self, *args, **kwargs) -> "Prompt":
+    def format(self, *args, **kwargs) -> "str":
         """支持位置参数和关键字参数的格式化，使用"""
         ret = type(self)(
             self.template,
@@ -187,10 +198,8 @@ class Prompt(str):
             _should_register=False,
             **kwargs if kwargs else self._kwargs,
         )
-        ret.template = str(ret)
-        print(f"prompt build result: {ret}  name: {ret.name} ")
-        print(global_prompt_manager._prompts["schedule_prompt"])
-        return ret
+        # print(f"prompt build result: {ret}  name: {ret.name} ")
+        return str(ret)
 
     def __str__(self) -> str:
         if self._kwargs or self._args:
