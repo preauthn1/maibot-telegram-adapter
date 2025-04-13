@@ -1,4 +1,3 @@
-import time
 from typing import List, Optional
 import random
 
@@ -10,6 +9,7 @@ from .think_flow_prompt_builder import prompt_builder
 from ...chat.utils import process_llm_response
 from src.common.logger import get_module_logger, LogConfig, LLM_STYLE_CONFIG
 from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
+from ...utils.timer_calculater import Timer
 
 from src.plugins.moods.moods import MoodManager
 
@@ -44,41 +44,40 @@ class ResponseGenerator:
 
         arousal_multiplier = MoodManager.get_instance().get_arousal_multiplier()
 
-        time1 = time.time()
-
-        checked = False
-        if random.random() > 0:
+        with Timer() as t_generate_response:
             checked = False
-            current_model = self.model_normal
-            current_model.temperature = 0.3 * arousal_multiplier  # 激活度越高，温度越高
-            model_response = await self._generate_response_with_model(
-                message, current_model, thinking_id, mode="normal"
-            )
+            if random.random() > 0:
+                checked = False
+                current_model = self.model_normal
+                current_model.temperature = 0.3 * arousal_multiplier  # 激活度越高，温度越高
+                model_response = await self._generate_response_with_model(
+                    message, current_model, thinking_id, mode="normal"
+                )
 
-            model_checked_response = model_response
-        else:
-            checked = True
-            current_model = self.model_normal
-            current_model.temperature = 0.3 * arousal_multiplier  # 激活度越高，温度越高
-            print(f"生成{message.processed_plain_text}回复温度是：{current_model.temperature}")
-            model_response = await self._generate_response_with_model(
-                message, current_model, thinking_id, mode="simple"
-            )
+                model_checked_response = model_response
+            else:
+                checked = True
+                current_model = self.model_normal
+                current_model.temperature = 0.3 * arousal_multiplier  # 激活度越高，温度越高
+                print(f"生成{message.processed_plain_text}回复温度是：{current_model.temperature}")
+                model_response = await self._generate_response_with_model(
+                    message, current_model, thinking_id, mode="simple"
+                )
 
-            current_model.temperature = 0.3
-            model_checked_response = await self._check_response_with_model(
-                message, model_response, current_model, thinking_id
-            )
-
-        time2 = time.time()
+                current_model.temperature = 0.3
+                model_checked_response = await self._check_response_with_model(
+                    message, model_response, current_model, thinking_id
+                )
 
         if model_response:
             if checked:
                 logger.info(
-                    f"{global_config.BOT_NICKNAME}的回复是：{model_response}，思忖后，回复是：{model_checked_response},生成回复时间: {time2 - time1}秒"
+                    f"{global_config.BOT_NICKNAME}的回复是：{model_response}，思忖后，回复是：{model_checked_response},生成回复时间: {t_generate_response.human_readable}"
                 )
             else:
-                logger.info(f"{global_config.BOT_NICKNAME}的回复是：{model_response},生成回复时间: {time2 - time1}秒")
+                logger.info(
+                    f"{global_config.BOT_NICKNAME}的回复是：{model_response},生成回复时间: {t_generate_response.human_readable}"
+                )
 
             model_processed_response = await self._process_response(model_checked_response)
 
@@ -105,23 +104,22 @@ class ResponseGenerator:
             sender_name = f"用户({message.chat_stream.user_info.user_id})"
 
         # 构建prompt
-        timer1 = time.time()
-        if mode == "normal":
-            prompt = await prompt_builder._build_prompt(
-                message.chat_stream,
-                message_txt=message.processed_plain_text,
-                sender_name=sender_name,
-                stream_id=message.chat_stream.stream_id,
-            )
-        elif mode == "simple":
-            prompt = await prompt_builder._build_prompt_simple(
-                message.chat_stream,
-                message_txt=message.processed_plain_text,
-                sender_name=sender_name,
-                stream_id=message.chat_stream.stream_id,
-            )
-        timer2 = time.time()
-        logger.info(f"构建{mode}prompt时间: {timer2 - timer1}秒")
+        with Timer() as t_build_prompt:
+            if mode == "normal":
+                prompt = await prompt_builder._build_prompt(
+                    message.chat_stream,
+                    message_txt=message.processed_plain_text,
+                    sender_name=sender_name,
+                    stream_id=message.chat_stream.stream_id,
+                )
+            elif mode == "simple":
+                prompt = await prompt_builder._build_prompt_simple(
+                    message.chat_stream,
+                    message_txt=message.processed_plain_text,
+                    sender_name=sender_name,
+                    stream_id=message.chat_stream.stream_id,
+                )
+        logger.info(f"构建{mode}prompt时间: {t_build_prompt.human_readable}")
 
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
@@ -153,17 +151,16 @@ class ResponseGenerator:
             sender_name = f"用户({message.chat_stream.user_info.user_id})"
 
         # 构建prompt
-        timer1 = time.time()
-        prompt = await prompt_builder._build_prompt_check_response(
-            message.chat_stream,
-            message_txt=message.processed_plain_text,
-            sender_name=sender_name,
-            stream_id=message.chat_stream.stream_id,
-            content=content,
-        )
-        timer2 = time.time()
+        with Timer() as t_build_prompt_check:
+            prompt = await prompt_builder._build_prompt_check_response(
+                message.chat_stream,
+                message_txt=message.processed_plain_text,
+                sender_name=sender_name,
+                stream_id=message.chat_stream.stream_id,
+                content=content,
+            )
         logger.info(f"构建check_prompt: {prompt}")
-        logger.info(f"构建check_prompt时间: {timer2 - timer1}秒")
+        logger.info(f"构建check_prompt时间: {t_build_prompt_check.human_readable}")
 
         try:
             checked_content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
