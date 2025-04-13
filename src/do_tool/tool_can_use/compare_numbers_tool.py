@@ -47,4 +47,4 @@ class CompareNumbersTool(BaseTool):
 
 
 # 注册工具
-register_tool(CompareNumbersTool)
+# register_tool(CompareNumbersTool)

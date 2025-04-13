@@ -132,4 +132,4 @@ class SearchKnowledgeTool(BaseTool):
 
 
 # 注册工具
-register_tool(SearchKnowledgeTool)
+# register_tool(SearchKnowledgeTool)

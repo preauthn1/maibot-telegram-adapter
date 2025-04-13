@@ -117,7 +117,7 @@ class PersonInfoManager:
             return document[field_name]
         else:
             default_value = copy.deepcopy(person_info_default[field_name])
-            logger.debug(f"获取{person_id}的{field_name}失败，已返回默认值{default_value}")
+            logger.trace(f"获取{person_id}的{field_name}失败，已返回默认值{default_value}")
             return default_value
 
     async def get_values(self, person_id: str, field_names: list) -> dict:

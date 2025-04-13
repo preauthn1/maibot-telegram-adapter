@@ -56,4 +56,4 @@ class GetMemoryTool(BaseTool):
 
 
 # 注册工具
-register_tool(GetMemoryTool)
+# register_tool(GetMemoryTool)

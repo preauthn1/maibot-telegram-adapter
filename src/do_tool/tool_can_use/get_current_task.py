@@ -51,4 +51,4 @@ class GetCurrentTaskTool(BaseTool):
 
 
 # 注册工具
-register_tool(GetCurrentTaskTool)
+# register_tool(GetCurrentTaskTool)
