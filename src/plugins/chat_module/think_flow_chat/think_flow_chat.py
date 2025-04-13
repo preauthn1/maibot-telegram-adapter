@@ -184,24 +184,24 @@ class ThinkFlowChat:
         heartflow.create_subheartflow(chat.stream_id)
 
         await message.process()
-        logger.debug(f"消息处理成功{message.processed_plain_text}")
+        logger.trace(f"消息处理成功{message.processed_plain_text}")
 
         # 过滤词/正则表达式过滤
         if self._check_ban_words(message.processed_plain_text, chat, userinfo) or self._check_ban_regex(
             message.raw_message, chat, userinfo
         ):
             return
-        logger.debug(f"过滤词/正则表达式过滤成功{message.processed_plain_text}")
+        logger.trace(f"过滤词/正则表达式过滤成功{message.processed_plain_text}")
 
         await self.storage.store_message(message, chat)
-        logger.debug(f"存储成功{message.processed_plain_text}")
+        logger.trace(f"存储成功{message.processed_plain_text}")
 
         # 记忆激活
         with Timer("记忆激活", timing_results):
             interested_rate = await HippocampusManager.get_instance().get_activate_from_text(
                 message.processed_plain_text, fast_retrieval=True
             )
-        logger.debug(f"记忆激活: {interested_rate}")
+        logger.trace(f"记忆激活: {interested_rate}")
 
         # 查询缓冲器结果，会整合前面跳过的消息，改变processed_plain_text
         buffer_result = await message_buffer.query_buffer_result(message)

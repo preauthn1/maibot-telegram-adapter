@@ -4,10 +4,15 @@ from src.plugins.chat.chat_stream import ChatStream
 from src.common.database import db
 import time
 import json
-from src.common.logger import get_module_logger
+from src.common.logger import get_module_logger, TOOL_USE_STYLE_CONFIG, LogConfig
 from src.do_tool.tool_can_use import get_all_tool_definitions, get_tool_instance
 
-logger = get_module_logger("tool_use")
+tool_use_config = LogConfig(
+    # 使用消息发送专用样式
+    console_format=TOOL_USE_STYLE_CONFIG["console_format"],
+    file_format=TOOL_USE_STYLE_CONFIG["file_format"],
+)
+logger = get_module_logger("tool_use", config=tool_use_config)
 
 
 class ToolUser:

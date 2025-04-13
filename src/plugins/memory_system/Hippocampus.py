@@ -1301,7 +1301,7 @@ class Hippocampus:
 
         # 对每个关键词进行扩散式检索
         for keyword in valid_keywords:
-            logger.debug(f"开始以关键词 '{keyword}' 为中心进行扩散检索 (最大深度: {max_depth}):")
+            logger.trace(f"开始以关键词 '{keyword}' 为中心进行扩散检索 (最大深度: {max_depth}):")
             # 初始化激活值
             activation_values = {keyword: 1.0}
             # 记录已访问的节点
@@ -1352,7 +1352,7 @@ class Hippocampus:
 
         # 计算激活节点数与总节点数的比值
         total_activation = sum(activate_map.values())
-        logger.info(f"总激活值: {total_activation:.2f}")
+        logger.trace(f"总激活值: {total_activation:.2f}")
         total_nodes = len(self.memory_graph.G.nodes())
         # activated_nodes = len(activate_map)
         activation_ratio = total_activation / total_nodes if total_nodes > 0 else 0

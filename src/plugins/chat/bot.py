@@ -38,7 +38,7 @@ class ChatBot:
     async def _ensure_started(self):
         """确保所有任务已启动"""
         if not self._started:
-            logger.info("确保ChatBot所有任务已启动")
+            logger.trace("确保ChatBot所有任务已启动")
 
             self._started = True
 
@@ -84,7 +84,7 @@ class ChatBot:
             message = MessageRecv(message_data)
             groupinfo = message.message_info.group_info
             userinfo = message.message_info.user_info
-            logger.debug(f"处理消息:{str(message_data)[:120]}...")
+            logger.trace(f"处理消息:{str(message_data)[:120]}...")
 
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
