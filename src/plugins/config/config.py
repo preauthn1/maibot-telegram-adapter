@@ -26,9 +26,9 @@ config_config = LogConfig(
 logger = get_module_logger("config", config=config_config)
 
 # 考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
-is_test = True
+is_test = False
 mai_version_main = "0.6.2"
-mai_version_fix = "snapshot-2"
+mai_version_fix = ""
 
 if mai_version_fix:
     if is_test:
@@ -196,6 +196,9 @@ class BotConfig:
     sub_heart_flow_freeze_time: int = 120  # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
     sub_heart_flow_stop_time: int = 600  # 子心流停止时间，超过这个时间没有回复，子心流会停止，间隔 单位秒
     heart_flow_update_interval: int = 300  # 心流更新频率，间隔 单位秒
+    observation_context_size: int = 20  # 心流观察到的最长上下文大小，超过这个值的上下文会被压缩
+    compressed_length: int = 5  # 不能大于observation_context_size,心流上下文压缩的最短压缩长度，超过心流观察到的上下文长度，会压缩，最短压缩长度为5
+    compress_length_limit: int = 5  #最多压缩份数，超过该数值的压缩上下文会被删除
 
     # willing
     willing_mode: str = "classical"  # 意愿模式
@@ -440,6 +443,16 @@ class BotConfig:
             config.heart_flow_update_interval = heartflow_config.get(
                 "heart_flow_update_interval", config.heart_flow_update_interval
             )
+            if config.INNER_VERSION in SpecifierSet(">=1.3.0"):
+                config.observation_context_size = heartflow_config.get(
+                    "observation_context_size", config.observation_context_size
+                )
+                config.compressed_length = heartflow_config.get(
+                    "compressed_length", config.compressed_length
+                )
+                config.compress_length_limit = heartflow_config.get(
+                    "compress_length_limit", config.compress_length_limit
+                )
 
         def willing(parent: dict):
             willing_config = parent["willing"]
@@ -477,7 +490,7 @@ class BotConfig:
                 "llm_emotion_judge",
                 "vlm",
                 "embedding",
-                "moderation",
+                "llm_tool_use",
                 "llm_observation",
                 "llm_sub_heartflow",
                 "llm_heartflow",
@@ -489,7 +502,7 @@ class BotConfig:
 
                     # base_url 的例子： SILICONFLOW_BASE_URL
                     # key 的例子： SILICONFLOW_KEY
-                    cfg_target = {"name": "", "base_url": "", "key": "", "stream": False, "pri_in": 0, "pri_out": 0}
+                    cfg_target = {"name": "", "base_url": "", "key": "", "stream": False, "pri_in": 0, "pri_out": 0, "temp": 0.7}
 
                     if config.INNER_VERSION in SpecifierSet("<=0.0.0"):
                         cfg_target = cfg_item
@@ -502,6 +515,7 @@ class BotConfig:
                             stable_item.append("stream")
 
                         pricing_item = ["pri_in", "pri_out"]
+                        
                         # 从配置中原始拷贝稳定字段
                         for i in stable_item:
                             # 如果 字段 属于计费项 且获取不到，那默认值是 0
@@ -518,6 +532,13 @@ class BotConfig:
                                 except KeyError as e:
                                     logger.error(f"{item} 中的必要字段不存在，请检查")
                                     raise KeyError(f"{item} 中的必要字段 {e} 不存在，请检查") from e
+
+                        # 如果配置中有temp参数，就使用配置中的值
+                        if "temp" in cfg_item:
+                            cfg_target["temp"] = cfg_item["temp"]
+                        else:
+                            # 如果没有temp参数，就删除默认值
+                            cfg_target.pop("temp", None)
 
                         provider = cfg_item.get("provider")
                         if provider is None:

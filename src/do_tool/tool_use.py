@@ -19,7 +19,7 @@ logger = get_module_logger("tool_use", config=tool_use_config)
 class ToolUser:
     def __init__(self):
         self.llm_model_tool = LLM_request(
-            model=global_config.llm_heartflow, temperature=0.2, max_tokens=1000, request_type="tool_use"
+            model=global_config.llm_tool_use, temperature=0.2, max_tokens=1000, request_type="tool_use"
         )
 
     async def _build_tool_prompt(self, message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None):

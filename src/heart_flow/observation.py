@@ -29,17 +29,10 @@ class ChattingObservation(Observation):
         self.name = global_config.BOT_NICKNAME
         self.nick_name = global_config.BOT_ALIAS_NAMES
 
-        self.observe_times = 0
-
-        self.summary_count = 0  # 30秒内的更新次数
-        self.max_update_in_30s = 2  # 30秒内最多更新2次
-        self.last_summary_time = 0  # 上次更新summary的时间
-
-        self.sub_observe = None
-        self.max_now_obs_len = 20
-        self.overlap_len = 5
+        self.max_now_obs_len = global_config.observation_context_size
+        self.overlap_len = global_config.compressed_length
         self.mid_memorys = []
-        self.max_mid_memory_len = 5
+        self.max_mid_memory_len = global_config.compress_length_limit
         self.mid_memory_info = ""
         self.now_message_info = ""
         

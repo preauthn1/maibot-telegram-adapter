@@ -79,7 +79,7 @@ class SubHeartflow:
         self.past_mind = []
         self.current_state: CurrentState = CurrentState()
         self.llm_model = LLM_request(
-            model=global_config.llm_sub_heartflow, temperature=0.2, max_tokens=600, request_type="sub_heart_flow"
+            model=global_config.llm_sub_heartflow, temperature=global_config.llm_sub_heartflow["temp"], max_tokens=600, request_type="sub_heart_flow"
         )
 
         self.main_heartflow_info = ""
