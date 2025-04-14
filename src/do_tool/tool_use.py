@@ -22,7 +22,9 @@ class ToolUser:
             model=global_config.llm_heartflow, temperature=0.2, max_tokens=1000, request_type="tool_use"
         )
 
-    async def _build_tool_prompt(self, message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None):
+    async def _build_tool_prompt(
+        self, message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
+    ):
         """构建工具使用的提示词
 
         Args:
@@ -38,7 +40,7 @@ class ToolUser:
             # print(f"intol111111111111111111111111111111111222222222222mid_memory_info：{mid_memory_info}")
         else:
             mid_memory_info = ""
-        
+
         new_messages = list(
             db.messages.find({"chat_id": chat_stream.stream_id, "time": {"$gt": time.time()}}).sort("time", 1).limit(15)
         )
@@ -104,7 +106,9 @@ class ToolUser:
             logger.error(f"执行工具调用时发生错误: {str(e)}")
             return None
 
-    async def use_tool(self, message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None):
+    async def use_tool(
+        self, message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
+    ):
         """使用工具辅助思考，判断是否需要额外信息
 
         Args:
@@ -117,12 +121,7 @@ class ToolUser:
         """
         try:
             # 构建提示词
-            prompt = await self._build_tool_prompt(
-                message_txt, 
-                sender_name, 
-                chat_stream, 
-                subheartflow
-            )
+            prompt = await self._build_tool_prompt(message_txt, sender_name, chat_stream, subheartflow)
 
             # 定义可用工具
             tools = self._define_tools()
@@ -170,10 +169,7 @@ class ToolUser:
                         tool_name = result["name"]
                         if tool_name not in structured_info:
                             structured_info[tool_name] = []
-                        structured_info[tool_name].append({
-                            "name": result["name"],
-                            "content": result["content"]
-                        })
+                        structured_info[tool_name].append({"name": result["name"], "content": result["content"]})
 
                 # 如果有工具结果，返回结构化的信息
                 if structured_info:

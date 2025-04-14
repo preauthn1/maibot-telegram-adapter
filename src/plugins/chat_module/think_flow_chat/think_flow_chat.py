@@ -234,7 +234,7 @@ class ThinkFlowChat:
         if random() < reply_probability:
             try:
                 do_reply = True
-                
+
                 # 回复前处理
                 await willing_manager.before_generate_reply_handle(message.message_info.message_id)
 
@@ -259,7 +259,6 @@ class ThinkFlowChat:
                     traceback.print_exc()
 
                 info_catcher.catch_after_observe(timing_results["观察"])
-                
 
                 # 思考前使用工具
                 update_relationship = ""
@@ -271,7 +270,8 @@ class ThinkFlowChat:
                             message.processed_plain_text,
                             message.message_info.user_info.user_nickname,
                             chat,
-                            heartflow.get_subheartflow(chat.stream_id))
+                            heartflow.get_subheartflow(chat.stream_id),
+                        )
                         # 如果工具被使用且获得了结果，将收集到的信息合并到思考中
                         # collected_info = ""
                         if tool_result.get("used_tools", False):
@@ -280,26 +280,25 @@ class ThinkFlowChat:
                                 # collected_info = ""
                                 get_mid_memory_id = []
                                 update_relationship = ""
-                                
+
                                 # 动态解析工具结果
                                 for tool_name, tool_data in tool_result_info.items():
                                     # tool_result_info += f"\n{tool_name} 相关信息:\n"
                                     # for item in tool_data:
-                                        # tool_result_info += f"- {item['name']}: {item['content']}\n"
-                                    
+                                    # tool_result_info += f"- {item['name']}: {item['content']}\n"
+
                                     # 特殊判定：mid_chat_mem
                                     if tool_name == "mid_chat_mem":
                                         for mid_memory in tool_data:
-                                            get_mid_memory_id.append(mid_memory['content'])
-                                    
+                                            get_mid_memory_id.append(mid_memory["content"])
+
                                     # 特殊判定：change_mood
                                     if tool_name == "change_mood":
                                         for mood in tool_data:
                                             self.mood_manager.update_mood_from_emotion(
-                                                mood['content'], 
-                                                global_config.mood_intensity_factor
+                                                mood["content"], global_config.mood_intensity_factor
                                             )
-                                    
+
                                     # 特殊判定：change_relationship
                                     if tool_name == "change_relationship":
                                         update_relationship = tool_data[0]["content"]
@@ -307,20 +306,16 @@ class ThinkFlowChat:
                 except Exception as e:
                     logger.error(f"思考前工具调用失败: {e}")
                     logger.error(traceback.format_exc())
-                    
+
                 # 处理关系更新
                 if update_relationship:
                     stance, emotion = await self.gpt._get_emotion_tags_with_reason(
-                        "你还没有回复", 
-                        message.processed_plain_text,
-                        update_relationship
+                        "你还没有回复", message.processed_plain_text, update_relationship
                     )
                     await relationship_manager.calculate_update_relationship_value(
-                        chat_stream=message.chat_stream, 
-                        label=emotion, 
-                        stance=stance
+                        chat_stream=message.chat_stream, label=emotion, stance=stance
                     )
-                    
+
                 # 思考前脑内状态
                 try:
                     with Timer("思考前脑内状态", timing_results):
@@ -330,8 +325,8 @@ class ThinkFlowChat:
                             message_txt=message.processed_plain_text,
                             sender_name=message.message_info.user_info.user_nickname,
                             chat_stream=chat,
-                            obs_id = get_mid_memory_id,
-                            extra_info=tool_result_info
+                            obs_id=get_mid_memory_id,
+                            extra_info=tool_result_info,
                         )
                 except Exception as e:
                     logger.error(f"心流思考前脑内状态失败: {e}")
@@ -366,7 +361,6 @@ class ThinkFlowChat:
                 except Exception as e:
                     logger.error(f"心流处理表情包失败: {e}")
 
-
                 try:
                     with Timer("思考后脑内状态更新", timing_results):
                         stream_id = message.chat_stream.stream_id
@@ -376,7 +370,9 @@ class ThinkFlowChat:
                                 stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
                             )
 
-                        await heartflow.get_subheartflow(stream_id).do_thinking_after_reply(response_set, chat_talking_prompt,tool_result_info)
+                        await heartflow.get_subheartflow(stream_id).do_thinking_after_reply(
+                            response_set, chat_talking_prompt, tool_result_info
+                        )
                 except Exception as e:
                     logger.error(f"心流思考后脑内状态更新失败: {e}")
 

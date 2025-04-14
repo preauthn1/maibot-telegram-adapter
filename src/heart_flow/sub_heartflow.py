@@ -150,7 +150,9 @@ class SubHeartflow:
         observation = self.observations[0]
         await observation.observe()
 
-    async def do_thinking_before_reply(self, message_txt: str, sender_name: str, chat_stream: ChatStream, extra_info: str, obs_id: int = None):
+    async def do_thinking_before_reply(
+        self, message_txt: str, sender_name: str, chat_stream: ChatStream, extra_info: str, obs_id: int = None
+    ):
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         # mood_info = "你很生气，很愤怒"
@@ -257,7 +259,7 @@ class SubHeartflow:
 
         personality_core = individuality.personality.personality_core
         prompt_personality += personality_core
-        
+
         extra_info_prompt = ""
         for tool_name, tool_data in extra_info.items():
             extra_info_prompt += f"{tool_name} 相关信息:\n"
