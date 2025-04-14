@@ -225,8 +225,7 @@ class ResponseGenerator:
         except Exception as e:
             logger.debug(f"获取情感标签时出错: {e}")
             return "中立", "平静"  # 出错时返回默认值
-    
-    
+
     async def _get_emotion_tags_with_reason(self, content: str, processed_plain_text: str, reason: str):
         """提取情感标签，结合立场和情绪"""
         try:
