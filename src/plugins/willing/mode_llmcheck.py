@@ -22,7 +22,7 @@ chat_config = LogConfig(
 # 配置主程序日志格式
 logger = get_module_logger("llm_willing", config=chat_config)
 
-class WillingManager_llm(WillingManager):
+class WillingManager(WillingManager):
 
     def __init__(self):
         super().__init__()
@@ -39,8 +39,6 @@ class WillingManager_llm(WillingManager):
 
         current_date = time.strftime("%Y-%m-%d", time.localtime())
         current_time = time.strftime("%H:%M:%S", time.localtime())
-        bot_schedule_now_time, bot_schedule_now_activity = bot_schedule.get_current_task()
-
         chat_in_group = True
         chat_talking_prompt = ""
         if stream_id:
@@ -71,7 +69,7 @@ class WillingManager_llm(WillingManager):
         prompt = f"""
         假设你正在查看一个群聊，你在这个群聊里的网名叫{global_config.BOT_NICKNAME}，你还有很多别名: {"/".join(global_config.BOT_ALIAS_NAMES)}，
         现在群里聊天的内容是{chat_talking_prompt}，
-        今天是{current_date}，现在是{current_time}，你现在正在{bot_schedule_now_activity}。
+        今天是{current_date}，现在是{current_time}。
         综合群内的氛围和你自己之前的发言，给出你认为**最新的消息**需要你回复的概率，数值在0到1之间。请注意，群聊内容杂乱，很多时候对话连续，但很可能不是在和你说话。
         如果最新的消息和你之前的发言在内容上连续，或者提到了你的名字或者称谓，将其视作明确指向你的互动，给出高于0.8的概率。如果现在是睡眠时间，直接概率为0。如果话题内容与你之前不是紧密相关，请不要给出高于0.1的概率。
         请注意是判断概率，而不是编写回复内容，
@@ -83,7 +81,7 @@ class WillingManager_llm(WillingManager):
             prompt = f"""
         假设你在和网友聊天，网名叫{global_config.BOT_NICKNAME}，你还有很多别名: {"/".join(global_config.BOT_ALIAS_NAMES)}，
         现在你和朋友私聊的内容是{chat_talking_prompt}，
-        今天是{current_date}，现在是{current_time}，你现在正在{bot_schedule_now_activity}。
+        今天是{current_date}，现在是{current_time}。
         综合以上的内容，给出你认为最新的消息是在和你交流的概率，数值在0到1之间。如果现在是个人休息时间，直接概率为0，请注意是决定是否需要发言，而不是编写回复内容，
         仅输出在0到1区间内的概率值，不要给出你的判断依据。
         """
@@ -91,13 +89,14 @@ class WillingManager_llm(WillingManager):
         # logger.info(f"{prompt}")
         logger.info(f"{content_check} {reasoning_check}")
         probability = self.extract_marked_probability(content_check)
+        # 兴趣系数修正 无关激活效率太高，暂时停用，待新记忆系统上线后调整
+        probability += (interested_rate * 0.25)
+        probability = min(1.0, probability)
         if probability <= 0.1:
             probability = min(0.03, probability)
         if probability >= 0.8:
             probability = max(probability, 0.90)
-        # 兴趣系数修正 无关激活效率太高，暂时停用，待新记忆系统上线后调整
-        # probability += (interested_rate * 0.25)
-        # probability = min(1.0, probability)
+
         # 当前表情包理解能力较差，少说就少错
         if is_emoji:
             probability *= 0.1

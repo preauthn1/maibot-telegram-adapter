@@ -25,9 +25,37 @@ services:
 #    ports:
 #      - "8000:8000"
     volumes:
+<<<<<<< HEAD
       - ./docker-config/mmc/.env:/MaiMBot/.env # 持久化env配置文件
       - ./docker-config/mmc:/MaiMBot/config # 持久化bot配置文件
       - ./data/MaiMBot:/MaiMBot/data # NapCat 和 NoneBot 共享此卷，否则发送图片会有问题
+=======
+      - ./config_ai/.env:/MaiMBot/.env # 持久化env配置文件
+      - ./config_ai:/MaiMBot/config # 持久化bot配置文件
+      - ./data_ai:/MaiMBot/data # NapCat 和 NoneBot 共享此卷，否则发送图片会有问题
+      - ./src:/MaiMBot/src
+    restart: always
+    depends_on:
+      - mongodb
+    networks:
+      - maim_bot
+
+  core_reimu:
+    container_name: reimu
+    image: mmc:local
+    # image: infinitycat/maimbot:main
+    environment:
+      - TZ=Asia/Shanghai
+      - EULA_AGREE=35362b6ea30f12891d46ef545122e84a  # 同意EULA
+      - PRIVACY_AGREE=2402af06e133d2d10d9c6c643fdc9333 # 同意EULA
+    # ports:
+    #   - "8001:8000"
+    volumes:
+      - ./config_reimu/.env:/MaiMBot/.env # 持久化env配置文件
+      - ./config_reimu:/MaiMBot/config # 持久化bot配置文件
+      - ./data_reimu/MaiMBot:/MaiMBot/data # NapCat 和 NoneBot 共享此卷，否则发送图片会有问题
+      - ./src:/MaiMBot/src
+>>>>>>> 7535f02 (完成Maicore适配)
     restart: always
     depends_on:
       - mongodb
