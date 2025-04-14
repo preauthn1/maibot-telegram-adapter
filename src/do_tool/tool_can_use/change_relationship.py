@@ -1,7 +1,7 @@
-from src.plugins.person_info.relationship_manager import relationship_manager
+# from src.plugins.person_info.relationship_manager import relationship_manager
 from src.common.logger import get_module_logger
 from src.do_tool.tool_can_use.base_tool import BaseTool
-from src.plugins.chat_module.think_flow_chat.think_flow_generator import ResponseGenerator
+# from src.plugins.chat_module.think_flow_chat.think_flow_generator import ResponseGenerator
 
 
 logger = get_module_logger("relationship_tool")

@@ -1,4 +1,4 @@
-from src.do_tool.tool_can_use.base_tool import BaseTool, register_tool
+from src.do_tool.tool_can_use.base_tool import BaseTool
 from src.plugins.config.config import global_config
 from src.common.logger import get_module_logger
 from src.plugins.moods.moods import MoodManager
