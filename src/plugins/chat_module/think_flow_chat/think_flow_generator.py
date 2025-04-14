@@ -26,7 +26,10 @@ logger = get_module_logger("llm_generator", config=llm_config)
 class ResponseGenerator:
     def __init__(self):
         self.model_normal = LLM_request(
-            model=global_config.llm_normal, temperature=global_config.llm_normal["temp"], max_tokens=256, request_type="response_heartflow"
+            model=global_config.llm_normal,
+            temperature=global_config.llm_normal["temp"],
+            max_tokens=256,
+            request_type="response_heartflow",
         )
 
         self.model_sum = LLM_request(
@@ -49,7 +52,9 @@ class ResponseGenerator:
             if random.random() > 0:
                 checked = False
                 current_model = self.model_normal
-                current_model.temperature = global_config.llm_normal["temp"] * arousal_multiplier  # 激活度越高，温度越高
+                current_model.temperature = (
+                    global_config.llm_normal["temp"] * arousal_multiplier
+                )  # 激活度越高，温度越高
                 model_response = await self._generate_response_with_model(
                     message, current_model, thinking_id, mode="normal"
                 )
@@ -58,7 +63,9 @@ class ResponseGenerator:
             else:
                 checked = True
                 current_model = self.model_normal
-                current_model.temperature = global_config.llm_normal["temp"] * arousal_multiplier  # 激活度越高，温度越高
+                current_model.temperature = (
+                    global_config.llm_normal["temp"] * arousal_multiplier
+                )  # 激活度越高，温度越高
                 print(f"生成{message.processed_plain_text}回复温度是：{current_model.temperature}")
                 model_response = await self._generate_response_with_model(
                     message, current_model, thinking_id, mode="simple"
