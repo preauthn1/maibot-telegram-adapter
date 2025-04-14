@@ -108,7 +108,7 @@ class ThinkFlowChat:
         message_manager.add_message(message_set)
         return first_bot_msg
 
-    async def _handle_emoji(self, message, chat, response, send_emoji = ""):
+    async def _handle_emoji(self, message, chat, response, send_emoji=""):
         """处理表情包"""
         if send_emoji:
             emoji_raw = await emoji_manager.get_emoji_for_text(send_emoji)
@@ -305,7 +305,7 @@ class ThinkFlowChat:
                                     # 特殊判定：change_relationship
                                     if tool_name == "change_relationship":
                                         update_relationship = tool_data[0]["content"]
-                                        
+
                                     if tool_name == "send_emoji":
                                         send_emoji = tool_data[0]["content"]
 

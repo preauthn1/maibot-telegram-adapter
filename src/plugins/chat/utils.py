@@ -325,12 +325,12 @@ def random_remove_punctuation(text: str) -> str:
 
 def process_llm_response(text: str) -> List[str]:
     # 提取被 () 或 [] 包裹的内容
-    pattern = re.compile(r'[\(\[].*?[\)\]]')
+    pattern = re.compile(r"[\(\[].*?[\)\]]")
     _extracted_contents = pattern.findall(text)
     # 去除 () 和 [] 及其包裹的内容
-    cleaned_text = pattern.sub('', text)
+    cleaned_text = pattern.sub("", text)
     logger.debug(f"{text}去除括号处理后的文本: {cleaned_text}")
-    
+
     # 对清理后的文本进行进一步处理
     max_length = global_config.response_max_length * 2
     max_sentence_num = global_config.response_max_sentence_num
@@ -366,7 +366,7 @@ def process_llm_response(text: str) -> List[str]:
     if len(sentences) > max_sentence_num:
         logger.warning(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
         return [f"{global_config.BOT_NICKNAME}不知道哦"]
-    
+
     # sentences.extend(extracted_contents)
 
     return sentences
