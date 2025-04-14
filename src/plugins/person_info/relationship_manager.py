@@ -12,6 +12,7 @@ relationship_config = LogConfig(
 )
 logger = get_module_logger("rel_manager", config=relationship_config)
 
+
 class RelationshipManager:
     def __init__(self):
         self.positive_feedback_value = 0  # 正反馈系统
@@ -22,6 +23,7 @@ class RelationshipManager:
     def mood_manager(self):
         if self._mood_manager is None:
             from ..moods.moods import MoodManager  # 延迟导入
+
             self._mood_manager = MoodManager.get_instance()
         return self._mood_manager
 
@@ -41,39 +43,39 @@ class RelationshipManager:
             "厌恶",
         ]
 
-        if label in positive_list and stance != "反对":
+        if label in positive_list:
             if 7 > self.positive_feedback_value >= 0:
                 self.positive_feedback_value += 1
             elif self.positive_feedback_value < 0:
                 self.positive_feedback_value = 0
-        elif label in negative_list and stance != "支持":
+        elif label in negative_list:
             if -7 < self.positive_feedback_value <= 0:
                 self.positive_feedback_value -= 1
             elif self.positive_feedback_value > 0:
                 self.positive_feedback_value = 0
-        
+
         if abs(self.positive_feedback_value) > 1:
             logger.info(f"触发mood变更增益，当前增益系数：{self.gain_coefficient[abs(self.positive_feedback_value)]}")
 
     def mood_feedback(self, value):
         """情绪反馈"""
         mood_manager = self.mood_manager
-        mood_gain = (mood_manager.get_current_mood().valence) ** 2 \
-                 * math.copysign(1, value * mood_manager.get_current_mood().valence)
+        mood_gain = (mood_manager.get_current_mood().valence) ** 2 * math.copysign(
+            1, value * mood_manager.get_current_mood().valence
+        )
         value += value * mood_gain
         logger.info(f"当前relationship增益系数：{mood_gain:.3f}")
         return value
-    
+
     def feedback_to_mood(self, mood_value):
         """对情绪的反馈"""
         coefficient = self.gain_coefficient[abs(self.positive_feedback_value)]
-        if (mood_value > 0 and self.positive_feedback_value > 0 
-            or mood_value < 0 and self.positive_feedback_value < 0):
-            return mood_value*coefficient
+        if mood_value > 0 and self.positive_feedback_value > 0 or mood_value < 0 and self.positive_feedback_value < 0:
+            return mood_value * coefficient
         else:
-            return mood_value/coefficient
+            return mood_value / coefficient
 
-    async def calculate_update_relationship_value(self, chat_stream: ChatStream, label: str, stance: str) -> None:
+    async def calculate_update_relationship_value(self, chat_stream: ChatStream, label: str, stance: str) -> tuple:
         """计算并变更关系值
         新的关系值变更计算方式：
             将关系值限定在-1000到1000
@@ -82,13 +84,17 @@ class RelationshipManager:
                 2.关系越差，改善越难，关系越好，恶化越容易
                 3.人维护关系的精力往往有限，所以当高关系值用户越多，对于中高关系值用户增长越慢
                 4.连续正面或负面情感会正反馈
+
+        返回：
+            用户昵称，变更值，变更后关系等级
+
         """
         stancedict = {
             "支持": 0,
             "中立": 1,
             "反对": 2,
         }
-        
+
         valuedict = {
             "开心": 1.5,
             "愤怒": -2.0,
@@ -103,10 +109,10 @@ class RelationshipManager:
 
         person_id = person_info_manager.get_person_id(chat_stream.user_info.platform, chat_stream.user_info.user_id)
         data = {
-            "platform" : chat_stream.user_info.platform,
-            "user_id" : chat_stream.user_info.user_id,
-            "nickname" : chat_stream.user_info.user_nickname,
-            "konw_time" : int(time.time())
+            "platform": chat_stream.user_info.platform,
+            "user_id": chat_stream.user_info.user_id,
+            "nickname": chat_stream.user_info.user_nickname,
+            "konw_time": int(time.time()),
         }
         old_value = await person_info_manager.get_value(person_id, "relationship_value")
         old_value = self.ensure_float(old_value, person_id)
@@ -145,6 +151,7 @@ class RelationshipManager:
         level_num = self.calculate_level_num(old_value + value)
         relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "暧昧"]
         logger.info(
+            f"用户: {chat_stream.user_info.user_nickname}"
             f"当前关系: {relationship_level[level_num]}, "
             f"关系值: {old_value:.2f}, "
             f"当前立场情感: {stance}-{label}, "
@@ -152,6 +159,97 @@ class RelationshipManager:
         )
 
         await person_info_manager.update_one_field(person_id, "relationship_value", old_value + value, data)
+
+        return chat_stream.user_info.user_nickname, value, relationship_level[level_num]
+
+    async def calculate_update_relationship_value_with_reason(
+        self, chat_stream: ChatStream, label: str, stance: str, reason: str
+    ) -> tuple:
+        """计算并变更关系值
+        新的关系值变更计算方式：
+            将关系值限定在-1000到1000
+            对于关系值的变更，期望：
+                1.向两端逼近时会逐渐减缓
+                2.关系越差，改善越难，关系越好，恶化越容易
+                3.人维护关系的精力往往有限，所以当高关系值用户越多，对于中高关系值用户增长越慢
+                4.连续正面或负面情感会正反馈
+
+        返回：
+            用户昵称，变更值，变更后关系等级
+
+        """
+        stancedict = {
+            "支持": 0,
+            "中立": 1,
+            "反对": 2,
+        }
+
+        valuedict = {
+            "开心": 1.5,
+            "愤怒": -2.0,
+            "悲伤": -0.5,
+            "惊讶": 0.6,
+            "害羞": 2.0,
+            "平静": 0.3,
+            "恐惧": -1.5,
+            "厌恶": -1.0,
+            "困惑": 0.5,
+        }
+
+        person_id = person_info_manager.get_person_id(chat_stream.user_info.platform, chat_stream.user_info.user_id)
+        data = {
+            "platform": chat_stream.user_info.platform,
+            "user_id": chat_stream.user_info.user_id,
+            "nickname": chat_stream.user_info.user_nickname,
+            "konw_time": int(time.time()),
+        }
+        old_value = await person_info_manager.get_value(person_id, "relationship_value")
+        old_value = self.ensure_float(old_value, person_id)
+
+        if old_value > 1000:
+            old_value = 1000
+        elif old_value < -1000:
+            old_value = -1000
+
+        value = valuedict[label]
+        if old_value >= 0:
+            if valuedict[label] >= 0 and stancedict[stance] != 2:
+                value = value * math.cos(math.pi * old_value / 2000)
+                if old_value > 500:
+                    rdict = await person_info_manager.get_specific_value_list("relationship_value", lambda x: x > 700)
+                    high_value_count = len(rdict)
+                    if old_value > 700:
+                        value *= 3 / (high_value_count + 2)  # 排除自己
+                    else:
+                        value *= 3 / (high_value_count + 3)
+            elif valuedict[label] < 0 and stancedict[stance] != 0:
+                value = value * math.exp(old_value / 2000)
+            else:
+                value = 0
+        elif old_value < 0:
+            if valuedict[label] >= 0 and stancedict[stance] != 2:
+                value = value * math.exp(old_value / 2000)
+            elif valuedict[label] < 0 and stancedict[stance] != 0:
+                value = value * math.cos(math.pi * old_value / 2000)
+            else:
+                value = 0
+
+        self.positive_feedback_sys(label, stance)
+        value = self.mood_feedback(value)
+
+        level_num = self.calculate_level_num(old_value + value)
+        relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "暧昧"]
+        logger.info(
+            f"用户: {chat_stream.user_info.user_nickname}"
+            f"当前关系: {relationship_level[level_num]}, "
+            f"关系值: {old_value:.2f}, "
+            f"当前立场情感: {stance}-{label}, "
+            f"变更: {value:+.5f}"
+        )
+
+        await person_info_manager.update_one_field(person_id, "relationship_value", old_value + value, data)
+
+        return chat_stream.user_info.user_nickname, value, relationship_level[level_num]
 
     async def build_relationship_info(self, person) -> str:
         person_id = person_info_manager.get_person_id(person[0], person[1])
@@ -199,5 +297,6 @@ class RelationshipManager:
         except (ValueError, TypeError, AttributeError):
             logger.warning(f"[关系管理] {person_id}值转换失败（原始值：{value}），已重置为0")
             return 0.0
+
 
 relationship_manager = RelationshipManager()

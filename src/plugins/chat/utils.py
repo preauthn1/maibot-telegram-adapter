@@ -42,20 +42,49 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
     """检查消息是否提到了机器人"""
     keywords = [global_config.BOT_NICKNAME]
     nicknames = global_config.BOT_ALIAS_NAMES
-    for keyword in keywords:
-        if keyword in message.processed_plain_text:
-            return True
-    for nickname in nicknames:
-        if nickname in message.processed_plain_text:
-            return True
-    return False
+    reply_probability = 0
+    is_at = False
+    is_mentioned = False
+
+    # 判断是否被@
+    if re.search(f"@[\s\S]*?（id:{global_config.BOT_QQ}）", message.processed_plain_text):
+        is_at = True
+        is_mentioned = True
+
+    if is_at and global_config.at_bot_inevitable_reply:
+        reply_probability = 1
+        logger.info("被@，回复概率设置为100%")
+    else:
+        if not is_mentioned:
+            # 判断是否被回复
+            if re.match(f"回复[\s\S]*?\({global_config.BOT_QQ}\)的消息，说：", message.processed_plain_text):
+                is_mentioned = True
+
+            # 判断内容中是否被提及
+            message_content = re.sub(r"\@[\s\S]*?（(\d+)）", "", message.processed_plain_text)
+            message_content = re.sub(r"回复[\s\S]*?\((\d+)\)的消息，说： ", "", message_content)
+            for keyword in keywords:
+                if keyword in message_content:
+                    is_mentioned = True
+            for nickname in nicknames:
+                if nickname in message_content:
+                    is_mentioned = True
+        if is_mentioned and global_config.mentioned_bot_inevitable_reply:
+            reply_probability = 1
+            logger.info("被提及，回复概率设置为100%")
+    return is_mentioned, reply_probability
 
 
 async def get_embedding(text, request_type="embedding"):
     """获取文本的embedding向量"""
     llm = LLM_request(model=global_config.embedding, request_type=request_type)
     # return llm.get_embedding_sync(text)
-    return await llm.get_embedding(text)
+    try:
+        embedding = await llm.get_embedding(text)
+    except Exception as e:
+        logger.error(f"获取embedding失败: {str(e)}")
+        embedding = None
+    return embedding
 
 
 async def get_recent_group_messages(chat_id: str, limit: int = 12) -> list:
@@ -295,27 +324,35 @@ def random_remove_punctuation(text: str) -> str:
 
 
 def process_llm_response(text: str) -> List[str]:
-    # processed_response = process_text_with_typos(content)
-    # 对西文字符段落的回复长度设置为汉字字符的两倍
-    max_length = global_config.response_max_length
+    # 提取被 () 或 [] 包裹的内容
+    pattern = re.compile(r"[\(\[].*?[\)\]]")
+    _extracted_contents = pattern.findall(text)
+    # 去除 () 和 [] 及其包裹的内容
+    cleaned_text = pattern.sub("", text)
+    logger.debug(f"{text}去除括号处理后的文本: {cleaned_text}")
+
+    # 对清理后的文本进行进一步处理
+    max_length = global_config.response_max_length * 2
     max_sentence_num = global_config.response_max_sentence_num
-    if len(text) > max_length and not is_western_paragraph(text):
-        logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
+    if len(cleaned_text) > max_length and not is_western_paragraph(cleaned_text):
+        logger.warning(f"回复过长 ({len(cleaned_text)} 字符)，返回默认回复")
         return ["懒得说"]
-    elif len(text) > 200:
-        logger.warning(f"回复过长 ({len(text)} 字符)，返回默认回复")
+    elif len(cleaned_text) > 200:
+        logger.warning(f"回复过长 ({len(cleaned_text)} 字符)，返回默认回复")
         return ["懒得说"]
-    # 处理长消息
+
     typo_generator = ChineseTypoGenerator(
         error_rate=global_config.chinese_typo_error_rate,
         min_freq=global_config.chinese_typo_min_freq,
         tone_error_rate=global_config.chinese_typo_tone_error_rate,
         word_replace_rate=global_config.chinese_typo_word_replace_rate,
     )
-    if global_config.enable_response_spliter:
-        split_sentences = split_into_sentences_w_remove_punctuation(text)
+
+    if global_config.enable_response_splitter:
+        split_sentences = split_into_sentences_w_remove_punctuation(cleaned_text)
     else:
-        split_sentences = [text]
+        split_sentences = [cleaned_text]
+
     sentences = []
     for sentence in split_sentences:
         if global_config.chinese_typo_enable:
@@ -325,16 +362,23 @@ def process_llm_response(text: str) -> List[str]:
                 sentences.append(typo_corrections)
         else:
             sentences.append(sentence)
-    # 检查分割后的消息数量是否过多（超过3条）
 
     if len(sentences) > max_sentence_num:
         logger.warning(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
         return [f"{global_config.BOT_NICKNAME}不知道哦"]
 
+    # sentences.extend(extracted_contents)
+
     return sentences
 
 
-def calculate_typing_time(input_string: str, thinking_start_time: float, chinese_time: float = 0.2, english_time: float = 0.1, is_emoji: bool = False) -> float:
+def calculate_typing_time(
+    input_string: str,
+    thinking_start_time: float,
+    chinese_time: float = 0.2,
+    english_time: float = 0.1,
+    is_emoji: bool = False,
+) -> float:
     """
     计算输入字符串所需的时间，中文和英文字符有不同的输入时间
         input_string (str): 输入的字符串
@@ -368,19 +412,18 @@ def calculate_typing_time(input_string: str, thinking_start_time: float, chinese
             total_time += chinese_time
         else:  # 其他字符（如英文）
             total_time += english_time
-    
-    
+
     if is_emoji:
         total_time = 1
-    
+
     if time.time() - thinking_start_time > 10:
         total_time = 1
-    
+
     # print(f"thinking_start_time:{thinking_start_time}")
     # print(f"nowtime:{time.time()}")
     # print(f"nowtime - thinking_start_time:{time.time() - thinking_start_time}")
     # print(f"{total_time}")
-    
+
     return total_time  # 加上回车时间
 
 
@@ -510,39 +553,32 @@ def count_messages_between(start_time: float, end_time: float, stream_id: str) -
     try:
         # 获取开始时间之前最新的一条消息
         start_message = db.messages.find_one(
-            {
-                "chat_id": stream_id,
-                "time": {"$lte": start_time}
-            },
-            sort=[("time", -1), ("_id", -1)]  # 按时间倒序，_id倒序（最后插入的在前）
+            {"chat_id": stream_id, "time": {"$lte": start_time}},
+            sort=[("time", -1), ("_id", -1)],  # 按时间倒序，_id倒序（最后插入的在前）
         )
-        
+
         # 获取结束时间最近的一条消息
         # 先找到结束时间点的所有消息
-        end_time_messages = list(db.messages.find(
-            {
-                "chat_id": stream_id,
-                "time": {"$lte": end_time}
-            },
-            sort=[("time", -1)]  # 先按时间倒序
-        ).limit(10))  # 限制查询数量，避免性能问题
-        
+        end_time_messages = list(
+            db.messages.find(
+                {"chat_id": stream_id, "time": {"$lte": end_time}},
+                sort=[("time", -1)],  # 先按时间倒序
+            ).limit(10)
+        )  # 限制查询数量，避免性能问题
+
         if not end_time_messages:
             logger.warning(f"未找到结束时间 {end_time} 之前的消息")
             return 0, 0
-            
+
         # 找到最大时间
         max_time = end_time_messages[0]["time"]
         # 在最大时间的消息中找最后插入的（_id最大的）
-        end_message = max(
-            [msg for msg in end_time_messages if msg["time"] == max_time],
-            key=lambda x: x["_id"]
-        )
-            
+        end_message = max([msg for msg in end_time_messages if msg["time"] == max_time], key=lambda x: x["_id"])
+
         if not start_message:
             logger.warning(f"未找到开始时间 {start_time} 之前的消息")
             return 0, 0
-        
+
         # 调试输出
         # print("\n=== 消息范围信息 ===")
         # print("Start message:", {
@@ -562,20 +598,16 @@ def count_messages_between(start_time: float, end_time: float, stream_id: str) -
         # 如果结束消息的时间等于开始时间，返回0
         if end_message["time"] == start_message["time"]:
             return 0, 0
-            
+
         # 获取并打印这个时间范围内的所有消息
         # print("\n=== 时间范围内的所有消息 ===")
-        all_messages = list(db.messages.find(
-            {
-                "chat_id": stream_id,
-                "time": {
-                    "$gte": start_message["time"],
-                    "$lte": end_message["time"]
-                }
-            },
-            sort=[("time", 1), ("_id", 1)]  # 按时间正序，_id正序
-        ))
-        
+        all_messages = list(
+            db.messages.find(
+                {"chat_id": stream_id, "time": {"$gte": start_message["time"], "$lte": end_message["time"]}},
+                sort=[("time", 1), ("_id", 1)],  # 按时间正序，_id正序
+            )
+        )
+
         count = 0
         total_length = 0
         for msg in all_messages:
@@ -590,10 +622,10 @@ def count_messages_between(start_time: float, end_time: float, stream_id: str) -
             #     "text_length": text_length,
             #     "_id": str(msg.get("_id"))
             # })
-        
+
         # 如果时间不同，需要把end_message本身也计入
         return count - 1, total_length
-        
+
     except Exception as e:
         logger.error(f"计算消息数量时出错: {str(e)}")
         return 0, 0

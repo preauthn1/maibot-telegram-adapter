@@ -1,7 +1,7 @@
 import time
 from random import random
-import re
 
+from typing import List
 from ...memory_system.Hippocampus import HippocampusManager
 from ...moods.moods import MoodManager
 from ...config.config import global_config
@@ -18,6 +18,8 @@ from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ...chat.chat_stream import chat_manager
 from ...person_info.relationship_manager import relationship_manager
 from ...chat.message_buffer import message_buffer
+from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
+from ...utils.timer_calculater import Timer
 
 # 定义日志配置
 chat_config = LogConfig(
@@ -26,6 +28,7 @@ chat_config = LogConfig(
 )
 
 logger = get_module_logger("reasoning_chat", config=chat_config)
+
 
 class ReasoningChat:
     def __init__(self):
@@ -53,11 +56,10 @@ class ReasoningChat:
         )
 
         message_manager.add_message(thinking_message)
-        willing_manager.change_reply_willing_sent(chat)
 
         return thinking_id
 
-    async def _send_response_messages(self, message, chat, response_set, thinking_id):
+    async def _send_response_messages(self, message, chat, response_set: List[str], thinking_id) -> MessageSending:
         """发送回复消息"""
         container = message_manager.get_container(chat.stream_id)
         thinking_message = None
@@ -76,6 +78,7 @@ class ReasoningChat:
         message_set = MessageSet(chat, thinking_id)
 
         mark_head = False
+        first_bot_msg = None
         for msg in response_set:
             message_segment = Seg(type="text", data=msg)
             bot_message = MessageSending(
@@ -95,8 +98,11 @@ class ReasoningChat:
             )
             if not mark_head:
                 mark_head = True
+                first_bot_msg = bot_message
             message_set.add_message(bot_message)
         message_manager.add_message(message_set)
+
+        return first_bot_msg
 
     async def _handle_emoji(self, message, chat, response):
         """处理表情包"""
@@ -125,7 +131,7 @@ class ReasoningChat:
                 )
                 message_manager.add_message(bot_message)
 
-    async def _update_relationship(self, message, response_set):
+    async def _update_relationship(self, message: MessageRecv, response_set):
         """更新关系情绪"""
         ori_response = ",".join(response_set)
         stance, emotion = await self.gpt._get_emotion_tags(ori_response, message.processed_plain_text)
@@ -168,16 +174,24 @@ class ReasoningChat:
         await self.storage.store_message(message, chat)
 
         # 记忆激活
-        timer1 = time.time()
-        interested_rate = await HippocampusManager.get_instance().get_activate_from_text(
-            message.processed_plain_text, fast_retrieval=True
-        )
-        timer2 = time.time()
-        timing_results["记忆激活"] = timer2 - timer1
+        with Timer("记忆激活", timing_results):
+            interested_rate = await HippocampusManager.get_instance().get_activate_from_text(
+                message.processed_plain_text, fast_retrieval=True
+            )
 
         # 查询缓冲器结果，会整合前面跳过的消息，改变processed_plain_text
         buffer_result = await message_buffer.query_buffer_result(message)
+
+        # 处理提及
+        is_mentioned, reply_probability = is_mentioned_bot_in_message(message)
+
+        # 意愿管理器：设置当前message信息
+        willing_manager.setup(message, chat, is_mentioned, interested_rate)
+
+        # 处理缓冲器结果
         if not buffer_result:
+            await willing_manager.bombing_buffer_message_handle(message.message_info.message_id)
+            willing_manager.delete(message.message_info.message_id)
             if message.message_segment.type == "text":
                 logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
             elif message.message_segment.type == "image":
@@ -186,75 +200,73 @@ class ReasoningChat:
                 logger.info("触发缓冲，已炸飞消息列")
             return
 
-        is_mentioned = is_mentioned_bot_in_message(message)
+        # 获取回复概率
+        is_willing = False
+        if reply_probability != 1:
+            is_willing = True
+            reply_probability = await willing_manager.get_reply_probability(message.message_info.message_id)
 
-        # 计算回复意愿
-        current_willing = willing_manager.get_willing(chat_stream=chat)
-        willing_manager.set_willing(chat.stream_id, current_willing)
-
-        # 意愿激活
-        timer1 = time.time()
-        reply_probability = await willing_manager.change_reply_willing_received(
-            chat_stream=chat,
-            is_mentioned_bot=is_mentioned,
-            config=global_config,
-            is_emoji=message.is_emoji,
-            interested_rate=interested_rate,
-            sender_id=str(message.message_info.user_info.user_id),
-        )
-        timer2 = time.time()
-        timing_results["意愿激活"] = timer2 - timer1
+            if message.message_info.additional_config:
+                if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
+                    reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
 
         # 打印消息信息
         mes_name = chat.group_info.group_name if chat.group_info else "私聊"
-        current_time = time.strftime("%H:%M:%S", time.localtime(messageinfo.time))
+        current_time = time.strftime("%H:%M:%S", time.localtime(message.message_info.time))
+        willing_log = f"[回复意愿:{await willing_manager.get_willing(chat.stream_id):.2f}]" if is_willing else ""
         logger.info(
             f"[{current_time}][{mes_name}]"
             f"{chat.user_info.user_nickname}:"
-            f"{message.processed_plain_text}[回复意愿:{current_willing:.2f}][概率:{reply_probability * 100:.1f}%]"
+            f"{message.processed_plain_text}{willing_log}[概率:{reply_probability * 100:.1f}%]"
         )
-
-        if message.message_info.additional_config:
-            if "maimcore_reply_probability_gain" in message.message_info.additional_config.keys():
-                reply_probability += message.message_info.additional_config["maimcore_reply_probability_gain"]
-
         do_reply = False
         if random() < reply_probability:
             do_reply = True
-            
+
+            # 回复前处理
+            await willing_manager.before_generate_reply_handle(message.message_info.message_id)
+
             # 创建思考消息
-            timer1 = time.time()
-            thinking_id = await self._create_thinking_message(message, chat, userinfo, messageinfo)
-            timer2 = time.time()
-            timing_results["创建思考消息"] = timer2 - timer1
-            
+            with Timer("创建思考消息", timing_results):
+                thinking_id = await self._create_thinking_message(message, chat, userinfo, messageinfo)
+
+            logger.debug(f"创建捕捉器，thinking_id:{thinking_id}")
+
+            info_catcher = info_catcher_manager.get_info_catcher(thinking_id)
+            info_catcher.catch_decide_to_response(message)
+
             # 生成回复
-            timer1 = time.time()
-            response_set = await self.gpt.generate_response(message)
-            timer2 = time.time()
-            timing_results["生成回复"] = timer2 - timer1
+            try:
+                with Timer("生成回复", timing_results):
+                    response_set = await self.gpt.generate_response(message, thinking_id)
+
+                info_catcher.catch_after_generate_response(timing_results["生成回复"])
+            except Exception as e:
+                logger.error(f"回复生成出现错误：str{e}")
+                response_set = None
 
             if not response_set:
                 logger.info("为什么生成回复失败？")
                 return
 
             # 发送消息
-            timer1 = time.time()
-            await self._send_response_messages(message, chat, response_set, thinking_id)
-            timer2 = time.time()
-            timing_results["发送消息"] = timer2 - timer1
+            with Timer("发送消息", timing_results):
+                first_bot_msg = await self._send_response_messages(message, chat, response_set, thinking_id)
+
+            info_catcher.catch_after_response(timing_results["发送消息"], response_set, first_bot_msg)
+
+            info_catcher.done_catch()
 
             # 处理表情包
-            timer1 = time.time()
-            await self._handle_emoji(message, chat, response_set)
-            timer2 = time.time()
-            timing_results["处理表情包"] = timer2 - timer1
+            with Timer("处理表情包", timing_results):
+                await self._handle_emoji(message, chat, response_set)
 
             # 更新关系情绪
-            timer1 = time.time()
-            await self._update_relationship(message, response_set)
-            timer2 = time.time()
-            timing_results["更新关系情绪"] = timer2 - timer1
+            with Timer("更新关系情绪", timing_results):
+                await self._update_relationship(message, response_set)
+
+            # 回复后处理
+            await willing_manager.after_generate_reply_handle(message.message_info.message_id)
 
         # 输出性能计时结果
         if do_reply:
@@ -262,6 +274,12 @@ class ReasoningChat:
             trigger_msg = message.processed_plain_text
             response_msg = " ".join(response_set) if response_set else "无回复"
             logger.info(f"触发消息: {trigger_msg[:20]}... | 推理消息: {response_msg[:20]}... | 性能计时: {timing_str}")
+        else:
+            # 不回复处理
+            await willing_manager.not_reply_handle(message.message_info.message_id)
+
+        # 意愿管理器：注销当前message信息
+        willing_manager.delete(message.message_info.message_id)
 
     def _check_ban_words(self, text: str, chat, userinfo) -> bool:
         """检查消息中是否包含过滤词"""
@@ -277,7 +295,7 @@ class ReasoningChat:
     def _check_ban_regex(self, text: str, chat, userinfo) -> bool:
         """检查消息是否匹配过滤正则表达式"""
         for pattern in global_config.ban_msgs_regex:
-            if re.search(pattern, text):
+            if pattern.search(text):
                 logger.info(
                     f"[{chat.group_info.group_name if chat.group_info else '私聊'}]{userinfo.user_nickname}:{text}"
                 )

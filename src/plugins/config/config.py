@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from dateutil import tz
@@ -24,10 +25,11 @@ config_config = LogConfig(
 # 配置主程序日志格式
 logger = get_module_logger("config", config=config_config)
 
-#考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
+# 考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
 is_test = False
-mai_version_main = "0.6.1"
+mai_version_main = "0.6.2"
 mai_version_fix = ""
+
 if mai_version_fix:
     if is_test:
         mai_version = f"test-{mai_version_main}-{mai_version_fix}"
@@ -38,6 +40,7 @@ else:
         mai_version = f"test-{mai_version_main}"
     else:
         mai_version = mai_version_main
+
 
 def update_config():
     # 获取根目录路径
@@ -54,7 +57,7 @@ def update_config():
     # 检查配置文件是否存在
     if not old_config_path.exists():
         logger.info("配置文件不存在，从模板创建新配置")
-        #创建文件夹
+        # 创建文件夹
         old_config_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(template_path, old_config_path)
         logger.info(f"已创建新配置文件，请填写后重新运行: {old_config_path}")
@@ -84,7 +87,7 @@ def update_config():
     # 生成带时间戳的新文件名
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     old_backup_path = old_config_dir / f"bot_config_{timestamp}.toml"
-    
+
     # 移动旧配置文件到old目录
     shutil.move(old_config_path, old_backup_path)
     logger.info(f"已备份旧配置文件到: {old_backup_path}")
@@ -127,6 +130,7 @@ def update_config():
         f.write(tomlkit.dumps(new_config))
     logger.info("配置文件更新完成")
 
+
 logger = get_module_logger("config")
 
 
@@ -148,17 +152,21 @@ class BotConfig:
     ban_user_id = set()
 
     # personality
-    personality_core = "用一句话或几句话描述人格的核心特点" # 建议20字以内，谁再写3000字小作文敲谁脑袋
-    personality_sides: List[str] = field(default_factory=lambda: [
-        "用一句话或几句话描述人格的一些侧面",
-        "用一句话或几句话描述人格的一些侧面",
-        "用一句话或几句话描述人格的一些侧面"
-    ])
+    personality_core = "用一句话或几句话描述人格的核心特点"  # 建议20字以内，谁再写3000字小作文敲谁脑袋
+    personality_sides: List[str] = field(
+        default_factory=lambda: [
+            "用一句话或几句话描述人格的一些侧面",
+            "用一句话或几句话描述人格的一些侧面",
+            "用一句话或几句话描述人格的一些侧面",
+        ]
+    )
     # identity
-    identity_detail: List[str] = field(default_factory=lambda: [
-        "身份特点",
-        "身份特点",
-    ])
+    identity_detail: List[str] = field(
+        default_factory=lambda: [
+            "身份特点",
+            "身份特点",
+        ]
+    )
     height: int = 170  # 身高 单位厘米
     weight: int = 50  # 体重 单位千克
     age: int = 20  # 年龄 单位岁
@@ -181,20 +189,25 @@ class BotConfig:
 
     ban_words = set()
     ban_msgs_regex = set()
-    
-    #heartflow
+
+    # heartflow
     # enable_heartflow: bool = False  # 是否启用心流
     sub_heart_flow_update_interval: int = 60  # 子心流更新频率，间隔 单位秒
     sub_heart_flow_freeze_time: int = 120  # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
     sub_heart_flow_stop_time: int = 600  # 子心流停止时间，超过这个时间没有回复，子心流会停止，间隔 单位秒
     heart_flow_update_interval: int = 300  # 心流更新频率，间隔 单位秒
-    
+    observation_context_size: int = 20  # 心流观察到的最长上下文大小，超过这个值的上下文会被压缩
+    compressed_length: int = 5  # 不能大于observation_context_size,心流上下文压缩的最短压缩长度，超过心流观察到的上下文长度，会压缩，最短压缩长度为5
+    compress_length_limit: int = 5  # 最多压缩份数，超过该数值的压缩上下文会被删除
+
     # willing
     willing_mode: str = "classical"  # 意愿模式
     response_willing_amplifier: float = 1.0  # 回复意愿放大系数
     response_interested_rate_amplifier: float = 1.0  # 回复兴趣度放大系数
     down_frequency_rate: float = 3  # 降低回复频率的群组回复意愿降低系数
     emoji_response_penalty: float = 0.0  # 表情包回复惩罚
+    mentioned_bot_inevitable_reply: bool = False  # 提及 bot 必然回复
+    at_bot_inevitable_reply: bool = False  # @bot 必然回复
 
     # response
     response_mode: str = "heart_flow"  # 回复策略
@@ -243,8 +256,8 @@ class BotConfig:
     chinese_typo_tone_error_rate = 0.2  # 声调错误概率
     chinese_typo_word_replace_rate = 0.02  # 整词替换概率
 
-    # response_spliter
-    enable_response_spliter = True  # 是否启用回复分割器
+    # response_splitter
+    enable_response_splitter = True  # 是否启用回复分割器
     response_max_length = 100  # 回复允许的最大长度
     response_max_sentence_num = 3  # 回复允许的最大句子数
 
@@ -352,7 +365,6 @@ class BotConfig:
         """从TOML配置文件加载配置"""
         config = cls()
 
-
         def personality(parent: dict):
             personality_config = parent["personality"]
             if config.INNER_VERSION in SpecifierSet(">=1.2.4"):
@@ -416,13 +428,29 @@ class BotConfig:
             config.max_response_length = response_config.get("max_response_length", config.max_response_length)
             if config.INNER_VERSION in SpecifierSet(">=1.0.4"):
                 config.response_mode = response_config.get("response_mode", config.response_mode)
-            
+
         def heartflow(parent: dict):
             heartflow_config = parent["heartflow"]
-            config.sub_heart_flow_update_interval = heartflow_config.get("sub_heart_flow_update_interval", config.sub_heart_flow_update_interval)
-            config.sub_heart_flow_freeze_time = heartflow_config.get("sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time)
-            config.sub_heart_flow_stop_time = heartflow_config.get("sub_heart_flow_stop_time", config.sub_heart_flow_stop_time)
-            config.heart_flow_update_interval = heartflow_config.get("heart_flow_update_interval", config.heart_flow_update_interval)
+            config.sub_heart_flow_update_interval = heartflow_config.get(
+                "sub_heart_flow_update_interval", config.sub_heart_flow_update_interval
+            )
+            config.sub_heart_flow_freeze_time = heartflow_config.get(
+                "sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time
+            )
+            config.sub_heart_flow_stop_time = heartflow_config.get(
+                "sub_heart_flow_stop_time", config.sub_heart_flow_stop_time
+            )
+            config.heart_flow_update_interval = heartflow_config.get(
+                "heart_flow_update_interval", config.heart_flow_update_interval
+            )
+            if config.INNER_VERSION in SpecifierSet(">=1.3.0"):
+                config.observation_context_size = heartflow_config.get(
+                    "observation_context_size", config.observation_context_size
+                )
+                config.compressed_length = heartflow_config.get("compressed_length", config.compressed_length)
+                config.compress_length_limit = heartflow_config.get(
+                    "compress_length_limit", config.compress_length_limit
+                )
 
         def willing(parent: dict):
             willing_config = parent["willing"]
@@ -439,6 +467,13 @@ class BotConfig:
                 config.emoji_response_penalty = willing_config.get(
                     "emoji_response_penalty", config.emoji_response_penalty
                 )
+            if config.INNER_VERSION in SpecifierSet(">=1.2.5"):
+                config.mentioned_bot_inevitable_reply = willing_config.get(
+                    "mentioned_bot_inevitable_reply", config.mentioned_bot_inevitable_reply
+                )
+                config.at_bot_inevitable_reply = willing_config.get(
+                    "at_bot_inevitable_reply", config.at_bot_inevitable_reply
+                )
 
         def model(parent: dict):
             # 加载模型配置
@@ -453,7 +488,7 @@ class BotConfig:
                 "llm_emotion_judge",
                 "vlm",
                 "embedding",
-                "moderation",
+                "llm_tool_use",
                 "llm_observation",
                 "llm_sub_heartflow",
                 "llm_heartflow",
@@ -465,7 +500,15 @@ class BotConfig:
 
                     # base_url 的例子： SILICONFLOW_BASE_URL
                     # key 的例子： SILICONFLOW_KEY
-                    cfg_target = {"name": "", "base_url": "", "key": "", "stream": False, "pri_in": 0, "pri_out": 0}
+                    cfg_target = {
+                        "name": "",
+                        "base_url": "",
+                        "key": "",
+                        "stream": False,
+                        "pri_in": 0,
+                        "pri_out": 0,
+                        "temp": 0.7,
+                    }
 
                     if config.INNER_VERSION in SpecifierSet("<=0.0.0"):
                         cfg_target = cfg_item
@@ -478,6 +521,7 @@ class BotConfig:
                             stable_item.append("stream")
 
                         pricing_item = ["pri_in", "pri_out"]
+
                         # 从配置中原始拷贝稳定字段
                         for i in stable_item:
                             # 如果 字段 属于计费项 且获取不到，那默认值是 0
@@ -494,6 +538,13 @@ class BotConfig:
                                 except KeyError as e:
                                     logger.error(f"{item} 中的必要字段不存在，请检查")
                                     raise KeyError(f"{item} 中的必要字段 {e} 不存在，请检查") from e
+
+                        # 如果配置中有temp参数，就使用配置中的值
+                        if "temp" in cfg_item:
+                            cfg_target["temp"] = cfg_item["temp"]
+                        else:
+                            # 如果没有temp参数，就删除默认值
+                            cfg_target.pop("temp", None)
 
                         provider = cfg_item.get("provider")
                         if provider is None:
@@ -522,8 +573,8 @@ class BotConfig:
                 "response_interested_rate_amplifier", config.response_interested_rate_amplifier
             )
             config.down_frequency_rate = msg_config.get("down_frequency_rate", config.down_frequency_rate)
-            config.ban_msgs_regex = msg_config.get("ban_msgs_regex", config.ban_msgs_regex)
-
+            for r in msg_config.get("ban_msgs_regex", config.ban_msgs_regex):
+                config.ban_msgs_regex.add(re.compile(r))
             if config.INNER_VERSION in SpecifierSet(">=0.0.11"):
                 config.max_response_length = msg_config.get("max_response_length", config.max_response_length)
             if config.INNER_VERSION in SpecifierSet(">=1.1.4"):
@@ -564,6 +615,9 @@ class BotConfig:
             keywords_reaction_config = parent["keywords_reaction"]
             if keywords_reaction_config.get("enable", False):
                 config.keywords_reaction_rules = keywords_reaction_config.get("rules", config.keywords_reaction_rules)
+                for rule in config.keywords_reaction_rules:
+                    if rule.get("enable", False) and "regex" in rule:
+                        rule["regex"] = [re.compile(r) for r in rule.get("regex", [])]
 
         def chinese_typo(parent: dict):
             chinese_typo_config = parent["chinese_typo"]
@@ -577,13 +631,13 @@ class BotConfig:
                 "word_replace_rate", config.chinese_typo_word_replace_rate
             )
 
-        def response_spliter(parent: dict):
-            response_spliter_config = parent["response_spliter"]
-            config.enable_response_spliter = response_spliter_config.get(
-                "enable_response_spliter", config.enable_response_spliter
+        def response_splitter(parent: dict):
+            response_splitter_config = parent["response_splitter"]
+            config.enable_response_splitter = response_splitter_config.get(
+                "enable_response_splitter", config.enable_response_splitter
             )
-            config.response_max_length = response_spliter_config.get("response_max_length", config.response_max_length)
-            config.response_max_sentence_num = response_spliter_config.get(
+            config.response_max_length = response_splitter_config.get("response_max_length", config.response_max_length)
+            config.response_max_sentence_num = response_splitter_config.get(
                 "response_max_sentence_num", config.response_max_sentence_num
             )
 
@@ -637,7 +691,7 @@ class BotConfig:
             "keywords_reaction": {"func": keywords_reaction, "support": ">=0.0.2", "necessary": False},
             "chinese_typo": {"func": chinese_typo, "support": ">=0.0.3", "necessary": False},
             "platforms": {"func": platforms, "support": ">=1.0.0"},
-            "response_spliter": {"func": response_spliter, "support": ">=0.0.11", "necessary": False},
+            "response_splitter": {"func": response_splitter, "support": ">=0.0.11", "necessary": False},
             "experimental": {"func": experimental, "support": ">=0.0.11", "necessary": False},
             "heartflow": {"func": heartflow, "support": ">=1.0.2", "necessary": False},
         }
@@ -689,6 +743,11 @@ class BotConfig:
                         # 如果用户根本没有需要的配置项，提示缺少配置
                         logger.error(f"配置文件中缺少必需的字段: '{key}'")
                         raise KeyError(f"配置文件中缺少必需的字段: '{key}'")
+
+                # identity_detail字段非空检查
+                if not config.identity_detail:
+                    logger.error("配置文件错误：[identity] 部分的 identity_detail 不能为空字符串")
+                    raise ValueError("配置文件错误：[identity] 部分的 identity_detail 不能为空字符串")
 
                 logger.success(f"成功加载配置文件: {config_path}")
 

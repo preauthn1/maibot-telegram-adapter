@@ -98,7 +98,7 @@ class LLM_request:
                 "timestamp": datetime.now(),
             }
             db.llm_usage.insert_one(usage_data)
-            logger.debug(
+            logger.trace(
                 f"Token使用情况 - 模型: {self.model_name}, "
                 f"用户: {user_id}, 类型: {request_type}, "
                 f"提示词: {prompt_tokens}, 完成: {completion_tokens}, "
@@ -179,7 +179,6 @@ class LLM_request:
         # logger.debug(f"{logger_msg}发送请求到URL: {api_url}")
         # logger.info(f"使用模型: {self.model_name}")
 
-
         # 构建请求体
         if image_base64:
             payload = await self._build_payload(prompt, image_base64, image_format)
@@ -205,13 +204,17 @@ class LLM_request:
                             # 处理需要重试的状态码
                             if response.status in policy["retry_codes"]:
                                 wait_time = policy["base_wait"] * (2**retry)
-                                logger.warning(f"模型 {self.model_name} 错误码: {response.status}, 等待 {wait_time}秒后重试")
+                                logger.warning(
+                                    f"模型 {self.model_name} 错误码: {response.status}, 等待 {wait_time}秒后重试"
+                                )
                                 if response.status == 413:
                                     logger.warning("请求体过大，尝试压缩...")
                                     image_base64 = compress_base64_image_by_scale(image_base64)
                                     payload = await self._build_payload(prompt, image_base64, image_format)
                                 elif response.status in [500, 503]:
-                                    logger.error(f"模型 {self.model_name} 错误码: {response.status} - {error_code_mapping.get(response.status)}")
+                                    logger.error(
+                                        f"模型 {self.model_name} 错误码: {response.status} - {error_code_mapping.get(response.status)}"
+                                    )
                                     raise RuntimeError("服务器负载过高，模型恢复失败QAQ")
                                 else:
                                     logger.warning(f"模型 {self.model_name} 请求限制(429)，等待{wait_time}秒后重试...")
@@ -219,7 +222,9 @@ class LLM_request:
                                 await asyncio.sleep(wait_time)
                                 continue
                             elif response.status in policy["abort_codes"]:
-                                logger.error(f"模型 {self.model_name} 错误码: {response.status} - {error_code_mapping.get(response.status)}")
+                                logger.error(
+                                    f"模型 {self.model_name} 错误码: {response.status} - {error_code_mapping.get(response.status)}"
+                                )
                                 # 尝试获取并记录服务器返回的详细错误信息
                                 try:
                                     error_json = await response.json()
@@ -257,7 +262,9 @@ class LLM_request:
                                     ):
                                         old_model_name = self.model_name
                                         self.model_name = self.model_name[4:]  # 移除"Pro/"前缀
-                                        logger.warning(f"检测到403错误，模型从 {old_model_name} 降级为 {self.model_name}")
+                                        logger.warning(
+                                            f"检测到403错误，模型从 {old_model_name} 降级为 {self.model_name}"
+                                        )
 
                                         # 对全局配置进行更新
                                         if global_config.llm_normal.get("name") == old_model_name:
@@ -266,7 +273,9 @@ class LLM_request:
 
                                         if global_config.llm_reasoning.get("name") == old_model_name:
                                             global_config.llm_reasoning["name"] = self.model_name
-                                            logger.warning(f"将全局配置中的 llm_reasoning 模型临时降级至{self.model_name}")
+                                            logger.warning(
+                                                f"将全局配置中的 llm_reasoning 模型临时降级至{self.model_name}"
+                                            )
 
                                         # 更新payload中的模型名
                                         if payload and "model" in payload:
@@ -328,7 +337,15 @@ class LLM_request:
                                         await response.release()
                                         # 返回已经累积的内容
                                         result = {
-                                            "choices": [{"message": {"content": accumulated_content, "reasoning_content": reasoning_content}}],
+                                            "choices": [
+                                                {
+                                                    "message": {
+                                                        "content": accumulated_content,
+                                                        "reasoning_content": reasoning_content,
+                                                        # 流式输出可能没有工具调用，此处不需要添加tool_calls字段
+                                                    }
+                                                }
+                                            ],
                                             "usage": usage,
                                         }
                                         return (
@@ -345,7 +362,15 @@ class LLM_request:
                                             logger.error(f"清理资源时发生错误: {cleanup_error}")
                                         # 返回已经累积的内容
                                         result = {
-                                            "choices": [{"message": {"content": accumulated_content, "reasoning_content": reasoning_content}}],
+                                            "choices": [
+                                                {
+                                                    "message": {
+                                                        "content": accumulated_content,
+                                                        "reasoning_content": reasoning_content,
+                                                        # 流式输出可能没有工具调用，此处不需要添加tool_calls字段
+                                                    }
+                                                }
+                                            ],
                                             "usage": usage,
                                         }
                                         return (
@@ -360,7 +385,15 @@ class LLM_request:
                                 content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
                                 # 构造一个伪result以便调用自定义响应处理器或默认处理器
                                 result = {
-                                    "choices": [{"message": {"content": content, "reasoning_content": reasoning_content}}],
+                                    "choices": [
+                                        {
+                                            "message": {
+                                                "content": content,
+                                                "reasoning_content": reasoning_content,
+                                                # 流式输出可能没有工具调用，此处不需要添加tool_calls字段
+                                            }
+                                        }
+                                    ],
                                     "usage": usage,
                                 }
                                 return (
@@ -394,7 +427,9 @@ class LLM_request:
                 # 处理aiohttp抛出的响应错误
                 if retry < policy["max_retries"] - 1:
                     wait_time = policy["base_wait"] * (2**retry)
-                    logger.error(f"模型 {self.model_name} HTTP响应错误，等待{wait_time}秒后重试... 状态码: {e.status}, 错误: {e.message}")
+                    logger.error(
+                        f"模型 {self.model_name} HTTP响应错误，等待{wait_time}秒后重试... 状态码: {e.status}, 错误: {e.message}"
+                    )
                     try:
                         if hasattr(e, "response") and e.response and hasattr(e.response, "text"):
                             error_text = await e.response.text()
@@ -419,13 +454,17 @@ class LLM_request:
                                 else:
                                     logger.error(f"模型 {self.model_name} 服务器错误响应: {error_json}")
                             except (json.JSONDecodeError, TypeError) as json_err:
-                                logger.warning(f"模型 {self.model_name} 响应不是有效的JSON: {str(json_err)}, 原始内容: {error_text[:200]}")
+                                logger.warning(
+                                    f"模型 {self.model_name} 响应不是有效的JSON: {str(json_err)}, 原始内容: {error_text[:200]}"
+                                )
                     except (AttributeError, TypeError, ValueError) as parse_err:
                         logger.warning(f"模型 {self.model_name} 无法解析响应错误内容: {str(parse_err)}")
 
                     await asyncio.sleep(wait_time)
                 else:
-                    logger.critical(f"模型 {self.model_name} HTTP响应错误达到最大重试次数: 状态码: {e.status}, 错误: {e.message}")
+                    logger.critical(
+                        f"模型 {self.model_name} HTTP响应错误达到最大重试次数: 状态码: {e.status}, 错误: {e.message}"
+                    )
                     # 安全地检查和记录请求详情
                     if (
                         image_base64
@@ -536,6 +575,9 @@ class LLM_request:
                 if not reasoning_content:
                     reasoning_content = reasoning
 
+            # 提取工具调用信息
+            tool_calls = message.get("tool_calls", None)
+
             # 记录token使用情况
             usage = result.get("usage", {})
             if usage:
@@ -551,7 +593,11 @@ class LLM_request:
                     endpoint=endpoint,
                 )
 
-            return content, reasoning_content
+            # 只有当tool_calls存在且不为空时才返回
+            if tool_calls:
+                return content, reasoning_content, tool_calls
+            else:
+                return content, reasoning_content
 
         return "没有返回结果", ""
 
@@ -574,21 +620,33 @@ class LLM_request:
             return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
             # 防止小朋友们截图自己的key
 
-    async def generate_response(self, prompt: str) -> Tuple[str, str, str]:
+    async def generate_response(self, prompt: str) -> Tuple:
         """根据输入的提示生成模型的异步响应"""
 
-        content, reasoning_content = await self._execute_request(endpoint="/chat/completions", prompt=prompt)
-        return content, reasoning_content, self.model_name
+        response = await self._execute_request(endpoint="/chat/completions", prompt=prompt)
+        # 根据返回值的长度决定怎么处理
+        if len(response) == 3:
+            content, reasoning_content, tool_calls = response
+            return content, reasoning_content, self.model_name, tool_calls
+        else:
+            content, reasoning_content = response
+            return content, reasoning_content, self.model_name
 
-    async def generate_response_for_image(self, prompt: str, image_base64: str, image_format: str) -> Tuple[str, str]:
+    async def generate_response_for_image(self, prompt: str, image_base64: str, image_format: str) -> Tuple:
         """根据输入的提示和图片生成模型的异步响应"""
 
-        content, reasoning_content = await self._execute_request(
+        response = await self._execute_request(
             endpoint="/chat/completions", prompt=prompt, image_base64=image_base64, image_format=image_format
         )
-        return content, reasoning_content
+        # 根据返回值的长度决定怎么处理
+        if len(response) == 3:
+            content, reasoning_content, tool_calls = response
+            return content, reasoning_content, tool_calls
+        else:
+            content, reasoning_content = response
+            return content, reasoning_content
 
-    async def generate_response_async(self, prompt: str, **kwargs) -> Union[str, Tuple[str, str]]:
+    async def generate_response_async(self, prompt: str, **kwargs) -> Union[str, Tuple]:
         """异步方式根据输入的提示生成模型的响应"""
         # 构建请求体
         data = {
@@ -599,10 +657,9 @@ class LLM_request:
             **kwargs,
         }
 
-        content, reasoning_content = await self._execute_request(
-            endpoint="/chat/completions", payload=data, prompt=prompt
-        )
-        return content, reasoning_content
+        response = await self._execute_request(endpoint="/chat/completions", payload=data, prompt=prompt)
+        # 原样返回响应，不做处理
+        return response
 
     async def get_embedding(self, text: str) -> Union[list, None]:
         """异步方法：获取文本的embedding向量

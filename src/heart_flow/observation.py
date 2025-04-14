@@ -4,8 +4,11 @@ from datetime import datetime
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.config.config import global_config
 from src.common.database import db
-from src.individuality.individuality import Individuality
-import random
+from src.common.logger import get_module_logger
+import traceback
+
+logger = get_module_logger("observation")
+
 
 # 所有观察的基类
 class Observation:
@@ -24,133 +27,142 @@ class ChattingObservation(Observation):
 
         self.talking_message = []
         self.talking_message_str = ""
-        
+
         self.name = global_config.BOT_NICKNAME
         self.nick_name = global_config.BOT_ALIAS_NAMES
 
-        self.observe_times = 0
+        self.max_now_obs_len = global_config.observation_context_size
+        self.overlap_len = global_config.compressed_length
+        self.mid_memorys = []
+        self.max_mid_memory_len = global_config.compress_length_limit
+        self.mid_memory_info = ""
+        self.now_message_info = ""
 
-        self.summary_count = 0  # 30秒内的更新次数
-        self.max_update_in_30s = 2  # 30秒内最多更新2次
-        self.last_summary_time = 0  # 上次更新summary的时间
-
-        self.sub_observe = None
+        self.updating_old = False
 
         self.llm_summary = LLM_request(
             model=global_config.llm_observation, temperature=0.7, max_tokens=300, request_type="chat_observation"
         )
 
     # 进行一次观察 返回观察结果observe_info
+    def get_observe_info(self, ids=None):
+        if ids:
+            mid_memory_str = ""
+            for id in ids:
+                print(f"id：{id}")
+                try:
+                    for mid_memory in self.mid_memorys:
+                        if mid_memory["id"] == id:
+                            mid_memory_by_id = mid_memory
+                            msg_str = ""
+                            for msg in mid_memory_by_id["messages"]:
+                                msg_str += f"{msg['detailed_plain_text']}"
+                            time_diff = int((datetime.now().timestamp() - mid_memory_by_id["created_at"]) / 60)
+                            mid_memory_str += f"距离现在{time_diff}分钟前：\n{msg_str}\n"
+                except Exception as e:
+                    logger.error(f"获取mid_memory_id失败: {e}")
+                    traceback.print_exc()
+                    # print(f"获取mid_memory_id失败: {e}")
+                    return self.now_message_info
+
+            return mid_memory_str + "现在群里正在聊：\n" + self.now_message_info
+
+        else:
+            return self.now_message_info
+
     async def observe(self):
-        # 查找新消息，限制最多30条
+        # 查找新消息
         new_messages = list(
-            db.messages.find({"chat_id": self.chat_id, "time": {"$gt": self.last_observe_time}})
-            .sort("time", 1)
-            .limit(20)
-        )  # 按时间正序排列，最多20条
+            db.messages.find({"chat_id": self.chat_id, "time": {"$gt": self.last_observe_time}}).sort("time", 1)
+        )  # 按时间正序排列
 
         if not new_messages:
             return self.observe_info  # 没有新消息，返回上次观察结果
+
+        self.last_observe_time = new_messages[-1]["time"]
+
+        self.talking_message.extend(new_messages)
 
         # 将新消息转换为字符串格式
         new_messages_str = ""
         for msg in new_messages:
             if "detailed_plain_text" in msg:
                 new_messages_str += f"{msg['detailed_plain_text']}"
-                
+
         # print(f"new_messages_str：{new_messages_str}")
 
         # 将新消息添加到talking_message，同时保持列表长度不超过20条
-        self.talking_message.extend(new_messages)
-        if len(self.talking_message) > 20:
-            self.talking_message = self.talking_message[-20:]  # 只保留最新的20条
-        self.translate_message_list_to_str()
 
-        # 更新观察次数
-        self.observe_times += 1
-        self.last_observe_time = new_messages[-1]["time"]
+        if len(self.talking_message) > self.max_now_obs_len and not self.updating_old:
+            self.updating_old = True
+            # 计算需要保留的消息数量
+            keep_messages_count = self.max_now_obs_len - self.overlap_len
+            # 提取所有超出保留数量的最老消息
+            oldest_messages = self.talking_message[:-keep_messages_count]
+            self.talking_message = self.talking_message[-keep_messages_count:]
+            oldest_messages_str = "\n".join([msg["detailed_plain_text"] for msg in oldest_messages])
+            oldest_timestamps = [msg["time"] for msg in oldest_messages]
 
-        # 检查是否需要更新summary
-        current_time = int(datetime.now().timestamp())
-        if current_time - self.last_summary_time >= 30:  # 如果超过30秒，重置计数
-            self.summary_count = 0
-            self.last_summary_time = current_time
+            # 调用 LLM 总结主题
+            prompt = f"请总结以下聊天记录的主题：\n{oldest_messages_str}\n主题,用一句话概括包括人物事件和主要信息，不要分点："
+            try:
+                summary, _ = await self.llm_summary.generate_response_async(prompt)
+            except Exception as e:
+                print(f"总结主题失败: {e}")
+                summary = "无法总结主题"
 
-        if self.summary_count < self.max_update_in_30s:  # 如果30秒内更新次数小于2次
-            await self.update_talking_summary(new_messages_str)
-            self.summary_count += 1
+            mid_memory = {
+                "id": str(int(datetime.now().timestamp())),
+                "theme": summary,
+                "messages": oldest_messages,
+                "timestamps": oldest_timestamps,
+                "chat_id": self.chat_id,
+                "created_at": datetime.now().timestamp(),
+            }
+            # print(f"mid_memory：{mid_memory}")
+            # 存入内存中的 mid_memorys
+            self.mid_memorys.append(mid_memory)
+            if len(self.mid_memorys) > self.max_mid_memory_len:
+                self.mid_memorys.pop(0)
 
-        return self.observe_info
+            mid_memory_str = "之前聊天的内容概括是：\n"
+            for mid_memory in self.mid_memorys:
+                time_diff = int((datetime.now().timestamp() - mid_memory["created_at"]) / 60)
+                mid_memory_str += f"距离现在{time_diff}分钟前(聊天记录id:{mid_memory['id']})：{mid_memory['theme']}\n"
+            self.mid_memory_info = mid_memory_str
 
-    async def carefully_observe(self):
-        # 查找新消息，限制最多40条
-        new_messages = list(
-            db.messages.find({"chat_id": self.chat_id, "time": {"$gt": self.last_observe_time}})
-            .sort("time", 1)
-            .limit(30)
-        )  # 按时间正序排列，最多30条
+            self.updating_old = False
 
-        if not new_messages:
-            return self.observe_info  # 没有新消息，返回上次观察结果
+            # print(f"处理后self.talking_message：{self.talking_message}")
 
-        # 将新消息转换为字符串格式
-        new_messages_str = ""
-        for msg in new_messages:
-            if "detailed_plain_text" in msg:
-                new_messages_str += f"{msg['detailed_plain_text']}\n"
+        now_message_str = ""
+        now_message_str += self.translate_message_list_to_str(talking_message=self.talking_message)
+        self.now_message_info = now_message_str
 
-        # 将新消息添加到talking_message，同时保持列表长度不超过30条
-        self.talking_message.extend(new_messages)
-        if len(self.talking_message) > 30:
-            self.talking_message = self.talking_message[-30:]  # 只保留最新的30条
-        self.translate_message_list_to_str()
-
-        # 更新观察次数
-        self.observe_times += 1
-        self.last_observe_time = new_messages[-1]["time"]
-
-        await self.update_talking_summary(new_messages_str)
-        return self.observe_info
+        logger.debug(f"压缩早期记忆：{self.mid_memory_info}\n现在聊天内容：{self.now_message_info}")
 
     async def update_talking_summary(self, new_messages_str):
-        # 基于已经有的talking_summary，和新的talking_message，生成一个summary
-        # print(f"更新聊天总结：{self.talking_summary}")
-        # 开始构建prompt
-        prompt_personality = "你"
-        #person
-        individuality = Individuality.get_instance()
-        
-        personality_core = individuality.personality.personality_core
-        prompt_personality += personality_core
-        
-        personality_sides = individuality.personality.personality_sides
-        random.shuffle(personality_sides)
-        prompt_personality += f",{personality_sides[0]}"
-        
-        identity_detail = individuality.identity.identity_detail
-        random.shuffle(identity_detail)
-        prompt_personality += f",{identity_detail[0]}"
-        
-        
-        
-        personality_info = prompt_personality
-        
-        
-        
         prompt = ""
-        prompt += f"{personality_info}，请注意识别你自己的聊天发言"
-        prompt += f"你的名字叫：{self.name}，你的昵称是：{self.nick_name}\n"
+        # prompt += f"{personality_info}"
+        prompt += f"你的名字叫：{self.name}\n，标识'{self.name}'的都是你自己说的话"
         prompt += f"你正在参与一个qq群聊的讨论，你记得这个群之前在聊的内容是：{self.observe_info}\n"
         prompt += f"现在群里的群友们产生了新的讨论，有了新的发言，具体内容如下：{new_messages_str}\n"
-        prompt += """以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，
-        以及聊天中的一些重要信息，注意识别你自己的发言，记得不要分点，不要太长，精简的概括成一段文本\n"""
+        prompt += """以上是群里在进行的聊天，请你对这个聊天内容进行总结，总结内容要包含聊天的大致内容，目前最新讨论的话题
+        以及聊天中的一些重要信息，记得不要分点，精简的概括成一段文本\n"""
         prompt += "总结概括："
-        self.observe_info, reasoning_content = await self.llm_summary.generate_response_async(prompt)
-        print(f"prompt：{prompt}")
-        print(f"self.observe_info：{self.observe_info}")
-        
+        try:
+            updated_observe_info, reasoning_content = await self.llm_summary.generate_response_async(prompt)
+        except Exception as e:
+            print(f"获取总结失败: {e}")
+            updated_observe_info = ""
 
-    def translate_message_list_to_str(self):
-        self.talking_message_str = ""
-        for message in self.talking_message:
-            self.talking_message_str += message["detailed_plain_text"]
+        return updated_observe_info
+        # print(f"prompt：{prompt}")
+        # print(f"self.observe_info：{self.observe_info}")
+
+    def translate_message_list_to_str(self, talking_message):
+        talking_message_str = ""
+        for message in talking_message:
+            talking_message_str += message["detailed_plain_text"]
+
+        return talking_message_str

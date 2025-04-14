@@ -127,7 +127,7 @@
 #         """处理窗口关闭事件"""
 #         # 标记GUI已关闭，防止后台线程继续访问tkinter对象
 #         self.is_running = False
-        
+
 #         # 安全清理所有可能的tkinter变量
 #         for attr_name in list(self.__dict__.keys()):
 #             if isinstance(getattr(self, attr_name), (ctk.Variable, ctk.StringVar, ctk.IntVar, ctk.DoubleVar, ctk.BooleanVar)):
@@ -138,7 +138,7 @@
 #                 except Exception:
 #                     pass
 #                 setattr(self, attr_name, None)
-        
+
 #         # 退出
 #         self.root.quit()
 #         sys.exit(0)
@@ -259,7 +259,7 @@
 #         while True:
 #             if not self.is_running:
 #                 break  # 如果GUI已关闭，停止线程
-                
+
 #             try:
 #                 # 从数据库获取最新数据，只获取启动时间之后的记录
 #                 query = {"time": {"$gt": self.start_timestamp}}

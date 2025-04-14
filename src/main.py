@@ -16,7 +16,7 @@ from .plugins.chat.bot import chat_bot
 from .common.logger import get_module_logger
 from .plugins.remote import heartbeat_thread  # noqa: F401
 from .individuality.individuality import Individuality
-
+from .common.server import global_server
 
 logger = get_module_logger("main")
 
@@ -33,6 +33,7 @@ class MainSystem:
         from .plugins.message import global_api
 
         self.app = global_api
+        self.server = global_server
 
     async def initialize(self):
         """初始化系统组件"""
@@ -63,7 +64,7 @@ class MainSystem:
         asyncio.create_task(person_info_manager.personal_habit_deduction())
 
         # 启动愿望管理器
-        await willing_manager.ensure_started()
+        await willing_manager.async_task_starter()
 
         # 启动消息处理器
         if not self._message_manager_started:
@@ -100,7 +101,7 @@ class MainSystem:
             weight=global_config.weight,
             age=global_config.age,
             gender=global_config.gender,
-            appearance=global_config.appearance
+            appearance=global_config.appearance,
         )
         logger.success("个体特征初始化成功")
 
@@ -126,6 +127,7 @@ class MainSystem:
                 emoji_manager.start_periodic_check_register(),
                 # emoji_manager.start_periodic_register(),
                 self.app.run(),
+                self.server.run(),
             ]
             await asyncio.gather(*tasks)
 
@@ -135,7 +137,6 @@ class MainSystem:
             await asyncio.sleep(global_config.build_memory_interval)
             logger.info("正在进行记忆构建")
             await HippocampusManager.get_instance().build_memory()
-            
 
     async def forget_memory_task(self):
         """记忆遗忘任务"""
@@ -144,7 +145,6 @@ class MainSystem:
             print("\033[1;32m[记忆遗忘]\033[0m 开始遗忘记忆...")
             await HippocampusManager.get_instance().forget_memory(percentage=global_config.memory_forget_percentage)
             print("\033[1;32m[记忆遗忘]\033[0m 记忆遗忘完成")
-            
 
     async def print_mood_task(self):
         """打印情绪状态"""
