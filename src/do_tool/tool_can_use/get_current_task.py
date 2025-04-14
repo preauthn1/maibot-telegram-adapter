@@ -57,5 +57,3 @@ class GetCurrentTaskTool(BaseTool):
                 task_info = f"在 {start_time} 到 {end_time} 之间没有找到日程信息"
 
         return {"name": "get_current_task", "content": f"日程信息: {task_info}"}
-
-

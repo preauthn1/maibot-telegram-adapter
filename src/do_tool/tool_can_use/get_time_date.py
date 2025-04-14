@@ -5,6 +5,7 @@ from datetime import datetime
 
 logger = get_module_logger("get_time_date")
 
+
 class GetCurrentDateTimeTool(BaseTool):
     """获取当前时间、日期、年份和星期的工具"""
 
@@ -33,7 +34,5 @@ class GetCurrentDateTimeTool(BaseTool):
 
         return {
             "name": "get_current_date_time",
-            "content": f"当前时间: {current_time}, 日期: {current_date}, 年份: {current_year}, 星期: {current_weekday}"
+            "content": f"当前时间: {current_time}, 日期: {current_date}, 年份: {current_year}, 星期: {current_weekday}",
         }
-
-
