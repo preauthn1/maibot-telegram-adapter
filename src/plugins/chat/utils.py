@@ -341,7 +341,7 @@ def process_llm_response(text: str) -> List[str]:
         tone_error_rate=global_config.chinese_typo_tone_error_rate,
         word_replace_rate=global_config.chinese_typo_word_replace_rate,
     )
-    if global_config.enable_response_spliter:
+    if global_config.enable_response_splitter:
         split_sentences = split_into_sentences_w_remove_punctuation(text)
     else:
         split_sentences = [text]

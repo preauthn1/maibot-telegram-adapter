@@ -253,8 +253,8 @@ class BotConfig:
     chinese_typo_tone_error_rate = 0.2  # 声调错误概率
     chinese_typo_word_replace_rate = 0.02  # 整词替换概率
 
-    # response_spliter
-    enable_response_spliter = True  # 是否启用回复分割器
+    # response_splitter
+    enable_response_splitter = True  # 是否启用回复分割器
     response_max_length = 100  # 回复允许的最大长度
     response_max_sentence_num = 3  # 回复允许的最大句子数
 
@@ -604,13 +604,13 @@ class BotConfig:
                 "word_replace_rate", config.chinese_typo_word_replace_rate
             )
 
-        def response_spliter(parent: dict):
-            response_spliter_config = parent["response_spliter"]
-            config.enable_response_spliter = response_spliter_config.get(
-                "enable_response_spliter", config.enable_response_spliter
+        def response_splitter(parent: dict):
+            response_splitter_config = parent["response_splitter"]
+            config.enable_response_splitter = response_splitter_config.get(
+                "enable_response_splitter", config.enable_response_splitter
             )
-            config.response_max_length = response_spliter_config.get("response_max_length", config.response_max_length)
-            config.response_max_sentence_num = response_spliter_config.get(
+            config.response_max_length = response_splitter_config.get("response_max_length", config.response_max_length)
+            config.response_max_sentence_num = response_splitter_config.get(
                 "response_max_sentence_num", config.response_max_sentence_num
             )
 
@@ -664,7 +664,7 @@ class BotConfig:
             "keywords_reaction": {"func": keywords_reaction, "support": ">=0.0.2", "necessary": False},
             "chinese_typo": {"func": chinese_typo, "support": ">=0.0.3", "necessary": False},
             "platforms": {"func": platforms, "support": ">=1.0.0"},
-            "response_spliter": {"func": response_spliter, "support": ">=0.0.11", "necessary": False},
+            "response_splitter": {"func": response_splitter, "support": ">=0.0.11", "necessary": False},
             "experimental": {"func": experimental, "support": ">=0.0.11", "necessary": False},
             "heartflow": {"func": heartflow, "support": ">=1.0.2", "necessary": False},
         }

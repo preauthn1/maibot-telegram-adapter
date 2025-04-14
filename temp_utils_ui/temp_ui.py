@@ -29,7 +29,7 @@ SECTION_TRANSLATIONS = {
     "mood": "情绪设置",
     "keywords_reaction": "关键词反应",
     "chinese_typo": "中文错别字",
-    "response_spliter": "回复分割器",
+    "response_splitter": "回复分割器",
     "remote": "远程设置",
     "experimental": "实验功能",
     "model": "模型设置",
@@ -116,9 +116,9 @@ CONFIG_DESCRIPTIONS = {
     "chinese_typo.tone_error_rate": "声调错误概率",
     "chinese_typo.word_replace_rate": "整词替换概率",
     # 回复分割器
-    "response_spliter.enable_response_spliter": "是否启用回复分割器",
-    "response_spliter.response_max_length": "回复允许的最大长度",
-    "response_spliter.response_max_sentence_num": "回复允许的最大句子数",
+    "response_splitter.enable_response_splitter": "是否启用回复分割器",
+    "response_splitter.response_max_length": "回复允许的最大长度",
+    "response_splitter.response_max_sentence_num": "回复允许的最大句子数",
     # 远程设置
     "remote.enable": "是否启用远程统计",
     # 实验功能
