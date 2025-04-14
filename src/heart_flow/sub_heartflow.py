@@ -98,8 +98,6 @@ class SubHeartflow:
 
         self.bot_name = global_config.BOT_NICKNAME
 
-        
-
     def add_observation(self, observation: Observation):
         """添加一个新的observation对象到列表中，如果已存在相同id的observation则不添加"""
         # 查找是否存在相同id的observation

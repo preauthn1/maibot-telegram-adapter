@@ -1,5 +1,5 @@
 [inner]
-version = "1.2.6"
+version = "1.2.7"
 
 
 #以下是给开发人员阅读的，一般用户不需要阅读
@@ -159,8 +159,8 @@ min_freq=9 # 最小字频阈值
 tone_error_rate=0.1 # 声调错误概率
 word_replace_rate=0.006 # 整词替换概率
 
-[response_spliter]
-enable_response_spliter = true # 是否启用回复分割器
+[response_splitter]
+enable_response_splitter = true # 是否启用回复分割器
 response_max_length = 100 # 回复允许的最大长度
 response_max_sentence_num = 4 # 回复允许的最大句子数
 

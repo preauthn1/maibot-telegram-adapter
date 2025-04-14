@@ -136,8 +136,6 @@ class ThinkFlowChat:
 
                 message_manager.add_message(bot_message)
 
-        
-
     async def _update_relationship(self, message: MessageRecv, response_set):
         """更新关系情绪"""
         ori_response = ",".join(response_set)
@@ -381,7 +379,6 @@ class ThinkFlowChat:
                         await heartflow.get_subheartflow(stream_id).do_thinking_after_reply(response_set, chat_talking_prompt,tool_result_info)
                 except Exception as e:
                     logger.error(f"心流思考后脑内状态更新失败: {e}")
-
 
                 # 回复后处理
                 await willing_manager.after_generate_reply_handle(message.message_info.message_id)

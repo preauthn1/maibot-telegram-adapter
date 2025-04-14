@@ -154,7 +154,7 @@ class ToolUser:
                     logger.debug("模型返回了空的tool_calls列表")
                     return {"used_tools": False}
 
-                tool_calls_str = "" 
+                tool_calls_str = ""
                 for tool_call in tool_calls:
                     tool_calls_str += f"{tool_call['function']['name']}\n"
                 logger.info(f"根据:\n{prompt}\n模型请求调用{len(tool_calls)}个工具: {tool_calls_str}")
@@ -178,10 +178,7 @@ class ToolUser:
                 # 如果有工具结果，返回结构化的信息
                 if structured_info:
                     logger.info(f"工具调用收集到结构化信息: {json.dumps(structured_info, ensure_ascii=False)}")
-                    return {
-                        "used_tools": True,
-                        "structured_info": structured_info
-                    }
+                    return {"used_tools": True, "structured_info": structured_info}
             else:
                 # 没有工具调用
                 content, reasoning_content = response
