@@ -97,8 +97,6 @@ class SubHeartflow:
 
         self.bot_name = global_config.BOT_NICKNAME
 
-        
-
     def add_observation(self, observation: Observation):
         """添加一个新的observation对象到列表中，如果已存在相同id的observation则不添加"""
         # 查找是否存在相同id的observation
@@ -151,14 +149,14 @@ class SubHeartflow:
         observation = self.observations[0]
         await observation.observe()
 
-    async def do_thinking_before_reply(self, message_txt: str, sender_name: str, chat_stream: ChatStream, extra_info: str):
+    async def do_thinking_before_reply(
+        self, message_txt: str, sender_name: str, chat_stream: ChatStream, extra_info: str
+    ):
         current_thinking_info = self.current_mind
         mood_info = self.current_state.mood
         # mood_info = "你很生气，很愤怒"
         observation = self.observations[0]
         chat_observe_info = observation.observe_info
-
-
 
         # 开始构建prompt
         prompt_personality = f"你的名字是{self.bot_name},你"

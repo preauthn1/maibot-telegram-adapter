@@ -21,7 +21,9 @@ class ToolUser:
             model=global_config.llm_heartflow, temperature=0.2, max_tokens=1000, request_type="tool_use"
         )
 
-    async def _build_tool_prompt(self, message_txt: str, sender_name: str, chat_stream: ChatStream, reply_message:str = ""):
+    async def _build_tool_prompt(
+        self, message_txt: str, sender_name: str, chat_stream: ChatStream, reply_message: str = ""
+    ):
         """构建工具使用的提示词
 
         Args:
@@ -155,7 +157,7 @@ class ToolUser:
                     logger.debug("模型返回了空的tool_calls列表")
                     return {"used_tools": False}
 
-                tool_calls_str = "" 
+                tool_calls_str = ""
                 for tool_call in tool_calls:
                     tool_calls_str += f"{tool_call['function']['name']}\n"
                 logger.info(f"模型请求调用{len(tool_calls)}个工具: {tool_calls_str}")
@@ -166,7 +168,7 @@ class ToolUser:
                     "knowledge": [],
                     "change_relationship": [],
                     "change_mood": [],
-                    "other": []
+                    "other": [],
                 }
 
                 # 执行所有工具调用
@@ -175,18 +177,12 @@ class ToolUser:
                     if result:
                         tool_results.append(result)
                         # 将工具结果添加到对应类型的列表中
-                        structured_info[result["type"]].append({
-                            "name": result["name"],
-                            "content": result["content"]
-                        })
+                        structured_info[result["type"]].append({"name": result["name"], "content": result["content"]})
 
                 # 如果有工具结果，返回结构化的信息
                 if any(structured_info.values()):
                     logger.info(f"工具调用收集到结构化信息: {json.dumps(structured_info, ensure_ascii=False)}")
-                    return {
-                        "used_tools": True,
-                        "structured_info": structured_info
-                    }
+                    return {"used_tools": True, "structured_info": structured_info}
             else:
                 # 没有工具调用
                 content, reasoning_content = response
