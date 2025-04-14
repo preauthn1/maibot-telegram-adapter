@@ -108,33 +108,35 @@ class ThinkFlowChat:
         message_manager.add_message(message_set)
         return first_bot_msg
 
-    async def _handle_emoji(self, message, chat, response):
+    async def _handle_emoji(self, message, chat, response, send_emoji = ""):
         """处理表情包"""
-        if random() < global_config.emoji_chance:
+        if send_emoji:
+            emoji_raw = await emoji_manager.get_emoji_for_text(send_emoji)
+        else:
             emoji_raw = await emoji_manager.get_emoji_for_text(response)
-            if emoji_raw:
-                emoji_path, description = emoji_raw
-                emoji_cq = image_path_to_base64(emoji_path)
+        if emoji_raw:
+            emoji_path, description = emoji_raw
+            emoji_cq = image_path_to_base64(emoji_path)
 
-                thinking_time_point = round(message.message_info.time, 2)
+            thinking_time_point = round(message.message_info.time, 2)
 
-                message_segment = Seg(type="emoji", data=emoji_cq)
-                bot_message = MessageSending(
-                    message_id="mt" + str(thinking_time_point),
-                    chat_stream=chat,
-                    bot_user_info=UserInfo(
-                        user_id=global_config.BOT_QQ,
-                        user_nickname=global_config.BOT_NICKNAME,
-                        platform=message.message_info.platform,
-                    ),
-                    sender_info=message.message_info.user_info,
-                    message_segment=message_segment,
-                    reply=message,
-                    is_head=False,
-                    is_emoji=True,
-                )
+            message_segment = Seg(type="emoji", data=emoji_cq)
+            bot_message = MessageSending(
+                message_id="mt" + str(thinking_time_point),
+                chat_stream=chat,
+                bot_user_info=UserInfo(
+                    user_id=global_config.BOT_QQ,
+                    user_nickname=global_config.BOT_NICKNAME,
+                    platform=message.message_info.platform,
+                ),
+                sender_info=message.message_info.user_info,
+                message_segment=message_segment,
+                reply=message,
+                is_head=False,
+                is_emoji=True,
+            )
 
-                message_manager.add_message(bot_message)
+            message_manager.add_message(bot_message)
 
     async def _update_relationship(self, message: MessageRecv, response_set):
         """更新关系情绪"""
@@ -264,6 +266,7 @@ class ThinkFlowChat:
                 update_relationship = ""
                 get_mid_memory_id = []
                 tool_result_info = {}
+                send_emoji = ""
                 try:
                     with Timer("思考前使用工具", timing_results):
                         tool_result = await self.tool_user.use_tool(
@@ -302,6 +305,9 @@ class ThinkFlowChat:
                                     # 特殊判定：change_relationship
                                     if tool_name == "change_relationship":
                                         update_relationship = tool_data[0]["content"]
+                                        
+                                    if tool_name == "send_emoji":
+                                        send_emoji = tool_data[0]["content"]
 
                 except Exception as e:
                     logger.error(f"思考前工具调用失败: {e}")
@@ -357,7 +363,13 @@ class ThinkFlowChat:
                 # 处理表情包
                 try:
                     with Timer("处理表情包", timing_results):
-                        await self._handle_emoji(message, chat, response_set)
+                        if global_config.emoji_chance == 1:
+                            if send_emoji:
+                                logger.info(f"麦麦决定发送表情包{send_emoji}")
+                                await self._handle_emoji(message, chat, response_set, send_emoji)
+                        else:
+                            if random() < global_config.emoji_chance:
+                                await self._handle_emoji(message, chat, response_set)
                 except Exception as e:
                     logger.error(f"心流处理表情包失败: {e}")
 

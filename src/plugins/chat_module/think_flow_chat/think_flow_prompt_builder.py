@@ -52,7 +52,7 @@ def init_prompt():
 你的名字叫{bot_name}，{prompt_identity}。
 {chat_target}，你希望在群里回复：{content}。现在请你根据以下信息修改回复内容。将这个回复修改的更加日常且口语化的回复，平淡一些，回复尽量简短一些。不要回复的太有条理。
 {prompt_ger}，不要刻意突出自身学科背景，注意只输出回复内容。
-{moderation_prompt}。注意：不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
+{moderation_prompt}。注意：不要输出多余内容(包括前后缀，冒号和引号，at或 @等 )。""",
         "heart_flow_prompt_response",
     )
 
