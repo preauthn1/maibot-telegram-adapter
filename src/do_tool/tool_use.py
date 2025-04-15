@@ -1,3 +1,4 @@
+from src.plugins.chat.utils import get_recent_group_detailed_plain_text
 from src.plugins.models.utils_model import LLM_request
 from src.plugins.config.config import global_config
 from src.plugins.chat.chat_stream import ChatStream
@@ -41,6 +42,12 @@ class ToolUser:
         else:
             mid_memory_info = ""
 
+        stream_id = chat_stream.stream_id
+        chat_talking_prompt = ""
+        if stream_id:
+            chat_talking_prompt = get_recent_group_detailed_plain_text(
+                stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
+            )
         new_messages = list(
             db.messages.find({"chat_id": chat_stream.stream_id, "time": {"$gt": time.time()}}).sort("time", 1).limit(15)
         )
@@ -54,9 +61,10 @@ class ToolUser:
         prompt = ""
         prompt += mid_memory_info
         prompt += "你正在思考如何回复群里的消息。\n"
+        prompt += f"之前群里进行了如下讨论:\n"
+        prompt += chat_talking_prompt
         prompt += f"你注意到{sender_name}刚刚说：{message_txt}\n"
-        prompt += f"注意你就是{bot_name}，{bot_name}指的就是你。"
-
+        prompt += f"注意你就是{bot_name}，{bot_name}是你的名字。根据之前的聊天记录补充问题信息，搜索时避开你的名字。\n"
         prompt += "你现在需要对群里的聊天内容进行回复，现在选择工具来对消息和你的回复进行处理，你是否需要额外的信息，比如回忆或者搜寻已有的知识，改变关系和情感，或者了解你现在正在做什么。"
         return prompt
 
