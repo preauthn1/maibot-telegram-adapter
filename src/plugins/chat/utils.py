@@ -324,11 +324,16 @@ def random_remove_punctuation(text: str) -> str:
 
 
 def process_llm_response(text: str) -> List[str]:
+    # 先保护颜文字
+    protected_text, kaomoji_mapping = protect_kaomoji(text)
+    logger.debug(f"保护颜文字后的文本: {protected_text}")
     # 提取被 () 或 [] 包裹的内容
     pattern = re.compile(r"[\(\[].*?[\)\]]")
-    _extracted_contents = pattern.findall(text)
+    # _extracted_contents = pattern.findall(text)
+    _extracted_contents = pattern.findall(protected_text) # 在保护后的文本上查找
     # 去除 () 和 [] 及其包裹的内容
-    cleaned_text = pattern.sub("", text)
+    # cleaned_text = pattern.sub("", text)
+    cleaned_text = pattern.sub("", protected_text)
     logger.debug(f"{text}去除括号处理后的文本: {cleaned_text}")
 
     # 对清理后的文本进行进一步处理
@@ -368,6 +373,8 @@ def process_llm_response(text: str) -> List[str]:
         return [f"{global_config.BOT_NICKNAME}不知道哦"]
 
     # sentences.extend(extracted_contents)
+    # 在所有句子处理完毕后，对包含占位符的列表进行恢复
+    sentences = recover_kaomoji(sentences, kaomoji_mapping)
 
     return sentences
 
