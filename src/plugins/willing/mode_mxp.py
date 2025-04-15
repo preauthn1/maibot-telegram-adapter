@@ -61,7 +61,7 @@ class MxpWillingManager(BaseWillingManager):
         """异步任务启动器"""
         asyncio.create_task(self._return_to_basic_willing())
         asyncio.create_task(self._chat_new_message_to_change_basic_willing())
-        asyncio.create_task(self.fatigue_attenuation())
+        asyncio.create_task(self._fatigue_attenuation())
 
     async def before_generate_reply_handle(self, message_id: str):
         """回复前处理"""
@@ -77,7 +77,7 @@ class MxpWillingManager(BaseWillingManager):
                 time_interval = 60 - (current_time - self.chat_bot_message_time[w_info.chat_id].pop(0))
                 if w_info.chat_id not in self.chat_fatigue_punishment_list:
                     self.chat_fatigue_punishment_list[w_info.chat_id] = []
-                self.chat_fatigue_punishment_list[w_info.chat_id].append(current_time, time_interval * 2)
+                self.chat_fatigue_punishment_list[w_info.chat_id].append([current_time, time_interval * 2])
 
     async def after_generate_reply_handle(self, message_id: str):
         """回复后处理"""
@@ -120,9 +120,10 @@ class MxpWillingManager(BaseWillingManager):
                 self.logger.debug(f"基础意愿值：{current_willing}")
 
             if w_info.is_mentioned_bot:
-                current_willing += self.mention_willing_gain / (int(current_willing) + 1)
+                current_willing_ = self.mention_willing_gain / (int(current_willing) + 1)
+                current_willing += current_willing_
                 if self.is_debug:
-                    self.logger.debug(f"提及增益：{self.mention_willing_gain / (int(current_willing) + 1)}")
+                    self.logger.debug(f"提及增益：{current_willing_}")
 
             if w_info.interested_rate > 0:
                 current_willing += math.atan(w_info.interested_rate / 2) / math.pi * 2 * self.interest_willing_gain
@@ -153,15 +154,20 @@ class MxpWillingManager(BaseWillingManager):
             chat_person_ogoing_messages = [msg for msg in chat_ongoing_messages if msg.person_id == w_info.person_id]
             if len(chat_person_ogoing_messages) >= 2:
                 current_willing = 0
+                if self.is_debug:
+                    self.logger.debug("进行中消息惩罚：归0")
             elif len(chat_ongoing_messages) == 2:
                 current_willing -= 0.5
+                if self.is_debug:
+                    self.logger.debug("进行中消息惩罚：-0.5")
             elif len(chat_ongoing_messages) == 3:
                 current_willing -= 1.5
+                if self.is_debug:
+                    self.logger.debug("进行中消息惩罚：-1.5")
             elif len(chat_ongoing_messages) >= 4:
                 current_willing = 0
-            else:
                 if self.is_debug:
-                    self.logger.debug("无进行中消息惩罚")
+                    self.logger.debug("进行中消息惩罚：归0")
             
 
             probability = self._willing_to_probability(current_willing)
@@ -229,8 +235,8 @@ class MxpWillingManager(BaseWillingManager):
 
     async def _chat_new_message_to_change_basic_willing(self):
         """聊天流新消息改变基础意愿"""
+        update_time = 20
         while True:
-            update_time = 20
             await asyncio.sleep(update_time)
             async with self.lock:
                 for chat_id, message_times in self.chat_new_message_time.items():
@@ -253,6 +259,8 @@ class MxpWillingManager(BaseWillingManager):
                     else:
                         self.logger.debug(f"聊天流{chat_id}消息时间数量异常，数量：{len(message_times)}")
                         self.chat_reply_willing[chat_id] = 0
+                if self.is_debug:
+                    self.logger.debug(f"聊天流意愿值更新：{self.chat_reply_willing}")
 
 
     def _get_relationship_level_num(self, relationship_value) -> int:
@@ -278,11 +286,11 @@ class MxpWillingManager(BaseWillingManager):
         return  math.tan(t * self.expected_replies_per_min * math.pi
                  / 120 / self.number_of_message_storage) / 2
     
-    async def fatigue_attenuation(self):
+    async def _fatigue_attenuation(self):
         """疲劳衰减"""
         while True:
-            current_time = time.time()
             await asyncio.sleep(1)
+            current_time = time.time()
             async with self.lock:
                 for chat_id, fatigue_list in self.chat_fatigue_punishment_list.items():
                     fatigue_list = [z for z in fatigue_list if current_time - z[0] < z[1]]
