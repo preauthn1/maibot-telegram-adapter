@@ -37,8 +37,8 @@ class MxpWillingManager(BaseWillingManager):
 
         # 可变参数
         self.intention_decay_rate = 0.93  # 意愿衰减率
-        self.message_expiration_time = 120  # 消息过期时间（秒）
-        self.number_of_message_storage = 10  # 消息存储数量
+        self.number_of_message_storage = 12  # 消息存储数量
+        self.expected_replies_per_min = 3  # 每分钟预期回复数
         self.basic_maximum_willing = 0.5  # 基础最大意愿值
         self.mention_willing_gain = 0.6  # 提及意愿增益
         self.interest_willing_gain = 0.3  # 兴趣意愿增益
@@ -193,7 +193,8 @@ class MxpWillingManager(BaseWillingManager):
                     # 清理过期消息
                     current_time = time.time()
                     message_times = [
-                        msg_time for msg_time in message_times if current_time - msg_time < self.message_expiration_time
+                        msg_time for msg_time in message_times if current_time - msg_time < 
+                        self.number_of_message_storage * self.basic_maximum_willing / self.expected_replies_per_min * 60
                     ]
                     self.chat_new_message_time[chat_id] = message_times
 
@@ -202,38 +203,13 @@ class MxpWillingManager(BaseWillingManager):
                         update_time = 20
                     elif len(message_times) == self.number_of_message_storage:
                         time_interval = current_time - message_times[0]
-                        basic_willing = self.basic_maximum_willing * math.sqrt(
-                            time_interval / self.message_expiration_time
-                        )
+                        basic_willing = self._basic_willing_coefficient_culculate(time_interval)
                         self.chat_reply_willing[chat_id] = basic_willing
-                        update_time = 17 * math.sqrt(time_interval / self.message_expiration_time) + 3
+                        update_time = 17 * basic_willing / self.basic_maximum_willing + 3
                     else:
                         self.logger.debug(f"聊天流{chat_id}消息时间数量异常，数量：{len(message_times)}")
                         self.chat_reply_willing[chat_id] = 0
 
-    async def get_variable_parameters(self) -> Dict[str, str]:
-        """获取可变参数"""
-        return {
-            "intention_decay_rate": "意愿衰减率",
-            "message_expiration_time": "消息过期时间（秒）",
-            "number_of_message_storage": "消息存储数量",
-            "basic_maximum_willing": "基础最大意愿值",
-            "mention_willing_gain": "提及意愿增益",
-            "interest_willing_gain": "兴趣意愿增益",
-            "emoji_response_penalty": "表情包回复惩罚",
-            "down_frequency_rate": "降低回复频率的群组惩罚系数",
-            "single_chat_gain": "单聊增益（不仅是私聊）",
-        }
-
-    async def set_variable_parameters(self, parameters: Dict[str, any]):
-        """设置可变参数"""
-        async with self.lock:
-            for key, value in parameters.items():
-                if hasattr(self, key):
-                    setattr(self, key, value)
-                    self.logger.debug(f"参数 {key} 已更新为 {value}")
-                else:
-                    self.logger.debug(f"尝试设置未知参数 {key}")
 
     def _get_relationship_level_num(self, relationship_value) -> int:
         """关系等级计算"""
@@ -252,6 +228,11 @@ class MxpWillingManager(BaseWillingManager):
         else:
             level_num = 5 if relationship_value > 1000 else 0
         return level_num - 2
+
+    def _basic_willing_coefficient_culculate(self, t: float) -> float:
+        """基础意愿值系数计算"""
+        return  math.tan(t * self.expected_replies_per_min * math.pi
+                 / 120 / self.number_of_message_storage) / 2
 
     async def get_willing(self, chat_id):
         return self.temporary_willing
