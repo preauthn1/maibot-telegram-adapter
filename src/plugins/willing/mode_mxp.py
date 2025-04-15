@@ -10,6 +10,7 @@ Mxp 模式：梦溪畔独家赞助
 4.限制同时思考的消息数量，防止喷射
 5.拥有单聊增益，无论在群里还是私聊，只要bot一直和你聊，就会增加意愿值
 6.意愿分为衰减意愿+临时意愿
+7.疲劳机制
 
 如果你发现本模式出现了bug
 上上策是询问智慧的小草神（）
@@ -34,26 +35,47 @@ class MxpWillingManager(BaseWillingManager):
         self.chat_new_message_time: Dict[str, list[float]] = {}  # 聊天流ID: 消息时间
         self.last_response_person: Dict[str, tuple[str, int]] = {}  # 上次回复的用户信息
         self.temporary_willing: float = 0  # 临时意愿值
+        self.chat_bot_message_time: Dict[str, list[float]] = {}  # 聊天流ID: bot已回复消息时间
+        self.chat_fatigue_punishment_list: Dict[str, list[tuple[float, float]]] = {}  # 聊天流疲劳惩罚列, 聊天流ID: 惩罚时间列(开始时间，持续时间)
+        self.chat_fatigue_willing_attenuation: Dict[str, float] = {}  # 聊天流疲劳意愿衰减值
 
         # 可变参数
         self.intention_decay_rate = 0.93  # 意愿衰减率
+
         self.number_of_message_storage = 12  # 消息存储数量
         self.expected_replies_per_min = 3  # 每分钟预期回复数
         self.basic_maximum_willing = 0.5  # 基础最大意愿值
+
         self.mention_willing_gain = 0.6  # 提及意愿增益
         self.interest_willing_gain = 0.3  # 兴趣意愿增益
         self.emoji_response_penalty = self.global_config.emoji_response_penalty  # 表情包回复惩罚
         self.down_frequency_rate = self.global_config.down_frequency_rate  # 降低回复频率的群组惩罚系数
         self.single_chat_gain = 0.12  # 单聊增益
 
+        self.fatigue_messages_triggered_num = self.expected_replies_per_min  # 疲劳消息触发数量(int)
+        self.fatigue_coefficient = 1.0  # 疲劳系数
+
     async def async_task_starter(self) -> None:
         """异步任务启动器"""
         asyncio.create_task(self._return_to_basic_willing())
         asyncio.create_task(self._chat_new_message_to_change_basic_willing())
+        asyncio.create_task(self.fatigue_attenuation())
 
     async def before_generate_reply_handle(self, message_id: str):
         """回复前处理"""
-        pass
+        current_time = time.time()
+        async with self.lock:
+            w_info = self.ongoing_messages[message_id]
+            if w_info.chat_id not in self.chat_bot_message_time:
+                self.chat_bot_message_time[w_info.chat_id] = []
+            self.chat_bot_message_time[w_info.chat_id] = \
+            [t for t in self.chat_bot_message_time[w_info.chat_id] if current_time - t < 60]
+            self.chat_bot_message_time[w_info.chat_id].append(current_time)
+            if len(self.chat_bot_message_time[w_info.chat_id]) == int(self.fatigue_messages_triggered_num):
+                time_interval = 60 - (current_time - self.chat_bot_message_time[w_info.chat_id].pop(0))
+                if w_info.chat_id not in self.chat_fatigue_punishment_list:
+                    self.chat_fatigue_punishment_list[w_info.chat_id] = []
+                self.chat_fatigue_punishment_list[w_info.chat_id].append(current_time, time_interval * 2)
 
     async def after_generate_reply_handle(self, message_id: str):
         """回复后处理"""
@@ -122,6 +144,8 @@ class MxpWillingManager(BaseWillingManager):
             elif len(chat_ongoing_messages) >= 4:
                 current_willing = 0
 
+            current_willing += self.chat_fatigue_willing_attenuation.get(w_info.chat_id, 0)
+
             probability = self._willing_to_probability(current_willing)
 
             if w_info.is_emoji:
@@ -179,8 +203,10 @@ class MxpWillingManager(BaseWillingManager):
         willing = max(0, willing)
         if willing < 2:
             probability = math.atan(willing * 2) / math.pi * 2
-        else:
+        elif willing <2.5:
             probability = math.atan(willing * 4) / math.pi * 2
+        else:
+            probability = 1
         return probability
 
     async def _chat_new_message_to_change_basic_willing(self):
@@ -203,7 +229,7 @@ class MxpWillingManager(BaseWillingManager):
                         update_time = 20
                     elif len(message_times) == self.number_of_message_storage:
                         time_interval = current_time - message_times[0]
-                        basic_willing = self._basic_willing_coefficient_culculate(time_interval)
+                        basic_willing = self._basic_willing_culculate(time_interval)
                         self.chat_reply_willing[chat_id] = basic_willing
                         update_time = 17 * basic_willing / self.basic_maximum_willing + 3
                     else:
@@ -229,10 +255,25 @@ class MxpWillingManager(BaseWillingManager):
             level_num = 5 if relationship_value > 1000 else 0
         return level_num - 2
 
-    def _basic_willing_coefficient_culculate(self, t: float) -> float:
-        """基础意愿值系数计算"""
+    def _basic_willing_culculate(self, t: float) -> float:
+        """基础意愿值计算"""
         return  math.tan(t * self.expected_replies_per_min * math.pi
                  / 120 / self.number_of_message_storage) / 2
+    
+    async def fatigue_attenuation(self):
+        """疲劳衰减"""
+        while True:
+            current_time = time.time()
+            await asyncio.sleep(1)
+            async with self.lock:
+                for chat_id, fatigue_list in self.chat_fatigue_punishment_list.items():
+                    fatigue_list = [z for z in fatigue_list if current_time - z[0] < z[1]]
+                    self.chat_fatigue_willing_attenuation[chat_id] = 0
+                    for start_time, duration in fatigue_list:
+                        self.chat_fatigue_willing_attenuation[chat_id] += \
+                        (self.chat_reply_willing[chat_id] * 2 / math.pi * math.asin(
+                            2 * (current_time - start_time) / duration - 1
+                        ) - self.chat_reply_willing[chat_id]) * self.fatigue_coefficient
 
     async def get_willing(self, chat_id):
         return self.temporary_willing
