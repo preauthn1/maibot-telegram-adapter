@@ -26,7 +26,7 @@ def is_continuous_chat(self, message_id: str):
     # 判断是否是连续对话，出于成本考虑，默认限制5条
     willing_info = self.ongoing_messages[message_id]
     chat_id = willing_info.chat_id
-    group_info = willing_info.chat_id
+    group_info = willing_info.group_info
     config = self.global_config
     length = 5 
     if chat_id:
