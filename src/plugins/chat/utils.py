@@ -342,13 +342,17 @@ def process_llm_response(text: str) -> List[str]:
     protected_text, kaomoji_mapping = protect_kaomoji(text)
     logger.debug(f"保护颜文字后的文本: {protected_text}")
     # 提取被 () 或 [] 包裹的内容
-    pattern = re.compile(r"[\(\[].*?[\)\]]")
+    pattern = re.compile(r"[\(\[\（].*?[\)\]\）]")
     # _extracted_contents = pattern.findall(text)
     _extracted_contents = pattern.findall(protected_text) # 在保护后的文本上查找
 
     # 去除 () 和 [] 及其包裹的内容
     # cleaned_text = pattern.sub("", text)
     cleaned_text = pattern.sub("", protected_text)
+    
+    if cleaned_text == '':
+        return ["呃呃"]
+
     logger.debug(f"{text}去除括号处理后的文本: {cleaned_text}")
 
     # 对清理后的文本进行进一步处理
