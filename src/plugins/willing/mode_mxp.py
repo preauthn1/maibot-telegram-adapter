@@ -150,8 +150,6 @@ class MxpWillingManager(BaseWillingManager):
             if self.is_debug:
                 self.logger.debug(f"疲劳衰减：{self.chat_fatigue_willing_attenuation.get(w_info.chat_id, 0)}")
 
-            self.logger.debug(f"当前意愿值：{current_willing}")
-
             chat_ongoing_messages = [msg for msg in self.ongoing_messages.values() if msg.chat_id == w_info.chat_id]
             chat_person_ogoing_messages = [msg for msg in chat_ongoing_messages if msg.person_id == w_info.person_id]
             if len(chat_person_ogoing_messages) >= 2:
