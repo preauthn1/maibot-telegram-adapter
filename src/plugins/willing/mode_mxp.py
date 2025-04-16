@@ -55,7 +55,7 @@ class MxpWillingManager(BaseWillingManager):
         self.fatigue_messages_triggered_num = self.expected_replies_per_min  # 疲劳消息触发数量(int)
         self.fatigue_coefficient = 1.0  # 疲劳系数
 
-        self.is_debug = False  # 是否开启调试模式
+        self.is_debug = True  # 是否开启调试模式
 
     async def async_task_starter(self) -> None:
         """异步任务启动器"""
@@ -144,11 +144,13 @@ class MxpWillingManager(BaseWillingManager):
             ):
                 current_willing += self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] + 1)
                 if self.is_debug:
-                    self.logger.debug(f"单聊增益：{self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] - 1)}")
+                    self.logger.debug(f"单聊增益：{self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] + 1)}")
 
             current_willing += self.chat_fatigue_willing_attenuation.get(w_info.chat_id, 0)
             if self.is_debug:
                 self.logger.debug(f"疲劳衰减：{self.chat_fatigue_willing_attenuation.get(w_info.chat_id, 0)}")
+
+            self.logger.debug(f"当前意愿值：{current_willing}")
 
             chat_ongoing_messages = [msg for msg in self.ongoing_messages.values() if msg.chat_id == w_info.chat_id]
             chat_person_ogoing_messages = [msg for msg in chat_ongoing_messages if msg.person_id == w_info.person_id]
