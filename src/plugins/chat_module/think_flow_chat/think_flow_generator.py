@@ -109,7 +109,7 @@ class ResponseGenerator:
         #     sender_name = f"({message.chat_stream.user_info.user_id}){message.chat_stream.user_info.user_nickname}"
         # else:
         #     sender_name = f"用户({message.chat_stream.user_info.user_id})"
-            
+
         sender_name = f"<{message.chat_stream.user_info.platform}:{message.chat_stream.user_info.user_id}:{message.chat_stream.user_info.user_nickname}:{message.chat_stream.user_info.user_cardname}>"
 
         # 构建prompt

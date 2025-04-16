@@ -57,7 +57,7 @@ class ChattingObservation(Observation):
                             msg_str = ""
                             for msg in mid_memory_by_id["messages"]:
                                 msg_str += f"{msg['detailed_plain_text']}"
-                            time_diff = int((datetime.now().timestamp() - mid_memory_by_id["created_at"]) / 60)
+                            # time_diff = int((datetime.now().timestamp() - mid_memory_by_id["created_at"]) / 60)
                             # mid_memory_str += f"距离现在{time_diff}分钟前：\n{msg_str}\n"
                             mid_memory_str += f"{msg_str}\n"
                 except Exception as e:
