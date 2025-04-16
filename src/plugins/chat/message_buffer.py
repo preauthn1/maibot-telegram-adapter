@@ -3,7 +3,7 @@ from src.common.logger import get_module_logger
 import asyncio
 from dataclasses import dataclass, field
 from .message import MessageRecv
-from ..message.message_base import BaseMessageInfo, GroupInfo
+from ..message.message_base import BaseMessageInfo, GroupInfo, Seg
 import hashlib
 from typing import Dict
 from collections import OrderedDict
@@ -130,22 +130,36 @@ class MessageBuffer:
                     keep_msgs = OrderedDict()
                     combined_text = []
                     found = False
-                    type = "text"
+                    type = "seglist"
                     is_update = True
                     for msg_id, msg in self.buffer_pool[person_id_].items():
                         if msg_id == message.message_info.message_id:
                             found = True
-                            type = msg.message.message_segment.type
+                            if msg.message.message_segment.type != "seglist":
+                                type = msg.message.message_segment.type
+                            else:
+                                if (isinstance(msg.message.message_segment.data, list) 
+                                and all(isinstance(x, Seg) for x in msg.message.message_segment.data)
+                                and len(msg.message.message_segment.data) == 1):
+                                    type = msg.message.message_segment.data[0].type
                             combined_text.append(msg.message.processed_plain_text)
                             continue
                         if found:
                             keep_msgs[msg_id] = msg
                         elif msg.result == "F":
                             # 收集F消息的文本内容
+                            F_type = "seglist"
+                            if msg.message.message_segment.type != "seglist":
+                                F_type = msg.message.message_segment.type
+                            else:
+                                if (isinstance(msg.message.message_segment.data, list) 
+                                and all(isinstance(x, Seg) for x in msg.message.message_segment.data)
+                                and len(msg.message.message_segment.data) == 1):
+                                    F_type = msg.message.message_segment.data[0].type
                             if hasattr(msg.message, "processed_plain_text") and msg.message.processed_plain_text:
-                                if msg.message.message_segment.type == "text":
+                                if F_type == "text":
                                     combined_text.append(msg.message.processed_plain_text)
-                                elif msg.message.message_segment.type != "text":
+                                elif F_type != "text":
                                     is_update = False
                         elif msg.result == "U":
                             logger.debug(f"异常未处理信息id： {msg.message.message_info.message_id}")
