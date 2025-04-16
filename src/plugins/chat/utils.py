@@ -38,15 +38,18 @@ def db_message_to_str(message_dict: Dict) -> str:
     return result
 
 
-def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
+def is_mentioned_bot_in_message(message: MessageRecv) -> tuple[bool, float]:
     """检查消息是否提到了机器人"""
     keywords = [global_config.BOT_NICKNAME]
     nicknames = global_config.BOT_ALIAS_NAMES
-    reply_probability = 0
+    reply_probability = 0.0
     is_at = False
     is_mentioned = False
 
-    if message.message_info.additional_config.get("is_mentioned") is not None:
+    if (
+        message.message_info.additional_config is not None
+        and message.message_info.additional_config.get("is_mentioned") is not None
+    ):
         try:
             reply_probability = float(message.message_info.additional_config.get("is_mentioned"))
             is_mentioned = True
@@ -63,7 +66,7 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
         is_mentioned = True
 
     if is_at and global_config.at_bot_inevitable_reply:
-        reply_probability = 1
+        reply_probability = 1.0
         logger.info("被@，回复概率设置为100%")
     else:
         if not is_mentioned:
@@ -81,7 +84,7 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
                 if nickname in message_content:
                     is_mentioned = True
         if is_mentioned and global_config.mentioned_bot_inevitable_reply:
-            reply_probability = 1
+            reply_probability = 1.0
             logger.info("被提及，回复概率设置为100%")
     return is_mentioned, reply_probability
 
