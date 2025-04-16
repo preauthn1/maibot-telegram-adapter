@@ -46,6 +46,16 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
     is_at = False
     is_mentioned = False
 
+    if "is_mentioned" in message.message_info.additional_config.keys():
+        try:
+            reply_probability = float(message.message_info.additional_config.get("is_mentioned"))
+            is_mentioned = True
+            return is_mentioned, reply_probability
+        except Exception as e:
+            logger.warning(
+                f"消息中包含不合理的设置 is_mentioned: {message.message_info.additional_config.get('is_mentioned')}"
+            )
+
     # 判断是否被@
     if re.search(f"@[\s\S]*?（id:{global_config.BOT_QQ}）", message.processed_plain_text):
         is_at = True
