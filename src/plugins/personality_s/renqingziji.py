@@ -38,7 +38,7 @@ else:
     print("将使用默认配置")
 
 
-class PersonalityEvaluator_direct:
+class PersonalityEvaluatorDirect:
     def __init__(self):
         self.personality_traits = {"开放性": 0, "严谨性": 0, "外向性": 0, "宜人性": 0, "神经质": 0}
         self.scenarios = []
@@ -135,7 +135,7 @@ def main():
     print("\n准备好了吗？按回车键开始...")
     input()
 
-    evaluator = PersonalityEvaluator_direct()
+    evaluator = PersonalityEvaluatorDirect()
     final_scores = {"开放性": 0, "严谨性": 0, "外向性": 0, "宜人性": 0, "神经质": 0}
     dimension_counts = {trait: 0 for trait in final_scores.keys()}
 

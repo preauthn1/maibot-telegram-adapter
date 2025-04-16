@@ -23,7 +23,7 @@ sender_config = LogConfig(
 logger = get_module_logger("msg_sender", config=sender_config)
 
 
-class Message_Sender:
+class MessageSender:
     """发送器"""
 
     def __init__(self):
@@ -83,7 +83,7 @@ class Message_Sender:
                         # logger.info(f"发送消息到{end_point}")
                         # logger.info(message_json)
                         try:
-                            await global_api.send_message_REST(end_point, message_json)
+                            await global_api.send_message_rest(end_point, message_json)
                         except Exception as e:
                             logger.error(f"REST方式发送失败，出现错误: {str(e)}")
                             logger.info("尝试使用ws发送")
@@ -286,4 +286,4 @@ class MessageManager:
 # 创建全局消息管理器实例
 message_manager = MessageManager()
 # 创建全局发送器实例
-message_sender = Message_Sender()
+message_sender = MessageSender()

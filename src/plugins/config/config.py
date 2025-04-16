@@ -26,9 +26,9 @@ config_config = LogConfig(
 logger = get_module_logger("config", config=config_config)
 
 # 考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
-is_test = False
-mai_version_main = "0.6.2"
-mai_version_fix = ""
+is_test = True
+mai_version_main = "0.6.3"
+mai_version_fix = "snapshot-1"
 
 if mai_version_fix:
     if is_test:
@@ -62,8 +62,7 @@ def update_config():
         shutil.copy2(template_path, old_config_path)
         logger.info(f"已创建新配置文件，请填写后重新运行: {old_config_path}")
         # 如果是新创建的配置文件,直接返回
-        quit()
-        return
+        return quit()
 
     # 读取旧配置文件和模板文件
     with open(old_config_path, "r", encoding="utf-8") as f:

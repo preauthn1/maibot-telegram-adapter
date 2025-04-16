@@ -142,14 +142,16 @@ class MessageRecv(Message):
 
     def _generate_detailed_text(self) -> str:
         """生成详细文本，包含时间和用户信息"""
-        time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.message_info.time))
+        # time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.message_info.time))
+        time = self.message_info.time
         user_info = self.message_info.user_info
-        name = (
-            f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
-            if user_info.user_cardname != None
-            else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
-        )
-        return f"[{time_str}] {name}: {self.processed_plain_text}\n"
+        # name = (
+        #     f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
+        #     if user_info.user_cardname != None
+        #     else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
+        # )
+        name = f"<{self.message_info.platform}:{user_info.user_id}:{user_info.user_nickname}:{user_info.user_cardname}>"
+        return f"[{time}] {name}: {self.processed_plain_text}\n"
 
 
 @dataclass
@@ -239,14 +241,16 @@ class MessageProcessBase(Message):
 
     def _generate_detailed_text(self) -> str:
         """生成详细文本，包含时间和用户信息"""
-        time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.message_info.time))
+        # time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.message_info.time))
+        time = self.message_info.time
         user_info = self.message_info.user_info
-        name = (
-            f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
-            if user_info.user_cardname != None
-            else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
-        )
-        return f"[{time_str}] {name}: {self.processed_plain_text}\n"
+        # name = (
+        #     f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
+        #     if user_info.user_cardname != None
+        #     else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
+        # )
+        name = f"<{self.message_info.platform}:{user_info.user_id}:{user_info.user_nickname}:{user_info.user_cardname}>"
+        return f"[{time}] {name}: {self.processed_plain_text}\n"
 
 
 @dataclass

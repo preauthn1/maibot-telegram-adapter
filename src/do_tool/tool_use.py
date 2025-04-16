@@ -1,5 +1,4 @@
-from src.plugins.chat.utils import get_recent_group_detailed_plain_text
-from src.plugins.models.utils_model import LLM_request
+from src.plugins.models.utils_model import LLMRequest
 from src.plugins.config.config import global_config
 from src.plugins.chat.chat_stream import ChatStream
 from src.common.database import db
@@ -19,7 +18,7 @@ logger = get_module_logger("tool_use", config=tool_use_config)
 
 class ToolUser:
     def __init__(self):
-        self.llm_model_tool = LLM_request(
+        self.llm_model_tool = LLMRequest(
             model=global_config.llm_tool_use, temperature=0.2, max_tokens=1000, request_type="tool_use"
         )
 
@@ -115,7 +114,7 @@ class ToolUser:
             return None
 
     async def use_tool(
-        self, message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
+        self, message_txt: str, sender_name: str, chat_stream: ChatStream, sub_heartflow: SubHeartflow = None
     ):
         """使用工具辅助思考，判断是否需要额外信息
 
@@ -123,13 +122,14 @@ class ToolUser:
             message_txt: 用户消息文本
             sender_name: 发送者名称
             chat_stream: 聊天流对象
+            sub_heartflow: 子心流对象（可选）
 
         Returns:
             dict: 工具使用结果，包含结构化的信息
         """
         try:
             # 构建提示词
-            prompt = await self._build_tool_prompt(message_txt, sender_name, chat_stream, subheartflow)
+            prompt = await self._build_tool_prompt(message_txt, sender_name, chat_stream, sub_heartflow)
 
             # 定义可用工具
             tools = self._define_tools()
