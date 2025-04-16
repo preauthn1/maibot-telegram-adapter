@@ -232,7 +232,7 @@ class ObservationInfo:
         """清空未处理消息列表"""
         # 将未处理消息添加到历史记录中
         for message in self.unprocessed_messages:
-            self.chat_history.append(message) # TODO NEED FIX TYPE???
+            self.chat_history.append(message)  # TODO NEED FIX TYPE???
         # 清空未处理消息列表
         self.has_unread_messages = False
         self.unprocessed_messages.clear()
