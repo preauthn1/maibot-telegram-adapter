@@ -75,8 +75,6 @@ class MxpWillingManager(BaseWillingManager):
             self.chat_bot_message_time[w_info.chat_id].append(current_time)
             if len(self.chat_bot_message_time[w_info.chat_id]) == int(self.fatigue_messages_triggered_num):
                 time_interval = 60 - (current_time - self.chat_bot_message_time[w_info.chat_id].pop(0))
-                if w_info.chat_id not in self.chat_fatigue_punishment_list:
-                    self.chat_fatigue_punishment_list[w_info.chat_id] = []
                 self.chat_fatigue_punishment_list[w_info.chat_id].append([current_time, time_interval * 2])
 
     async def after_generate_reply_handle(self, message_id: str):
@@ -99,7 +97,7 @@ class MxpWillingManager(BaseWillingManager):
         async with self.lock:
             w_info = self.ongoing_messages[message_id]
             if w_info.is_mentioned_bot:
-                self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] += 0.2
+                self.chat_person_reply_willing[w_info.chat_id][w_info.person_id] += self.mention_willing_gain / 2.5
             if (
                 w_info.chat_id in self.last_response_person
                 and self.last_response_person[w_info.chat_id][0] == w_info.person_id
@@ -216,11 +214,16 @@ class MxpWillingManager(BaseWillingManager):
             self.ongoing_messages[message.message_info.message_id].person_id, self.chat_reply_willing[chat.stream_id]
         )
 
+        current_time = time.time()
         if chat.stream_id not in self.chat_new_message_time:
             self.chat_new_message_time[chat.stream_id] = []
-        self.chat_new_message_time[chat.stream_id].append(time.time())
+        self.chat_new_message_time[chat.stream_id].append(current_time)
         if len(self.chat_new_message_time[chat.stream_id]) > self.number_of_message_storage:
             self.chat_new_message_time[chat.stream_id].pop(0)
+
+        if chat.stream_id not in self.chat_fatigue_punishment_list:
+            self.chat_fatigue_punishment_list[chat.stream_id] = [current_time, 
+            self.number_of_message_storage * self.basic_maximum_willing / self.expected_replies_per_min * 60]
 
     def _willing_to_probability(self, willing: float) -> float:
         """意愿值转化为概率"""
