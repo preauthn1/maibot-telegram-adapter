@@ -1,4 +1,4 @@
-from src.plugins.models.utils_model import LLM_request
+from src.plugins.models.utils_model import LLMRequest
 from src.plugins.config.config import global_config
 from src.plugins.chat.chat_stream import ChatStream
 from src.common.database import db
@@ -18,7 +18,7 @@ logger = get_module_logger("tool_use", config=tool_use_config)
 
 class ToolUser:
     def __init__(self):
-        self.llm_model_tool = LLM_request(
+        self.llm_model_tool = LLMRequest(
             model=global_config.llm_tool_use, temperature=0.2, max_tokens=1000, request_type="tool_use"
         )
 
@@ -41,6 +41,12 @@ class ToolUser:
         else:
             mid_memory_info = ""
 
+        stream_id = chat_stream.stream_id
+        chat_talking_prompt = ""
+        if stream_id:
+            chat_talking_prompt = get_recent_group_detailed_plain_text(
+                stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
+            )
         new_messages = list(
             db.messages.find({"chat_id": chat_stream.stream_id, "time": {"$gt": time.time()}}).sort("time", 1).limit(15)
         )
@@ -54,9 +60,10 @@ class ToolUser:
         prompt = ""
         prompt += mid_memory_info
         prompt += "你正在思考如何回复群里的消息。\n"
+        prompt += f"之前群里进行了如下讨论:\n"
+        prompt += chat_talking_prompt
         prompt += f"你注意到{sender_name}刚刚说：{message_txt}\n"
-        prompt += f"注意你就是{bot_name}，{bot_name}指的就是你。"
-
+        prompt += f"注意你就是{bot_name}，{bot_name}是你的名字。根据之前的聊天记录补充问题信息，搜索时避开你的名字。\n"
         prompt += "你现在需要对群里的聊天内容进行回复，现在选择工具来对消息和你的回复进行处理，你是否需要额外的信息，比如回忆或者搜寻已有的知识，改变关系和情感，或者了解你现在正在做什么。"
         return prompt
 
@@ -107,7 +114,7 @@ class ToolUser:
             return None
 
     async def use_tool(
-        self, message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
+        self, message_txt: str, sender_name: str, chat_stream: ChatStream, sub_heartflow: SubHeartflow = None
     ):
         """使用工具辅助思考，判断是否需要额外信息
 
@@ -115,13 +122,14 @@ class ToolUser:
             message_txt: 用户消息文本
             sender_name: 发送者名称
             chat_stream: 聊天流对象
+            sub_heartflow: 子心流对象（可选）
 
         Returns:
             dict: 工具使用结果，包含结构化的信息
         """
         try:
             # 构建提示词
-            prompt = await self._build_tool_prompt(message_txt, sender_name, chat_stream, subheartflow)
+            prompt = await self._build_tool_prompt(message_txt, sender_name, chat_stream, sub_heartflow)
 
             # 定义可用工具
             tools = self._define_tools()

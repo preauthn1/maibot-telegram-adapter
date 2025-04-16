@@ -59,20 +59,20 @@ class MessageBuffer:
                     logger.debug(f"被新消息覆盖信息id: {cache_msg.message.message_info.message_id}")
 
             # 查找最近的处理成功消息(T)
-            recent_F_count = 0
+            recent_f_count = 0
             for msg_id in reversed(self.buffer_pool[person_id_]):
                 msg = self.buffer_pool[person_id_][msg_id]
                 if msg.result == "T":
                     break
                 elif msg.result == "F":
-                    recent_F_count += 1
+                    recent_f_count += 1
 
             # 判断条件：最近T之后有超过3-5条F
-            if recent_F_count >= random.randint(3, 5):
+            if recent_f_count >= random.randint(3, 5):
                 new_msg = CacheMessages(message=message, result="T")
                 new_msg.cache_determination.set()
                 self.buffer_pool[person_id_][message.message_info.message_id] = new_msg
-                logger.debug(f"快速处理消息(已堆积{recent_F_count}条F): {message.message_info.message_id}")
+                logger.debug(f"快速处理消息(已堆积{recent_f_count}条F): {message.message_info.message_id}")
                 return
 
             # 添加新消息
@@ -153,11 +153,11 @@ class MessageBuffer:
                     # 更新当前消息的processed_plain_text
                     if combined_text and combined_text[0] != message.processed_plain_text and is_update:
                         if type == "text":
-                            message.processed_plain_text = "".join(combined_text)
+                            message.processed_plain_text = "，".join(combined_text)
                             logger.debug(f"整合了{len(combined_text) - 1}条F消息的内容到当前消息")
                         elif type == "emoji":
                             combined_text.pop()
-                            message.processed_plain_text = "".join(combined_text)
+                            message.processed_plain_text = "，".join(combined_text)
                             message.is_emoji = False
                             logger.debug(f"整合了{len(combined_text) - 1}条F消息的内容，覆盖当前emoji消息")
 
