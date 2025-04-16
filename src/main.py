@@ -11,7 +11,7 @@ from .heart_flow.heartflow import heartflow
 from .plugins.memory_system.Hippocampus import HippocampusManager
 from .plugins.chat.messagesender import message_manager
 from .plugins.storage.storage import MessageStorage
-from .plugins.config.config import global_config
+from .config.config import global_config
 from .plugins.chat.bot import chat_bot
 from .common.logger import get_module_logger
 from .plugins.remote import heartbeat_thread  # noqa: F401

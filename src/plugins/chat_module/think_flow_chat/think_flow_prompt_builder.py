@@ -1,7 +1,7 @@
 import random
 from typing import Optional
 
-from ...config.config import global_config
+from ....config.config import global_config
 from ...chat.utils import get_recent_group_detailed_plain_text
 from ...chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger

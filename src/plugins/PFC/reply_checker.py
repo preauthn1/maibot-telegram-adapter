@@ -3,7 +3,7 @@ import datetime
 from typing import Tuple
 from src.common.logger import get_module_logger
 from ..models.utils_model import LLMRequest
-from ..config.config import global_config
+from ...config.config import global_config
 from .chat_observer import ChatObserver
 from ..message.message_base import UserInfo
 

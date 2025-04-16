@@ -3,7 +3,7 @@ import random
 
 
 from ...models.utils_model import LLMRequest
-from ...config.config import global_config
+from ....config.config import global_config
 from ...chat.message import MessageRecv
 from .think_flow_prompt_builder import prompt_builder
 from ...chat.utils import process_llm_response

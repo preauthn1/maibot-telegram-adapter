@@ -9,7 +9,7 @@ from typing import Dict
 from collections import OrderedDict
 import random
 import time
-from ..config.config import global_config
+from ...config.config import global_config
 
 logger = get_module_logger("message_buffer")
 

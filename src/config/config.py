@@ -44,7 +44,7 @@ else:
 
 def update_config():
     # 获取根目录路径
-    root_dir = Path(__file__).parent.parent.parent.parent
+    root_dir = Path(__file__).parent.parent.parent
     template_dir = root_dir / "template"
     config_dir = root_dir / "config"
     old_config_dir = config_dir / "old"
@@ -305,7 +305,7 @@ class BotConfig:
     def get_config_dir() -> str:
         """获取配置文件目录"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        root_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+        root_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
         config_dir = os.path.join(root_dir, "config")
         if not os.path.exists(config_dir):
             os.makedirs(config_dir)

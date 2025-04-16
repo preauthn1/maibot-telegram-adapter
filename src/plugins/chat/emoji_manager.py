@@ -10,7 +10,7 @@ from PIL import Image
 import io
 
 from ...common.database import db
-from ..config.config import global_config
+from ...config.config import global_config
 from ..chat.utils import get_embedding
 from ..chat.utils_image import ImageManager, image_path_to_base64
 from ..models.utils_model import LLMRequest

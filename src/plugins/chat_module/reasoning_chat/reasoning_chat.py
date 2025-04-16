@@ -4,7 +4,7 @@ from random import random
 from typing import List
 from ...memory_system.Hippocampus import HippocampusManager
 from ...moods.moods import MoodManager
-from ...config.config import global_config
+from ....config.config import global_config
 from ...chat.emoji_manager import emoji_manager
 from .reasoning_generator import ResponseGenerator
 from ...chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet

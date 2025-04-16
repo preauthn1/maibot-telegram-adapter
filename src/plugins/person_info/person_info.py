@@ -7,7 +7,7 @@ import datetime
 import asyncio
 import numpy as np
 from src.plugins.models.utils_model import LLMRequest
-from src.plugins.config.config import global_config
+from src.config.config import global_config
 from src.individuality.individuality import Individuality
 
 import matplotlib

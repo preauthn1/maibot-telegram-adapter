@@ -1,5 +1,5 @@
 from ..moods.moods import MoodManager  # 导入情绪管理器
-from ..config.config import global_config
+from ...config.config import global_config
 from .message import MessageRecv
 from ..PFC.pfc_manager import PFCManager
 from .chat_stream import chat_manager

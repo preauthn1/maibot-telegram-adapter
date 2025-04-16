@@ -1,6 +1,6 @@
 from src.common.logger import LogConfig, WILLING_STYLE_CONFIG, LoguruLogger, get_module_logger
 from dataclasses import dataclass
-from ..config.config import global_config, BotConfig
+from ...config.config import global_config, BotConfig
 from ..chat.chat_stream import ChatStream, GroupInfo
 from ..chat.message import MessageRecv
 from ..person_info.person_info import person_info_manager, PersonInfoManager

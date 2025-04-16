@@ -1,5 +1,5 @@
 from src.plugins.models.utils_model import LLMRequest
-from src.plugins.config.config import global_config
+from src.config.config import global_config
 from src.plugins.chat.chat_stream import ChatStream
 from src.common.database import db
 import time
@@ -7,6 +7,8 @@ import json
 from src.common.logger import get_module_logger, TOOL_USE_STYLE_CONFIG, LogConfig
 from src.do_tool.tool_can_use import get_all_tool_definitions, get_tool_instance
 from src.heart_flow.sub_heartflow import SubHeartflow
+import traceback
+from src.plugins.chat.utils import get_recent_group_detailed_plain_text
 
 tool_use_config = LogConfig(
     # 使用消息发送专用样式
@@ -195,6 +197,7 @@ class ToolUser:
 
         except Exception as e:
             logger.error(f"工具调用过程中出错: {str(e)}")
+            logger.error(f"工具调用过程中出错: {traceback.format_exc()}")
             return {
                 "used_tools": False,
                 "error": str(e),
