@@ -46,12 +46,13 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
     is_at = False
     is_mentioned = False
 
-    if "is_mentioned" in message.message_info.additional_config.keys():
+    if message.message_info.additional_config.get("is_mentioned") is not None:
         try:
             reply_probability = float(message.message_info.additional_config.get("is_mentioned"))
             is_mentioned = True
             return is_mentioned, reply_probability
         except Exception as e:
+            logger.warning(e)
             logger.warning(
                 f"消息中包含不合理的设置 is_mentioned: {message.message_info.additional_config.get('is_mentioned')}"
             )
@@ -71,7 +72,7 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
                 is_mentioned = True
 
             # 判断内容中是否被提及
-            message_content = re.sub(r"\@[\s\S]*?（(\d+)）", "", message.processed_plain_text)
+            message_content = re.sub(r"@[\s\S]*?（(\d+)）", "", message.processed_plain_text)
             message_content = re.sub(r"回复[\s\S]*?\((\d+)\)的消息，说： ", "", message_content)
             for keyword in keywords:
                 if keyword in message_content:
@@ -335,7 +336,7 @@ def random_remove_punctuation(text: str) -> str:
 
 def process_llm_response(text: str) -> List[str]:
     # 提取被 () 或 [] 包裹的内容
-    pattern = re.compile(r"[\(\[].*?[\)\]]")
+    pattern = re.compile(r"[(\[].*?[\)\]")
     _extracted_contents = pattern.findall(text)
     # 去除 () 和 [] 及其包裹的内容
     cleaned_text = pattern.sub("", text)
@@ -496,16 +497,16 @@ def protect_kaomoji(sentence):
     """
     kaomoji_pattern = re.compile(
         r"("
-        r"[\(\[（【]"  # 左括号
+        r"[(\[（【]"  # 左括号
         r"[^()\[\]（）【】]*?"  # 非括号字符（惰性匹配）
-        r"[^\u4e00-\u9fa5a-zA-Z0-9\s]"  # 非中文、非英文、非数字、非空格字符（必须包含至少一个）
+        r"[^一-龥a-zA-Z0-9\s]"  # 非中文、非英文、非数字、非空格字符（必须包含至少一个）
         r"[^()\[\]（）【】]*?"  # 非括号字符（惰性匹配）
-        r"[\)\]）】]"  # 右括号
+        r"[\)\]）】"  # 右括号
+        r"]"
         r")"
         r"|"
-        r"("
-        r"[▼▽・ᴥω･﹏^><≧≦￣｀´∀ヮДд︿﹀へ｡ﾟ╥╯╰︶︹•⁄]{2,15}"
-        r")"
+        r"([▼▽・ᴥω･﹏^><≧≦￣｀´∀ヮДд︿﹀へ｡ﾟ╥╯╰︶︹•⁄]{2,15"
+        r"}"
     )
 
     kaomoji_matches = kaomoji_pattern.findall(sentence)
