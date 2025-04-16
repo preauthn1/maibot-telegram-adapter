@@ -227,7 +227,7 @@ class MxpWillingManager(BaseWillingManager):
             self.chat_fatigue_punishment_list[chat.stream_id] = [
                 (current_time, self.number_of_message_storage * self.basic_maximum_willing / self.expected_replies_per_min * 60)
             ]
-            self.chat_fatigue_willing_attenuation[chat.stream_id] = - 2 * self.basic_maximum_willing
+            self.chat_fatigue_willing_attenuation[chat.stream_id] = - 2 * self.basic_maximum_willing * self.fatigue_coefficient
             
             
 
