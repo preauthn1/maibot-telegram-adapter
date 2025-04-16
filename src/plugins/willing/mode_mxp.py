@@ -55,7 +55,7 @@ class MxpWillingManager(BaseWillingManager):
         self.fatigue_messages_triggered_num = self.expected_replies_per_min  # 疲劳消息触发数量(int)
         self.fatigue_coefficient = 1.0  # 疲劳系数
 
-        self.is_debug = True  # 是否开启调试模式
+        self.is_debug = False  # 是否开启调试模式
 
     async def async_task_starter(self) -> None:
         """异步任务启动器"""
