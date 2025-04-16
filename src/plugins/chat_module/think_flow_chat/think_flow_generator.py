@@ -2,7 +2,7 @@ from typing import List, Optional
 import random
 
 
-from ...models.utils_model import LLM_request
+from ...models.utils_model import LLMRequest
 from ...config.config import global_config
 from ...chat.message import MessageRecv
 from .think_flow_prompt_builder import prompt_builder
@@ -25,14 +25,14 @@ logger = get_module_logger("llm_generator", config=llm_config)
 
 class ResponseGenerator:
     def __init__(self):
-        self.model_normal = LLM_request(
+        self.model_normal = LLMRequest(
             model=global_config.llm_normal,
             temperature=global_config.llm_normal["temp"],
             max_tokens=256,
             request_type="response_heartflow",
         )
 
-        self.model_sum = LLM_request(
+        self.model_sum = LLMRequest(
             model=global_config.llm_summary_by_topic, temperature=0.6, max_tokens=2000, request_type="relation"
         )
         self.current_model_type = "r1"  # 默认使用 R1
@@ -94,7 +94,7 @@ class ResponseGenerator:
             return None
 
     async def _generate_response_with_model(
-        self, message: MessageRecv, model: LLM_request, thinking_id: str, mode: str = "normal"
+        self, message: MessageRecv, model: LLMRequest, thinking_id: str, mode: str = "normal"
     ) -> str:
         sender_name = ""
 

@@ -1,7 +1,7 @@
 # 定义了来自外部世界的信息
 # 外部世界可以是某个聊天 不同平台的聊天 也可以是任意媒体
 from datetime import datetime
-from src.plugins.models.utils_model import LLM_request
+from src.plugins.models.utils_model import LLMRequest
 from src.plugins.config.config import global_config
 from src.common.database import db
 from src.common.logger import get_module_logger
@@ -40,7 +40,7 @@ class ChattingObservation(Observation):
 
         self.updating_old = False
 
-        self.llm_summary = LLM_request(
+        self.llm_summary = LLMRequest(
             model=global_config.llm_observation, temperature=0.7, max_tokens=300, request_type="chat_observation"
         )
 

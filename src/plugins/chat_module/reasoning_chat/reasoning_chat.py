@@ -8,7 +8,7 @@ from ...config.config import global_config
 from ...chat.emoji_manager import emoji_manager
 from .reasoning_generator import ResponseGenerator
 from ...chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
-from ...chat.message_sender import message_manager
+from ...chat.messagesender import message_manager
 from ...storage.storage import MessageStorage
 from ...chat.utils import is_mentioned_bot_in_message
 from ...chat.utils_image import image_path_to_base64

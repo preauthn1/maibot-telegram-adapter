@@ -1,7 +1,7 @@
 from .observation import Observation, ChattingObservation
 import asyncio
 from src.plugins.moods.moods import MoodManager
-from src.plugins.models.utils_model import LLM_request
+from src.plugins.models.utils_model import LLMRequest
 from src.plugins.config.config import global_config
 import time
 from src.plugins.chat.message import UserInfo
@@ -79,7 +79,7 @@ class SubHeartflow:
         self.current_mind = ""
         self.past_mind = []
         self.current_state: CurrentState = CurrentState()
-        self.llm_model = LLM_request(
+        self.llm_model = LLMRequest(
             model=global_config.llm_sub_heartflow,
             temperature=global_config.llm_sub_heartflow["temp"],
             max_tokens=600,

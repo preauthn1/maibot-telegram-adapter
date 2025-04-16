@@ -62,8 +62,7 @@ def update_config():
         shutil.copy2(template_path, old_config_path)
         logger.info(f"已创建新配置文件，请填写后重新运行: {old_config_path}")
         # 如果是新创建的配置文件,直接返回
-        quit()
-        return
+        return quit()
 
     # 读取旧配置文件和模板文件
     with open(old_config_path, "r", encoding="utf-8") as f:

@@ -8,7 +8,7 @@ import jieba
 import numpy as np
 from src.common.logger import get_module_logger
 
-from ..models.utils_model import LLM_request
+from ..models.utils_model import LLMRequest
 from ..utils.typo_generator import ChineseTypoGenerator
 from ..config.config import global_config
 from .message import MessageRecv, Message
@@ -91,7 +91,7 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> tuple[bool, float]:
 
 async def get_embedding(text, request_type="embedding"):
     """获取文本的embedding向量"""
-    llm = LLM_request(model=global_config.embedding, request_type=request_type)
+    llm = LLMRequest(model=global_config.embedding, request_type=request_type)
     # return llm.get_embedding_sync(text)
     try:
         embedding = await llm.get_embedding(text)
@@ -105,7 +105,7 @@ async def get_recent_group_messages(chat_id: str, limit: int = 12) -> list:
     """从数据库获取群组最近的消息记录
 
     Args:
-        group_id: 群组ID
+        chat_id: 群组ID
         limit: 获取消息数量，默认12条
 
     Returns:

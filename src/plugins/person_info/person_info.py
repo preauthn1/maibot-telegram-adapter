@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict
 import datetime
 import asyncio
 import numpy as np
-from src.plugins.models.utils_model import LLM_request
+from src.plugins.models.utils_model import LLMRequest
 from src.plugins.config.config import global_config
 from src.individuality.individuality import Individuality
 
@@ -56,7 +56,7 @@ person_info_default = {
 class PersonInfoManager:
     def __init__(self):
         self.person_name_list = {}
-        self.qv_name_llm = LLM_request(
+        self.qv_name_llm = LLMRequest(
             model=global_config.llm_normal,
             max_tokens=256,
             request_type="qv_name",
@@ -107,7 +107,7 @@ class PersonInfoManager:
 
         db.person_info.insert_one(_person_info_default)
 
-    async def update_one_field(self, person_id: str, field_name: str, value, Data: dict = None):
+    async def update_one_field(self, person_id: str, field_name: str, value, data: dict = None):
         """更新某一个字段，会补全"""
         if field_name not in person_info_default.keys():
             logger.debug(f"更新'{field_name}'失败，未定义的字段")
@@ -118,11 +118,12 @@ class PersonInfoManager:
         if document:
             db.person_info.update_one({"person_id": person_id}, {"$set": {field_name: value}})
         else:
-            Data[field_name] = value
+            data[field_name] = value
             logger.debug(f"更新时{person_id}不存在，已新建")
-            await self.create_person_info(person_id, Data)
+            await self.create_person_info(person_id, data)
 
-    async def has_one_field(self, person_id: str, field_name: str):
+    @staticmethod
+    async def has_one_field(person_id: str, field_name: str):
         """判断是否存在某一个字段"""
         document = db.person_info.find_one({"person_id": person_id}, {field_name: 1})
         if document:
