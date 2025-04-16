@@ -4,6 +4,8 @@ import math
 from bson.decimal128 import Decimal128
 from .person_info import person_info_manager
 import time
+import re
+import traceback
 
 relationship_config = LogConfig(
     # 使用关系专用样式
@@ -74,8 +76,63 @@ class RelationshipManager:
             return mood_value * coefficient
         else:
             return mood_value / coefficient
+        
+    async def is_known_some_one(self, platform , user_id):
+        """判断是否认识某人"""
+        is_known = person_info_manager.is_person_known(platform, user_id)
+        return is_known
 
-    async def calculate_update_relationship_value(self, chat_stream: ChatStream, label: str, stance: str) -> None:
+    async def is_qved_name(self, platform , user_id):
+        """判断是否认识某人"""
+        person_id = person_info_manager.get_person_id(platform, user_id)
+        is_qved = await person_info_manager.has_one_field(person_id, "person_name")
+        old_name = await person_info_manager.get_value(person_id, "person_name")
+        print(f"old_name: {old_name}")
+        print(f"is_qved: {is_qved}")
+        if is_qved and old_name != None:
+            return True
+        else:
+            return False
+        
+    async def first_knowing_some_one(self, platform , user_id, user_nickname, user_cardname, user_avatar):
+        """判断是否认识某人"""
+        person_id = person_info_manager.get_person_id(platform,user_id)
+        await person_info_manager.update_one_field(person_id, "nickname", user_nickname)
+        # await person_info_manager.update_one_field(person_id, "user_cardname", user_cardname)
+        # await person_info_manager.update_one_field(person_id, "user_avatar", user_avatar)
+        await person_info_manager.qv_person_name(person_id, user_nickname, user_cardname, user_avatar)
+        
+    async def convert_all_person_sign_to_person_name(self,input_text:str):
+        """将所有人的<platform:user_id:nickname:cardname>格式转换为person_name"""
+        try:
+            # 使用正则表达式匹配<platform:user_id:nickname:cardname>格式
+            all_person = person_info_manager.person_name_list
+            
+            pattern = r'<([^:]+):(\d+):([^:]+):([^>]+)>'
+            matches = re.findall(pattern, input_text)
+            
+            # 遍历匹配结果，将<platform:user_id:nickname:cardname>替换为person_name
+            result_text = input_text
+            for platform, user_id, nickname, cardname in matches:
+                person_id = person_info_manager.get_person_id(platform, user_id)
+                # 默认使用昵称作为人名
+                person_name = nickname.strip() if nickname.strip() else cardname.strip()
+                
+                if person_id in all_person:
+                    if all_person[person_id] != None:
+                        person_name = all_person[person_id]
+                        
+                    print(f"将<{platform}:{user_id}:{nickname}:{cardname}>替换为{person_name}")
+                
+                
+                result_text = result_text.replace(f"<{platform}:{user_id}:{nickname}:{cardname}>", person_name)
+            
+            return result_text
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return input_text
+
+    async def calculate_update_relationship_value(self, chat_stream: ChatStream, label: str, stance: str) -> tuple:
         """计算并变更关系值
         新的关系值变更计算方式：
             将关系值限定在-1000到1000
@@ -84,6 +141,10 @@ class RelationshipManager:
                 2.关系越差，改善越难，关系越好，恶化越容易
                 3.人维护关系的精力往往有限，所以当高关系值用户越多，对于中高关系值用户增长越慢
                 4.连续正面或负面情感会正反馈
+
+        返回：
+            用户昵称，变更值，变更后关系等级
+
         """
         stancedict = {
             "支持": 0,
@@ -147,6 +208,7 @@ class RelationshipManager:
         level_num = self.calculate_level_num(old_value + value)
         relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "暧昧"]
         logger.info(
+            f"用户: {chat_stream.user_info.user_nickname}"
             f"当前关系: {relationship_level[level_num]}, "
             f"关系值: {old_value:.2f}, "
             f"当前立场情感: {stance}-{label}, "
@@ -154,6 +216,97 @@ class RelationshipManager:
         )
 
         await person_info_manager.update_one_field(person_id, "relationship_value", old_value + value, data)
+
+        return chat_stream.user_info.user_nickname, value, relationship_level[level_num]
+
+    async def calculate_update_relationship_value_with_reason(
+        self, chat_stream: ChatStream, label: str, stance: str, reason: str
+    ) -> tuple:
+        """计算并变更关系值
+        新的关系值变更计算方式：
+            将关系值限定在-1000到1000
+            对于关系值的变更，期望：
+                1.向两端逼近时会逐渐减缓
+                2.关系越差，改善越难，关系越好，恶化越容易
+                3.人维护关系的精力往往有限，所以当高关系值用户越多，对于中高关系值用户增长越慢
+                4.连续正面或负面情感会正反馈
+
+        返回：
+            用户昵称，变更值，变更后关系等级
+
+        """
+        stancedict = {
+            "支持": 0,
+            "中立": 1,
+            "反对": 2,
+        }
+
+        valuedict = {
+            "开心": 1.5,
+            "愤怒": -2.0,
+            "悲伤": -0.5,
+            "惊讶": 0.6,
+            "害羞": 2.0,
+            "平静": 0.3,
+            "恐惧": -1.5,
+            "厌恶": -1.0,
+            "困惑": 0.5,
+        }
+
+        person_id = person_info_manager.get_person_id(chat_stream.user_info.platform, chat_stream.user_info.user_id)
+        data = {
+            "platform": chat_stream.user_info.platform,
+            "user_id": chat_stream.user_info.user_id,
+            "nickname": chat_stream.user_info.user_nickname,
+            "konw_time": int(time.time()),
+        }
+        old_value = await person_info_manager.get_value(person_id, "relationship_value")
+        old_value = self.ensure_float(old_value, person_id)
+
+        if old_value > 1000:
+            old_value = 1000
+        elif old_value < -1000:
+            old_value = -1000
+
+        value = valuedict[label]
+        if old_value >= 0:
+            if valuedict[label] >= 0 and stancedict[stance] != 2:
+                value = value * math.cos(math.pi * old_value / 2000)
+                if old_value > 500:
+                    rdict = await person_info_manager.get_specific_value_list("relationship_value", lambda x: x > 700)
+                    high_value_count = len(rdict)
+                    if old_value > 700:
+                        value *= 3 / (high_value_count + 2)  # 排除自己
+                    else:
+                        value *= 3 / (high_value_count + 3)
+            elif valuedict[label] < 0 and stancedict[stance] != 0:
+                value = value * math.exp(old_value / 2000)
+            else:
+                value = 0
+        elif old_value < 0:
+            if valuedict[label] >= 0 and stancedict[stance] != 2:
+                value = value * math.exp(old_value / 2000)
+            elif valuedict[label] < 0 and stancedict[stance] != 0:
+                value = value * math.cos(math.pi * old_value / 2000)
+            else:
+                value = 0
+
+        self.positive_feedback_sys(label, stance)
+        value = self.mood_feedback(value)
+
+        level_num = self.calculate_level_num(old_value + value)
+        relationship_level = ["厌恶", "冷漠", "一般", "友好", "喜欢", "暧昧"]
+        logger.info(
+            f"用户: {chat_stream.user_info.user_nickname}"
+            f"当前关系: {relationship_level[level_num]}, "
+            f"关系值: {old_value:.2f}, "
+            f"当前立场情感: {stance}-{label}, "
+            f"变更: {value:+.5f}"
+        )
+
+        await person_info_manager.update_one_field(person_id, "relationship_value", old_value + value, data)
+
+        return chat_stream.user_info.user_nickname, value, relationship_level[level_num]
 
     async def build_relationship_info(self, person) -> str:
         person_id = person_info_manager.get_person_id(person[0], person[1])

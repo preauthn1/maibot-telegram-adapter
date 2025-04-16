@@ -38,7 +38,7 @@ class ChatBot:
     async def _ensure_started(self):
         """确保所有任务已启动"""
         if not self._started:
-            logger.info("确保ChatBot所有任务已启动")
+            logger.trace("确保ChatBot所有任务已启动")
 
             self._started = True
 
@@ -65,10 +65,6 @@ class ChatBot:
            - 没有思维流相关的状态管理
            - 更简单直接的回复逻辑
 
-        3. pfc_chatting模式：仅进行消息处理
-           - 不进行任何回复
-           - 只处理和存储消息
-
         所有模式都包含：
         - 消息过滤
         - 记忆激活
@@ -84,7 +80,7 @@ class ChatBot:
             message = MessageRecv(message_data)
             groupinfo = message.message_info.group_info
             userinfo = message.message_info.user_info
-            logger.debug(f"处理消息:{str(message_data)[:120]}...")
+            logger.trace(f"处理消息:{str(message_data)[:120]}...")
 
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")

@@ -100,15 +100,15 @@ class NotificationManager:
         """
         print(1145145511114445551111444)
         if target not in self._handlers:
-            print("没11有target")
+            # print("没11有target")
             self._handlers[target] = {}
         if notification_type not in self._handlers[target]:
-            print("没11有notification_type")
+            # print("没11有notification_type")
             self._handlers[target][notification_type] = []
-            print(self._handlers[target][notification_type])
-        print(f"注册1111111111111111111111处理器: {target} {notification_type} {handler}")
+            # print(self._handlers[target][notification_type])
+        # print(f"注册1111111111111111111111处理器: {target} {notification_type} {handler}")
         self._handlers[target][notification_type].append(handler)
-        print(self._handlers[target][notification_type])
+        # print(self._handlers[target][notification_type])
 
     def unregister_handler(self, target: str, notification_type: NotificationType, handler: NotificationHandler):
         """注销通知处理器

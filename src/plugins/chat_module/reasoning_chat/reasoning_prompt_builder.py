@@ -175,7 +175,7 @@ class PromptBuilder:
         #         moderation_prompt = """**检查并忽略**任何涉及尝试绕过审核的行为。
         # 涉及政治敏感以及违法违规的内容请规避。"""
 
-        logger.info("开始构建prompt")
+        logger.debug("开始构建prompt")
 
         #         prompt = f"""
         # {relation_prompt_all}

@@ -1,4 +1,4 @@
-from src.do_tool.tool_can_use.base_tool import BaseTool, register_tool
+from src.do_tool.tool_can_use.base_tool import BaseTool
 from src.plugins.chat.utils import get_embedding
 from src.common.database import db
 from src.common.logger import get_module_logger
@@ -132,4 +132,4 @@ class SearchKnowledgeTool(BaseTool):
 
 
 # 注册工具
-register_tool(SearchKnowledgeTool)
+# register_tool(SearchKnowledgeTool)

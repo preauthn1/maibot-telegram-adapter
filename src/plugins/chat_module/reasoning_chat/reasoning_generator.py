@@ -1,4 +1,3 @@
-import time
 from typing import List, Optional, Tuple, Union
 import random
 
@@ -7,6 +6,7 @@ from ...config.config import global_config
 from ...chat.message import MessageThinking
 from .reasoning_prompt_builder import prompt_builder
 from ...chat.utils import process_llm_response
+from ...utils.timer_calculater import Timer
 from src.common.logger import get_module_logger, LogConfig, LLM_STYLE_CONFIG
 from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 
@@ -29,7 +29,10 @@ class ResponseGenerator:
             request_type="response_reasoning",
         )
         self.model_normal = LLM_request(
-            model=global_config.llm_normal, temperature=0.8, max_tokens=256, request_type="response_reasoning"
+            model=global_config.llm_normal,
+            temperature=global_config.llm_normal["temp"],
+            max_tokens=256,
+            request_type="response_reasoning",
         )
 
         self.model_sum = LLM_request(
@@ -82,15 +85,14 @@ class ResponseGenerator:
 
         logger.debug("开始使用生成回复-2")
         # 构建prompt
-        timer1 = time.time()
-        prompt = await prompt_builder._build_prompt(
-            message.chat_stream,
-            message_txt=message.processed_plain_text,
-            sender_name=sender_name,
-            stream_id=message.chat_stream.stream_id,
-        )
-        timer2 = time.time()
-        logger.info(f"构建prompt时间: {timer2 - timer1}秒")
+        with Timer() as t_build_prompt:
+            prompt = await prompt_builder._build_prompt(
+                message.chat_stream,
+                message_txt=message.processed_plain_text,
+                sender_name=sender_name,
+                stream_id=message.chat_stream.stream_id,
+            )
+        logger.info(f"构建prompt时间: {t_build_prompt.human_readable}")
 
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
