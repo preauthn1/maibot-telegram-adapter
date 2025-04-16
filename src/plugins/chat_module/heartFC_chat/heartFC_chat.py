@@ -6,9 +6,9 @@ from ...memory_system.Hippocampus import HippocampusManager
 from ...moods.moods import MoodManager
 from ....config.config import global_config
 from ...chat.emoji_manager import emoji_manager
-from .think_flow_generator import ResponseGenerator
+from .heartFC__generator import ResponseGenerator
 from ...chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
-from ...chat.messagesender import message_manager
+from .messagesender import MessageManager
 from ...storage.storage import MessageStorage
 from ...chat.utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
 from ...chat.utils_image import image_path_to_base64
@@ -40,8 +40,7 @@ class ThinkFlowChat:
         self.mood_manager.start_mood_update()
         self.tool_user = ToolUser()
 
-    @staticmethod
-    async def _create_thinking_message(message, chat, userinfo, messageinfo):
+    async def _create_thinking_message(self, message, chat, userinfo, messageinfo):
         """创建思考消息"""
         bot_user_info = UserInfo(
             user_id=global_config.BOT_QQ,
@@ -59,14 +58,13 @@ class ThinkFlowChat:
             thinking_start_time=thinking_time_point,
         )
 
-        message_manager.add_message(thinking_message)
+        MessageManager().add_message(thinking_message)
 
         return thinking_id
 
-    @staticmethod
-    async def _send_response_messages(message, chat, response_set: List[str], thinking_id) -> MessageSending:
+    async def _send_response_messages(self, message, chat, response_set: List[str], thinking_id) -> MessageSending:
         """发送回复消息"""
-        container = message_manager.get_container(chat.stream_id)
+        container = MessageManager().get_container(chat.stream_id)
         thinking_message = None
 
         for msg in container.messages:
@@ -107,11 +105,10 @@ class ThinkFlowChat:
 
             # print(f"thinking_start_time:{bot_message.thinking_start_time}")
             message_set.add_message(bot_message)
-        message_manager.add_message(message_set)
+        MessageManager().add_message(message_set)
         return first_bot_msg
 
-    @staticmethod
-    async def _handle_emoji(message, chat, response, send_emoji=""):
+    async def _handle_emoji(self, message, chat, response, send_emoji=""):
         """处理表情包"""
         if send_emoji:
             emoji_raw = await emoji_manager.get_emoji_for_text(send_emoji)
@@ -139,7 +136,7 @@ class ThinkFlowChat:
                 is_emoji=True,
             )
 
-            message_manager.add_message(bot_message)
+            MessageManager().add_message(bot_message)
 
     async def _update_relationship(self, message: MessageRecv, response_set):
         """更新关系情绪"""
@@ -207,21 +204,19 @@ class ThinkFlowChat:
         if not buffer_result:
             await willing_manager.bombing_buffer_message_handle(message.message_info.message_id)
             willing_manager.delete(message.message_info.message_id)
-            f_type = "seglist"
+            F_type = "seglist"
             if message.message_segment.type != "seglist":
-                f_type = message.message_segment.type
+                F_type =message.message_segment.type
             else:
-                if (
-                    isinstance(message.message_segment.data, list)
-                    and all(isinstance(x, Seg) for x in message.message_segment.data)
-                    and len(message.message_segment.data) == 1
-                ):
-                    f_type = message.message_segment.data[0].type
-            if f_type == "text":
+                if (isinstance(message.message_segment.data, list) 
+                and all(isinstance(x, Seg) for x in message.message_segment.data)
+                and len(message.message_segment.data) == 1):
+                    F_type = message.message_segment.data[0].type
+            if F_type == "text":
                 logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
-            elif f_type == "image":
+            elif F_type == "image":
                 logger.info("触发缓冲，已炸飞表情包/图片")
-            elif f_type == "seglist":
+            elif F_type == "seglist":
                 logger.info("触发缓冲，已炸飞消息列")
             return
 
@@ -380,68 +375,17 @@ class ThinkFlowChat:
                 # 处理表情包
                 try:
                     with Timer("处理表情包", timing_results):
-                        if global_config.emoji_chance == 1:
-                            if send_emoji:
-                                logger.info(f"麦麦决定发送表情包{send_emoji}")
-                                await self._handle_emoji(message, chat, response_set, send_emoji)
-                        else:
-                            if random() < global_config.emoji_chance:
-                                await self._handle_emoji(message, chat, response_set)
+                        if send_emoji:
+                            logger.info(f"麦麦决定发送表情包{send_emoji}")
+                            await self._handle_emoji(message, chat, response_set, send_emoji)
+
                 except Exception as e:
                     logger.error(f"心流处理表情包失败: {e}")
 
-                # 思考后脑内状态更新
-                # try:
-                #     with Timer("思考后脑内状态更新", timing_results):
-                #         stream_id = message.chat_stream.stream_id
-                #         chat_talking_prompt = ""
-                #         if stream_id:
-                #             chat_talking_prompt = get_recent_group_detailed_plain_text(
-                #                 stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
-                #             )
-
-                #         await heartflow.get_subheartflow(stream_id).do_thinking_after_reply(
-                #             response_set, chat_talking_prompt, tool_result_info
-                #         )
-                # except Exception as e:
-                #     logger.error(f"心流思考后脑内状态更新失败: {e}")
-                #     logger.error(traceback.format_exc())
 
                 # 回复后处理
                 await willing_manager.after_generate_reply_handle(message.message_info.message_id)
 
-                # 处理认识关系
-                try:
-                    is_known = await relationship_manager.is_known_some_one(
-                        message.message_info.platform, message.message_info.user_info.user_id
-                    )
-                    if not is_known:
-                        logger.info(f"首次认识用户: {message.message_info.user_info.user_nickname}")
-                        await relationship_manager.first_knowing_some_one(
-                            message.message_info.platform,
-                            message.message_info.user_info.user_id,
-                            message.message_info.user_info.user_nickname,
-                            message.message_info.user_info.user_cardname
-                            or message.message_info.user_info.user_nickname,
-                            "",
-                        )
-                    else:
-                        logger.debug(f"已认识用户: {message.message_info.user_info.user_nickname}")
-                        if not await relationship_manager.is_qved_name(
-                            message.message_info.platform, message.message_info.user_info.user_id
-                        ):
-                            logger.info(f"更新已认识但未取名的用户: {message.message_info.user_info.user_nickname}")
-                            await relationship_manager.first_knowing_some_one(
-                                message.message_info.platform,
-                                message.message_info.user_info.user_id,
-                                message.message_info.user_info.user_nickname,
-                                message.message_info.user_info.user_cardname
-                                or message.message_info.user_info.user_nickname,
-                                "",
-                            )
-                except Exception as e:
-                    logger.error(f"处理认识关系失败: {e}")
-                    logger.error(traceback.format_exc())
 
             except Exception as e:
                 logger.error(f"心流处理消息失败: {e}")
@@ -460,8 +404,7 @@ class ThinkFlowChat:
         # 意愿管理器：注销当前message信息
         willing_manager.delete(message.message_info.message_id)
 
-    @staticmethod
-    def _check_ban_words(text: str, chat, userinfo) -> bool:
+    def _check_ban_words(self, text: str, chat, userinfo) -> bool:
         """检查消息中是否包含过滤词"""
         for word in global_config.ban_words:
             if word in text:
@@ -472,8 +415,7 @@ class ThinkFlowChat:
                 return True
         return False
 
-    @staticmethod
-    def _check_ban_regex(text: str, chat, userinfo) -> bool:
+    def _check_ban_regex(self, text: str, chat, userinfo) -> bool:
         """检查消息是否匹配过滤正则表达式"""
         for pattern in global_config.ban_msgs_regex:
             if pattern.search(text):
