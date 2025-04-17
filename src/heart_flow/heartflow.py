@@ -2,7 +2,7 @@ from .sub_heartflow import SubHeartflow
 from .observation import ChattingObservation
 from src.plugins.moods.moods import MoodManager
 from src.plugins.models.utils_model import LLMRequest
-from src.plugins.config.config import global_config
+from src.config.config import global_config
 from src.plugins.schedule.schedule_generator import bot_schedule
 from src.plugins.utils.prompt_builder import Prompt, global_prompt_manager
 import asyncio

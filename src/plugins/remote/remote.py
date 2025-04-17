@@ -6,7 +6,7 @@ import os
 import json
 import threading
 from src.common.logger import get_module_logger
-from src.plugins.config.config import global_config
+from src.config.config import global_config
 
 logger = get_module_logger("remote")
 

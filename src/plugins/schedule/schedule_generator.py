@@ -12,7 +12,7 @@ sys.path.append(root_path)
 from src.common.database import db  # noqa: E402
 from src.common.logger import get_module_logger, SCHEDULE_STYLE_CONFIG, LogConfig  # noqa: E402
 from src.plugins.models.utils_model import LLMRequest  # noqa: E402
-from src.plugins.config.config import global_config  # noqa: E402
+from src.config.config import global_config  # noqa: E402
 
 TIME_ZONE = tz.gettz(global_config.TIME_ZONE)  # 设置时区
 

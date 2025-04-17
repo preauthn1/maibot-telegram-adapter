@@ -9,7 +9,7 @@ from ..chat.chat_stream import ChatStream
 from ..message.message_base import UserInfo, Seg
 from ..chat.message import Message
 from ..models.utils_model import LLMRequest
-from ..config.config import global_config
+from ...config.config import global_config
 from src.plugins.chat.message import MessageSending
 from ..message.api import global_api
 from ..storage.storage import MessageStorage

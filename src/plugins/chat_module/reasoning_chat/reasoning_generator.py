@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple, Union
 import random
 
 from ...models.utils_model import LLMRequest
-from ...config.config import global_config
+from ....config.config import global_config
 from ...chat.message import MessageThinking
 from .reasoning_prompt_builder import prompt_builder
 from ...chat.utils import process_llm_response

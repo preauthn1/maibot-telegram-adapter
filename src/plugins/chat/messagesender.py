@@ -8,7 +8,7 @@ from ..message.api import global_api
 from .message import MessageSending, MessageThinking, MessageSet
 
 from ..storage.storage import MessageStorage
-from ..config.config import global_config
+from ...config.config import global_config
 from .utils import truncate_message, calculate_typing_time, count_messages_between
 
 from src.common.logger import LogConfig, SENDER_STYLE_CONFIG

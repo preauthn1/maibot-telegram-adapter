@@ -10,7 +10,7 @@ from src.common.logger import get_module_logger
 
 from ..models.utils_model import LLMRequest
 from ..utils.typo_generator import ChineseTypoGenerator
-from ..config.config import global_config
+from ...config.config import global_config
 from .message import MessageRecv, Message
 from ..message.message_base import UserInfo
 from .chat_stream import ChatStream
@@ -338,11 +338,21 @@ def random_remove_punctuation(text: str) -> str:
 
 
 def process_llm_response(text: str) -> List[str]:
+    # 先保护颜文字
+    protected_text, kaomoji_mapping = protect_kaomoji(text)
+    logger.debug(f"保护颜文字后的文本: {protected_text}")
     # 提取被 () 或 [] 包裹的内容
-    pattern = re.compile(r"[(\[].*?[\)\]")
-    _extracted_contents = pattern.findall(text)
+    pattern = re.compile(r"[\(\[\（].*?[\)\]\）]")
+    # _extracted_contents = pattern.findall(text)
+    _extracted_contents = pattern.findall(protected_text)  # 在保护后的文本上查找
+
     # 去除 () 和 [] 及其包裹的内容
-    cleaned_text = pattern.sub("", text)
+    # cleaned_text = pattern.sub("", text)
+    cleaned_text = pattern.sub("", protected_text)
+
+    if cleaned_text == "":
+        return ["呃呃"]
+
     logger.debug(f"{text}去除括号处理后的文本: {cleaned_text}")
 
     # 对清理后的文本进行进一步处理
@@ -382,6 +392,8 @@ def process_llm_response(text: str) -> List[str]:
         return [f"{global_config.BOT_NICKNAME}不知道哦"]
 
     # sentences.extend(extracted_contents)
+    # 在所有句子处理完毕后，对包含占位符的列表进行恢复
+    sentences = recover_kaomoji(sentences, kaomoji_mapping)
 
     return sentences
 
@@ -508,8 +520,7 @@ def protect_kaomoji(sentence):
         r"]"
         r")"
         r"|"
-        r"([▼▽・ᴥω･﹏^><≧≦￣｀´∀ヮДд︿﹀へ｡ﾟ╥╯╰︶︹•⁄]{2,15"
-        r"}"
+        r"([▼▽・ᴥω･﹏^><≧≦￣｀´∀ヮДд︿﹀へ｡ﾟ╥╯╰︶︹•⁄]{2,15})"
     )
 
     kaomoji_matches = kaomoji_pattern.findall(sentence)
@@ -706,12 +717,30 @@ def parse_text_timestamps(text: str, mode: str = "normal") -> str:
     # normal模式: 直接转换所有时间戳
     if mode == "normal":
         result_text = text
+
+        # 将时间戳转换为可读格式并记录相同格式的时间戳
+        timestamp_readable_map = {}
+        readable_time_used = set()
+
         for match in matches:
             timestamp = float(match.group(1))
             readable_time = translate_timestamp_to_human_readable(timestamp, "normal")
-            # 由于替换会改变文本长度，需要使用正则替换而非直接替换
-            pattern_instance = re.escape(match.group(0))
-            result_text = re.sub(pattern_instance, readable_time, result_text, count=1)
+            timestamp_readable_map[match.group(0)] = (timestamp, readable_time)
+
+        # 按时间戳排序
+        sorted_timestamps = sorted(timestamp_readable_map.items(), key=lambda x: x[1][0])
+
+        # 执行替换，相同格式的只保留最早的
+        for ts_str, (_, readable) in sorted_timestamps:
+            pattern_instance = re.escape(ts_str)
+            if readable in readable_time_used:
+                # 如果这个可读时间已经使用过，替换为空字符串
+                result_text = re.sub(pattern_instance, "", result_text, count=1)
+            else:
+                # 否则替换为可读时间并记录
+                result_text = re.sub(pattern_instance, readable, result_text, count=1)
+                readable_time_used.add(readable)
+
         return result_text
     else:
         # lite模式: 按5秒间隔划分并选择性转换
@@ -770,15 +799,30 @@ def parse_text_timestamps(text: str, mode: str = "normal") -> str:
                 pattern_instance = re.escape(match.group(0))
                 result_text = re.sub(pattern_instance, "", result_text, count=1)
 
-        # 按照时间戳原始顺序排序，避免替换时位置错误
-        to_convert.sort(key=lambda x: x[1].start())
+        # 按照时间戳升序排序
+        to_convert.sort(key=lambda x: x[0])
 
-        # 执行替换
-        # 由于替换会改变文本长度，从后向前替换
-        to_convert.reverse()
+        # 将时间戳转换为可读时间并记录哪些可读时间已经使用过
+        converted_timestamps = []
+        readable_time_used = set()
+
         for ts, match in to_convert:
             readable_time = translate_timestamp_to_human_readable(ts, "relative")
+            converted_timestamps.append((ts, match, readable_time))
+
+        # 按照时间戳原始顺序排序，避免替换时位置错误
+        converted_timestamps.sort(key=lambda x: x[1].start())
+
+        # 从后向前替换，避免位置改变
+        converted_timestamps.reverse()
+        for match, readable_time in converted_timestamps:
             pattern_instance = re.escape(match.group(0))
-            result_text = re.sub(pattern_instance, readable_time, result_text, count=1)
+            if readable_time in readable_time_used:
+                # 如果相同格式的时间已存在，替换为空字符串
+                result_text = re.sub(pattern_instance, "", result_text, count=1)
+            else:
+                # 否则替换为可读时间并记录
+                result_text = re.sub(pattern_instance, readable_time, result_text, count=1)
+                readable_time_used.add(readable_time)
 
         return result_text

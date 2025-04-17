@@ -2,7 +2,7 @@
 # 外部世界可以是某个聊天 不同平台的聊天 也可以是任意媒体
 from datetime import datetime
 from src.plugins.models.utils_model import LLMRequest
-from src.plugins.config.config import global_config
+from src.config.config import global_config
 from src.common.database import db
 from src.common.logger import get_module_logger
 import traceback

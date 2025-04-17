@@ -2,7 +2,7 @@ from typing import List, Tuple
 from src.common.logger import get_module_logger
 from src.plugins.memory_system.Hippocampus import HippocampusManager
 from ..models.utils_model import LLMRequest
-from ..config.config import global_config
+from ...config.config import global_config
 from ..chat.message import Message
 
 logger = get_module_logger("knowledge_fetcher")

@@ -2,7 +2,7 @@ from typing import List, Optional
 
 
 from ..models.utils_model import LLMRequest
-from ..config.config import global_config
+from ...config.config import global_config
 from src.common.logger import get_module_logger, LogConfig, TOPIC_STYLE_CONFIG
 
 # 定义日志配置
