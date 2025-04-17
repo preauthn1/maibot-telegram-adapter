@@ -144,7 +144,7 @@ class MxpWillingManager(BaseWillingManager):
             ):
                 current_willing += self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] + 1)
                 if self.is_debug:
-                    self.logger.debug(f"单聊增益：{self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] - 1)}")
+                    self.logger.debug(f"单聊增益：{self.single_chat_gain * (2 * self.last_response_person[w_info.chat_id][1] + 1)}")
 
             current_willing += self.chat_fatigue_willing_attenuation.get(w_info.chat_id, 0)
             if self.is_debug:

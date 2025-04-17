@@ -354,7 +354,7 @@ class PersonInfoManager:
         """启动个人信息推断，每天根据一定条件推断一次"""
         try:
             while 1:
-                await asyncio.sleep(60)
+                await asyncio.sleep(600)
                 current_time = datetime.datetime.now()
                 logger.info(f"个人信息推断启动: {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
