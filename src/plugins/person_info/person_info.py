@@ -316,7 +316,7 @@ class PersonInfoManager:
 
     @staticmethod
     async def get_specific_value_list(
-            field_name: str,
+        field_name: str,
         way: Callable[[Any], bool],  # 接受任意类型值
     ) -> Dict[str, Any]:
         """

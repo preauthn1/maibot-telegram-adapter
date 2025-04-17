@@ -66,7 +66,7 @@ class PromptBuilder:
 
     @staticmethod
     async def _build_prompt(
-            chat_stream, message_txt: str, sender_name: str = "某人", stream_id: Optional[int] = None
+        chat_stream, message_txt: str, sender_name: str = "某人", stream_id: Optional[int] = None
     ) -> tuple[str, str]:
         current_mind_info = heartflow.get_subheartflow(stream_id).current_mind
 
@@ -171,7 +171,7 @@ class PromptBuilder:
 
     @staticmethod
     async def _build_prompt_simple(
-            chat_stream, message_txt: str, sender_name: str = "某人", stream_id: Optional[int] = None
+        chat_stream, message_txt: str, sender_name: str = "某人", stream_id: Optional[int] = None
     ) -> tuple[str, str]:
         current_mind_info = heartflow.get_subheartflow(stream_id).current_mind
 
@@ -241,7 +241,7 @@ class PromptBuilder:
 
     @staticmethod
     async def _build_prompt_check_response(
-            chat_stream,
+        chat_stream,
         message_txt: str,
         sender_name: str = "某人",
         stream_id: Optional[int] = None,

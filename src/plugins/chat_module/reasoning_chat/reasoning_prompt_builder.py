@@ -375,7 +375,7 @@ class PromptBuilder:
 
     @staticmethod
     def get_info_from_db(
-            query_embedding: list, limit: int = 1, threshold: float = 0.5, return_raw: bool = False
+        query_embedding: list, limit: int = 1, threshold: float = 0.5, return_raw: bool = False
     ) -> Union[str, list]:
         if not query_embedding:
             return "" if not return_raw else []

@@ -17,7 +17,7 @@ class DirectMessageSender:
 
     @staticmethod
     async def send_message(
-            chat_stream: ChatStream,
+        chat_stream: ChatStream,
         content: str,
         reply_to_message: Optional[Message] = None,
     ) -> None:

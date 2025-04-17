@@ -26,7 +26,7 @@ class ToolUser:
 
     @staticmethod
     async def _build_tool_prompt(
-            message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
+        message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
     ):
         """构建工具使用的提示词
 

@@ -51,7 +51,7 @@ class SearchKnowledgeTool(BaseTool):
 
     @staticmethod
     def get_info_from_db(
-            query_embedding: list, limit: int = 1, threshold: float = 0.5, return_raw: bool = False
+        query_embedding: list, limit: int = 1, threshold: float = 0.5, return_raw: bool = False
     ) -> Union[str, list]:
         """从数据库中获取相关信息
 
