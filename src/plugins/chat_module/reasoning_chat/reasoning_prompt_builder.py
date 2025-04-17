@@ -110,7 +110,6 @@ class PromptBuilder:
                 "memory_prompt", related_memory_info=related_memory_info
             )
 
-
         # print(f"相关记忆：{related_memory_info}")
 
         # 日程构建
