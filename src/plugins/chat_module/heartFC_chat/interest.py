@@ -218,13 +218,13 @@ class InterestChatting:
         if self.current_reply_probability > 0:
             # 只有在阈值之上且概率大于0时才有可能触发
             trigger = random.random() < self.current_reply_probability
-            if trigger:
-                logger.info(f"回复概率评估触发! 概率: {self.current_reply_probability:.4f}, 阈值: {self.trigger_threshold}, 兴趣: {self.interest_level:.2f}")
-                # 可选：触发后是否重置/降低概率？根据需要决定
-                # self.current_reply_probability = self.base_reply_probability # 例如，触发后降回基础概率
-                # self.current_reply_probability *= 0.5 # 例如，触发后概率减半
-            else:
-                 logger.debug(f"回复概率评估未触发。概率: {self.current_reply_probability:.4f}") 
+            # if trigger:
+            #     logger.info(f"回复概率评估触发! 概率: {self.current_reply_probability:.4f}, 阈值: {self.trigger_threshold}, 兴趣: {self.interest_level:.2f}")
+            #     # 可选：触发后是否重置/降低概率？根据需要决定
+            #     # self.current_reply_probability = self.base_reply_probability # 例如，触发后降回基础概率
+            #     # self.current_reply_probability *= 0.5 # 例如，触发后概率减半
+            # else:
+            #      logger.debug(f"回复概率评估未触发。概率: {self.current_reply_probability:.4f}") 
             return trigger
         else:
             # logger.debug(f"Reply evaluation check: Below threshold or zero probability. Probability: {self.current_reply_probability:.4f}")
@@ -282,7 +282,7 @@ class InterestManager:
         """后台日志记录任务的异步函数 (记录历史数据，包含 group_name)"""
         while True:
             await asyncio.sleep(interval_seconds)
-            logger.debug(f"运行定期历史记录 (间隔: {interval_seconds}秒)...")
+            # logger.debug(f"运行定期历史记录 (间隔: {interval_seconds}秒)...")
             try:
                 current_timestamp = time.time()
                 all_states = self.get_all_interest_states() # 获取当前所有状态
@@ -435,7 +435,8 @@ class InterestManager:
         interest_chatting = self._get_or_create_interest_chatting(stream_id)
         # 调用修改后的 increase_interest，不再传入 message
         interest_chatting.increase_interest(current_time, value)
-        logger.debug(f"增加了聊天流 {stream_id} 的兴趣度 {value:.2f}，当前值为 {interest_chatting.interest_level:.2f}") # 更新日志
+        stream_name = chat_manager.get_stream_name(stream_id) or stream_id # 获取流名称
+        logger.debug(f"增加了聊天流 {stream_name} 的兴趣度 {value:.2f}，当前值为 {interest_chatting.interest_level:.2f}") # 更新日志
 
     def decrease_interest(self, stream_id: str, value: float):
         """降低指定聊天流的兴趣度"""
@@ -444,9 +445,11 @@ class InterestManager:
         interest_chatting = self.get_interest_chatting(stream_id)
         if interest_chatting:
             interest_chatting.decrease_interest(current_time, value)
-            logger.debug(f"降低了聊天流 {stream_id} 的兴趣度 {value:.2f}，当前值为 {interest_chatting.interest_level:.2f}")
+            stream_name = chat_manager.get_stream_name(stream_id) or stream_id # 获取流名称
+            logger.debug(f"降低了聊天流 {stream_name} 的兴趣度 {value:.2f}，当前值为 {interest_chatting.interest_level:.2f}")
         else:
-            logger.warning(f"尝试降低不存在的聊天流 {stream_id} 的兴趣度")
+            stream_name = chat_manager.get_stream_name(stream_id) or stream_id # 获取流名称
+            logger.warning(f"尝试降低不存在的聊天流 {stream_name} 的兴趣度")
 
     def cleanup_inactive_chats(self, max_age_seconds=INACTIVE_THRESHOLD_SECONDS):
         """
@@ -474,7 +477,8 @@ class InterestManager:
 
             if should_remove:
                 keys_to_remove.append(stream_id)
-                logger.debug(f"Marking stream_id {stream_id} for removal. Reason: {reason}")
+                stream_name = chat_manager.get_stream_name(stream_id) or stream_id # 获取流名称
+                logger.debug(f"Marking stream {stream_name} for removal. Reason: {reason}")
 
         if keys_to_remove:
             logger.info(f"清理识别到 {len(keys_to_remove)} 个不活跃/低兴趣的流。")
@@ -483,7 +487,8 @@ class InterestManager:
                  # 再次检查 key 是否存在，以防万一在迭代和删除之间状态改变
                 if key in self.interest_dict:
                     del self.interest_dict[key]
-                    logger.debug(f"移除了流_id: {key}")
+                    stream_name = chat_manager.get_stream_name(key) or key # 获取流名称
+                    logger.debug(f"移除了流: {stream_name}")
             final_count = initial_count - len(keys_to_remove)
             logger.info(f"清理完成。移除了 {len(keys_to_remove)} 个流。当前数量: {final_count}")
         else:
