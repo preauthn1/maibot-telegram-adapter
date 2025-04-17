@@ -38,7 +38,7 @@ class ResponseGenerator:
         self.current_model_type = "r1"  # 默认使用 R1
         self.current_model_name = "unknown model"
 
-    async def generate_response(self, message: MessageRecv, thinking_id: str) -> Optional[List[str]]:
+    async def generate_response(self, message: MessageRecv, thinking_id: str,) -> Optional[List[str]]:
         """根据当前模型类型选择对应的生成函数"""
 
         logger.info(

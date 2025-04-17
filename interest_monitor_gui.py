@@ -93,6 +93,10 @@ class InterestMonitorApp:
         # --- 初始化和启动刷新 ---
         self.update_display() # 首次加载并开始刷新循环
 
+    def on_stream_selected(self, event=None):
+        """当 Combobox 选择改变时调用，更新单个流的图表"""
+        self.update_single_stream_plot()
+
     def get_random_color(self):
         """生成随机颜色用于区分线条"""
         return "#{:06x}".format(random.randint(0, 0xFFFFFF))
@@ -305,11 +309,82 @@ class InterestMonitorApp:
         self.ax_single_probability.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
 
         selected_name = self.selected_stream_id.get()
+        selected_sid = None
+
+        # --- 新增：根据选中的名称找到 stream_id ---
+        if selected_name:
+            for sid, name in self.stream_display_names.items():
+                if name == selected_name:
+                    selected_sid = sid
+                    break
+
+        all_times = [] # 用于确定 X 轴范围
+
+        # --- 新增：绘制兴趣度图 ---
+        if selected_sid and selected_sid in self.stream_history and self.stream_history[selected_sid]:
+            history = self.stream_history[selected_sid]
+            timestamps, interests = zip(*history)
+            try:
+                mpl_dates = [datetime.fromtimestamp(ts) for ts in timestamps]
+                all_times.extend(mpl_dates)
+                self.ax_single_interest.plot(
+                    mpl_dates,
+                    interests,
+                    color=self.stream_colors.get(selected_sid, 'blue'),
+                    marker='.',
+                    markersize=3,
+                    linestyle='-',
+                    linewidth=1
+                )
+            except ValueError as e:
+                 print(f"Skipping interest plot for {selected_sid} due to invalid timestamp: {e}")
+
+        # --- 新增：绘制概率图 ---
+        if selected_sid and selected_sid in self.probability_history and self.probability_history[selected_sid]:
+            prob_history = self.probability_history[selected_sid]
+            prob_timestamps, probabilities = zip(*prob_history)
+            try:
+                prob_mpl_dates = [datetime.fromtimestamp(ts) for ts in prob_timestamps]
+                # 注意：概率图的时间点可能与兴趣度不同，也需要加入 all_times
+                all_times.extend(prob_mpl_dates) 
+                self.ax_single_probability.plot(
+                    prob_mpl_dates,
+                    probabilities,
+                    color=self.stream_colors.get(selected_sid, 'green'), # 可以用不同颜色
+                    marker='.',
+                    markersize=3,
+                    linestyle='-',
+                    linewidth=1
+                )
+            except ValueError as e:
+                 print(f"Skipping probability plot for {selected_sid} due to invalid timestamp: {e}")
+
+        # --- 新增：调整 X 轴范围和格式 ---
+        if all_times:
+             min_time = min(all_times)
+             max_time = max(all_times)
+             # 设置共享的 X 轴范围
+             self.ax_single_interest.set_xlim(min_time, max_time) 
+             # self.ax_single_probability.set_xlim(min_time, max_time) # sharex 会自动同步
+             # 自动格式化X轴标签 (应用到共享轴的最后一个子图上通常即可)
+             self.fig_single.autofmt_xdate()
+        else:
+            # 如果没有数据，设置一个默认的时间范围
+            now = datetime.now()
+            one_hour_ago = now - timedelta(hours=1)
+            self.ax_single_interest.set_xlim(one_hour_ago, now)
+            # self.ax_single_probability.set_xlim(one_hour_ago, now) # sharex 会自动同步
+
+        # --- 新增：重新绘制画布 ---
+        self.canvas_single.draw()
+
     def update_display(self):
         """主更新循环"""
         try:
             self.load_and_update_history() # 从文件加载数据并更新内部状态
-            self.update_plot()             # 根据内部状态更新图表
+            # *** 修改：分别调用两个图表的更新方法 ***
+            self.update_all_streams_plot() # 更新所有流的图表
+            self.update_single_stream_plot() # 更新单个流的图表
         except Exception as e:
             # 提供更详细的错误信息
             import traceback

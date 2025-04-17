@@ -37,13 +37,13 @@ def init_prompt():
     # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
     prompt += "{extra_info}\n"
     # prompt += "{prompt_schedule}\n"
-    prompt += "{relation_prompt_all}\n"
+    # prompt += "{relation_prompt_all}\n"
     prompt += "{prompt_personality}\n"
     prompt += "刚刚你的想法是{current_thinking_info}。可以适当转换话题\n"
     prompt += "-----------------------------------\n"
     prompt += "现在是{time_now}，你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：\n{chat_observe_info}\n"
     prompt += "你现在{mood_info}\n"
-    prompt += "你注意到{sender_name}刚刚说：{message_txt}\n"
+    # prompt += "你注意到{sender_name}刚刚说：{message_txt}\n"
     prompt += "现在你接下去继续思考，产生新的想法，不要分点输出，输出连贯的内心独白"
     prompt += "思考时可以想想如何对群聊内容进行回复。回复的要求是：平淡一些，简短一些，说中文，尽量不要说你说过的话。如果你要回复，最好只回复一个人的一个话题\n"
     prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，等)，不要带有括号和动作描写"
@@ -199,7 +199,7 @@ class SubHeartflow:
             logger.error(f"[{self.subheartflow_id}] do_observe called but no valid observation found.")
 
     async def do_thinking_before_reply(
-        self, message_txt: str, sender_info: UserInfo, chat_stream: ChatStream, extra_info: str, obs_id: list[str] = None # 修改 obs_id 类型为 list[str]
+        self,  chat_stream: ChatStream, extra_info: str, obs_id: list[str] = None # 修改 obs_id 类型为 list[str]
     ):
         async with self._thinking_lock: # 获取思考锁
             # --- 在思考前确保观察已执行 --- #
@@ -246,45 +246,45 @@ class SubHeartflow:
             identity_detail = individuality.identity.identity_detail
             if identity_detail: random.shuffle(identity_detail); prompt_personality += f",{identity_detail[0]}"
 
-            who_chat_in_group = [
-                (chat_stream.platform, sender_info.user_id, sender_info.user_nickname) # 先添加当前发送者
-            ]
-            # 获取最近发言者，排除当前发送者，避免重复
-            recent_speakers = get_recent_group_speaker(
-                chat_stream.stream_id,
-                (chat_stream.platform, sender_info.user_id),
-                limit=global_config.MAX_CONTEXT_SIZE -1 # 减去当前发送者
-            )
-            who_chat_in_group.extend(recent_speakers)
+            # who_chat_in_group = [
+            #     (chat_stream.platform, sender_info.user_id, sender_info.user_nickname) # 先添加当前发送者
+            # ]
+            # # 获取最近发言者，排除当前发送者，避免重复
+            # recent_speakers = get_recent_group_speaker(
+            #     chat_stream.stream_id,
+            #     (chat_stream.platform, sender_info.user_id),
+            #     limit=global_config.MAX_CONTEXT_SIZE -1 # 减去当前发送者
+            # )
+            # who_chat_in_group.extend(recent_speakers)
 
-            relation_prompt = ""
-            unique_speakers = set() # 确保人物信息不重复
-            for person_tuple in who_chat_in_group:
-                person_key = (person_tuple[0], person_tuple[1]) # 使用 platform+id 作为唯一标识
-                if person_key not in unique_speakers:
-                    relation_prompt += await relationship_manager.build_relationship_info(person_tuple)
-                    unique_speakers.add(person_key)
+            # relation_prompt = ""
+            # unique_speakers = set() # 确保人物信息不重复
+            # for person_tuple in who_chat_in_group:
+            #     person_key = (person_tuple[0], person_tuple[1]) # 使用 platform+id 作为唯一标识
+            #     if person_key not in unique_speakers:
+            #         relation_prompt += await relationship_manager.build_relationship_info(person_tuple)
+            #         unique_speakers.add(person_key)
 
-            relation_prompt_all = (await global_prompt_manager.get_prompt_async("relationship_prompt")).format(
-                relation_prompt, sender_info.user_nickname
-            )
+            # relation_prompt_all = (await global_prompt_manager.get_prompt_async("relationship_prompt")).format(
+            #     relation_prompt, sender_info.user_nickname
+            # )
 
-            sender_name_sign = (
-                f"<{chat_stream.platform}:{sender_info.user_id}:{sender_info.user_nickname}:{sender_info.user_cardname or 'NoCard'}>"
-            )
+            # sender_name_sign = (
+            #     f"<{chat_stream.platform}:{sender_info.user_id}:{sender_info.user_nickname}:{sender_info.user_cardname or 'NoCard'}>"
+            # )
 
             time_now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
             prompt = (await global_prompt_manager.get_prompt_async("sub_heartflow_prompt_before")).format(
                 extra_info=extra_info_prompt,
-                relation_prompt_all=relation_prompt_all,
+                # relation_prompt_all=relation_prompt_all,
                 prompt_personality=prompt_personality,
                 current_thinking_info=current_thinking_info,
                 time_now=time_now,
                 chat_observe_info=chat_observe_info,
                 mood_info=mood_info,
-                sender_name=sender_name_sign,
-                message_txt=message_txt,
+                # sender_name=sender_name_sign,
+                # message_txt=message_txt,
                 bot_name=self.bot_name,
             )
 

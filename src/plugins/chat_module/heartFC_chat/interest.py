@@ -20,11 +20,11 @@ logger = get_module_logger("InterestManager", config=interest_log_config)
 
 
 # 定义常量
-DEFAULT_DECAY_RATE_PER_SECOND = 0.95  # 每秒衰减率 (兴趣保留 99%)
-MAX_INTEREST = 10.0                # 最大兴趣值
-MIN_INTEREST_THRESHOLD = 0.1      # 低于此值可能被清理 (可选)
+DEFAULT_DECAY_RATE_PER_SECOND = 0.98  # 每秒衰减率 (兴趣保留 99%)
+MAX_INTEREST = 15.0                # 最大兴趣值
+# MIN_INTEREST_THRESHOLD = 0.1      # 低于此值可能被清理 (可选)
 CLEANUP_INTERVAL_SECONDS = 3600     # 清理任务运行间隔 (例如：1小时)
-INACTIVE_THRESHOLD_SECONDS = 3600 * 24 # 不活跃时间阈值 (例如：1天)
+INACTIVE_THRESHOLD_SECONDS = 3600  # 不活跃时间阈值 (例如：1小时)
 LOG_INTERVAL_SECONDS = 3  # 日志记录间隔 (例如：30秒)
 LOG_DIRECTORY = "logs/interest" # 日志目录
 LOG_FILENAME = "interest_log.json" # 快照日志文件名 (保留，以防其他地方用到)
@@ -33,11 +33,11 @@ HISTORY_LOG_FILENAME = "interest_history.log" # 新的历史日志文件名
 # INTEREST_INCREASE_THRESHOLD = 0.5
 
 # --- 新增：概率回复相关常量 ---
-REPLY_TRIGGER_THRESHOLD = 5.0         # 触发概率回复的兴趣阈值 (示例值)
+REPLY_TRIGGER_THRESHOLD = 3.0         # 触发概率回复的兴趣阈值 (示例值)
 BASE_REPLY_PROBABILITY = 0.05         # 首次超过阈值时的基础回复概率 (示例值)
 PROBABILITY_INCREASE_RATE_PER_SECOND = 0.02 # 高于阈值时，每秒概率增加量 (线性增长, 示例值)
 PROBABILITY_DECAY_FACTOR_PER_SECOND = 0.3  # 低于阈值时，每秒概率衰减因子 (指数衰减, 示例值)
-MAX_REPLY_PROBABILITY = 0.95          # 回复概率上限 (示例值)
+MAX_REPLY_PROBABILITY = 1          # 回复概率上限 (示例值)
 # --- 结束：概率回复相关常量 ---
 
 class InterestChatting:
@@ -117,15 +117,15 @@ class InterestChatting:
                 # 持续高于阈值，线性增加概率
                 increase_amount = self.probability_increase_rate * time_delta
                 self.current_reply_probability += increase_amount
-                logger.debug(f"兴趣高于阈值 ({self.trigger_threshold}) 持续 {time_delta:.2f}秒. 概率增加 {increase_amount:.4f} 到 {self.current_reply_probability:.4f}")
+                # logger.debug(f"兴趣高于阈值 ({self.trigger_threshold}) 持续 {time_delta:.2f}秒. 概率增加 {increase_amount:.4f} 到 {self.current_reply_probability:.4f}")
 
             # 限制概率不超过最大值
             self.current_reply_probability = min(self.current_reply_probability, self.max_reply_probability)
 
         else: # 低于阈值
-            if self.is_above_threshold:
-                 # 刚低于阈值，开始衰减
-                 logger.debug(f"兴趣低于阈值 ({self.trigger_threshold}). 概率衰减开始于 {self.current_reply_probability:.4f}")
+            # if self.is_above_threshold:
+            #      # 刚低于阈值，开始衰减
+            #      logger.debug(f"兴趣低于阈值 ({self.trigger_threshold}). 概率衰减开始于 {self.current_reply_probability:.4f}")
             # else: # 持续低于阈值，继续衰减
             #     pass # 不需要特殊处理
 
@@ -133,12 +133,12 @@ class InterestChatting:
             # 检查 decay_factor 是否有效
             if 0 < self.probability_decay_factor < 1:
                 decay_multiplier = math.pow(self.probability_decay_factor, time_delta)
-                old_prob = self.current_reply_probability
+                # old_prob = self.current_reply_probability
                 self.current_reply_probability *= decay_multiplier
                 # 避免因浮点数精度问题导致概率略微大于0，直接设为0
                 if self.current_reply_probability < 1e-6:
                     self.current_reply_probability = 0.0
-                logger.debug(f"兴趣低于阈值 ({self.trigger_threshold}) 持续 {time_delta:.2f}秒. 概率从 {old_prob:.4f} 衰减到 {self.current_reply_probability:.4f} (因子: {self.probability_decay_factor})")
+                # logger.debug(f"兴趣低于阈值 ({self.trigger_threshold}) 持续 {time_delta:.2f}秒. 概率从 {old_prob:.4f} 衰减到 {self.current_reply_probability:.4f} (因子: {self.probability_decay_factor})")
             elif self.probability_decay_factor <= 0:
                 # 如果衰减因子无效或为0，直接清零
                 if self.current_reply_probability > 0:
@@ -212,19 +212,19 @@ class InterestChatting:
         # 确保概率是基于最新兴趣值计算的
         self._update_reply_probability(current_time)
         # 更新兴趣衰减（如果需要，取决于逻辑，这里保持和 get_interest 一致）
-        self._calculate_decay(current_time)
-        self.last_update_time = current_time # 更新时间戳
+        # self._calculate_decay(current_time)
+        # self.last_update_time = current_time # 更新时间戳
 
-        if self.is_above_threshold and self.current_reply_probability > 0:
+        if self.current_reply_probability > 0:
             # 只有在阈值之上且概率大于0时才有可能触发
             trigger = random.random() < self.current_reply_probability
             if trigger:
-                logger.info(f"Reply evaluation triggered! Probability: {self.current_reply_probability:.4f}, Threshold: {self.trigger_threshold}, Interest: {self.interest_level:.2f}")
+                logger.info(f"回复概率评估触发! 概率: {self.current_reply_probability:.4f}, 阈值: {self.trigger_threshold}, 兴趣: {self.interest_level:.2f}")
                 # 可选：触发后是否重置/降低概率？根据需要决定
                 # self.current_reply_probability = self.base_reply_probability # 例如，触发后降回基础概率
                 # self.current_reply_probability *= 0.5 # 例如，触发后概率减半
             else:
-                 logger.debug(f"Reply evaluation NOT triggered. Probability: {self.current_reply_probability:.4f}, Random value: {trigger + 1e-9:.4f}") # 打印随机值用于调试
+                 logger.debug(f"回复概率评估未触发。概率: {self.current_reply_probability:.4f}") 
             return trigger
         else:
             # logger.debug(f"Reply evaluation check: Below threshold or zero probability. Probability: {self.current_reply_probability:.4f}")
@@ -271,12 +271,12 @@ class InterestManager:
         except OSError as e:
             logger.error(f"Error creating log directory '{LOG_DIRECTORY}': {e}")
 
-    async def _periodic_cleanup_task(self, interval_seconds: int, threshold: float, max_age_seconds: int):
+    async def _periodic_cleanup_task(self, interval_seconds: int, max_age_seconds: int):
         """后台清理任务的异步函数"""
         while True:
             await asyncio.sleep(interval_seconds)
             logger.info(f"运行定期清理 (间隔: {interval_seconds}秒)...")
-            self.cleanup_inactive_chats(threshold=threshold, max_age_seconds=max_age_seconds)
+            self.cleanup_inactive_chats(max_age_seconds=max_age_seconds)
 
     async def _periodic_log_task(self, interval_seconds: int):
         """后台日志记录任务的异步函数 (记录历史数据，包含 group_name)"""
@@ -318,7 +318,7 @@ class InterestManager:
                         # 将每个条目作为单独的 JSON 行写入
                         f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
                         count += 1
-                logger.debug(f"Successfully appended {count} interest history entries to {self._history_log_file_path}")
+                # logger.debug(f"Successfully appended {count} interest history entries to {self._history_log_file_path}")
                 
                 # 注意：不再写入快照文件 interest_log.json
                 # 如果需要快照文件，可以在这里单独写入 self._snapshot_log_file_path
@@ -358,7 +358,6 @@ class InterestManager:
             self._cleanup_task = asyncio.create_task(
                 self._periodic_cleanup_task(
                     interval_seconds=CLEANUP_INTERVAL_SECONDS,
-                    threshold=MIN_INTEREST_THRESHOLD,
                     max_age_seconds=INACTIVE_THRESHOLD_SECONDS
                 )
             )
@@ -449,10 +448,9 @@ class InterestManager:
         else:
             logger.warning(f"尝试降低不存在的聊天流 {stream_id} 的兴趣度")
 
-    def cleanup_inactive_chats(self, threshold=MIN_INTEREST_THRESHOLD, max_age_seconds=INACTIVE_THRESHOLD_SECONDS):
+    def cleanup_inactive_chats(self, max_age_seconds=INACTIVE_THRESHOLD_SECONDS):
         """
         清理长时间不活跃的聊天流记录
-        threshold: 低于此兴趣度的将被清理
         max_age_seconds: 超过此时间未更新的将被清理
         """
         current_time = time.time()
