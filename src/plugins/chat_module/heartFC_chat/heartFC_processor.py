@@ -120,7 +120,7 @@ class HeartFC_Processor:
 
             # 更新兴趣度
             try:
-                self.interest_manager.increase_interest(chat.stream_id, value=interested_rate, message=message)
+                self.interest_manager.increase_interest(chat.stream_id, value=interested_rate)
                 current_interest = self.interest_manager.get_interest(chat.stream_id) # 获取更新后的值用于日志
                 logger.trace(f"使用激活率 {interested_rate:.2f} 更新后 (通过缓冲后)，当前兴趣度: {current_interest:.2f}")
 
