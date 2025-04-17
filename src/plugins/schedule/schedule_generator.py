@@ -235,6 +235,7 @@ class ScheduleGenerator:
 
         Args:
             num (int): 需要获取的日程数量，默认为1
+            time_info (bool): 是否包含时间信息，默认为False
 
         Returns:
             list: 最新加入的日程列表

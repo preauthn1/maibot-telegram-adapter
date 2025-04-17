@@ -27,9 +27,7 @@ class RelationshipTool(BaseTool):
 
         Args:
             function_args: 包含工具参数的字典
-            text: 原始消息文本
-            changed_value: 变更值
-            reason: 变更原因
+            message_txt: 原始消息文本
 
         Returns:
             dict: 包含执行结果的字典
