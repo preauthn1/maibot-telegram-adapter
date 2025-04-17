@@ -194,11 +194,13 @@ class ReasoningChat:
             willing_manager.delete(message.message_info.message_id)
             F_type = "seglist"
             if message.message_segment.type != "seglist":
-                F_type =message.message_segment.type
+                F_type = message.message_segment.type
             else:
-                if (isinstance(message.message_segment.data, list) 
-                and all(isinstance(x, Seg) for x in message.message_segment.data)
-                and len(message.message_segment.data) == 1):
+                if (
+                    isinstance(message.message_segment.data, list)
+                    and all(isinstance(x, Seg) for x in message.message_segment.data)
+                    and len(message.message_segment.data) == 1
+                ):
                     F_type = message.message_segment.data[0].type
             if F_type == "text":
                 logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
