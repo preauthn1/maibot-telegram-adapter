@@ -124,7 +124,7 @@ class Conversation:
             return Message(
                 message_id=msg_dict["message_id"],
                 chat_stream=chat_stream,
-                time=msg_dict["time"],
+                timestamp=msg_dict["time"],
                 user_info=user_info,
                 processed_plain_text=msg_dict.get("processed_plain_text", ""),
                 detailed_plain_text=msg_dict.get("detailed_plain_text", ""),
