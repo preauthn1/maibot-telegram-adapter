@@ -240,7 +240,8 @@ class MxpWillingManager(BaseWillingManager):
                 -2 * self.basic_maximum_willing * self.fatigue_coefficient
             )
 
-    def _willing_to_probability(self, willing: float) -> float:
+    @staticmethod
+    def _willing_to_probability(willing: float) -> float:
         """意愿值转化为概率"""
         willing = max(0, willing)
         if willing < 2:
@@ -285,7 +286,8 @@ class MxpWillingManager(BaseWillingManager):
                 if self.is_debug:
                     self.logger.debug(f"聊天流意愿值更新：{self.chat_reply_willing}")
 
-    def _get_relationship_level_num(self, relationship_value) -> int:
+    @staticmethod
+    def _get_relationship_level_num(relationship_value) -> int:
         """关系等级计算"""
         if -1000 <= relationship_value < -227:
             level_num = 0

@@ -373,8 +373,9 @@ class PromptBuilder:
         logger.info(f"知识库检索总耗时: {time.time() - start_time:.3f}秒")
         return related_info
 
+    @staticmethod
     def get_info_from_db(
-        self, query_embedding: list, limit: int = 1, threshold: float = 0.5, return_raw: bool = False
+            query_embedding: list, limit: int = 1, threshold: float = 0.5, return_raw: bool = False
     ) -> Union[str, list]:
         if not query_embedding:
             return "" if not return_raw else []

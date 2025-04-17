@@ -267,7 +267,8 @@ class ScheduleGenerator:
         db.schedule.update_one({"date": date_str}, {"$set": schedule_data}, upsert=True)
         logger.debug(f"已保存{date_str}的日程到数据库")
 
-    def load_schedule_from_db(self, date: datetime.datetime):
+    @staticmethod
+    def load_schedule_from_db(date: datetime.datetime):
         """从数据库加载日程，同时加载 today_done_list"""
         date_str = date.strftime("%Y-%m-%d")
         existing_schedule = db.schedule.find_one({"date": date_str})

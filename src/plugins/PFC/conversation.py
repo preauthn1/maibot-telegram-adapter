@@ -113,7 +113,8 @@ class Conversation:
             return True
         return False
 
-    def _convert_to_message(self, msg_dict: Dict[str, Any]) -> Message:
+    @staticmethod
+    def _convert_to_message(msg_dict: Dict[str, Any]) -> Message:
         """将消息字典转换为Message对象"""
         try:
             chat_info = msg_dict.get("chat_info", {})
