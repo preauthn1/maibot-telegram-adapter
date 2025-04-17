@@ -69,7 +69,6 @@ class ResponseGenerator:
             return None
 
     async def _generate_response_with_model(self, message: MessageThinking, model: LLMRequest, thinking_id: str):
-        sender_name = ""
 
         info_catcher = info_catcher_manager.get_info_catcher(thinking_id)
 
