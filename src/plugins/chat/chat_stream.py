@@ -188,6 +188,20 @@ class ChatManager:
         stream_id = self._generate_stream_id(platform, user_info, group_info)
         return self.streams.get(stream_id)
 
+    def get_stream_name(self, stream_id: str) -> Optional[str]:
+        """根据 stream_id 获取聊天流名称"""
+        stream = self.get_stream(stream_id)
+        if not stream:
+            return None
+
+        if stream.group_info and stream.group_info.group_name:
+            return stream.group_info.group_name
+        elif stream.user_info and stream.user_info.user_nickname:
+            return f"{stream.user_info.user_nickname}的私聊"
+        else:
+            # 如果没有群名或用户昵称，返回 None 或其他默认值
+            return None
+
     async def _save_stream(self, stream: ChatStream):
         """保存聊天流到数据库"""
         if not stream.saved:
