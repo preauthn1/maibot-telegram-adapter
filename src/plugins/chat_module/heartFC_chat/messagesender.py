@@ -5,8 +5,7 @@ from typing import Dict, List, Optional, Union
 from src.common.logger import get_module_logger
 from ....common.database import db
 from ...message.api import global_api
-from ...message import MessageSending, MessageThinking, MessageSet
-
+from ...chat.message import MessageSending, MessageThinking, MessageSet
 from ...storage.storage import MessageStorage
 from ....config.config import global_config
 from ...chat.utils import truncate_message, calculate_typing_time, count_messages_between
@@ -97,22 +96,10 @@ class MessageContainer:
         self.max_size = max_size
         self.messages = []
         self.last_send_time = 0
-        self.thinking_wait_timeout = 20  # 思考等待超时时间（秒）
 
-    def get_timeout_messages(self) -> List[MessageSending]:
-        """获取所有超时的Message_Sending对象（思考时间超过20秒），按thinking_start_time排序"""
-        current_time = time.time()
-        timeout_messages = []
-
-        for msg in self.messages:
-            if isinstance(msg, MessageSending):
-                if current_time - msg.thinking_start_time > self.thinking_wait_timeout:
-                    timeout_messages.append(msg)
-
-        # 按thinking_start_time排序，时间早的在前面
-        timeout_messages.sort(key=lambda x: x.thinking_start_time)
-
-        return timeout_messages
+    def count_thinking_messages(self) -> int:
+        """计算当前容器中思考消息的数量"""
+        return sum(1 for msg in self.messages if isinstance(msg, MessageThinking))
 
     def get_earliest_message(self) -> Optional[Union[MessageThinking, MessageSending]]:
         """获取thinking_start_time最早的消息对象"""
@@ -224,10 +211,10 @@ class MessageManager:
 
                 if (
                     message_earliest.is_head
-                    and (thinking_messages_count > 4 or thinking_messages_length > 250)
+                    and (thinking_messages_count > 3 or thinking_messages_length > 200)
                     and not message_earliest.is_private_message()  # 避免在私聊时插入reply
                 ):
-                    logger.debug(f"设置回复消息{message_earliest.processed_plain_text}")
+                    logger.debug(f"距离原始消息太长，设置回复消息{message_earliest.processed_plain_text}")
                     message_earliest.set_reply()
 
                 await message_earliest.process()
