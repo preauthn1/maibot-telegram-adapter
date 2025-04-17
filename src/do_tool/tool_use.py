@@ -24,8 +24,9 @@ class ToolUser:
             model=global_config.llm_tool_use, temperature=0.2, max_tokens=1000, request_type="tool_use"
         )
 
+    @staticmethod
     async def _build_tool_prompt(
-        self, message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
+        message_txt: str, sender_name: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
     ):
         """构建工具使用的提示词
 
@@ -69,7 +70,8 @@ class ToolUser:
         prompt += "你现在需要对群里的聊天内容进行回复，现在选择工具来对消息和你的回复进行处理，你是否需要额外的信息，比如回忆或者搜寻已有的知识，改变关系和情感，或者了解你现在正在做什么。"
         return prompt
 
-    def _define_tools(self):
+    @staticmethod
+    def _define_tools():
         """获取所有已注册工具的定义
 
         Returns:
@@ -77,7 +79,8 @@ class ToolUser:
         """
         return get_all_tool_definitions()
 
-    async def _execute_tool_call(self, tool_call, message_txt: str):
+    @staticmethod
+    async def _execute_tool_call(tool_call, message_txt: str):
         """执行特定的工具调用
 
         Args:

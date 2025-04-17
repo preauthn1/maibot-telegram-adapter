@@ -13,7 +13,7 @@ llmcheck 模式：
 
 import time
 from loguru import logger
-from ..models.utils_model import LLM_request
+from ..models.utils_model import LLMRequest
 from ...config.config import global_config
 
 # from ..chat.chat_stream import ChatStream
@@ -61,7 +61,7 @@ def llmcheck_decorator(trigger_condition_func):
 class LlmcheckWillingManager(MxpWillingManager):
     def __init__(self):
         super().__init__()
-        self.model_v3 = LLM_request(model=global_config.llm_normal, temperature=0.3)
+        self.model_v3 = LLMRequest(model=global_config.llm_normal, temperature=0.3)
 
     async def get_llmreply_probability(self, message_id: str):
         message_info = self.ongoing_messages[message_id]
