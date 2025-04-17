@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 import time
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import random
 from collections import deque
 import json # 引入 json
@@ -37,23 +37,58 @@ class InterestMonitorApp:
         # 使用 deque 来存储有限的历史数据点
         # key: stream_id, value: deque([(timestamp, interest_level), ...])
         self.stream_history = {}
+        # key: stream_id, value: deque([(timestamp, reply_probability), ...]) # <--- 新增：存储概率历史
+        self.probability_history = {}
         self.stream_colors = {} # 为每个 stream 分配颜色
         self.stream_display_names = {} # *** New: Store display names (group_name) ***
+        self.selected_stream_id = tk.StringVar() # 用于 Combobox 绑定
 
         # --- UI 元素 ---
+        # 创建 Notebook (选项卡控件)
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(pady=10, padx=10, fill=tk.BOTH, expand=1)
+
+        # --- 第一个选项卡：所有流 ---
+        self.frame_all = ttk.Frame(self.notebook, padding="5 5 5 5")
+        self.notebook.add(self.frame_all, text='所有聊天流')
+
         # 状态标签
         self.status_label = tk.Label(root, text="Initializing...", anchor="w", fg="grey")
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=2)
 
-        # Matplotlib 图表设置
+        # Matplotlib 图表设置 (用于第一个选项卡)
         self.fig = Figure(figsize=(5, 4), dpi=100)
         self.ax = self.fig.add_subplot(111)
         # 配置在 update_plot 中进行，避免重复
 
-        # 创建 Tkinter 画布嵌入 Matplotlib 图表
-        self.canvas = FigureCanvasTkAgg(self.fig, master=root)
+        # 创建 Tkinter 画布嵌入 Matplotlib 图表 (用于第一个选项卡)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.frame_all) # <--- 放入 frame_all
         self.canvas_widget = self.canvas.get_tk_widget()
         self.canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+        # --- 第二个选项卡：单个流 ---
+        self.frame_single = ttk.Frame(self.notebook, padding="5 5 5 5")
+        self.notebook.add(self.frame_single, text='单个聊天流详情')
+
+        # 单个流选项卡的上部控制区域
+        self.control_frame_single = ttk.Frame(self.frame_single)
+        self.control_frame_single.pack(side=tk.TOP, fill=tk.X, pady=5)
+
+        ttk.Label(self.control_frame_single, text="选择聊天流:").pack(side=tk.LEFT, padx=(0, 5))
+        self.stream_selector = ttk.Combobox(self.control_frame_single, textvariable=self.selected_stream_id, state="readonly", width=50)
+        self.stream_selector.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.stream_selector.bind("<<ComboboxSelected>>", self.on_stream_selected)
+
+        # Matplotlib 图表设置 (用于第二个选项卡)
+        self.fig_single = Figure(figsize=(5, 4), dpi=100)
+        # 修改：创建两个子图，一个显示兴趣度，一个显示概率
+        self.ax_single_interest = self.fig_single.add_subplot(211) # 2行1列的第1个
+        self.ax_single_probability = self.fig_single.add_subplot(212, sharex=self.ax_single_interest) # 2行1列的第2个，共享X轴
+
+        # 创建 Tkinter 画布嵌入 Matplotlib 图表 (用于第二个选项卡)
+        self.canvas_single = FigureCanvasTkAgg(self.fig_single, master=self.frame_single) # <--- 放入 frame_single
+        self.canvas_widget_single = self.canvas_single.get_tk_widget()
+        self.canvas_widget_single.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
         # --- 初始化和启动刷新 ---
         self.update_display() # 首次加载并开始刷新循环
@@ -72,6 +107,7 @@ class InterestMonitorApp:
         # *** Reset display names each time we reload ***
         new_stream_history = {}
         new_stream_display_names = {}
+        new_probability_history = {} # <--- 重置概率历史
         read_count = 0
         error_count = 0
         # *** Calculate the timestamp threshold for the last 30 minutes ***
@@ -93,6 +129,7 @@ class InterestMonitorApp:
                         stream_id = log_entry.get("stream_id")
                         interest_level = log_entry.get("interest_level")
                         group_name = log_entry.get("group_name", stream_id) # *** Get group_name, fallback to stream_id ***
+                        reply_probability = log_entry.get("reply_probability") # <--- 获取概率值
 
                         # *** Check other required fields AFTER time filtering ***
                         if stream_id is None or interest_level is None:
@@ -102,6 +139,7 @@ class InterestMonitorApp:
                         # 如果是第一次读到这个 stream_id，则创建 deque
                         if stream_id not in new_stream_history:
                             new_stream_history[stream_id] = deque(maxlen=MAX_HISTORY_POINTS)
+                            new_probability_history[stream_id] = deque(maxlen=MAX_HISTORY_POINTS) # <--- 创建概率 deque
                             # 检查是否已有颜色，没有则分配
                             if stream_id not in self.stream_colors:
                                 self.stream_colors[stream_id] = self.get_random_color()
@@ -111,6 +149,13 @@ class InterestMonitorApp:
 
                         # 添加数据点
                         new_stream_history[stream_id].append((float(timestamp), float(interest_level)))
+                        # 添加概率数据点 (如果存在)
+                        if reply_probability is not None:
+                            try:
+                                new_probability_history[stream_id].append((float(timestamp), float(reply_probability)))
+                            except (TypeError, ValueError):
+                                # 如果概率值无效，可以跳过或记录一个默认值，这里跳过
+                                pass
 
                     except json.JSONDecodeError:
                         error_count += 1
@@ -124,6 +169,7 @@ class InterestMonitorApp:
             # 读取完成后，用新数据替换旧数据
             self.stream_history = new_stream_history
             self.stream_display_names = new_stream_display_names # *** Update display names ***
+            self.probability_history = new_probability_history # <--- 更新概率历史
             status_msg = f"Data loaded at {datetime.now().strftime('%H:%M:%S')}. Lines read: {read_count}."
             if error_count > 0:
                  status_msg += f" Skipped {error_count} invalid lines."
@@ -136,12 +182,39 @@ class InterestMonitorApp:
         except Exception as e:
             self.set_status(f"An unexpected error occurred during loading: {e}", "red")
 
+        # --- 更新 Combobox ---
+        self.update_stream_selector()
 
-    def update_plot(self):
-        """更新 Matplotlib 图表"""
+    def update_stream_selector(self):
+        """更新单个流选项卡中的 Combobox 列表"""
+        # 创建 (display_name, stream_id) 对的列表，按 display_name 排序
+        available_streams = sorted(
+            [(name, sid) for sid, name in self.stream_display_names.items() if sid in self.stream_history and self.stream_history[sid]],
+            key=lambda item: item[0] # 按显示名称排序
+        )
+
+        # 更新 Combobox 的值 (仅显示 display_name)
+        self.stream_selector['values'] = [name for name, sid in available_streams]
+
+        # 检查当前选中的 stream_id 是否仍然有效
+        current_selection_name = self.selected_stream_id.get()
+        current_selection_valid = any(name == current_selection_name for name, sid in available_streams)
+
+        if not current_selection_valid and available_streams:
+            # 如果当前选择无效，并且有可选流，则默认选中第一个
+            self.selected_stream_id.set(available_streams[0][0])
+            # 手动触发一次更新，因为 set 不会触发 <<ComboboxSelected>>
+            self.update_single_stream_plot()
+        elif not available_streams:
+            # 如果没有可选流，清空选择
+            self.selected_stream_id.set("")
+            self.update_single_stream_plot() # 清空图表
+
+    def update_all_streams_plot(self):
+        """更新第一个选项卡的 Matplotlib 图表 (显示所有流)"""
         self.ax.clear() # 清除旧图
         # *** 设置中文标题和标签 ***
-        self.ax.set_title("兴趣度随时间变化图")
+        self.ax.set_title("兴趣度随时间变化图 (所有活跃流)")
         self.ax.set_xlabel("时间")
         self.ax.set_ylabel("兴趣度")
         self.ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
@@ -213,6 +286,25 @@ class InterestMonitorApp:
 
         self.canvas.draw() # 重绘画布
 
+    def update_single_stream_plot(self):
+        """更新第二个选项卡的 Matplotlib 图表 (显示单个选定的流)"""
+        self.ax_single_interest.clear()
+        self.ax_single_probability.clear()
+
+        # 设置子图标题和标签
+        self.ax_single_interest.set_title("兴趣度")
+        self.ax_single_interest.set_ylabel("兴趣度")
+        self.ax_single_interest.grid(True)
+        self.ax_single_interest.set_ylim(0, 10) # 固定 Y 轴范围 0-10
+
+        self.ax_single_probability.set_title("回复评估概率")
+        self.ax_single_probability.set_xlabel("时间")
+        self.ax_single_probability.set_ylabel("概率")
+        self.ax_single_probability.grid(True)
+        self.ax_single_probability.set_ylim(0, 1.05) # 固定 Y 轴范围 0-1
+        self.ax_single_probability.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+
+        selected_name = self.selected_stream_id.get()
     def update_display(self):
         """主更新循环"""
         try:

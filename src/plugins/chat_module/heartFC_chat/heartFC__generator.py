@@ -48,45 +48,21 @@ class ResponseGenerator:
         arousal_multiplier = MoodManager.get_instance().get_arousal_multiplier()
 
         with Timer() as t_generate_response:
-            checked = False
-            if random.random() > 0:
-                checked = False
-                current_model = self.model_normal
-                current_model.temperature = (
-                    global_config.llm_normal["temp"] * arousal_multiplier
-                )  # 激活度越高，温度越高
-                model_response = await self._generate_response_with_model(
-                    message, current_model, thinking_id, mode="normal"
-                )
 
-                model_checked_response = model_response
-            else:
-                checked = True
-                current_model = self.model_normal
-                current_model.temperature = (
-                    global_config.llm_normal["temp"] * arousal_multiplier
-                )  # 激活度越高，温度越高
-                print(f"生成{message.processed_plain_text}回复温度是：{current_model.temperature}")
-                model_response = await self._generate_response_with_model(
-                    message, current_model, thinking_id, mode="simple"
-                )
+            current_model = self.model_normal
+            current_model.temperature = (
+                global_config.llm_normal["temp"] * arousal_multiplier
+            )  # 激活度越高，温度越高
+            model_response = await self._generate_response_with_model(
+                message, current_model, thinking_id, mode="normal"
+            )
 
-                current_model.temperature = global_config.llm_normal["temp"]
-                model_checked_response = await self._check_response_with_model(
-                    message, model_response, current_model, thinking_id
-                )
 
         if model_response:
-            if checked:
-                logger.info(
-                    f"{global_config.BOT_NICKNAME}的回复是：{model_response}，思忖后，回复是：{model_checked_response},生成回复时间: {t_generate_response.human_readable}"
-                )
-            else:
-                logger.info(
-                    f"{global_config.BOT_NICKNAME}的回复是：{model_response},生成回复时间: {t_generate_response.human_readable}"
-                )
-
-            model_processed_response = await self._process_response(model_checked_response)
+            logger.info(
+                f"{global_config.BOT_NICKNAME}的回复是：{model_response},生成回复时间: {t_generate_response.human_readable}"
+            )
+            model_processed_response = await self._process_response(model_response)
 
             return model_processed_response
         else:
