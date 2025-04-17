@@ -14,9 +14,9 @@ import time
 from loguru import logger
 from ..models.utils_model import LLM_request
 from ...config.config import global_config
-from ..chat.chat_stream import ChatStream
+# from ..chat.chat_stream import ChatStream
 from ..chat.utils import get_recent_group_detailed_plain_text
-from .willing_manager import BaseWillingManager
+# from .willing_manager import BaseWillingManager
 from .mode_mxp import MxpWillingManager
 import re
 from functools import wraps

@@ -62,7 +62,7 @@ class ToolUser:
         prompt = ""
         prompt += mid_memory_info
         prompt += "你正在思考如何回复群里的消息。\n"
-        prompt += f"之前群里进行了如下讨论:\n"
+        prompt += "之前群里进行了如下讨论:\n"
         prompt += chat_talking_prompt
         prompt += f"你注意到{sender_name}刚刚说：{message_txt}\n"
         prompt += f"注意你就是{bot_name}，{bot_name}是你的名字。根据之前的聊天记录补充问题信息，搜索时避开你的名字。\n"
