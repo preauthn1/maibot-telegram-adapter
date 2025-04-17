@@ -207,21 +207,21 @@ class ThinkFlowChat:
         if not buffer_result:
             await willing_manager.bombing_buffer_message_handle(message.message_info.message_id)
             willing_manager.delete(message.message_info.message_id)
-            F_type = "seglist"
+            f_type = "seglist"
             if message.message_segment.type != "seglist":
-                F_type = message.message_segment.type
+                f_type = message.message_segment.type
             else:
                 if (
                     isinstance(message.message_segment.data, list)
                     and all(isinstance(x, Seg) for x in message.message_segment.data)
                     and len(message.message_segment.data) == 1
                 ):
-                    F_type = message.message_segment.data[0].type
-            if F_type == "text":
+                    f_type = message.message_segment.data[0].type
+            if f_type == "text":
                 logger.info(f"触发缓冲，已炸飞消息：{message.processed_plain_text}")
-            elif F_type == "image":
+            elif f_type == "image":
                 logger.info("触发缓冲，已炸飞表情包/图片")
-            elif F_type == "seglist":
+            elif f_type == "seglist":
                 logger.info("触发缓冲，已炸飞消息列")
             return
 

@@ -151,20 +151,20 @@ class MessageBuffer:
                             keep_msgs[msg_id] = msg
                         elif msg.result == "F":
                             # 收集F消息的文本内容
-                            F_type = "seglist"
+                            f_type = "seglist"
                             if msg.message.message_segment.type != "seglist":
-                                F_type = msg.message.message_segment.type
+                                f_type = msg.message.message_segment.type
                             else:
                                 if (
                                     isinstance(msg.message.message_segment.data, list)
                                     and all(isinstance(x, Seg) for x in msg.message.message_segment.data)
                                     and len(msg.message.message_segment.data) == 1
                                 ):
-                                    F_type = msg.message.message_segment.data[0].type
+                                    f_type = msg.message.message_segment.data[0].type
                             if hasattr(msg.message, "processed_plain_text") and msg.message.processed_plain_text:
-                                if F_type == "text":
+                                if f_type == "text":
                                     combined_text.append(msg.message.processed_plain_text)
-                                elif F_type != "text":
+                                elif f_type != "text":
                                     is_update = False
                         elif msg.result == "U":
                             logger.debug(f"异常未处理信息id： {msg.message.message_info.message_id}")
