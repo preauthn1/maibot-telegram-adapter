@@ -4,6 +4,8 @@ import math
 import random
 import time
 import re
+from itertools import combinations
+
 import jieba
 import networkx as nx
 import numpy as np
@@ -1553,11 +1555,10 @@ class ParahippocampalGyrus:
                                 last_modified=current_time,
                             )
 
-            for i in range(len(all_topics)):
-                for j in range(i + 1, len(all_topics)):
-                    logger.debug(f"连接同批次节点: {all_topics[i]} 和 {all_topics[j]}")
-                    all_added_edges.append(f"{all_topics[i]}-{all_topics[j]}")
-                    self.memory_graph.connect_dot(all_topics[i], all_topics[j])
+            for topic1, topic2 in combinations(all_topics, 2):
+                logger.debug(f"连接同批次节点: {topic1} 和 {topic2}")
+                all_added_edges.append(f"{topic1}-{topic2}")
+                self.memory_graph.connect_dot(topic1, topic2)
 
         logger.success(f"更新记忆: {', '.join(all_added_nodes)}")
         logger.debug(f"强化连接: {', '.join(all_added_edges)}")
