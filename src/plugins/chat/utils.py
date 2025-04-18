@@ -789,6 +789,16 @@ def parse_text_timestamps(text: str, mode: str = "normal") -> str:
         to_convert.reverse()
         for ts, match in to_convert:
             readable_time = translate_timestamp_to_human_readable(ts, "relative")
+'''
+            converted_timestamps.append((ts, match, readable_time))
+
+        # 按照时间戳原始顺序排序，避免替换时位置错误
+        converted_timestamps.sort(key=lambda x: x[1].start())
+
+        # 从后向前替换，避免位置改变
+        converted_timestamps.reverse()
+        for _ts, match, readable_time in converted_timestamps:
+'''
             pattern_instance = re.escape(match.group(0))
             result_text = re.sub(pattern_instance, readable_time, result_text, count=1)
 
