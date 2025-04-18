@@ -22,9 +22,7 @@ class ToolUser:
         )
 
     @staticmethod
-    async def _build_tool_prompt(
-        message_txt: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
-    ):
+    async def _build_tool_prompt(message_txt: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None):
         """构建工具使用的提示词
 
         Args:
@@ -114,9 +112,7 @@ class ToolUser:
             logger.error(f"执行工具调用时发生错误: {str(e)}")
             return None
 
-    async def use_tool(
-        self, message_txt: str, chat_stream: ChatStream, sub_heartflow: SubHeartflow = None
-    ):
+    async def use_tool(self, message_txt: str, chat_stream: ChatStream, sub_heartflow: SubHeartflow = None):
         """使用工具辅助思考，判断是否需要额外信息
 
         Args:

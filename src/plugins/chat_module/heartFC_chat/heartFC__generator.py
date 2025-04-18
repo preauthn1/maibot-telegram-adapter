@@ -37,7 +37,11 @@ class ResponseGenerator:
         self.current_model_type = "r1"  # 默认使用 R1
         self.current_model_name = "unknown model"
 
-    async def generate_response(self, message: MessageRecv, thinking_id: str,) -> Optional[List[str]]:
+    async def generate_response(
+        self,
+        message: MessageRecv,
+        thinking_id: str,
+    ) -> Optional[List[str]]:
         """根据当前模型类型选择对应的生成函数"""
 
         logger.info(
@@ -47,15 +51,11 @@ class ResponseGenerator:
         arousal_multiplier = MoodManager.get_instance().get_arousal_multiplier()
 
         with Timer() as t_generate_response:
-
             current_model = self.model_normal
-            current_model.temperature = (
-                global_config.llm_normal["temp"] * arousal_multiplier
-            )  # 激活度越高，温度越高
+            current_model.temperature = global_config.llm_normal["temp"] * arousal_multiplier  # 激活度越高，温度越高
             model_response = await self._generate_response_with_model(
                 message, current_model, thinking_id, mode="normal"
             )
-
 
         if model_response:
             logger.info(

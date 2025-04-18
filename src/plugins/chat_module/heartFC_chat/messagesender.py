@@ -23,6 +23,7 @@ logger = get_module_logger("msg_sender", config=sender_config)
 
 class MessageSender:
     """发送器"""
+
     _instance = None
 
     def __new__(cls, *args, **kwargs):
@@ -32,7 +33,7 @@ class MessageSender:
 
     def __init__(self):
         # 确保 __init__ 只被调用一次
-        if not hasattr(self, '_initialized'):
+        if not hasattr(self, "_initialized"):
             self.message_interval = (0.5, 1)  # 消息间隔时间范围(秒)
             self.last_send_time = 0
             self._current_bot = None
@@ -41,7 +42,6 @@ class MessageSender:
     def set_bot(self, bot):
         """设置当前bot实例"""
         pass
-
 
     async def send_via_ws(self, message: MessageSending) -> None:
         try:
@@ -56,7 +56,6 @@ class MessageSender:
         """发送消息"""
 
         if isinstance(message, MessageSending):
-
             typing_time = calculate_typing_time(
                 input_string=message.processed_plain_text,
                 thinking_start_time=message.thinking_start_time,
@@ -143,6 +142,7 @@ class MessageContainer:
 
 class MessageManager:
     """管理所有聊天流的消息容器"""
+
     _instance = None
 
     def __new__(cls, *args, **kwargs):
@@ -152,7 +152,7 @@ class MessageManager:
 
     def __init__(self):
         # 确保 __init__ 只被调用一次
-        if not hasattr(self, '_initialized'):
+        if not hasattr(self, "_initialized"):
             self.containers: Dict[str, MessageContainer] = {}  # chat_id -> MessageContainer
             self.storage = MessageStorage()
             self._running = True
@@ -232,10 +232,10 @@ class MessageManager:
         while self._running:
             await asyncio.sleep(1)
             tasks = []
-            for chat_id in list(self.containers.keys()): # 使用 list 复制 key，防止在迭代时修改字典
+            for chat_id in list(self.containers.keys()):  # 使用 list 复制 key，防止在迭代时修改字典
                 tasks.append(self.process_chat_messages(chat_id))
 
-            if tasks: # 仅在有任务时执行 gather
+            if tasks:  # 仅在有任务时执行 gather
                 await asyncio.gather(*tasks)
 
 

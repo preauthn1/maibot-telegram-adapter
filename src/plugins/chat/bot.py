@@ -122,11 +122,9 @@ class ChatBot:
                                 # logger.debug(f"开始群聊模式{str(message_data)[:50]}...")
                                 if global_config.response_mode == "heart_flow":
                                     # logger.info(f"启动最新最好的思维流FC模式{str(message_data)[:50]}...")
-                                    
+
                                     await self.heartFC_processor.process_message(message_data)
-                                    
-                                    
-                                    
+
                                 elif global_config.response_mode == "reasoning":
                                     # logger.debug(f"开始推理模式{str(message_data)[:50]}...")
                                     await self.reasoning_chat.process_message(message_data)

@@ -60,8 +60,8 @@ def init_prompt():
     prompt += "现在你接下去继续思考，产生新的想法，记得保留你刚刚的想法，不要分点输出，输出连贯的内心独白"
     prompt += "不要太长，但是记得结合上述的消息，要记得你的人设，关注聊天和新内容，关注你回复的内容，不要思考太多:"
     Prompt(prompt, "sub_heartflow_prompt_after")
-    
-        # prompt += f"你现在正在做的事情是：{schedule_info}\n"
+
+    # prompt += f"你现在正在做的事情是：{schedule_info}\n"
     prompt += "{extra_info}\n"
     prompt += "{prompt_personality}\n"
     prompt += "现在是{time_now}，你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：\n{chat_observe_info}\n"
@@ -115,7 +115,7 @@ class SubHeartflow:
 
         self.running_knowledges = []
 
-        self._thinking_lock = asyncio.Lock() # 添加思考锁，防止并发思考
+        self._thinking_lock = asyncio.Lock()  # 添加思考锁，防止并发思考
 
         self.bot_name = global_config.BOT_NICKNAME
 
@@ -165,8 +165,10 @@ class SubHeartflow:
 
             # 检查是否超过指定时间没有激活 (例如，没有被调用进行思考)
             if current_time - self.last_active_time > global_config.sub_heart_flow_stop_time:  # 例如 5 分钟
-                logger.info(f"子心流 {self.subheartflow_id} 超过 {global_config.sub_heart_flow_stop_time} 秒没有激活，正在销毁..."
-                            f" (Last active: {datetime.fromtimestamp(self.last_active_time).strftime('%Y-%m-%d %H:%M:%S')})")
+                logger.info(
+                    f"子心流 {self.subheartflow_id} 超过 {global_config.sub_heart_flow_stop_time} 秒没有激活，正在销毁..."
+                    f" (Last active: {datetime.fromtimestamp(self.last_active_time).strftime('%Y-%m-%d %H:%M:%S')})"
+                )
                 # 在这里添加实际的销毁逻辑，例如从主 Heartflow 管理器中移除自身
                 # heartflow.remove_subheartflow(self.subheartflow_id) # 假设有这样的方法
                 break  # 退出循环以停止任务
@@ -176,7 +178,7 @@ class SubHeartflow:
             # await self.do_a_thinking()
             # await self.judge_willing()
 
-            await asyncio.sleep(global_config.sub_heart_flow_update_interval) # 定期检查销毁条件
+            await asyncio.sleep(global_config.sub_heart_flow_update_interval)  # 定期检查销毁条件
 
     async def ensure_observed(self):
         """确保在思考前执行了观察"""
@@ -198,20 +200,23 @@ class SubHeartflow:
             logger.error(f"[{self.subheartflow_id}] do_observe called but no valid observation found.")
 
     async def do_thinking_before_reply(
-        self,  chat_stream: ChatStream, extra_info: str, obs_id: list[str] = None # 修改 obs_id 类型为 list[str]
+        self,
+        chat_stream: ChatStream,
+        extra_info: str,
+        obs_id: list[str] = None,  # 修改 obs_id 类型为 list[str]
     ):
-        async with self._thinking_lock: # 获取思考锁
+        async with self._thinking_lock:  # 获取思考锁
             # --- 在思考前确保观察已执行 --- #
             await self.ensure_observed()
 
-            self.last_active_time = time.time() # 更新最后激活时间戳
+            self.last_active_time = time.time()  # 更新最后激活时间戳
 
             current_thinking_info = self.current_mind
             mood_info = self.current_state.mood
             observation = self._get_primary_observation()
             if not observation:
                 logger.error(f"[{self.subheartflow_id}] Cannot perform thinking without observation.")
-                return "", [] # 返回空结果
+                return "", []  # 返回空结果
 
             # --- 获取观察信息 --- #
             chat_observe_info = ""
@@ -220,12 +225,13 @@ class SubHeartflow:
                     chat_observe_info = observation.get_observe_info(obs_id)
                     logger.debug(f"[{self.subheartflow_id}] Using specific observation IDs: {obs_id}")
                 except Exception as e:
-                    logger.error(f"[{self.subheartflow_id}] Error getting observe info with IDs {obs_id}: {e}. Falling back.")
-                    chat_observe_info = observation.get_observe_info() # 出错时回退到默认观察
+                    logger.error(
+                        f"[{self.subheartflow_id}] Error getting observe info with IDs {obs_id}: {e}. Falling back."
+                    )
+                    chat_observe_info = observation.get_observe_info()  # 出错时回退到默认观察
             else:
                 chat_observe_info = observation.get_observe_info()
                 logger.debug(f"[{self.subheartflow_id}] Using default observation info.")
-
 
             # --- 构建 Prompt (基本逻辑不变) --- #
             extra_info_prompt = ""
@@ -235,19 +241,19 @@ class SubHeartflow:
                     for item in tool_data:
                         extra_info_prompt += f"- {item['name']}: {item['content']}\n"
             else:
-                extra_info_prompt = "无工具信息。\n" # 提供默认值
+                extra_info_prompt = "无工具信息。\n"  # 提供默认值
 
             individuality = Individuality.get_instance()
             prompt_personality = f"你的名字是{self.bot_name}，你"
             prompt_personality += individuality.personality.personality_core
-            
+
             # 添加随机性格侧面
             if individuality.personality.personality_sides:
                 random_side = random.choice(individuality.personality.personality_sides)
                 prompt_personality += f"，{random_side}"
-            
+
             # 添加随机身份细节
-            if individuality.identity.identity_detail: 
+            if individuality.identity.identity_detail:
                 random_detail = random.choice(individuality.identity.identity_detail)
                 prompt_personality += f"，{random_detail}"
 
@@ -273,12 +279,12 @@ class SubHeartflow:
 
             try:
                 response, reasoning_content = await self.llm_model.generate_response_async(prompt)
-                if not response: # 如果 LLM 返回空，给一个默认想法
+                if not response:  # 如果 LLM 返回空，给一个默认想法
                     response = "(不知道该想些什么...)"
                     logger.warning(f"[{self.subheartflow_id}] LLM returned empty response for thinking.")
             except Exception as e:
                 logger.error(f"[{self.subheartflow_id}] 内心独白获取失败: {e}")
-                response = "(思考时发生错误...)" # 错误时的默认想法
+                response = "(思考时发生错误...)"  # 错误时的默认想法
 
             self.update_current_mind(response)
 
@@ -448,9 +454,9 @@ class SubHeartflow:
 
     async def check_reply_trigger(self) -> bool:
         """根据观察到的信息和内部状态，判断是否应该触发一次回复。
-           TODO: 实现具体的判断逻辑。
-           例如：检查 self.observations[0].now_message_info 是否包含提及、问题，
-           或者 self.current_mind 中是否包含强烈的回复意图等。
+        TODO: 实现具体的判断逻辑。
+        例如：检查 self.observations[0].now_message_info 是否包含提及、问题，
+        或者 self.current_mind 中是否包含强烈的回复意图等。
         """
         # Placeholder: 目前始终返回 False，需要后续实现
         logger.trace(f"[{self.subheartflow_id}] check_reply_trigger called. (Logic Pending)")
@@ -462,7 +468,7 @@ class SubHeartflow:
         #         logger.info(f"[{self.subheartflow_id}] Triggering reply based on mention.")
         #         return True
         # ------------------ #
-        return False # 默认不触发
+        return False  # 默认不触发
 
 
 init_prompt()

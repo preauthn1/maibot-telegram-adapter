@@ -112,7 +112,7 @@ class MainSystem:
             logger.success("心流系统启动成功")
 
             # 启动 InterestManager 的后台任务
-            interest_manager = InterestManager() # 获取单例
+            interest_manager = InterestManager()  # 获取单例
             await interest_manager.start_background_tasks()
             logger.success("InterestManager 后台任务启动成功")
 

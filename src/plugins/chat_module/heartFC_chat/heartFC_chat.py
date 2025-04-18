@@ -33,15 +33,16 @@ logger = get_module_logger("heartFC_chat", config=chat_config)
 # 新增常量
 INTEREST_MONITOR_INTERVAL_SECONDS = 1
 
+
 class HeartFC_Chat:
-    _instance = None # For potential singleton access if needed by MessageManager
+    _instance = None  # For potential singleton access if needed by MessageManager
 
     def __init__(self):
         # --- Updated Init ---
         if HeartFC_Chat._instance is not None:
             # Prevent re-initialization if used as a singleton
             return
-        self.logger = logger # Make logger accessible via self
+        self.logger = logger  # Make logger accessible via self
         self.gpt = ResponseGenerator()
         self.mood_manager = MoodManager.get_instance()
         self.mood_manager.start_mood_update()
@@ -52,13 +53,14 @@ class HeartFC_Chat:
         self.pf_chatting_instances: Dict[str, PFChatting] = {}
         self._pf_chatting_lock = Lock()
         # --- End New PFChatting Management ---
-        HeartFC_Chat._instance = self # Register instance
+        HeartFC_Chat._instance = self  # Register instance
         # --- End Updated Init ---
 
     # --- Added Class Method for Singleton Access ---
     @classmethod
     def get_instance(cls):
         return cls._instance
+
     # --- End Added Class Method ---
 
     async def start(self):
@@ -76,8 +78,8 @@ class HeartFC_Chat:
                 self._interest_monitor_task = loop.create_task(self._interest_monitor_loop())
                 logger.info(f"兴趣监控任务已创建。监控间隔: {INTEREST_MONITOR_INTERVAL_SECONDS}秒。")
             except RuntimeError:
-                 logger.error("创建兴趣监控任务失败：没有运行中的事件循环。")
-                 raise
+                logger.error("创建兴趣监控任务失败：没有运行中的事件循环。")
+                raise
         else:
             logger.warning("跳过兴趣监控任务创建：任务已存在或正在运行。")
 
@@ -95,6 +97,7 @@ class HeartFC_Chat:
                     return None
                 self.pf_chatting_instances[stream_id] = instance
             return self.pf_chatting_instances[stream_id]
+
     # --- End Added PFChatting Instance Manager ---
 
     async def _interest_monitor_loop(self):
@@ -107,7 +110,7 @@ class HeartFC_Chat:
                 # logger.trace(f"检查 {len(active_stream_ids)} 个活跃流是否足以开启心流对话...") # 调试日志
 
                 for stream_id in active_stream_ids:
-                    stream_name = chat_manager.get_stream_name(stream_id) or stream_id # 获取流名称
+                    stream_name = chat_manager.get_stream_name(stream_id) or stream_id  # 获取流名称
                     sub_hf = heartflow.get_subheartflow(stream_id)
                     if not sub_hf:
                         logger.warning(f"监控循环: 无法获取活跃流 {stream_name} 的 sub_hf")
@@ -121,7 +124,9 @@ class HeartFC_Chat:
                             # if should_trigger:
                             #     logger.info(f"[{stream_name}] 基于兴趣概率决定启动交流模式 (概率: {interest_chatting.current_reply_probability:.4f})。")
                         else:
-                            logger.trace(f"[{stream_name}] 没有找到对应的 InterestChatting 实例，跳过基于兴趣的触发检查。")
+                            logger.trace(
+                                f"[{stream_name}] 没有找到对应的 InterestChatting 实例，跳过基于兴趣的触发检查。"
+                            )
                     except Exception as e:
                         logger.error(f"检查兴趣触发器时出错 流 {stream_name}: {e}")
                         logger.error(traceback.format_exc())
@@ -140,7 +145,7 @@ class HeartFC_Chat:
             except Exception as e:
                 logger.error(f"兴趣监控循环错误: {e}")
                 logger.error(traceback.format_exc())
-                await asyncio.sleep(5) # 发生错误时等待
+                await asyncio.sleep(5)  # 发生错误时等待
 
     async def _create_thinking_message(self, anchor_message: Optional[MessageRecv]):
         """创建思考消息 (尝试锚定到 anchor_message)"""
@@ -162,14 +167,16 @@ class HeartFC_Chat:
             message_id=thinking_id,
             chat_stream=chat,
             bot_user_info=bot_user_info,
-            reply=anchor_message, # 回复的是锚点消息
+            reply=anchor_message,  # 回复的是锚点消息
             thinking_start_time=thinking_time_point,
         )
 
         MessageManager().add_message(thinking_message)
         return thinking_id
 
-    async def _send_response_messages(self, anchor_message: Optional[MessageRecv], response_set: List[str], thinking_id) -> Optional[MessageSending]:
+    async def _send_response_messages(
+        self, anchor_message: Optional[MessageRecv], response_set: List[str], thinking_id
+    ) -> Optional[MessageSending]:
         """发送回复消息 (尝试锚定到 anchor_message)"""
         if not anchor_message or not anchor_message.chat_stream:
             logger.error("无法发送回复，缺少有效的锚点消息或聊天流。")
@@ -184,7 +191,7 @@ class HeartFC_Chat:
                 container.messages.remove(msg)
                 break
         if not thinking_message:
-            stream_name = chat_manager.get_stream_name(chat.stream_id) or chat.stream_id # 获取流名称
+            stream_name = chat_manager.get_stream_name(chat.stream_id) or chat.stream_id  # 获取流名称
             logger.warning(f"[{stream_name}] 未找到对应的思考消息 {thinking_id}，可能已超时被移除")
             return None
 
@@ -195,16 +202,16 @@ class HeartFC_Chat:
         for msg_text in response_set:
             message_segment = Seg(type="text", data=msg_text)
             bot_message = MessageSending(
-                message_id=thinking_id, # 使用 thinking_id 作为批次标识
+                message_id=thinking_id,  # 使用 thinking_id 作为批次标识
                 chat_stream=chat,
                 bot_user_info=UserInfo(
                     user_id=global_config.BOT_QQ,
                     user_nickname=global_config.BOT_NICKNAME,
                     platform=anchor_message.message_info.platform,
                 ),
-                sender_info=anchor_message.message_info.user_info, # 发送给锚点消息的用户
+                sender_info=anchor_message.message_info.user_info,  # 发送给锚点消息的用户
                 message_segment=message_segment,
-                reply=anchor_message, # 回复锚点消息
+                reply=anchor_message,  # 回复锚点消息
                 is_head=not mark_head,
                 is_emoji=False,
                 thinking_start_time=thinking_start_time,
@@ -214,19 +221,19 @@ class HeartFC_Chat:
                 first_bot_msg = bot_message
             message_set.add_message(bot_message)
 
-        if message_set.messages: # 确保有消息才添加
+        if message_set.messages:  # 确保有消息才添加
             MessageManager().add_message(message_set)
             return first_bot_msg
         else:
-            stream_name = chat_manager.get_stream_name(chat.stream_id) or chat.stream_id # 获取流名称
+            stream_name = chat_manager.get_stream_name(chat.stream_id) or chat.stream_id  # 获取流名称
             logger.warning(f"[{stream_name}] 没有生成有效的回复消息集，无法发送。")
             return None
 
     async def _handle_emoji(self, anchor_message: Optional[MessageRecv], response_set, send_emoji=""):
         """处理表情包 (尝试锚定到 anchor_message)"""
         if not anchor_message or not anchor_message.chat_stream:
-             logger.error("无法处理表情包，缺少有效的锚点消息或聊天流。")
-             return
+            logger.error("无法处理表情包，缺少有效的锚点消息或聊天流。")
+            return
 
         chat = anchor_message.chat_stream
         if send_emoji:
@@ -242,7 +249,7 @@ class HeartFC_Chat:
             thinking_time_point = round(time.time(), 2)
             message_segment = Seg(type="emoji", data=emoji_cq)
             bot_message = MessageSending(
-                message_id="me" + str(thinking_time_point), # 使用不同的 ID 前缀?
+                message_id="me" + str(thinking_time_point),  # 使用不同的 ID 前缀?
                 chat_stream=chat,
                 bot_user_info=UserInfo(
                     user_id=global_config.BOT_QQ,
@@ -251,7 +258,7 @@ class HeartFC_Chat:
                 ),
                 sender_info=anchor_message.message_info.user_info,
                 message_segment=message_segment,
-                reply=anchor_message, # 回复锚点消息
+                reply=anchor_message,  # 回复锚点消息
                 is_head=False,
                 is_emoji=True,
             )
@@ -260,8 +267,8 @@ class HeartFC_Chat:
     async def _update_relationship(self, anchor_message: Optional[MessageRecv], response_set):
         """更新关系情绪 (尝试基于 anchor_message)"""
         if not anchor_message or not anchor_message.chat_stream:
-             logger.error("无法更新关系情绪，缺少有效的锚点消息或聊天流。")
-             return
+            logger.error("无法更新关系情绪，缺少有效的锚点消息或聊天流。")
+            return
 
         # 关系更新依赖于理解回复是针对谁的，以及原始消息的上下文
         # 这里的实现可能需要调整，取决于关系管理器如何工作
@@ -269,18 +276,18 @@ class HeartFC_Chat:
         # 注意：anchor_message.processed_plain_text 是锚点消息的文本，不一定是思考的全部上下文
         stance, emotion = await self.gpt._get_emotion_tags(ori_response, anchor_message.processed_plain_text)
         await relationship_manager.calculate_update_relationship_value(
-            chat_stream=anchor_message.chat_stream, # 使用锚点消息的流
+            chat_stream=anchor_message.chat_stream,  # 使用锚点消息的流
             label=emotion,
-            stance=stance
+            stance=stance,
         )
         self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
 
     async def trigger_reply_generation(self, stream_id: str, observed_messages: List[dict]):
         """根据 SubHeartflow 的触发信号生成回复 (基于观察)"""
-        stream_name = chat_manager.get_stream_name(stream_id) or stream_id # <--- 在开始时获取名称
+        stream_name = chat_manager.get_stream_name(stream_id) or stream_id  # <--- 在开始时获取名称
         chat = None
         sub_hf = None
-        anchor_message: Optional[MessageRecv] = None # <--- 重命名，用于锚定回复的消息对象
+        anchor_message: Optional[MessageRecv] = None  # <--- 重命名，用于锚定回复的消息对象
         userinfo: Optional[UserInfo] = None
         messageinfo: Optional[BaseMessageInfo] = None
 
@@ -303,9 +310,9 @@ class HeartFC_Chat:
                         logger.error(f"[{stream_name}] 无法找到子心流对象，无法生成回复。")
                         return
             except Exception as e:
-                 logger.error(f"[{stream_name}] 获取 ChatStream 或 SubHeartflow 时出错: {e}")
-                 logger.error(traceback.format_exc())
-                 return
+                logger.error(f"[{stream_name}] 获取 ChatStream 或 SubHeartflow 时出错: {e}")
+                logger.error(traceback.format_exc())
+                return
 
             # --- 2. 尝试从 observed_messages 重建最后一条消息作为锚点, 失败则创建占位符 --- #
             try:
@@ -314,36 +321,49 @@ class HeartFC_Chat:
                     if observed_messages:
                         try:
                             last_msg_dict = observed_messages[-1]
-                            logger.debug(f"[{stream_name}] Attempting to reconstruct MessageRecv from last observed message.")
+                            logger.debug(
+                                f"[{stream_name}] Attempting to reconstruct MessageRecv from last observed message."
+                            )
                             anchor_message = MessageRecv(last_msg_dict, chat_stream=chat)
-                            if not (anchor_message and anchor_message.message_info and anchor_message.message_info.message_id and anchor_message.message_info.user_info):
+                            if not (
+                                anchor_message
+                                and anchor_message.message_info
+                                and anchor_message.message_info.message_id
+                                and anchor_message.message_info.user_info
+                            ):
                                 raise ValueError("Reconstructed MessageRecv missing essential info.")
                             userinfo = anchor_message.message_info.user_info
                             messageinfo = anchor_message.message_info
-                            logger.debug(f"[{stream_name}] Successfully reconstructed anchor message: ID={messageinfo.message_id}, Sender={userinfo.user_nickname}")
+                            logger.debug(
+                                f"[{stream_name}] Successfully reconstructed anchor message: ID={messageinfo.message_id}, Sender={userinfo.user_nickname}"
+                            )
                         except Exception as e_reconstruct:
-                            logger.warning(f"[{stream_name}] Reconstructing MessageRecv from observed message failed: {e_reconstruct}. Will create placeholder.")
+                            logger.warning(
+                                f"[{stream_name}] Reconstructing MessageRecv from observed message failed: {e_reconstruct}. Will create placeholder."
+                            )
                             reconstruction_failed = True
                     else:
-                        logger.warning(f"[{stream_name}] observed_messages is empty. Will create placeholder anchor message.")
-                        reconstruction_failed = True # Treat empty observed_messages as a failure to reconstruct
+                        logger.warning(
+                            f"[{stream_name}] observed_messages is empty. Will create placeholder anchor message."
+                        )
+                        reconstruction_failed = True  # Treat empty observed_messages as a failure to reconstruct
 
                     # 如果重建失败或 observed_messages 为空，创建占位符
                     if reconstruction_failed:
-                        placeholder_id = f"mid_{int(time.time() * 1000)}" # 使用毫秒时间戳增加唯一性
+                        placeholder_id = f"mid_{int(time.time() * 1000)}"  # 使用毫秒时间戳增加唯一性
                         placeholder_user = UserInfo(user_id="system_trigger", user_nickname="系统触发")
                         placeholder_msg_info = BaseMessageInfo(
                             message_id=placeholder_id,
                             platform=chat.platform,
                             group_info=chat.group_info,
                             user_info=placeholder_user,
-                            time=time.time()
+                            time=time.time(),
                             # 其他 BaseMessageInfo 可能需要的字段设为默认值或 None
                         )
                         # 创建 MessageRecv 实例，注意它需要消息字典结构，我们创建一个最小化的
                         placeholder_msg_dict = {
                             "message_info": placeholder_msg_info.to_dict(),
-                            "processed_plain_text": "", # 提供空文本
+                            "processed_plain_text": "",  # 提供空文本
                             "raw_message": "",
                             "time": placeholder_msg_info.time,
                         }
@@ -353,18 +373,20 @@ class HeartFC_Chat:
                         anchor_message.update_chat_stream(chat)
                         userinfo = anchor_message.message_info.user_info
                         messageinfo = anchor_message.message_info
-                        logger.info(f"[{stream_name}] Created placeholder anchor message: ID={messageinfo.message_id}, Sender={userinfo.user_nickname}")
+                        logger.info(
+                            f"[{stream_name}] Created placeholder anchor message: ID={messageinfo.message_id}, Sender={userinfo.user_nickname}"
+                        )
 
             except Exception as e:
                 logger.error(f"[{stream_name}] 获取或创建锚点消息时出错: {e}")
                 logger.error(traceback.format_exc())
-                anchor_message = None # 确保出错时 anchor_message 为 None
+                anchor_message = None  # 确保出错时 anchor_message 为 None
 
             # --- 4. 检查并发思考限制 (使用 anchor_message 简化获取) ---
             try:
                 container = MessageManager().get_container(chat.stream_id)
                 thinking_count = container.count_thinking_messages()
-                max_thinking_messages = getattr(global_config, 'max_concurrent_thinking_messages', 3)
+                max_thinking_messages = getattr(global_config, "max_concurrent_thinking_messages", 3)
                 if thinking_count >= max_thinking_messages:
                     logger.warning(f"聊天流 {stream_name} 已有 {thinking_count} 条思考消息，取消回复。")
                     return
@@ -393,7 +415,7 @@ class HeartFC_Chat:
             get_mid_memory_id = []
             tool_result_info = {}
             send_emoji = ""
-            observation_context_text = "" # 从 observation 获取上下文文本
+            observation_context_text = ""  # 从 observation 获取上下文文本
             try:
                 # --- 使用传入的 observed_messages 构建上下文文本 --- #
                 if observed_messages:
@@ -403,20 +425,22 @@ class HeartFC_Chat:
                     for msg_dict in observed_messages:
                         # 假设 detailed_plain_text 字段包含所需文本
                         # 你可能需要更复杂的逻辑来格式化，例如添加发送者和时间
-                        text = msg_dict.get('detailed_plain_text', '')
-                        if text: 
+                        text = msg_dict.get("detailed_plain_text", "")
+                        if text:
                             context_texts.append(text)
                     observation_context_text = "\n".join(context_texts)
-                    logger.debug(f"[{stream_name}] Context for tools:\n{observation_context_text[-200:]}...") # 打印部分上下文
+                    logger.debug(
+                        f"[{stream_name}] Context for tools:\n{observation_context_text[-200:]}..."
+                    )  # 打印部分上下文
                 else:
                     logger.warning(f"[{stream_name}] observed_messages 列表为空，无法为工具提供上下文。")
 
                 if observation_context_text:
                     with Timer("思考前使用工具", timing_results):
                         tool_result = await self.tool_user.use_tool(
-                            message_txt=observation_context_text, # <--- 使用观察上下文
+                            message_txt=observation_context_text,  # <--- 使用观察上下文
                             chat_stream=chat,
-                            sub_heartflow=sub_hf
+                            sub_heartflow=sub_hf,
                         )
                         if tool_result.get("used_tools", False):
                             if "structured_info" in tool_result:
@@ -446,9 +470,9 @@ class HeartFC_Chat:
             except Exception as e:
                 logger.error(f"[{stream_name}] SubHeartflow 思考失败: {e}")
                 logger.error(traceback.format_exc())
-                if info_catcher: 
+                if info_catcher:
                     info_catcher.done_catch()
-                return # 思考失败则不继续
+                return  # 思考失败则不继续
             if info_catcher:
                 info_catcher.catch_afer_shf_step(timing_results.get("生成内心想法(SubHF)"), past_mind, current_mind)
 
@@ -458,16 +482,16 @@ class HeartFC_Chat:
                     # response_set = await self.gpt.generate_response(anchor_message, thinking_id, current_mind=current_mind)
                     response_set = await self.gpt.generate_response(anchor_message, thinking_id)
             except Exception as e:
-                 logger.error(f"[{stream_name}] GPT 生成回复失败: {e}")
-                 logger.error(traceback.format_exc())
-                 if info_catcher: 
-                     info_catcher.done_catch()
-                 return
+                logger.error(f"[{stream_name}] GPT 生成回复失败: {e}")
+                logger.error(traceback.format_exc())
+                if info_catcher:
+                    info_catcher.done_catch()
+                return
             if info_catcher:
                 info_catcher.catch_after_generate_response(timing_results.get("生成最终回复(GPT)"))
             if not response_set:
                 logger.info(f"[{stream_name}] 回复生成失败或为空。")
-                if info_catcher: 
+                if info_catcher:
                     info_catcher.done_catch()
                 return
 
@@ -481,7 +505,7 @@ class HeartFC_Chat:
                 logger.error(traceback.format_exc())
             if info_catcher:
                 info_catcher.catch_after_response(timing_results.get("发送消息"), response_set, first_bot_msg)
-                info_catcher.done_catch() # 完成捕捉
+                info_catcher.done_catch()  # 完成捕捉
 
             # --- 11. 处理表情包 (使用 anchor_message) ---
             try:
@@ -496,10 +520,12 @@ class HeartFC_Chat:
             # --- 12. 记录性能日志 --- #
             timing_str = " | ".join([f"{step}: {duration:.2f}秒" for step, duration in timing_results.items()])
             response_msg = " ".join(response_set) if response_set else "无回复"
-            logger.info(f"[{stream_name}] 回复任务完成 (Observation Triggered): | 思维消息: {response_msg[:30]}... | 性能计时: {timing_str}")
+            logger.info(
+                f"[{stream_name}] 回复任务完成 (Observation Triggered): | 思维消息: {response_msg[:30]}... | 性能计时: {timing_str}"
+            )
 
             # --- 13. 更新关系情绪 (使用 anchor_message) ---
-            if first_bot_msg: # 仅在成功发送消息后
+            if first_bot_msg:  # 仅在成功发送消息后
                 try:
                     with Timer("更新关系情绪", timing_results):
                         await self._update_relationship(anchor_message, response_set)
@@ -512,8 +538,9 @@ class HeartFC_Chat:
             logger.error(traceback.format_exc())
 
         finally:
-             # 可以在这里添加清理逻辑，如果有的话
-             pass
+            # 可以在这里添加清理逻辑，如果有的话
+            pass
+
     # --- 结束重构 ---
 
     # _create_thinking_message, _send_response_messages, _handle_emoji, _update_relationship
