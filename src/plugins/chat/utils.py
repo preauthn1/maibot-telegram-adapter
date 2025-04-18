@@ -340,7 +340,7 @@ def random_remove_punctuation(text: str) -> str:
 def process_llm_response(text: str) -> List[str]:
     # 先保护颜文字
     protected_text, kaomoji_mapping = protect_kaomoji(text)
-    logger.debug(f"保护颜文字后的文本: {protected_text}")
+    logger.trace(f"保护颜文字后的文本: {protected_text}")
     # 提取被 () 或 [] 包裹的内容
     pattern = re.compile(r"[\(\[\（].*?[\)\]\）]")
     # _extracted_contents = pattern.findall(text)

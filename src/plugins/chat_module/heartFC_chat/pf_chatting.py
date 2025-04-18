@@ -180,18 +180,18 @@ class PFChatting:
 
 
     def _handle_loop_completion(self, task: asyncio.Task):
-        """Callback executed when the _run_pf_loop task finishes."""
+        """当 _run_pf_loop 任务完成时执行的回调。"""
         log_prefix = self._get_log_prefix()
         try:
             # Check if the task raised an exception
             exception = task.exception()
             if exception:
-                logger.error(f"{log_prefix} PF loop task completed with error: {exception}")
+                logger.error(f"{log_prefix} PFChatting: 麦麦脱离了聊天(异常)")
                 logger.error(traceback.format_exc())
             else:
-                logger.info(f"{log_prefix} PF loop task completed normally (timer likely expired or cancelled).")
+                logger.debug(f"{log_prefix} PFChatting: 麦麦脱离了聊天")
         except asyncio.CancelledError:
-            logger.info(f"{log_prefix} PF loop task was cancelled.")
+            logger.info(f"{log_prefix} PFChatting: 麦麦脱离了聊天(异常取消)")
         finally:
             # Reset state regardless of how the task finished
             self._loop_active = False
@@ -200,9 +200,8 @@ class PFChatting:
             self._trigger_count_this_activation = 0 # 重置计数器
             # Ensure lock is released if the loop somehow exited while holding it
             if self._processing_lock.locked():
-                logger.warning(f"{log_prefix} Releasing processing lock after loop task completion.")
+                logger.warning(f"{log_prefix} PFChatting: 锁没有正常释放")
                 self._processing_lock.release()
-            logger.info(f"{log_prefix} Loop state reset.")
 
 
     async def _run_pf_loop(self):
@@ -210,14 +209,14 @@ class PFChatting:
         主循环，当计时器>0时持续进行计划并可能回复消息
         管理每个循环周期的处理锁
         """
-        logger.info(f"{self._get_log_prefix()} 开始执行PF循环")
+        logger.info(f"{self._get_log_prefix()} PFChatting: 麦麦打算好好聊聊")
         try:
             while True:
                 # 使用计时器锁安全地检查当前计时器值
                 async with self._timer_lock:
                     current_timer = self._loop_timer
                     if current_timer <= 0:
-                        logger.info(f"{self._get_log_prefix()} 计时器为零或负数({current_timer:.1f}秒)，退出PF循环")
+                        logger.info(f"{self._get_log_prefix()} PFChatting: 聊太久了，麦麦打算休息一下(已经聊了{current_timer:.1f}秒)，退出PFChatting")
                         break  # 退出条件：计时器到期
 
                 # 记录循环开始时间
@@ -230,7 +229,7 @@ class PFChatting:
                 try:
                     await self._processing_lock.acquire()
                     acquired_lock = True
-                    logger.debug(f"{self._get_log_prefix()} 循环获取到处理锁")
+                    # logger.debug(f"{self._get_log_prefix()} PFChatting: 循环获取到处理锁")
 
                     # --- Planner ---
                     # Planner decides action, reasoning, emoji_query, etc.
@@ -243,7 +242,7 @@ class PFChatting:
                     observed_messages = planner_result.get("observed_messages", []) # Planner needs to return this
 
                     if action == "text_reply":
-                        logger.info(f"{self._get_log_prefix()} 计划循环决定: 回复文本.")
+                        logger.info(f"{self._get_log_prefix()} PFChatting: 麦麦决定回复文本.")
                         action_taken_this_cycle = True
                         # --- 回复器 ---
                         anchor_message = await self._get_anchor_message(observed_messages)
@@ -284,7 +283,7 @@ class PFChatting:
                                      self._cleanup_thinking_message(thinking_id) # 清理思考消息
 
                     elif action == "emoji_reply":
-                        logger.info(f"{self._get_log_prefix()} 计划循环决定: 回复表情 ('{emoji_query}').")
+                        logger.info(f"{self._get_log_prefix()} PFChatting: 麦麦决定回复表情 ('{emoji_query}').")
                         action_taken_this_cycle = True
                         anchor = await self._get_anchor_message(observed_messages)
                         if anchor:
@@ -296,15 +295,15 @@ class PFChatting:
                              logger.warning(f"{self._get_log_prefix()} 循环: 无法发送表情, 无法获取锚点.")
 
                     elif action == "no_reply":
-                        logger.info(f"{self._get_log_prefix()} 计划循环决定: 不回复. 原因: {reasoning}")
+                        logger.info(f"{self._get_log_prefix()} PFChatting: 麦麦决定不回复. 原因: {reasoning}")
                         # Do nothing else, action_taken_this_cycle remains False
 
                     elif action == "error":
-                         logger.error(f"{self._get_log_prefix()} 计划循环返回错误或失败. 原因: {reasoning}")
+                         logger.error(f"{self._get_log_prefix()} PFChatting: 麦麦回复出错. 原因: {reasoning}")
                          # 视为非操作周期
 
                     else: # Unknown action
-                         logger.warning(f"{self._get_log_prefix()} 计划循环返回未知动作: {action}. 视为不回复.")
+                         logger.warning(f"{self._get_log_prefix()} PFChatting: 麦麦做了奇怪的事情. 原因: {reasoning}")
                          # 视为非操作周期
 
                 except Exception as e_cycle:
@@ -327,7 +326,7 @@ class PFChatting:
                 cycle_duration = time.monotonic() - loop_cycle_start_time
                 async with self._timer_lock:
                     self._loop_timer -= cycle_duration
-                    logger.debug(f"{self._get_log_prefix()} 循环周期耗时 {cycle_duration:.2f}s. 计时器剩余: {self._loop_timer:.1f}s.")
+                    logger.debug(f"{self._get_log_prefix()} PFChatting: 麦麦聊了{cycle_duration:.2f}秒. 还能聊: {self._loop_timer:.1f}s.")
 
                 # --- Delay ---
                 # Add a small delay, especially if no action was taken, to prevent busy-waiting
@@ -342,17 +341,17 @@ class PFChatting:
                     break # Exit loop if cancelled during sleep
 
         except asyncio.CancelledError:
-             logger.info(f"{self._get_log_prefix()} PF loop task received cancellation request.")
+             logger.info(f"{self._get_log_prefix()} PFChatting: 麦麦的聊天被取消了")
         except Exception as e_loop_outer:
              # Catch errors outside the main cycle lock (should be rare)
-             logger.error(f"{self._get_log_prefix()} PF loop encountered unexpected outer error: {e_loop_outer}")
+             logger.error(f"{self._get_log_prefix()} PFChatting: 麦麦的聊天出错了: {e_loop_outer}")
              logger.error(traceback.format_exc())
         finally:
             # Reset trigger count when loop finishes
             async with self._timer_lock:
                 self._trigger_count_this_activation = 0
                 logger.debug(f"{self._get_log_prefix()} Trigger count reset to 0 as loop finishes.")
-            logger.info(f"{self._get_log_prefix()} PF loop finished execution run.")
+            logger.info(f"{self._get_log_prefix()} PFChatting: 麦麦的聊天结束了")
             # State reset (_loop_active, _loop_task) is handled by _handle_loop_completion callback
 
     async def _planner(self) -> Dict[str, Any]:

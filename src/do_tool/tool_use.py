@@ -26,7 +26,7 @@ class ToolUser:
 
     @staticmethod
     async def _build_tool_prompt(
-        self, message_txt: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
+        message_txt: str, chat_stream: ChatStream, subheartflow: SubHeartflow = None
     ):
         """构建工具使用的提示词
 
@@ -133,7 +133,11 @@ class ToolUser:
         """
         try:
             # 构建提示词
-            prompt = await self._build_tool_prompt(message_txt, chat_stream, sub_heartflow)
+            prompt = await self._build_tool_prompt(
+                message_txt=message_txt,
+                chat_stream=chat_stream,
+                subheartflow=sub_heartflow,
+            )
 
             # 定义可用工具
             tools = self._define_tools()
