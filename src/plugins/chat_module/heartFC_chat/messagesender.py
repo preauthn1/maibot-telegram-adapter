@@ -3,7 +3,6 @@ import time
 from typing import Dict, List, Optional, Union
 
 from src.common.logger import get_module_logger
-from ....common.database import db
 from ...message.api import global_api
 from ...chat.message import MessageSending, MessageThinking, MessageSet
 from ...storage.storage import MessageStorage

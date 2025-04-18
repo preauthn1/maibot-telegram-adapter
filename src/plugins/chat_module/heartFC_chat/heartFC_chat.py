@@ -1,5 +1,4 @@
 import time
-from random import random
 import traceback
 from typing import List, Optional, Dict
 import asyncio
@@ -18,7 +17,7 @@ from ...person_info.relationship_manager import relationship_manager
 from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from ...utils.timer_calculater import Timer
 from src.do_tool.tool_use import ToolUser
-from .interest import InterestManager, InterestChatting
+from .interest import InterestManager
 from src.plugins.chat.chat_stream import chat_manager
 from src.plugins.chat.message import BaseMessageInfo
 from .pf_chatting import PFChatting
@@ -405,7 +404,8 @@ class HeartFC_Chat:
                         # 假设 detailed_plain_text 字段包含所需文本
                         # 你可能需要更复杂的逻辑来格式化，例如添加发送者和时间
                         text = msg_dict.get('detailed_plain_text', '')
-                        if text: context_texts.append(text)
+                        if text: 
+                            context_texts.append(text)
                     observation_context_text = "\n".join(context_texts)
                     logger.debug(f"[{stream_name}] Context for tools:\n{observation_context_text[-200:]}...") # 打印部分上下文
                 else:
@@ -446,7 +446,8 @@ class HeartFC_Chat:
             except Exception as e:
                 logger.error(f"[{stream_name}] SubHeartflow 思考失败: {e}")
                 logger.error(traceback.format_exc())
-                if info_catcher: info_catcher.done_catch()
+                if info_catcher: 
+                    info_catcher.done_catch()
                 return # 思考失败则不继续
             if info_catcher:
                 info_catcher.catch_afer_shf_step(timing_results.get("生成内心想法(SubHF)"), past_mind, current_mind)
@@ -459,13 +460,15 @@ class HeartFC_Chat:
             except Exception as e:
                  logger.error(f"[{stream_name}] GPT 生成回复失败: {e}")
                  logger.error(traceback.format_exc())
-                 if info_catcher: info_catcher.done_catch()
+                 if info_catcher: 
+                     info_catcher.done_catch()
                  return
             if info_catcher:
                 info_catcher.catch_after_generate_response(timing_results.get("生成最终回复(GPT)"))
             if not response_set:
                 logger.info(f"[{stream_name}] 回复生成失败或为空。")
-                if info_catcher: info_catcher.done_catch()
+                if info_catcher: 
+                    info_catcher.done_catch()
                 return
 
             # --- 10. 发送消息 (使用 anchor_message) ---

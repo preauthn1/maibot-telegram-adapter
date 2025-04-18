@@ -238,12 +238,18 @@ class SubHeartflow:
                 extra_info_prompt = "无工具信息。\n" # 提供默认值
 
             individuality = Individuality.get_instance()
-            prompt_personality = f"你的名字是{self.bot_name},你"
+            prompt_personality = f"你的名字是{self.bot_name}，你"
             prompt_personality += individuality.personality.personality_core
-            personality_sides = individuality.personality.personality_sides
-            if personality_sides: random.shuffle(personality_sides); prompt_personality += f",{personality_sides[0]}"
-            identity_detail = individuality.identity.identity_detail
-            if identity_detail: random.shuffle(identity_detail); prompt_personality += f",{identity_detail[0]}"
+            
+            # 添加随机性格侧面
+            if individuality.personality.personality_sides:
+                random_side = random.choice(individuality.personality.personality_sides)
+                prompt_personality += f"，{random_side}"
+            
+            # 添加随机身份细节
+            if individuality.identity.identity_detail: 
+                random_detail = random.choice(individuality.identity.identity_detail)
+                prompt_personality += f"，{random_detail}"
 
             time_now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 

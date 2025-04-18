@@ -10,7 +10,7 @@ from .think_flow_generator import ResponseGenerator
 from ...chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
 from ...chat.messagesender import message_manager
 from ...storage.storage import MessageStorage
-from ...chat.utils import is_mentioned_bot_in_message, get_recent_group_detailed_plain_text
+from ...chat.utils import is_mentioned_bot_in_message
 from ...chat.utils_image import image_path_to_base64
 from ...willing.willing_manager import willing_manager
 from ...message import UserInfo, Seg

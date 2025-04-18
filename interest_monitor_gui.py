@@ -8,7 +8,6 @@ from collections import deque
 import json # 引入 json
 
 # --- 引入 Matplotlib ---
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.dates as mdates # 用于处理日期格式
@@ -165,7 +164,7 @@ class InterestMonitorApp:
                         error_count += 1
                         # logger.warning(f"Skipping invalid JSON line: {line.strip()}")
                         continue # 跳过无法解析的行
-                    except (TypeError, ValueError) as e:
+                    except (TypeError, ValueError):
                          error_count += 1
                          # logger.warning(f"Skipping line due to data type error ({e}): {line.strip()}")
                          continue # 跳过数据类型错误的行

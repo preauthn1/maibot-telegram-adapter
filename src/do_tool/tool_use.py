@@ -1,14 +1,11 @@
 from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.chat_stream import ChatStream
-from src.common.database import db
-import time
 import json
 from src.common.logger import get_module_logger, TOOL_USE_STYLE_CONFIG, LogConfig
 from src.do_tool.tool_can_use import get_all_tool_definitions, get_tool_instance
 from src.heart_flow.sub_heartflow import SubHeartflow
 import traceback
-from src.plugins.chat.utils import get_recent_group_detailed_plain_text
 
 tool_use_config = LogConfig(
     # 使用消息发送专用样式
@@ -62,7 +59,7 @@ class ToolUser:
         prompt = ""
         prompt += mid_memory_info
         prompt += "你正在思考如何回复群里的消息。\n"
-        prompt += f"之前群里进行了如下讨论:\n"
+        prompt += "之前群里进行了如下讨论:\n"
         prompt += message_txt
         # prompt += f"你注意到{sender_name}刚刚说：{message_txt}\n"
         prompt += f"注意你就是{bot_name}，{bot_name}是你的名字。根据之前的聊天记录补充问题信息，搜索时避开你的名字。\n"

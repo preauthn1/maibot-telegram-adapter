@@ -4,12 +4,10 @@ import asyncio
 import threading
 import json # 引入 json
 import os   # 引入 os
-import traceback # <--- 添加导入
 from typing import Optional # <--- 添加导入
 import random # <--- 添加导入 random
 from src.common.logger import get_module_logger, LogConfig, DEFAULT_CONFIG # 引入 DEFAULT_CONFIG
 from src.plugins.chat.chat_stream import chat_manager # *** Import ChatManager ***
-from ...chat.message import MessageRecv # 导入 MessageRecv
 
 # 定义日志配置 (使用 loguru 格式)
 interest_log_config = LogConfig(

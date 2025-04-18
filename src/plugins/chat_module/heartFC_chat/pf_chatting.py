@@ -1,8 +1,7 @@
 import asyncio
 import time
 import traceback
-from typing import List, Optional, Dict, Any, Deque, Union, TYPE_CHECKING
-from collections import deque
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import json
 
 from ....config.config import global_config
@@ -14,7 +13,6 @@ from src.plugins.chat.chat_stream import chat_manager
 from .messagesender import MessageManager
 from src.common.logger import get_module_logger, LogConfig, DEFAULT_CONFIG # 引入 DEFAULT_CONFIG
 from src.plugins.models.utils_model import LLMRequest
-from src.individuality.individuality import Individuality
 
 # 定义日志配置 (使用 loguru 格式)
 interest_log_config = LogConfig(
@@ -475,24 +473,36 @@ class PFChatting:
                             logger.info(f"{log_prefix}[Planner] LLM 决策: {action}, 理由: {reasoning}, EmojiQuery: '{emoji_query}'")
                         except json.JSONDecodeError as json_e:
                             logger.error(f"{log_prefix}[Planner] 解析工具参数失败: {json_e}. Arguments: {tool_call['function'].get('arguments')}")
-                            action = "error"; reasoning = "工具参数解析失败"; llm_error = True
+                            action = "error"
+                            reasoning = "工具参数解析失败"
+                            llm_error = True
                         except Exception as parse_e:
-                             logger.error(f"{log_prefix}[Planner] 处理工具参数时出错: {parse_e}")
-                             action = "error"; reasoning = "处理工具参数时出错"; llm_error = True
+                            logger.error(f"{log_prefix}[Planner] 处理工具参数时出错: {parse_e}")
+                            action = "error"
+                            reasoning = "处理工具参数时出错" 
+                            llm_error = True
                     else:
                         logger.warning(f"{log_prefix}[Planner] LLM 未按预期调用 'decide_reply_action' 工具。Tool calls: {tool_calls}")
-                        action = "error"; reasoning = "LLM未调用预期工具"; llm_error = True
+                        action = "error"
+                        reasoning = "LLM未调用预期工具"
+                        llm_error = True
                 else:
-                     logger.warning(f"{log_prefix}[Planner] LLM 响应中未包含有效的工具调用。Tool calls: {tool_calls}")
-                     action = "error"; reasoning = "LLM响应无工具调用"; llm_error = True
+                    logger.warning(f"{log_prefix}[Planner] LLM 响应中未包含有效的工具调用。Tool calls: {tool_calls}")
+                    action = "error"
+                    reasoning = "LLM响应无工具调用"
+                    llm_error = True
             else:
                 logger.warning(f"{log_prefix}[Planner] LLM 未返回预期的工具调用响应。Response parts: {len(response)}")
-                action = "error"; reasoning = "LLM响应格式错误"; llm_error = True
+                action = "error"
+                reasoning = "LLM响应格式错误"
+                llm_error = True
 
         except Exception as llm_e:
             logger.error(f"{log_prefix}[Planner] Planner LLM 调用失败: {llm_e}")
             logger.error(traceback.format_exc())
-            action = "error"; reasoning = f"LLM 调用失败: {llm_e}"; llm_error = True
+            action = "error"
+            reasoning = f"LLM 调用失败: {llm_e}"
+            llm_error = True
 
         # --- 返回决策结果 ---
         # Note: Lock release is handled by the loop now
