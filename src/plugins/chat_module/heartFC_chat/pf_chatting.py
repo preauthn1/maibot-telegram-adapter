@@ -92,7 +92,7 @@ class PFChatting:
         self._loop_active: bool = False # Is the loop currently running?
         self._loop_task: Optional[asyncio.Task] = None # Stores the main loop task
         self._trigger_count_this_activation: int = 0 # Counts triggers within an active period
-        self._initial_duration: float = 10.0 # 首次触发增加的时间
+        self._initial_duration: float = 30.0 # 首次触发增加的时间
         self._last_added_duration: float = self._initial_duration # <--- 新增：存储上次增加的时间
 
         # Removed pending_replies as processing is now serial within the loop
