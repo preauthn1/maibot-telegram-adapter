@@ -177,7 +177,7 @@ class ChattingObservation(Observation):
         now_message_str += self.translate_message_list_to_str(talking_message=self.talking_message)
         self.now_message_info = now_message_str
 
-        logger.debug(
+        logger.trace(
             f"Chat {self.chat_id} - 压缩早期记忆：{self.mid_memory_info}\n现在聊天内容：{self.now_message_info}"
         )
 

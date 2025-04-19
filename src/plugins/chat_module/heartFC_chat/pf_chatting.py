@@ -40,15 +40,15 @@ PLANNER_TOOL_DEFINITION = [
                     "action": {
                         "type": "string",
                         "enum": ["no_reply", "text_reply", "emoji_reply"],
-                        "description": "决定采取的行动：'no_reply'(不回复), 'text_reply'(文本回复) 或 'emoji_reply'(表情回复)。",
+                        "description": "决定采取的行动：'no_reply'(不回复), 'text_reply'(文本回复, 可选附带表情) 或 'emoji_reply'(仅表情回复)。",
                     },
                     "reasoning": {"type": "string", "description": "做出此决定的简要理由。"},
                     "emoji_query": {
                         "type": "string",
-                        "description": '如果行动是\'emoji_reply\',则指定表情的主题或概念（例如，"开心"、"困惑"）。仅在需要表情回复时提供。',
+                        "description": '如果行动是\'emoji_reply\'，指定表情的主题或概念。如果行动是\'text_reply\'且希望在文本后追加表情，也在此指定表情主题。',
                     },
                 },
-                "required": ["action", "reasoning"],  # 强制要求提供行动和理由
+                "required": ["action", "reasoning"],
             },
         },
     }
@@ -713,13 +713,10 @@ class PFChatting:
         prompt = f"你的名字是 {global_config.BOT_NICKNAME}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。\n"
 
         # Add current mind state if available
-        if current_mind:
-            prompt += f"\n你当前的内部想法是：\n---\n{current_mind}\n---\n\n"
-        else:
-            prompt += "\n你当前没有特别的内部想法。\n"
+        
 
         if observed_messages:
-            context_text = "\n".join(
+            context_text = " ".join(
                 [msg.get("detailed_plain_text", "") for msg in observed_messages if msg.get("detailed_plain_text")]
             )
             prompt += "观察到的最新聊天内容如下：\n---\n"
@@ -727,18 +724,25 @@ class PFChatting:
             prompt += "\n---\n"
         else:
             prompt += "当前没有观察到新的聊天内容。\n"
+            
+        prompt += "\n看了这些内容，你的想法是："
+        
+        if current_mind:
+            prompt += f"\n---\n{current_mind}\n---\n\n"
+
 
         prompt += (
-            "\n请结合你的内部想法和观察到的聊天内容，分析情况并使用 'decide_reply_action' 工具来决定你的最终行动。\n"
+            "\n请结合你的内部想法和观察到的聊天内容，分析情况并使用 \'decide_reply_action\' 工具来决定你的最终行动。\n"
         )
         prompt += "决策依据：\n"
         prompt += "1. 如果聊天内容无聊、与你无关、或者你的内部想法认为不适合回复，选择 'no_reply'。\n"
-        prompt += "2. 如果聊天内容值得回应，且适合用文字表达（参考你的内部想法），选择 'text_reply'。\n"
+        prompt += "2. 如果聊天内容值得回应，且适合用文字表达（参考你的内部想法），选择 'text_reply'。如果想在文字后追加一个表情，请同时提供 'emoji_query'。\n"
         prompt += (
             "3. 如果聊天内容或你的内部想法适合用一个表情来回应，选择 'emoji_reply' 并提供表情主题 'emoji_query'。\n"
         )
-        prompt += "4. 如果你已经回复过消息，也没有人又回复你，选择'no_reply'。"
-        prompt += "必须调用 'decide_reply_action' 工具并提供 'action' 和 'reasoning'。"
+        prompt += "4. 如果你已经回复过消息，也没有人又回复你，选择'no_reply'。\n"
+        prompt += "5. 除非大家都在这么做，否则不要重复聊相同的内容。\n"
+        prompt += "必须调用 \'decide_reply_action\' 工具并提供 \'action\' 和 \'reasoning\'。如果选择了 'emoji_reply' 或者选择了 'text_reply' 并想追加表情，则必须提供 \'emoji_query\'。"
 
 
         prompt = await relationship_manager.convert_all_person_sign_to_person_name(prompt)
