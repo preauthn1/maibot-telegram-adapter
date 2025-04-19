@@ -133,8 +133,7 @@ class PFChatting:
 
     async def add_time(self):
         """
-        Adds time to the loop timer with decay and starts the loop if it's not active.
-        First trigger adds initial duration, subsequent triggers add 50% of the previous addition.
+        为麦麦添加时间，麦麦有兴趣时，时间增加。
         """
         log_prefix = self._get_log_prefix()
         if not self._initialized:
@@ -149,32 +148,39 @@ class PFChatting:
                 duration_to_add = self._initial_duration  # 使用初始值
                 self._last_added_duration = duration_to_add  # 更新上次增加的值
                 self._trigger_count_this_activation = 1  # Start counting
-                logger.info(f"{log_prefix} First trigger in activation. Adding {duration_to_add:.2f}s.")
+                logger.info(
+                    f"{log_prefix} 麦麦有兴趣！ #{self._trigger_count_this_activation}. 麦麦打算聊： {duration_to_add:.2f}s."
+                )
             else:  # Loop is already active, apply 50% reduction
                 self._trigger_count_this_activation += 1
                 duration_to_add = self._last_added_duration * 0.5
-                self._last_added_duration = duration_to_add  # 更新上次增加的值
-                logger.info(
-                    f"{log_prefix} Trigger #{self._trigger_count_this_activation}. Adding {duration_to_add:.2f}s (50% of previous). Timer was {self._loop_timer:.1f}s."
-                )
+                if duration_to_add < 0.5:
+                    duration_to_add = 0.5
+                    self._last_added_duration = duration_to_add  # 更新上次增加的值
+                else:
+                    self._last_added_duration = duration_to_add  # 更新上次增加的值
+                    logger.info(
+                        f"{log_prefix} 麦麦兴趣增加！ #{self._trigger_count_this_activation}. 想继续聊： {duration_to_add:.2f}s,麦麦还能聊： {self._loop_timer:.1f}s."
+                    )
 
             # 添加计算出的时间
             new_timer_value = self._loop_timer + duration_to_add
             self._loop_timer = max(0, new_timer_value)
-            logger.info(f"{log_prefix} Timer is now {self._loop_timer:.1f}s.")
+            if self._loop_timer % 5 == 0:
+                logger.info(f"{log_prefix} 麦麦现在想聊{self._loop_timer:.1f}秒")
 
             # Start the loop if it wasn't active and timer is positive
             if not self._loop_active and self._loop_timer > 0:
-                logger.info(f"{log_prefix} Timer > 0 and loop not active. Starting PF loop.")
+                logger.info(f"{log_prefix} 麦麦有兴趣！开始聊天")
                 self._loop_active = True
                 if self._loop_task and not self._loop_task.done():
-                    logger.warning(f"{log_prefix} Found existing loop task unexpectedly during start. Cancelling it.")
+                    logger.warning(f"{log_prefix} 发现意外的循环任务正在进行。取消它。")
                     self._loop_task.cancel()
 
                 self._loop_task = asyncio.create_task(self._run_pf_loop())
                 self._loop_task.add_done_callback(self._handle_loop_completion)
             elif self._loop_active:
-                logger.debug(f"{log_prefix} Loop already active. Timer extended.")
+                logger.trace(f"{log_prefix} 循环已经激活。计时器延长。")
 
     def _handle_loop_completion(self, task: asyncio.Task):
         """当 _run_pf_loop 任务完成时执行的回调。"""
