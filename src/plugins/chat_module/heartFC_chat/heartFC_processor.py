@@ -12,7 +12,6 @@ from ...chat.chat_stream import chat_manager
 from ...chat.message_buffer import message_buffer
 from ...utils.timer_calculater import Timer
 from .interest import InterestManager
-from .heartFC_chat import HeartFC_Chat  # 导入 HeartFC_Chat 以调用回复生成
 
 # 定义日志配置
 processor_config = LogConfig(

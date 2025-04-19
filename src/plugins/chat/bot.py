@@ -8,7 +8,6 @@ from ..chat_module.only_process.only_message_process import MessageProcessor
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ..chat_module.think_flow_chat.think_flow_chat import ThinkFlowChat
 from ..chat_module.reasoning_chat.reasoning_chat import ReasoningChat
-from ..chat_module.heartFC_chat.heartFC_chat import HeartFC_Chat
 from ..chat_module.heartFC_chat.heartFC_processor import HeartFC_Processor
 from ..utils.prompt_builder import Prompt, global_prompt_manager
 import traceback
