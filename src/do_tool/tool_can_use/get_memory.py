@@ -33,7 +33,7 @@ class GetMemoryTool(BaseTool):
         try:
             topic = function_args.get("topic", message_txt)
             max_memory_num = function_args.get("max_memory_num", 2)
-            
+
             # 将主题字符串转换为列表
             topic_list = topic.split(",")
 

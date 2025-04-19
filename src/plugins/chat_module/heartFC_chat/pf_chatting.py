@@ -45,7 +45,7 @@ PLANNER_TOOL_DEFINITION = [
                     "reasoning": {"type": "string", "description": "做出此决定的简要理由。"},
                     "emoji_query": {
                         "type": "string",
-                        "description": '如果行动是\'emoji_reply\'，指定表情的主题或概念。如果行动是\'text_reply\'且希望在文本后追加表情，也在此指定表情主题。',
+                        "description": "如果行动是'emoji_reply'，指定表情的主题或概念。如果行动是'text_reply'且希望在文本后追加表情，也在此指定表情主题。",
                     },
                 },
                 "required": ["action", "reasoning"],
@@ -386,9 +386,9 @@ class PFChatting:
 
         # --- 获取最新的观察信息 ---
         try:
-            observation = self.sub_hf._get_primary_observation() # Call only once
+            observation = self.sub_hf._get_primary_observation()  # Call only once
 
-            if observation: # Now check if the result is truthy
+            if observation:  # Now check if the result is truthy
                 # logger.debug(f"{log_prefix}[Planner] 调用 observation.observe()...")
                 await observation.observe()  # 主动观察以获取最新消息
                 observed_messages = observation.talking_message  # 获取更新后的消息列表
@@ -409,7 +409,7 @@ class PFChatting:
                 ]
                 observation_context_text = " ".join(context_texts)
                 # logger.debug(f"{log_prefix}[Planner] Context for tools: {observation_context_text[:100]}...")
-            
+
             tool_result = await self.heartfc_chat.tool_user.use_tool(
                 message_txt=observation_context_text, chat_stream=self.chat_stream, sub_heartflow=self.sub_hf
             )
@@ -417,14 +417,11 @@ class PFChatting:
                 tool_result_info = tool_result.get("structured_info", {})
                 logger.debug(f"{log_prefix}[Planner] 规划前工具结果: {tool_result_info}")
                 if "mid_chat_mem" in tool_result_info:
-                    get_mid_memory_id = [
-                        mem["content"] for mem in tool_result_info["mid_chat_mem"] if "content" in mem
-                    ]
+                    get_mid_memory_id = [mem["content"] for mem in tool_result_info["mid_chat_mem"] if "content" in mem]
 
         except Exception as e_tool:
             logger.error(f"{log_prefix}[Planner] 规划前工具使用失败: {e_tool}")
         # --- 结束工具使用 ---
-
 
         current_mind, _past_mind = await self.sub_hf.do_thinking_before_reply(
             chat_stream=self.chat_stream,
@@ -713,7 +710,6 @@ class PFChatting:
         prompt = f"你的名字是 {global_config.BOT_NICKNAME}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。\n"
 
         # Add current mind state if available
-        
 
         if observed_messages:
             context_text = " ".join(
@@ -724,15 +720,14 @@ class PFChatting:
             prompt += "\n---\n"
         else:
             prompt += "当前没有观察到新的聊天内容。\n"
-            
+
         prompt += "\n看了这些内容，你的想法是："
-        
+
         if current_mind:
             prompt += f"\n---\n{current_mind}\n---\n\n"
 
-
         prompt += (
-            "\n请结合你的内部想法和观察到的聊天内容，分析情况并使用 \'decide_reply_action\' 工具来决定你的最终行动。\n"
+            "\n请结合你的内部想法和观察到的聊天内容，分析情况并使用 'decide_reply_action' 工具来决定你的最终行动。\n"
         )
         prompt += "决策依据：\n"
         prompt += "1. 如果聊天内容无聊、与你无关、或者你的内部想法认为不适合回复，选择 'no_reply'。\n"
@@ -742,8 +737,7 @@ class PFChatting:
         )
         prompt += "4. 如果你已经回复过消息，也没有人又回复你，选择'no_reply'。\n"
         prompt += "5. 除非大家都在这么做，否则不要重复聊相同的内容。\n"
-        prompt += "必须调用 \'decide_reply_action\' 工具并提供 \'action\' 和 \'reasoning\'。如果选择了 'emoji_reply' 或者选择了 'text_reply' 并想追加表情，则必须提供 \'emoji_query\'。"
-
+        prompt += "必须调用 'decide_reply_action' 工具并提供 'action' 和 'reasoning'。如果选择了 'emoji_reply' 或者选择了 'text_reply' 并想追加表情，则必须提供 'emoji_query'。"
 
         prompt = await relationship_manager.convert_all_person_sign_to_person_name(prompt)
         prompt = parse_text_timestamps(prompt, mode="lite")

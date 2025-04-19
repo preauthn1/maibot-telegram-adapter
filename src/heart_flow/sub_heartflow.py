@@ -43,9 +43,13 @@ def init_prompt():
     prompt += "你现在{mood_info}\n"
     # prompt += "你注意到{sender_name}刚刚说：{message_txt}\n"
     prompt += "现在请你根据刚刚的想法继续思考，思考时可以想想如何对群聊内容进行回复，关注新话题，可以适当转换话题，大家正在说的话才是聊天的主题。\n"
-    prompt += "回复的要求是：平淡一些，简短一些，说中文，尽量不要说你说过的话。如果你要回复，最好只回复一个人的一个话题\n"
+    prompt += (
+        "回复的要求是：平淡一些，简短一些，说中文，尽量不要说你说过的话。如果你要回复，最好只回复一个人的一个话题\n"
+    )
     prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，等)，不要带有括号和动作描写"
-    prompt += "现在请你继续生成你在这个聊天中的想法，不要分点输出,生成内心想法，文字不要浮夸，注意{bot_name}指的就是你。"
+    prompt += (
+        "现在请你继续生成你在这个聊天中的想法，不要分点输出,生成内心想法，文字不要浮夸，注意{bot_name}指的就是你。"
+    )
     Prompt(prompt, "sub_heartflow_prompt_before")
 
 
@@ -241,9 +245,9 @@ class SubHeartflow:
 
             try:
                 response, reasoning_content = await self.llm_model.generate_response_async(prompt)
-                
+
                 logger.debug(f"[{self.subheartflow_id}] 心流思考结果:\n{response}\n")
-                
+
                 if not response:  # 如果 LLM 返回空，给一个默认想法
                     response = "(不知道该想些什么...)"
                     logger.warning(f"[{self.subheartflow_id}] LLM 返回空结果，思考失败。")
@@ -257,7 +261,6 @@ class SubHeartflow:
 
             # logger.info(f"[{self.subheartflow_id}] 思考前脑内状态：{self.current_mind}")
             return self.current_mind, self.past_mind
-
 
     def update_current_mind(self, response):
         self.past_mind.append(self.current_mind)

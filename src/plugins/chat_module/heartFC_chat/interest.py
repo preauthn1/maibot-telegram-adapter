@@ -130,7 +130,7 @@ class InterestChatting:
             # 限制概率不超过最大值
             self.current_reply_probability = min(self.current_reply_probability, self.max_reply_probability)
 
-        else:  
+        else:
             if 0 < self.probability_decay_factor < 1:
                 decay_multiplier = math.pow(self.probability_decay_factor, time_delta)
                 # old_prob = self.current_reply_probability

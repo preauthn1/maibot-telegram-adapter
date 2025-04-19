@@ -1257,7 +1257,7 @@ class Hippocampus:
             logger.info(f"选中记忆: {memory} (来自节点: {topic})")
 
         return result
-    
+
     async def get_memory_from_topic(
         self,
         keywords: list[str],
@@ -1342,7 +1342,6 @@ class Hippocampus:
                         activate_map[node] += activation_value
                     else:
                         activate_map[node] = activation_value
-
 
         # 基于激活值平方的独立概率选择
         remember_map = {}
@@ -1941,7 +1940,7 @@ class HippocampusManager:
             logger.error(f"文本激活记忆失败: {e}")
             response = []
         return response
-    
+
     async def get_memory_from_topic(
         self,
         valid_keywords: list[str],

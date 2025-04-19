@@ -27,9 +27,7 @@ logger = get_module_logger("heartFC_processor", config=processor_config)
 class HeartFC_Processor:
     def __init__(self):
         self.storage = MessageStorage()
-        self.interest_manager = (
-            InterestManager()
-        ) 
+        self.interest_manager = InterestManager()
         # self.chat_instance = chat_instance  # 持有 HeartFC_Chat 实例
 
     async def process_message(self, message_data: str) -> None:
@@ -44,7 +42,7 @@ class HeartFC_Processor:
         5. 应用全局配置中的过滤词和正则表达式，过滤不符合规则的消息。
         6. 查询消息缓冲结果，如果消息被缓冲器拦截（例如，判断为消息轰炸的一部分），则中止后续处理。
         7. 对于通过缓冲的消息，将其存储到 `MessageStorage` 中。
-        
+
         8. 调用海马体（`HippocampusManager`）计算消息内容的记忆激活率。（这部分算法后续会进行优化）
         9. 根据是否被提及（@）和记忆激活率，计算最终的兴趣度增量。(提及的额外兴趣增幅)
         10. 使用计算出的增量更新 `InterestManager` 中对应会话的兴趣度。

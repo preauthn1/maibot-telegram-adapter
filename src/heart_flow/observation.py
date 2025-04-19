@@ -49,9 +49,8 @@ class ChattingObservation(Observation):
         initial_messages = list(initial_messages_cursor)
         initial_messages.reverse()  # 恢复时间正序
 
-        self.talking_message = initial_messages # 将这些消息设为初始上下文
-        self.now_message_info = self.translate_message_list_to_str(self.talking_message) # 更新初始的 now_message_info
-
+        self.talking_message = initial_messages  # 将这些消息设为初始上下文
+        self.now_message_info = self.translate_message_list_to_str(self.talking_message)  # 更新初始的 now_message_info
 
         self.llm_summary = LLMRequest(
             model=global_config.llm_observation, temperature=0.7, max_tokens=300, request_type="chat_observation"
@@ -100,9 +99,7 @@ class ChattingObservation(Observation):
             # 检查是否有任何新消息（即使超出限制），以决定是否更新 last_observe_time
             # 注意：这里的查询也可能与其他并发 observe 冲突，但锁保护了状态更新
             # 由于外部已加锁，此处的并发冲突担忧不再需要
-            any_new_message = db.messages.find_one(
-                {"chat_id": self.chat_id, "time": {"$gt": self.last_observe_time}}
-            )
+            any_new_message = db.messages.find_one({"chat_id": self.chat_id, "time": {"$gt": self.last_observe_time}})
             if not any_new_message:
                 return  # 确实没有新消息
 
@@ -120,10 +117,8 @@ class ChattingObservation(Observation):
                     self.last_observe_time = latest_time_doc["time"]
             return  # 返回，因为我们只关心限制内的最新消息
 
-
         self.last_observe_time = new_messages[-1]["time"]
         self.talking_message.extend(new_messages)
-
 
         if len(self.talking_message) > self.max_now_obs_len:
             try:  # 使用 try...finally 仅用于可能的LLM调用错误处理
@@ -164,7 +159,9 @@ class ChattingObservation(Observation):
                 mid_memory_str = "之前聊天的内容概述是：\n"
                 for mid_memory_item in self.mid_memorys:  # 重命名循环变量以示区分
                     time_diff = int((datetime.now().timestamp() - mid_memory_item["created_at"]) / 60)
-                    mid_memory_str += f"距离现在{time_diff}分钟前(聊天记录id:{mid_memory_item['id']})：{mid_memory_item['theme']}\n"
+                    mid_memory_str += (
+                        f"距离现在{time_diff}分钟前(聊天记录id:{mid_memory_item['id']})：{mid_memory_item['theme']}\n"
+                    )
                 self.mid_memory_info = mid_memory_str
             except Exception as e:  # 将异常处理移至此处以覆盖整个总结过程
                 logger.error(f"处理和总结旧消息时出错 for chat {self.chat_id}: {e}")

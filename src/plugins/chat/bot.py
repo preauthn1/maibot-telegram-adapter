@@ -32,7 +32,7 @@ class ChatBot:
         self.think_flow_chat = ThinkFlowChat()
         self.reasoning_chat = ReasoningChat()
         self.heartFC_processor = HeartFC_Processor()  # 新增
-        
+
         # 创建初始化PFC管理器的任务，会在_ensure_started时执行
         self.only_process_chat = MessageProcessor()
         self.pfc_manager = PFCManager.get_instance()

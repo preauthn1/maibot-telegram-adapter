@@ -276,9 +276,7 @@ class HeartFC_Chat:
         )
         self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
 
-
-
-    #暂不使用
+    # 暂不使用
     async def trigger_reply_generation(self, stream_id: str, observed_messages: List[dict]):
         """根据 SubHeartflow 的触发信号生成回复 (基于观察)"""
         stream_name = chat_manager.get_stream_name(stream_id) or stream_id  # <--- 在开始时获取名称
@@ -534,4 +532,3 @@ class HeartFC_Chat:
         finally:
             # 可以在这里添加清理逻辑，如果有的话
             pass
-
