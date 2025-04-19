@@ -50,6 +50,7 @@ def init_prompt():
     prompt += (
         "现在请你继续生成你在这个聊天中的想法，不要分点输出,生成内心想法，文字不要浮夸，注意{bot_name}指的就是你。"
     )
+
     Prompt(prompt, "sub_heartflow_prompt_before")
 
 
