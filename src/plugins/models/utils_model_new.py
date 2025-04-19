@@ -610,7 +610,7 @@ class LLMRequest:
             "stream_mode": stream_mode,
             "image_base64": image_base64,  # 保留必要的exception处理所需的原始数据
             "image_format": image_format,
-            "prompt": prompt
+            "prompt": prompt,
         }
 
     async def _execute_request(
@@ -862,7 +862,9 @@ class LLMRequest:
             if keep_request:
                 image_base64 = request_content["image_base64"]
                 compressed_image_base64 = compress_base64_image_by_scale(image_base64)
-                new_payload = await self._build_payload(request_content["prompt"], compressed_image_base64, request_content["image_format"])
+                new_payload = await self._build_payload(
+                    request_content["prompt"], compressed_image_base64, request_content["image_format"]
+                )
                 return new_payload, 0
             else:
                 return None, 0
@@ -910,7 +912,7 @@ class LLMRequest:
                     )
                 except Exception as parse_err:
                     logger.warning(f"模型 {self.model_name} 无法解析响应错误内容: {str(parse_err)}")
-                
+
                 await asyncio.sleep(wait_time)
                 return None, 0
             else:
