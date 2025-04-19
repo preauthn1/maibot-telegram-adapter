@@ -161,7 +161,7 @@ class ChattingObservation(Observation):
                 if len(self.mid_memorys) > self.max_mid_memory_len:
                     self.mid_memorys.pop(0)  # 移除最旧的
 
-                mid_memory_str = "之前聊天的内容概括是：\n"
+                mid_memory_str = "之前聊天的内容概述是：\n"
                 for mid_memory_item in self.mid_memorys:  # 重命名循环变量以示区分
                     time_diff = int((datetime.now().timestamp() - mid_memory_item["created_at"]) / 60)
                     mid_memory_str += f"距离现在{time_diff}分钟前(聊天记录id:{mid_memory_item['id']})：{mid_memory_item['theme']}\n"
