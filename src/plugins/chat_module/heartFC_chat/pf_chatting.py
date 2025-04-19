@@ -737,6 +737,7 @@ class PFChatting:
         )
         prompt += "4. 如果你已经回复过消息，也没有人又回复你，选择'no_reply'。\n"
         prompt += "5. 除非大家都在这么做，否则不要重复聊相同的内容。\n"
+        prompt += "6. 表情包是用来表示情绪的，不要直接回复或者评价别人的表情包。\n"
         prompt += "必须调用 'decide_reply_action' 工具并提供 'action' 和 'reasoning'。如果选择了 'emoji_reply' 或者选择了 'text_reply' 并想追加表情，则必须提供 'emoji_query'。"
 
         prompt = await relationship_manager.convert_all_person_sign_to_person_name(prompt)
