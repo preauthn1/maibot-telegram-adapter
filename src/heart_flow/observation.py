@@ -184,9 +184,7 @@ class ChattingObservation(Observation):
         try:
             # 只需检查是否存在，不需要获取内容，使用 {"_id": 1} 提高效率
             new_message = await asyncio.to_thread(
-                db.messages.find_one,
-                {"chat_id": self.chat_id, "time": {"$gt": timestamp}},
-                {"_id": 1}
+                db.messages.find_one, {"chat_id": self.chat_id, "time": {"$gt": timestamp}}, {"_id": 1}
             )
             # new_message = db.messages.find_one({"chat_id": self.chat_id, "time": {"$gt": timestamp}}, {"_id": 1}) # find_one 不是异步的
             return new_message is not None

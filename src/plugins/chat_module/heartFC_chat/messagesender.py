@@ -74,7 +74,6 @@ class MessageSender:
             logger.error(f"发送消息   {message_preview}   失败: {str(e)}")
 
 
-
 class MessageContainer:
     """单个聊天流的发送/思考消息容器"""
 
@@ -173,7 +172,7 @@ class MessageManager:
                     # 检查 message_id 是否匹配 thinking_id 或以 "me" 开头
                     if message.message_info.message_id == thinking_id or message.message_info.message_id[:2] == "me":
                         print(f"检查到存在相同thinking_id的消息: {message.message_info.message_id}???{thinking_id}")
-                        
+
                         return True
         return False
 
@@ -220,10 +219,9 @@ class MessageManager:
                 logger.trace(f"\n{message_earliest.processed_plain_text},{typing_time},计算输入时间结束\n")
                 await asyncio.sleep(typing_time)
                 logger.debug(f"\n{message_earliest.processed_plain_text},{typing_time},等待输入时间结束\n")
-                
-                
+
                 await self.storage.store_message(message_earliest, message_earliest.chat_stream)
-                
+
                 await MessageSender().send_message(message_earliest)
 
                 container.remove_message(message_earliest)
