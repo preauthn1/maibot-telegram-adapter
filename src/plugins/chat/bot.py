@@ -6,7 +6,6 @@ from .chat_stream import chat_manager
 from ..chat_module.only_process.only_message_process import MessageProcessor
 
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
-from ..chat_module.think_flow_chat.think_flow_chat import ThinkFlowChat
 from ..chat_module.reasoning_chat.reasoning_chat import ReasoningChat
 from ..chat_module.heartFC_chat.heartFC_processor import HeartFC_Processor
 from ..utils.prompt_builder import Prompt, global_prompt_manager
@@ -29,7 +28,6 @@ class ChatBot:
         self._started = False
         self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
         self.mood_manager.start_mood_update()  # 启动情绪更新
-        self.think_flow_chat = ThinkFlowChat()
         self.reasoning_chat = ReasoningChat()
         self.heartFC_processor = HeartFC_Processor()  # 新增
 
@@ -118,11 +116,9 @@ class ChatBot:
                         else:
                             if groupinfo.group_id in global_config.talk_allowed_groups:
                                 # logger.debug(f"开始群聊模式{str(message_data)[:50]}...")
-                                if global_config.response_mode == "heart_FC":
+                                if global_config.response_mode == "heart_flow":
                                     # logger.info(f"启动最新最好的思维流FC模式{str(message_data)[:50]}...")
-
                                     await self.heartFC_processor.process_message(message_data)
-
                                 elif global_config.response_mode == "reasoning":
                                     # logger.debug(f"开始推理模式{str(message_data)[:50]}...")
                                     await self.reasoning_chat.process_message(message_data)
@@ -136,7 +132,7 @@ class ChatBot:
                             # 私聊处理流程
                             # await self._handle_private_chat(message)
                             if global_config.response_mode == "heart_flow":
-                                await self.think_flow_chat.process_message(message_data)
+                                await self.heartFC_processor.process_message(message_data)
                             elif global_config.response_mode == "reasoning":
                                 await self.reasoning_chat.process_message(message_data)
                             else:
@@ -144,7 +140,7 @@ class ChatBot:
                     else:  # 群聊处理
                         if groupinfo.group_id in global_config.talk_allowed_groups:
                             if global_config.response_mode == "heart_flow":
-                                await self.think_flow_chat.process_message(message_data)
+                                await self.heartFC_processor.process_message(message_data)
                             elif global_config.response_mode == "reasoning":
                                 await self.reasoning_chat.process_message(message_data)
                             else:
