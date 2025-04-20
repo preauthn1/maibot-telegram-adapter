@@ -13,6 +13,8 @@ from src.plugins.chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger, LogConfig, DEFAULT_CONFIG  # 引入 DEFAULT_CONFIG
 from src.plugins.models.utils_model import LLMRequest
 from src.plugins.chat.utils import parse_text_timestamps
+from src.plugins.chat.utils_image import image_path_to_base64 # Local import needed after move
+from src.plugins.chat.message import Seg # Local import needed after move
 
 # 定义日志配置 (使用 loguru 格式)
 interest_log_config = LogConfig(
@@ -90,7 +92,7 @@ class PFChatting:
         self._loop_active: bool = False  # Is the loop currently running?
         self._loop_task: Optional[asyncio.Task] = None  # Stores the main loop task
         self._trigger_count_this_activation: int = 0  # Counts triggers within an active period
-        self._initial_duration: float = 30.0  # 首次触发增加的时间
+        self._initial_duration: float = 60.0  # 首次触发增加的时间
         self._last_added_duration: float = self._initial_duration  # <--- 新增：存储上次增加的时间
 
     def _get_log_prefix(self) -> str:
@@ -209,7 +211,16 @@ class PFChatting:
         log_prefix = self._get_log_prefix()
         logger.info(f"{log_prefix} PFChatting: 麦麦打算好好聊聊 (定时器: {self._loop_timer:.1f}s)")
         try:
+            thinking_id = ""
             while True:
+                if self.heartfc_controller.MessageManager().check_if_sending_message_exist(self.stream_id, thinking_id):
+                    logger.info(f"{log_prefix} PFChatting: 11111111111111111111111111111111麦麦还在发消息，等会再规划")
+                    await asyncio.sleep(1)
+                    continue
+                else:
+                    logger.info(f"{log_prefix} PFChatting: 11111111111111111111111111111111麦麦不发消息了，开始规划")
+                
+                
                 async with self._timer_lock:
                     current_timer = self._loop_timer
                     if current_timer <= 0:
@@ -257,11 +268,8 @@ class PFChatting:
                                 try:
                                     # --- Replier Work --- #
                                     replier_result = await self._replier_work(
-                                        observed_messages=observed_messages, # Pass observed messages
                                         anchor_message=anchor_message,
                                         thinking_id=thinking_id,
-                                        current_mind=current_mind,
-                                        # send_emoji=send_emoji_from_tools, # Pass tool emoji query
                                     )
                                 except Exception as e_replier:
                                     logger.error(f"{log_prefix} 循环: 回复器工作失败: {e_replier}")
@@ -813,8 +821,6 @@ class PFChatting:
 
     async def _handle_emoji(self, anchor_message: Optional[MessageRecv], response_set: List[str], send_emoji: str = ""):
         """处理表情包 (尝试锚定到 anchor_message)"""
-        from src.plugins.chat.utils_image import image_path_to_base64 # Local import needed after move
-        from src.plugins.chat.message import Seg # Local import needed after move
 
         if not anchor_message or not anchor_message.chat_stream:
             logger.error(f"{self._get_log_prefix()} 无法处理表情包，缺少有效的锚点消息或聊天流。")

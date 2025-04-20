@@ -162,11 +162,21 @@ class MessageManager:
         container = self.get_container(chat_stream.stream_id)
         container.add_message(message)
 
-    def check_if_sending_message_exist(self,chat_id,thinking_id):
+    def check_if_sending_message_exist(self, chat_id, thinking_id):
+        """检查指定聊天流的容器中是否存在具有特定 thinking_id 的 MessageSending 消息"""
         container = self.get_container(chat_id)
         if container.has_messages():
-            
-    
+            for message in container.get_all_messages():
+                # 首先确保是 MessageSending 类型
+                if isinstance(message, MessageSending):
+                    # 然后再访问 message_info.message_id
+                    # 检查 message_id 是否匹配 thinking_id 或以 "me" 开头
+                    if message.message_info.message_id == thinking_id or message.message_info.message_id[:2] == "me":
+                        print(f"检查到存在相同thinking_id的消息: {message.message_info.message_id}???{thinking_id}")
+                        
+                        return True
+        return False
+
     async def process_chat_messages(self, chat_id: str):
         """处理聊天流消息"""
         container = self.get_container(chat_id)
