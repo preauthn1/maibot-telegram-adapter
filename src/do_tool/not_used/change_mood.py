@@ -34,7 +34,7 @@ class ChangeMoodTool(BaseTool):
         """
         try:
             response_set = function_args.get("response_set")
-            message_processed_plain_text = function_args.get("text")
+            _message_processed_plain_text = function_args.get("text")
 
             mood_manager = MoodManager.get_instance()
             # gpt = ResponseGenerator()
@@ -42,7 +42,7 @@ class ChangeMoodTool(BaseTool):
             if response_set is None:
                 response_set = ["你还没有回复"]
 
-            ori_response = ",".join(response_set)
+            _ori_response = ",".join(response_set)
             # _stance, emotion = await gpt._get_emotion_tags(ori_response, message_processed_plain_text)
             emotion = "平静"
             mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
