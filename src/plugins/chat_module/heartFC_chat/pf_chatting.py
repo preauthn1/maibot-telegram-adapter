@@ -3,9 +3,8 @@ import time
 import traceback
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import json
-from src.plugins.chat.message import (MessageRecv, BaseMessageInfo, MessageThinking,
-                         MessageSending)
-from src.plugins.chat.message import MessageSet, Seg # Local import needed after move
+from src.plugins.chat.message import MessageRecv, BaseMessageInfo, MessageThinking, MessageSending
+from src.plugins.chat.message import MessageSet, Seg  # Local import needed after move
 from src.plugins.chat.chat_stream import ChatStream
 from src.plugins.chat.message import UserInfo
 from src.heart_flow.heartflow import heartflow, SubHeartflow
@@ -13,8 +12,7 @@ from src.plugins.chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger, LogConfig, DEFAULT_CONFIG  # 引入 DEFAULT_CONFIG
 from src.plugins.models.utils_model import LLMRequest
 from src.plugins.chat.utils import parse_text_timestamps
-from src.plugins.chat.utils_image import image_path_to_base64 # Local import needed after move
-from src.plugins.chat.message import Seg # Local import needed after move
+from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
 
 # 定义日志配置 (使用 loguru 格式)
 interest_log_config = LogConfig(
@@ -156,7 +154,7 @@ class PFChatting:
                 # Update _last_added_duration only if it's >= 0.5 to prevent it from becoming too small
                 self._last_added_duration = duration_to_add
                 logger.info(
-                        f"{log_prefix} 麦麦兴趣增加！ #{self._trigger_count_this_activation}. 想继续聊： {duration_to_add:.2f}s, 麦麦还能聊： {self._loop_timer:.1f}s."
+                    f"{log_prefix} 麦麦兴趣增加！ #{self._trigger_count_this_activation}. 想继续聊： {duration_to_add:.2f}s, 麦麦还能聊： {self._loop_timer:.1f}s."
                 )
 
             # 添加计算出的时间
@@ -186,7 +184,7 @@ class PFChatting:
             exception = task.exception()
             if exception:
                 logger.error(f"{log_prefix} PFChatting: 麦麦脱离了聊天(异常): {exception}")
-                logger.error(traceback.format_exc()) # Log full traceback for exceptions
+                logger.error(traceback.format_exc())  # Log full traceback for exceptions
             else:
                 logger.debug(f"{log_prefix} PFChatting: 麦麦脱离了聊天 (正常完成)")
         except asyncio.CancelledError:
@@ -219,38 +217,45 @@ class PFChatting:
                     continue
                 else:
                     logger.info(f"{log_prefix} PFChatting: 11111111111111111111111111111111麦麦不发消息了，开始规划")
-                
-                
+
                 async with self._timer_lock:
                     current_timer = self._loop_timer
                     if current_timer <= 0:
-                        logger.info(f"{log_prefix} PFChatting: 聊太久了，麦麦打算休息一下 (计时器为 {current_timer:.1f}s)。退出PFChatting。")
+                        logger.info(
+                            f"{log_prefix} PFChatting: 聊太久了，麦麦打算休息一下 (计时器为 {current_timer:.1f}s)。退出PFChatting。"
+                        )
                         break
 
+                # 记录循环周期开始时间，用于计时和休眠计算
                 loop_cycle_start_time = time.monotonic()
                 action_taken_this_cycle = False
                 acquired_lock = False
+                planner_start_db_time = 0.0  # 初始化
+
                 try:
                     # Use try_acquire pattern or timeout?
                     await self._processing_lock.acquire()
                     acquired_lock = True
                     logger.debug(f"{log_prefix} PFChatting: 循环获取到处理锁")
 
+                    # 在规划前记录数据库时间戳
+                    planner_start_db_time = time.time()
+
                     # --- Planner --- #
                     planner_result = await self._planner()
                     action = planner_result.get("action", "error")
                     reasoning = planner_result.get("reasoning", "Planner did not provide reasoning.")
                     emoji_query = planner_result.get("emoji_query", "")
-                    current_mind = planner_result.get("current_mind", "[Mind unavailable]")
+                    # current_mind = planner_result.get("current_mind", "[Mind unavailable]")
                     # send_emoji_from_tools = planner_result.get("send_emoji_from_tools", "") # Emoji from tools
                     observed_messages = planner_result.get("observed_messages", [])
                     llm_error = planner_result.get("llm_error", False)
 
                     if llm_error:
-                         logger.error(f"{log_prefix} Planner LLM 失败，跳过本周期回复尝试。理由: {reasoning}")
-                         # Optionally add a longer sleep?
-                         action_taken_this_cycle = False # Ensure no action is counted
-                         # Continue to timer decrement and sleep
+                        logger.error(f"{log_prefix} Planner LLM 失败，跳过本周期回复尝试。理由: {reasoning}")
+                        # Optionally add a longer sleep?
+                        action_taken_this_cycle = False  # Ensure no action is counted
+                        # Continue to timer decrement and sleep
 
                     elif action == "text_reply":
                         logger.info(f"{log_prefix} PFChatting: 麦麦决定回复文本. 理由: {reasoning}")
@@ -282,7 +287,7 @@ class PFChatting:
                                             thinking_id=thinking_id,
                                             anchor_message=anchor_message,
                                             response_set=replier_result,
-                                            send_emoji=emoji_query 
+                                            send_emoji=emoji_query,
                                         )
                                         # logger.info(f"{log_prefix} 循环: 发送器完成成功.")
                                     except Exception as e_sender:
@@ -304,16 +309,53 @@ class PFChatting:
                                 logger.error(f"{log_prefix} 循环: 发送表情失败: {e_emoji}")
                         else:
                             logger.warning(f"{log_prefix} 循环: 无法发送表情, 无法获取锚点.")
+                        action_taken_this_cycle = True  # 即使发送失败，Planner 也决策了动作
 
                     elif action == "no_reply":
                         logger.info(f"{log_prefix} PFChatting: 麦麦决定不回复. 原因: {reasoning}")
-                        action_taken_this_cycle = False
+                        action_taken_this_cycle = False  # 标记为未执行动作
+                        # --- 新增：等待新消息 ---
+                        logger.debug(f"{log_prefix} PFChatting: 开始等待新消息 (自 {planner_start_db_time})...")
+                        observation = None
+                        if self.sub_hf:
+                            observation = self.sub_hf._get_primary_observation()
 
-                    elif action == "error": # Action specifically set to error by planner
+                        if observation:
+                            wait_start_time = time.monotonic()
+                            while True:
+                                # 检查计时器是否耗尽
+                                async with self._timer_lock:
+                                    if self._loop_timer <= 0:
+                                        logger.info(f"{log_prefix} PFChatting: 等待新消息时计时器耗尽。")
+                                        break  # 计时器耗尽，退出等待
+
+                                # 检查是否有新消息
+                                has_new = await observation.has_new_messages_since(planner_start_db_time)
+                                if has_new:
+                                    logger.info(f"{log_prefix} PFChatting: 检测到新消息，结束等待。")
+                                    break  # 收到新消息，退出等待
+
+                                # 检查等待是否超时（例如，防止无限等待）
+                                if time.monotonic() - wait_start_time > 60:  # 等待60秒示例
+                                    logger.warning(f"{log_prefix} PFChatting: 等待新消息超时（60秒）。")
+                                    break  # 超时退出
+
+                                # 等待一段时间再检查
+                                try:
+                                    await asyncio.sleep(1.5)  # 检查间隔
+                                except asyncio.CancelledError:
+                                    logger.info(f"{log_prefix} 等待新消息的 sleep 被中断。")
+                                    raise  # 重新抛出取消错误，以便外层循环处理
+
+                        else:
+                            logger.warning(f"{log_prefix} PFChatting: 无法获取 Observation 实例，无法等待新消息。")
+                        # --- 等待结束 ---
+
+                    elif action == "error":  # Action specifically set to error by planner
                         logger.error(f"{log_prefix} PFChatting: Planner返回错误状态. 原因: {reasoning}")
                         action_taken_this_cycle = False
 
-                    else: # Unknown action from planner
+                    else:  # Unknown action from planner
                         logger.warning(f"{log_prefix} PFChatting: Planner返回未知动作 '{action}'. 原因: {reasoning}")
                         action_taken_this_cycle = False
 
@@ -336,9 +378,9 @@ class PFChatting:
                     self._loop_timer -= cycle_duration
                     # Log timer decrement less aggressively
                     if cycle_duration > 0.1 or not action_taken_this_cycle:
-                         logger.debug(
-                             f"{log_prefix} PFChatting: 周期耗时 {cycle_duration:.2f}s. 剩余时间: {self._loop_timer:.1f}s."
-                         )
+                        logger.debug(
+                            f"{log_prefix} PFChatting: 周期耗时 {cycle_duration:.2f}s. 剩余时间: {self._loop_timer:.1f}s."
+                        )
 
                 # --- Delay --- #
                 try:
@@ -349,8 +391,8 @@ class PFChatting:
                         sleep_duration = 0.2
 
                     if sleep_duration > 0:
-                         # logger.debug(f"{log_prefix} Sleeping for {sleep_duration:.2f}s")
-                         await asyncio.sleep(sleep_duration)
+                        # logger.debug(f"{log_prefix} Sleeping for {sleep_duration:.2f}s")
+                        await asyncio.sleep(sleep_duration)
 
                 except asyncio.CancelledError:
                     logger.info(f"{log_prefix} Sleep interrupted, loop likely cancelling.")
@@ -375,7 +417,7 @@ class PFChatting:
         get_mid_memory_id = []
         # send_emoji_from_tools = "" # Emoji suggested by tools
         current_mind: Optional[str] = None
-        llm_error = False # Flag for LLM failure
+        llm_error = False  # Flag for LLM failure
 
         # --- 获取最新的观察信息 --- #
         if not self.sub_hf:
@@ -418,10 +460,12 @@ class PFChatting:
                 tool_result_info = tool_result.get("structured_info", {})
                 logger.debug(f"{log_prefix}[Planner] 规划前工具结果: {tool_result_info}")
                 # Extract memory IDs and potential emoji query from tools
-                get_mid_memory_id = [mem["content"] for mem in tool_result_info.get("mid_chat_mem", []) if "content" in mem]
+                get_mid_memory_id = [
+                    mem["content"] for mem in tool_result_info.get("mid_chat_mem", []) if "content" in mem
+                ]
                 # send_emoji_from_tools = next((item["content"] for item in tool_result_info.get("send_emoji", []) if "content" in item), "")
                 # if send_emoji_from_tools:
-                    # logger.info(f"{log_prefix}[Planner] 工具建议表情: '{send_emoji_from_tools}'")
+                # logger.info(f"{log_prefix}[Planner] 工具建议表情: '{send_emoji_from_tools}'")
 
         except Exception as e_tool:
             logger.error(f"{log_prefix}[Planner] 规划前工具使用失败: {e_tool}")
@@ -442,7 +486,7 @@ class PFChatting:
 
         # --- 使用 LLM 进行决策 --- #
         action = "no_reply"  # Default action
-        emoji_query = ""    # Default emoji query (used if action is emoji_reply or text_reply with emoji)
+        emoji_query = ""  # Default emoji query (used if action is emoji_reply or text_reply with emoji)
         reasoning = "默认决策或获取决策失败"
 
         try:
@@ -478,7 +522,9 @@ class PFChatting:
                                 f"{log_prefix}[Planner] LLM 决策: {action}, 理由: {reasoning}, EmojiQuery: '{emoji_query}'"
                             )
                         except json.JSONDecodeError as json_e:
-                            logger.error(f"{log_prefix}[Planner] 解析工具参数失败: {json_e}. Args: {tool_call['function'].get('arguments')}")
+                            logger.error(
+                                f"{log_prefix}[Planner] 解析工具参数失败: {json_e}. Args: {tool_call['function'].get('arguments')}"
+                            )
                             action = "error"
                             reasoning = "工具参数解析失败"
                             llm_error = True
@@ -488,7 +534,9 @@ class PFChatting:
                             reasoning = "处理工具参数时出错"
                             llm_error = True
                     else:
-                        logger.warning(f"{log_prefix}[Planner] LLM 未按预期调用 'decide_reply_action' 工具。Tool calls: {tool_calls}")
+                        logger.warning(
+                            f"{log_prefix}[Planner] LLM 未按预期调用 'decide_reply_action' 工具。Tool calls: {tool_calls}"
+                        )
                         action = "error"
                         reasoning = "LLM未调用预期工具"
                         llm_error = True
@@ -514,7 +562,7 @@ class PFChatting:
         return {
             "action": action,
             "reasoning": reasoning,
-            "emoji_query": emoji_query, # Explicit query from Planner/LLM
+            "emoji_query": emoji_query,  # Explicit query from Planner/LLM
             "current_mind": current_mind,
             # "send_emoji_from_tools": send_emoji_from_tools, # Emoji suggested by tools (used as fallback)
             "observed_messages": observed_messages,
@@ -535,8 +583,8 @@ class PFChatting:
             if last_msg_dict:
                 try:
                     # anchor_message = MessageRecv(last_msg_dict, chat_stream=self.chat_stream)
-                    anchor_message = MessageRecv(last_msg_dict) # 移除 chat_stream 参数
-                    anchor_message.update_chat_stream(self.chat_stream) # 添加 update_chat_stream 调用
+                    anchor_message = MessageRecv(last_msg_dict)  # 移除 chat_stream 参数
+                    anchor_message.update_chat_stream(self.chat_stream)  # 添加 update_chat_stream 调用
                     if not (
                         anchor_message
                         and anchor_message.message_info
@@ -547,9 +595,11 @@ class PFChatting:
                     # logger.debug(f"{self._get_log_prefix()} 重构的锚点消息: ID={anchor_message.message_info.message_id}")
                     return anchor_message
                 except Exception as e_reconstruct:
-                    logger.warning(f"{self._get_log_prefix()} 从观察到的消息重构 MessageRecv 失败: {e_reconstruct}. 创建占位符.")
+                    logger.warning(
+                        f"{self._get_log_prefix()} 从观察到的消息重构 MessageRecv 失败: {e_reconstruct}. 创建占位符."
+                    )
             # else:
-                # logger.warning(f"{self._get_log_prefix()} observed_messages 为空. 创建占位符锚点消息.")
+            # logger.warning(f"{self._get_log_prefix()} observed_messages 为空. 创建占位符锚点消息.")
 
             # --- Create Placeholder --- #
             placeholder_id = f"mid_pf_{int(time.time() * 1000)}"
@@ -571,7 +621,9 @@ class PFChatting:
             }
             anchor_message = MessageRecv(placeholder_msg_dict)
             anchor_message.update_chat_stream(self.chat_stream)
-            logger.info(f"{self._get_log_prefix()} Created placeholder anchor message: ID={anchor_message.message_info.message_id}")
+            logger.info(
+                f"{self._get_log_prefix()} Created placeholder anchor message: ID={anchor_message.message_info.message_id}"
+            )
             return anchor_message
 
         except Exception as e:
@@ -596,7 +648,7 @@ class PFChatting:
         thinking_id: str,
         anchor_message: MessageRecv,
         response_set: List[str],
-        send_emoji: str # Emoji query decided by planner or tools
+        send_emoji: str,  # Emoji query decided by planner or tools
     ):
         """
         发送器 (Sender): 使用本类的方法发送生成的回复。
@@ -617,7 +669,7 @@ class PFChatting:
 
             # --- 更新关系状态 --- #
             await self._update_relationship(anchor_message, response_set)
-            
+
         else:
             # logger.warning(f"{log_prefix}[Sender-{thinking_id}] 发送回复失败(_send_response_messages返回None)。思考消息{thinking_id}可能已被移除。")
             # 无需清理，因为_send_response_messages返回None意味着已处理/已删除
@@ -633,7 +685,7 @@ class PFChatting:
             logger.info(f"{log_prefix} Cancelling active PF loop task.")
             self._loop_task.cancel()
             try:
-                await asyncio.wait_for(self._loop_task, timeout=1.0) # Shorter timeout?
+                await asyncio.wait_for(self._loop_task, timeout=1.0)  # Shorter timeout?
             except asyncio.CancelledError:
                 logger.info(f"{log_prefix} PF loop task cancelled successfully.")
             except asyncio.TimeoutError:
@@ -656,7 +708,9 @@ class PFChatting:
         config = self.heartfc_controller.global_config
         rel_manager = self.heartfc_controller.relationship_manager
 
-        prompt = f"你的名字是 {config.BOT_NICKNAME}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。\n"
+        prompt = (
+            f"你的名字是 {config.BOT_NICKNAME}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。\n"
+        )
 
         if observed_messages:
             context_texts = []
@@ -664,7 +718,7 @@ class PFChatting:
                 sender = msg.get("message_info", {}).get("user_info", {}).get("user_nickname", "未知用户")
                 text = msg.get("detailed_plain_text", "")
                 timestamp = msg.get("time", 0)
-                time_str = time.strftime('%H:%M:%S', time.localtime(timestamp)) if timestamp else ""
+                time_str = time.strftime("%H:%M:%S", time.localtime(timestamp)) if timestamp else ""
                 context_texts.append(f"{sender} ({time_str}): {text}")
             context_text = "\n".join(context_texts)
             prompt += "观察到的最新聊天内容如下 (最近的消息在最后)：\n---\n"
@@ -693,7 +747,7 @@ class PFChatting:
         )
 
         prompt = await rel_manager.convert_all_person_sign_to_person_name(prompt)
-        prompt = parse_text_timestamps(prompt, mode="remove") # Remove timestamps before sending to LLM
+        prompt = parse_text_timestamps(prompt, mode="remove")  # Remove timestamps before sending to LLM
 
         return prompt
 
@@ -716,8 +770,8 @@ class PFChatting:
 
             # Ensure generate_response has access to current_mind if it's crucial context
             response_set = await gpt_instance.generate_response(
-                anchor_message, # Pass anchor_message positionally (matches 'message' parameter)
-                thinking_id     # Pass thinking_id positionally
+                anchor_message,  # Pass anchor_message positionally (matches 'message' parameter)
+                thinking_id,  # Pass thinking_id positionally
             )
 
             if not response_set:
@@ -773,12 +827,12 @@ class PFChatting:
         chat = anchor_message.chat_stream
         container = self.heartfc_controller.MessageManager().get_container(chat.stream_id)
         thinking_message = None
-        
+
         # 移除思考消息
-        for msg in container.messages[:]: # Iterate over a copy
+        for msg in container.messages[:]:  # Iterate over a copy
             if isinstance(msg, MessageThinking) and msg.message_info.message_id == thinking_id:
                 thinking_message = msg
-                container.messages.remove(msg) # Remove the message directly here
+                container.messages.remove(msg)  # Remove the message directly here
                 logger.debug(f"{self._get_log_prefix()} Removed thinking message {thinking_id} via iteration.")
                 break
 
@@ -793,10 +847,10 @@ class PFChatting:
         first_bot_msg = None
         # Access global_config via controller
         bot_user_info = UserInfo(
-                user_id=self.heartfc_controller.global_config.BOT_QQ,
-                user_nickname=self.heartfc_controller.global_config.BOT_NICKNAME,
-                platform=anchor_message.message_info.platform,
-            )
+            user_id=self.heartfc_controller.global_config.BOT_QQ,
+            user_nickname=self.heartfc_controller.global_config.BOT_NICKNAME,
+            platform=anchor_message.message_info.platform,
+        )
         for msg_text in response_set:
             message_segment = Seg(type="text", data=msg_text)
             bot_message = MessageSending(
@@ -814,7 +868,6 @@ class PFChatting:
                 mark_head = True
                 first_bot_msg = bot_message
             message_set.add_message(bot_message)
-
 
         self.heartfc_controller.MessageManager().add_message(message_set)
         return first_bot_msg
@@ -842,10 +895,10 @@ class PFChatting:
             message_segment = Seg(type="emoji", data=emoji_cq)
             # Access global_config via controller
             bot_user_info = UserInfo(
-                    user_id=self.heartfc_controller.global_config.BOT_QQ,
-                    user_nickname=self.heartfc_controller.global_config.BOT_NICKNAME,
-                    platform=anchor_message.message_info.platform,
-                )
+                user_id=self.heartfc_controller.global_config.BOT_QQ,
+                user_nickname=self.heartfc_controller.global_config.BOT_NICKNAME,
+                platform=anchor_message.message_info.platform,
+            )
             bot_message = MessageSending(
                 message_id="me" + str(thinking_time_point),  # 使用不同的 ID 前缀?
                 chat_stream=chat,
@@ -856,7 +909,7 @@ class PFChatting:
                 is_head=False,
                 is_emoji=True,
             )
-             # Access MessageManager via controller
+            # Access MessageManager via controller
             self.heartfc_controller.MessageManager().add_message(bot_message)
 
     async def _update_relationship(self, anchor_message: Optional[MessageRecv], response_set: List[str]):
@@ -879,4 +932,5 @@ class PFChatting:
             stance=stance,
         )
         mood_manager_instance.update_mood_from_emotion(emotion, config.mood_intensity_factor)
+
     # --- Methods moved from HeartFC_Controller end ---
