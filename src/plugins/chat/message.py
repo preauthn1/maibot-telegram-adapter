@@ -313,17 +313,21 @@ class MessageSending(MessageProcessBase):
 
     def set_reply(self, reply: Optional["MessageRecv"] = None) -> None:
         """设置回复消息"""
-        if reply:
-            self.reply = reply
-        if self.reply:
-            self.reply_to_message_id = self.reply.message_info.message_id
-            self.message_segment = Seg(
-                type="seglist",
-                data=[
-                    Seg(type="reply", data=self.reply.message_info.message_id),
-                    self.message_segment,
-                ],
-            )
+        if (
+            self.message_info.format_info.accept_format is not None
+            and "reply" in self.message_info.format_info.accept_format
+        ):
+            if reply:
+                self.reply = reply
+            if self.reply:
+                self.reply_to_message_id = self.reply.message_info.message_id
+                self.message_segment = Seg(
+                    type="seglist",
+                    data=[
+                        Seg(type="reply", data=self.reply.message_info.message_id),
+                        self.message_segment,
+                    ],
+                )
         return self
 
     async def process(self) -> None:

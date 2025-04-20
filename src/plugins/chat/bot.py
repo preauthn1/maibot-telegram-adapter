@@ -77,10 +77,17 @@ class ChatBot:
             # 确保所有任务已启动
             await self._ensure_started()
 
+            if message_data["message_info"]["group_info"] is not None:
+                message_data["message_info"]["group_info"]["group_id"] = str(
+                    message_data["message_info"]["group_info"]["group_id"]
+                )
+            message_data["message_info"]["group_info"]["group_id"] = str(
+                message_data["message_info"]["group_info"]["group_id"]
+            )
+            logger.trace(f"处理消息:{str(message_data)[:120]}...")
             message = MessageRecv(message_data)
             groupinfo = message.message_info.group_info
             userinfo = message.message_info.user_info
-            logger.trace(f"处理消息:{str(message_data)[:120]}...")
 
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
