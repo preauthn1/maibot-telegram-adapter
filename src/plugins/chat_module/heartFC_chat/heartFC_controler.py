@@ -52,18 +52,19 @@ class HeartFC_Controller:
         self.emoji_manager = emoji_manager
         self.relationship_manager = relationship_manager
         self.global_config = global_config
-        self.MessageManager = MessageManager # Pass the class/singleton access
+        self.MessageManager = MessageManager  # Pass the class/singleton access
         # --- End dependencies ---
 
     # --- Added Class Method for Singleton Access ---
     @classmethod
     def get_instance(cls):
         if cls._instance is None:
-             # This might indicate an issue if called before initialization
-             logger.warning("HeartFC_Controller get_instance called before initialization.")
-             # Optionally, initialize here if a strict singleton pattern is desired
-             # cls._instance = cls()
+            # This might indicate an issue if called before initialization
+            logger.warning("HeartFC_Controller get_instance called before initialization.")
+            # Optionally, initialize here if a strict singleton pattern is desired
+            # cls._instance = cls()
         return cls._instance
+
     # --- End Added Class Method ---
 
     async def start(self):
