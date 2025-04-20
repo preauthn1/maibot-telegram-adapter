@@ -717,7 +717,7 @@ class PFChatting:
             )
             prompt += "观察到的最新聊天内容如下：\n---\n"
             prompt += context_text[:1500]  # Limit context length
-            prompt += "\n---\n"
+            prompt += "\n---"
         else:
             prompt += "当前没有观察到新的聊天内容。\n"
 
