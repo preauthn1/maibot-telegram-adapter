@@ -51,7 +51,6 @@ class HeartFC_Controller:
         # These are accessed via the passed instance in PFChatting
         self.emoji_manager = emoji_manager
         self.relationship_manager = relationship_manager
-        self.global_config = global_config
         self.MessageManager = MessageManager  # Pass the class/singleton access
         # --- End dependencies ---
 

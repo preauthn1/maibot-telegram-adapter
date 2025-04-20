@@ -79,7 +79,7 @@ class HeartFC_Processor:
 
             message.update_chat_stream(chat)
 
-            heartflow.create_subheartflow(chat.stream_id)
+            await heartflow.create_subheartflow(chat.stream_id)
 
             await message.process()
             logger.trace(f"消息处理成功: {message.processed_plain_text}")
