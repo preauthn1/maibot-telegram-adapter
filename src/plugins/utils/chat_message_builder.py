@@ -109,7 +109,7 @@ def num_new_messages_since_with_users(chat_id: str, timestamp_start: float, time
 async def _build_readable_messages_internal(
     messages: List[Dict[str, Any]],
     replace_bot_name: bool = True,
-    merge_messages: bool = True,
+    merge_messages: bool = False,
     timestamp_mode: str = "relative" # 新增参数控制时间戳格式
 ) -> Tuple[str, List[Tuple[float, str, str]]]:
     """
@@ -223,7 +223,7 @@ async def _build_readable_messages_internal(
 async def build_readable_messages_with_list(
     messages: List[Dict[str, Any]],
     replace_bot_name: bool = True,
-    merge_messages: bool = True,
+    merge_messages: bool = False,
     timestamp_mode: str = "relative"
 ) -> Tuple[str, List[Tuple[float, str, str]]]:
     """
@@ -238,7 +238,7 @@ async def build_readable_messages_with_list(
 async def build_readable_messages(
     messages: List[Dict[str, Any]],
     replace_bot_name: bool = True,
-    merge_messages: bool = True,
+    merge_messages: bool = False,
     timestamp_mode: str = "relative"
 ) -> str:
     """

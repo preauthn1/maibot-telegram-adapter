@@ -44,7 +44,7 @@ def init_prompt():
     prompt += "现在请你根据刚刚的想法继续思考，思考时可以想想如何对群聊内容进行回复，要不要对群里的话题进行回复，关注新话题，可以适当转换话题，大家正在说的话才是聊天的主题。\n"
     prompt += "回复的要求是：平淡一些，简短一些，说中文，如果你要回复，最好只回复一个人的一个话题\n"
     prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，等)，不要带有括号和动作描写。不要回复自己的发言，尽量不要说你说过的话。"
-    prompt += "现在请你继续生成你在这个聊天中的想法，不要分点输出,生成内心想法，文字不要浮夸"
+    prompt += "现在请你{hf_do_next}，不要分点输出,生成内心想法，文字不要浮夸"
 
     Prompt(prompt, "sub_heartflow_prompt_before")
 
@@ -176,6 +176,26 @@ class SubHeartflow:
             prompt_personality += f"，{random_detail}"
 
         time_now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        
+        
+        # 创建局部Random对象避免影响全局随机状态
+        local_random = random.Random()
+        current_minute = int(time.strftime("%M"))
+        local_random.seed(current_minute)  # 用分钟作为种子确保每分钟内选择一致
+        
+        hf_options = [
+            ("继续生成你在这个聊天中的想法，在原来想法的基础上继续思考", 0.7),
+            ("生成你在这个聊天中的想法，在原来的想法上尝试新的话题", 0.1), 
+            ("生成你在这个聊天中的想法，不要太深入", 0.1),
+            ("继续生成你在这个聊天中的想法，进行深入思考", 0.1)
+        ]
+        
+        hf_do_next = local_random.choices(
+            [option[0] for option in hf_options],
+            weights=[option[1] for option in hf_options],
+            k=1
+        )[0]
+        
 
         prompt = (await global_prompt_manager.get_prompt_async("sub_heartflow_prompt_before")).format(
             extra_info=extra_info_prompt,
@@ -186,6 +206,7 @@ class SubHeartflow:
             time_now=time_now,
             chat_observe_info=chat_observe_info,
             mood_info=mood_info,
+            hf_do_next=hf_do_next,
             # sender_name=sender_name_sign,
             # message_txt=message_txt,
         )

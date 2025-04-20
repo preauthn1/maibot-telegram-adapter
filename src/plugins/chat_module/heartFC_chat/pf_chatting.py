@@ -85,6 +85,7 @@ class PFChatting:
             max_tokens=1000,
             request_type="action_planning",
         )
+        
 
         # Internal state for loop control
         self._loop_timer: float = 0.0  # Remaining time for the loop in seconds
@@ -711,7 +712,7 @@ class PFChatting:
         else:
             prompt += "当前没有观察到新的聊天内容。\n"
 
-        prompt += "\n你的内心想法是："
+        prompt += "\n看了以上内容，你产生的内心想法是："
         if current_mind:
             prompt += f"\n---\n{current_mind}\n---\n\n"
         else:
