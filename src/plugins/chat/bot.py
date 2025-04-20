@@ -81,8 +81,8 @@ class ChatBot:
                 message_data["message_info"]["group_info"]["group_id"] = str(
                     message_data["message_info"]["group_info"]["group_id"]
                 )
-            message_data["message_info"]["group_info"]["group_id"] = str(
-                message_data["message_info"]["group_info"]["group_id"]
+            message_data["message_info"]["user_info"]["user_id"] = str(
+                message_data["message_info"]["user_info"]["user_id"]
             )
             logger.trace(f"处理消息:{str(message_data)[:120]}...")
             message = MessageRecv(message_data)
