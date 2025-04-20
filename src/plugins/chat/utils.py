@@ -23,7 +23,7 @@ logger = get_module_logger("chat_utils")
 
 def is_english_letter(char: str) -> bool:
     """检查字符是否为英文字母（忽略大小写）"""
-    return 'a' <= char.lower() <= 'z'
+    return "a" <= char.lower() <= "z"
 
 
 def db_message_to_str(message_dict: Dict) -> str:
@@ -233,8 +233,8 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
         List[str]: 分割和合并后的句子列表
     """
     # 处理两个汉字中间的换行符
-    text = re.sub(r'([\u4e00-\u9fff])\n([\u4e00-\u9fff])', r'\1。\2', text)
-    
+    text = re.sub(r"([\u4e00-\u9fff])\n([\u4e00-\u9fff])", r"\1。\2", text)
+
     len_text = len(text)
     if len_text < 3:
         if random.random() < 0.01:
@@ -243,7 +243,7 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
             return [text]
 
     # 定义分隔符
-    separators = {'，', ',', ' ', '。', ';'}
+    separators = {"，", ",", " ", "。", ";"}
     segments = []
     current_segment = ""
 
@@ -255,19 +255,19 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
             # 检查分割条件：如果分隔符左右都是英文字母，则不分割
             can_split = True
             if i > 0 and i < len(text) - 1:
-                prev_char = text[i-1]
-                next_char = text[i+1]
+                prev_char = text[i - 1]
+                next_char = text[i + 1]
                 # if is_english_letter(prev_char) and is_english_letter(next_char) and char == ' ': # 原计划只对空格应用此规则，现应用于所有分隔符
                 if is_english_letter(prev_char) and is_english_letter(next_char):
-                     can_split = False
+                    can_split = False
 
             if can_split:
                 # 只有当当前段不为空时才添加
                 if current_segment:
                     segments.append((current_segment, char))
                 # 如果当前段为空，但分隔符是空格，则也添加一个空段（保留空格）
-                elif char == ' ':
-                     segments.append(("", char))
+                elif char == " ":
+                    segments.append(("", char))
                 current_segment = ""
             else:
                 # 不分割，将分隔符加入当前段
@@ -287,7 +287,7 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     if not segments:
         # recovered_text = recover_kaomoji([text], mapping) # 恢复原文本中的颜文字 - 已移至上层处理
         # return [s for s in recovered_text if s] # 返回非空结果
-        return [text] if text else [] # 如果原始文本非空，则返回原始文本（可能只包含未被分割的字符或颜文字占位符）
+        return [text] if text else []  # 如果原始文本非空，则返回原始文本（可能只包含未被分割的字符或颜文字占位符）
 
     # 2. 概率合并
     if len_text < 12:
@@ -307,23 +307,23 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
         # 检查是否可以与下一段合并
         # 条件：不是最后一段，且随机数小于合并概率，且当前段有内容（避免合并空段）
         if idx + 1 < len(segments) and random.random() < merge_probability and current_content:
-            next_content, next_sep = segments[idx+1]
+            next_content, next_sep = segments[idx + 1]
             # 合并: (内容1 + 分隔符1 + 内容2, 分隔符2)
             # 只有当下一段也有内容时才合并文本，否则只传递分隔符
             if next_content:
-                 merged_content = current_content + current_sep + next_content
-                 merged_segments.append((merged_content, next_sep))
-            else: # 下一段内容为空，只保留当前内容和下一段的分隔符
-                 merged_segments.append((current_content, next_sep))
+                merged_content = current_content + current_sep + next_content
+                merged_segments.append((merged_content, next_sep))
+            else:  # 下一段内容为空，只保留当前内容和下一段的分隔符
+                merged_segments.append((current_content, next_sep))
 
-            idx += 2 # 跳过下一段，因为它已被合并
+            idx += 2  # 跳过下一段，因为它已被合并
         else:
             # 不合并，直接添加当前段
             merged_segments.append((current_content, current_sep))
             idx += 1
 
     # 提取最终的句子内容
-    final_sentences = [content for content, sep in merged_segments if content] # 只保留有内容的段
+    final_sentences = [content for content, sep in merged_segments if content]  # 只保留有内容的段
 
     # 清理可能引入的空字符串
     final_sentences = [s for s in final_sentences if s]
@@ -414,7 +414,7 @@ def process_llm_response(text: str) -> List[str]:
             sentences.append(content)
     # 在所有句子处理完毕后，对包含占位符的列表进行恢复
     sentences = recover_kaomoji(sentences, kaomoji_mapping)
-    
+
     print(sentences)
 
     return sentences
@@ -579,17 +579,17 @@ def get_western_ratio(paragraph):
     原理：检查段落中字母数字字符的西文比例
     通过is_english_letter函数判断每个字符是否为西文
     只检查字母数字字符，忽略标点符号和空格等非字母数字字符
-    
+
     Args:
         paragraph: 要检查的文本段落
-        
+
     Returns:
         float: 西文字符比例(0.0-1.0)，如果没有字母数字字符则返回0.0
     """
     alnum_chars = [char for char in paragraph if char.isalnum()]
     if not alnum_chars:
         return 0.0
-        
+
     western_count = sum(1 for char in alnum_chars if is_english_letter(char))
     return western_count / len(alnum_chars)
 

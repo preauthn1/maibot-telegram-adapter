@@ -425,7 +425,9 @@ class PersonInfoManager:
             logger.error(f"个人信息推断运行时出错: {str(e)}")
             logger.exception("详细错误信息：")
 
-    async def get_or_create_person(self, platform: str, user_id: int, nickname: str = None, user_cardname: str = None, user_avatar: str = None) -> str:
+    async def get_or_create_person(
+        self, platform: str, user_id: int, nickname: str = None, user_cardname: str = None, user_avatar: str = None
+    ) -> str:
         """
         根据 platform 和 user_id 获取 person_id。
         如果对应的用户不存在，则使用提供的可选信息创建新用户。
@@ -452,7 +454,7 @@ class PersonInfoManager:
                 "platform": platform,
                 "user_id": user_id,
                 "nickname": nickname,
-                "konw_time": int(datetime.datetime.now().timestamp()) # 添加初次认识时间
+                "konw_time": int(datetime.datetime.now().timestamp()),  # 添加初次认识时间
                 # 注意：这里没有添加 user_cardname 和 user_avatar，因为它们不在 person_info_default 中
                 # 如果需要存储它们，需要先在 person_info_default 中定义
             }

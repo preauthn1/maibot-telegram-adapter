@@ -177,8 +177,7 @@ class HeartFC_Processor:
                         message.message_info.platform,
                         message.message_info.user_info.user_id,
                         message.message_info.user_info.user_nickname,
-                        message.message_info.user_info.user_cardname
-                        or message.message_info.user_info.user_nickname,
+                        message.message_info.user_info.user_cardname or message.message_info.user_info.user_nickname,
                         "",
                     )
                 else:

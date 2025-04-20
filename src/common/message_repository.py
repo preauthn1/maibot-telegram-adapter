@@ -5,7 +5,10 @@ from typing import List, Dict, Any, Optional
 
 logger = get_module_logger(__name__)
 
-def find_messages(filter: Dict[str, Any], sort: Optional[List[tuple[str, int]]] = None, limit: int = 0, limit_mode: str = 'latest') -> List[Dict[str, Any]]:
+
+def find_messages(
+    filter: Dict[str, Any], sort: Optional[List[tuple[str, int]]] = None, limit: int = 0, limit_mode: str = "latest"
+) -> List[Dict[str, Any]]:
     """
     根据提供的过滤器、排序和限制条件查找消息。
 
@@ -23,17 +26,17 @@ def find_messages(filter: Dict[str, Any], sort: Optional[List[tuple[str, int]]] 
         results: List[Dict[str, Any]] = []
 
         if limit > 0:
-            if limit_mode == 'earliest':
+            if limit_mode == "earliest":
                 # 获取时间最早的 limit 条记录，已经是正序
-                query = query.sort([('time', 1)]).limit(limit)
+                query = query.sort([("time", 1)]).limit(limit)
                 results = list(query)
             else:  # 默认为 'latest'
                 # 获取时间最晚的 limit 条记录
-                query = query.sort([('time', -1)]).limit(limit)
+                query = query.sort([("time", -1)]).limit(limit)
                 latest_results = list(query)
                 # 将结果按时间正序排列
                 # 假设消息文档中总是有 'time' 字段且可排序
-                results = sorted(latest_results, key=lambda msg: msg.get('time'))
+                results = sorted(latest_results, key=lambda msg: msg.get("time"))
         else:
             # limit 为 0 时，应用传入的 sort 参数
             if sort:
@@ -42,9 +45,13 @@ def find_messages(filter: Dict[str, Any], sort: Optional[List[tuple[str, int]]] 
 
         return results
     except Exception as e:
-        log_message = f"查找消息失败 (filter={filter}, sort={sort}, limit={limit}, limit_mode={limit_mode}): {e}\n" + traceback.format_exc()
+        log_message = (
+            f"查找消息失败 (filter={filter}, sort={sort}, limit={limit}, limit_mode={limit_mode}): {e}\n"
+            + traceback.format_exc()
+        )
         logger.error(log_message)
         return []
+
 
 def count_messages(filter: Dict[str, Any]) -> int:
     """
@@ -64,4 +71,5 @@ def count_messages(filter: Dict[str, Any]) -> int:
         logger.error(log_message)
         return 0
 
-# 你可以在这里添加更多与 messages 集合相关的数据库操作函数，例如 find_one_message, insert_message 等。 
+
+# 你可以在这里添加更多与 messages 集合相关的数据库操作函数，例如 find_one_message, insert_message 等。

@@ -121,7 +121,6 @@ class SubHeartflow:
                 logger.error(f"[{self.subheartflow_id}] Error during pre-thinking observation: {e}")
                 logger.error(traceback.format_exc())
 
-
     async def do_thinking_before_reply(
         self,
         extra_info: str,
@@ -176,26 +175,22 @@ class SubHeartflow:
             prompt_personality += f"，{random_detail}"
 
         time_now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        
-        
+
         # 创建局部Random对象避免影响全局随机状态
         local_random = random.Random()
         current_minute = int(time.strftime("%M"))
         local_random.seed(current_minute)  # 用分钟作为种子确保每分钟内选择一致
-        
+
         hf_options = [
             ("继续生成你在这个聊天中的想法，在原来想法的基础上继续思考", 0.7),
-            ("生成你在这个聊天中的想法，在原来的想法上尝试新的话题", 0.1), 
+            ("生成你在这个聊天中的想法，在原来的想法上尝试新的话题", 0.1),
             ("生成你在这个聊天中的想法，不要太深入", 0.1),
-            ("继续生成你在这个聊天中的想法，进行深入思考", 0.1)
+            ("继续生成你在这个聊天中的想法，进行深入思考", 0.1),
         ]
-        
+
         hf_do_next = local_random.choices(
-            [option[0] for option in hf_options],
-            weights=[option[1] for option in hf_options],
-            k=1
+            [option[0] for option in hf_options], weights=[option[1] for option in hf_options], k=1
         )[0]
-        
 
         prompt = (await global_prompt_manager.get_prompt_async("sub_heartflow_prompt_before")).format(
             extra_info=extra_info_prompt,
@@ -234,7 +229,6 @@ class SubHeartflow:
 
         # logger.info(f"[{self.subheartflow_id}] 思考前脑内状态：{self.current_mind}")
         return self.current_mind, self.past_mind
-
 
     def update_current_mind(self, response):
         self.past_mind.append(self.current_mind)

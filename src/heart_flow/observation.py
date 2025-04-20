@@ -5,7 +5,12 @@ from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.common.logger import get_module_logger
 import traceback
-from src.plugins.utils.chat_message_builder import get_raw_msg_before_timestamp_with_chat, build_readable_messages,get_raw_msg_by_timestamp_with_chat,num_new_messages_since
+from src.plugins.utils.chat_message_builder import (
+    get_raw_msg_before_timestamp_with_chat,
+    build_readable_messages,
+    get_raw_msg_by_timestamp_with_chat,
+    num_new_messages_since,
+)
 
 logger = get_module_logger("observation")
 
@@ -40,12 +45,11 @@ class ChattingObservation(Observation):
         self.llm_summary = LLMRequest(
             model=global_config.llm_observation, temperature=0.7, max_tokens=300, request_type="chat_observation"
         )
-    
+
     async def initialize(self):
         initial_messages = get_raw_msg_before_timestamp_with_chat(self.chat_id, self.last_observe_time, 10)
         self.talking_message = initial_messages  # 将这些消息设为初始上下文
         self.talking_message_str = await build_readable_messages(self.talking_message)
-
 
     # 进行一次观察 返回观察结果observe_info
     def get_observe_info(self, ids=None):
@@ -77,11 +81,11 @@ class ChattingObservation(Observation):
         # 查找新消息，最多获取 self.max_now_obs_len 条
         print("2222222222222222221111111111111111开始观察")
         new_messages_list = get_raw_msg_by_timestamp_with_chat(
-            chat_id=self.chat_id, 
-            timestamp_start=self.last_observe_time, 
-            timestamp_end=datetime.now().timestamp(), # 使用当前时间作为结束时间戳
-            limit=self.max_now_obs_len, 
-            limit_mode="latest"
+            chat_id=self.chat_id,
+            timestamp_start=self.last_observe_time,
+            timestamp_end=datetime.now().timestamp(),  # 使用当前时间作为结束时间戳
+            limit=self.max_now_obs_len,
+            limit_mode="latest",
         )
         print(f"2222222222222222221111111111111111获取到新消息{len(new_messages_list)}条")
         if new_messages_list:  # 检查列表是否为空
@@ -93,11 +97,13 @@ class ChattingObservation(Observation):
             messages_to_remove_count = len(self.talking_message) - self.max_now_obs_len
             oldest_messages = self.talking_message[:messages_to_remove_count]
             self.talking_message = self.talking_message[messages_to_remove_count:]  # 保留后半部分，即最新的
-            
+
             oldest_messages_str = await build_readable_messages(oldest_messages)
 
             # 调用 LLM 总结主题
-            prompt = f"请总结以下聊天记录的主题：\n{oldest_messages_str}\n用一句话概括包括人物事件和主要信息，不要分点："
+            prompt = (
+                f"请总结以下聊天记录的主题：\n{oldest_messages_str}\n用一句话概括包括人物事件和主要信息，不要分点："
+            )
             summary = "没有主题的闲聊"  # 默认值
             try:
                 summary_result, _ = await self.llm_summary.generate_response_async(prompt)
@@ -131,10 +137,10 @@ class ChattingObservation(Observation):
         # except Exception as e:  # 将异常处理移至此处以覆盖整个总结过程
         #     logger.error(f"处理和总结旧消息时出错 for chat {self.chat_id}: {e}")
         #     traceback.print_exc()  # 记录详细堆栈
-            # print(f"处理后self.talking_message：{self.talking_message}")
+        # print(f"处理后self.talking_message：{self.talking_message}")
 
         self.talking_message_str = await build_readable_messages(self.talking_message)
-        
+
         logger.trace(
             f"Chat {self.chat_id} - 压缩早期记忆：{self.mid_memory_info}\n现在聊天内容：{self.talking_message_str}"
         )

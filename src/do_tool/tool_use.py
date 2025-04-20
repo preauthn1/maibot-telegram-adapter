@@ -33,7 +33,7 @@ class ToolUser:
         Returns:
             str: 构建好的提示词
         """
-        
+
         if subheartflow:
             mid_memory_info = subheartflow.observations[0].mid_memory_info
             # print(f"intol111111111111111111111111111111111222222222222mid_memory_info：{mid_memory_info}")

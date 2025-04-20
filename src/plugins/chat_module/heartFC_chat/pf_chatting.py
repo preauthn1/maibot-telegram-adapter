@@ -13,7 +13,7 @@ from src.common.logger import get_module_logger, LogConfig, PFC_STYLE_CONFIG  # 
 from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
-from src.plugins.utils.timer_calculater import Timer # <--- Import Timer
+from src.plugins.utils.timer_calculater import Timer  # <--- Import Timer
 
 # 定义日志配置 (使用 loguru 格式)
 interest_log_config = LogConfig(
@@ -85,7 +85,6 @@ class PFChatting:
             max_tokens=1000,
             request_type="action_planning",
         )
-        
 
         # Internal state for loop control
         self._loop_timer: float = 0.0  # Remaining time for the loop in seconds
@@ -213,7 +212,7 @@ class PFChatting:
         try:
             thinking_id = ""
             while True:
-                cycle_timers = {} # <--- Initialize timers dict for this cycle
+                cycle_timers = {}  # <--- Initialize timers dict for this cycle
 
                 if self.heartfc_controller.MessageManager().check_if_sending_message_exist(self.stream_id, thinking_id):
                     # logger.info(f"{log_prefix} PFChatting: 11111111111111111111111111111111麦麦还在发消息，等会再规划")
@@ -238,7 +237,7 @@ class PFChatting:
                 planner_start_db_time = 0.0  # 初始化
 
                 try:
-                    with Timer("Total Cycle", cycle_timers) as _total_timer: # <--- Start total cycle timer
+                    with Timer("Total Cycle", cycle_timers) as _total_timer:  # <--- Start total cycle timer
                         # Use try_acquire pattern or timeout?
                         await self._processing_lock.acquire()
                         acquired_lock = True
@@ -249,7 +248,7 @@ class PFChatting:
 
                         # --- Planner --- #
                         planner_result = {}
-                        with Timer("Planner", cycle_timers): # <--- Start Planner timer
+                        with Timer("Planner", cycle_timers):  # <--- Start Planner timer
                             planner_result = await self._planner()
                         action = planner_result.get("action", "error")
                         reasoning = planner_result.get("reasoning", "Planner did not provide reasoning.")
@@ -280,11 +279,11 @@ class PFChatting:
                                     replier_result = None
                                     try:
                                         # --- Replier Work --- #
-                                        with Timer("Replier", cycle_timers): # <--- Start Replier timer
+                                        with Timer("Replier", cycle_timers):  # <--- Start Replier timer
                                             replier_result = await self._replier_work(
                                                 anchor_message=anchor_message,
                                                 thinking_id=thinking_id,
-                                                reason = reasoning,
+                                                reason=reasoning,
                                             )
                                     except Exception as e_replier:
                                         logger.error(f"{log_prefix} 循环: 回复器工作失败: {e_replier}")
@@ -293,7 +292,7 @@ class PFChatting:
                                     if replier_result:
                                         # --- Sender Work --- #
                                         try:
-                                            with Timer("Sender", cycle_timers): # <--- Start Sender timer
+                                            with Timer("Sender", cycle_timers):  # <--- Start Sender timer
                                                 await self._sender(
                                                     thinking_id=thinking_id,
                                                     anchor_message=anchor_message,
@@ -309,13 +308,15 @@ class PFChatting:
                                         logger.warning(f"{log_prefix} 循环: 回复器未产生结果. 跳过发送.")
                                         self._cleanup_thinking_message(thinking_id)
                         elif action == "emoji_reply":
-                            logger.info(f"{log_prefix} PFChatting: 麦麦决定回复表情 ('{emoji_query}'). 理由: {reasoning}")
+                            logger.info(
+                                f"{log_prefix} PFChatting: 麦麦决定回复表情 ('{emoji_query}'). 理由: {reasoning}"
+                            )
                             action_taken_this_cycle = True
                             anchor = await self._get_anchor_message(observed_messages)
                             if anchor:
                                 try:
                                     # --- Handle Emoji (Moved) --- #
-                                    with Timer("Emoji Handler", cycle_timers): # <--- Start Emoji timer
+                                    with Timer("Emoji Handler", cycle_timers):  # <--- Start Emoji timer
                                         await self._handle_emoji(anchor, [], emoji_query)
                                 except Exception as e_emoji:
                                     logger.error(f"{log_prefix} 循环: 发送表情失败: {e_emoji}")
@@ -333,7 +334,7 @@ class PFChatting:
                                 observation = self.sub_hf._get_primary_observation()
 
                             if observation:
-                                with Timer("Wait New Msg", cycle_timers): # <--- Start Wait timer
+                                with Timer("Wait New Msg", cycle_timers):  # <--- Start Wait timer
                                     wait_start_time = time.monotonic()
                                     while True:
                                         # 检查计时器是否耗尽
@@ -368,7 +369,9 @@ class PFChatting:
                             action_taken_this_cycle = False
 
                         else:  # Unknown action from planner
-                            logger.warning(f"{log_prefix} PFChatting: Planner返回未知动作 '{action}'. 原因: {reasoning}")
+                            logger.warning(
+                                f"{log_prefix} PFChatting: Planner返回未知动作 '{action}'. 原因: {reasoning}"
+                            )
                             action_taken_this_cycle = False
 
                 except Exception as e_cycle:
@@ -391,9 +394,11 @@ class PFChatting:
                         # 直接格式化存储在字典中的浮点数 elapsed
                         formatted_time = f"{elapsed * 1000:.2f}毫秒" if elapsed < 1 else f"{elapsed:.2f}秒"
                         timer_strings.append(f"{name}: {formatted_time}")
-                        
+
                     if timer_strings:  # 如果有有效计时器数据才打印
-                        logger.debug(f"{log_prefix} test testtesttesttesttesttesttesttesttesttest Cycle Timers: {'; '.join(timer_strings)}")
+                        logger.debug(
+                            f"{log_prefix} test testtesttesttesttesttesttesttesttesttest Cycle Timers: {'; '.join(timer_strings)}"
+                        )
 
                 # --- Timer Decrement --- #
                 cycle_duration = time.monotonic() - loop_cycle_start_time
@@ -460,7 +465,7 @@ class PFChatting:
             if tool_result.get("used_tools", False):
                 tool_result_info = tool_result.get("structured_info", {})
                 logger.debug(f"{log_prefix}[Planner] 规划前工具结果: {tool_result_info}")
-                
+
                 get_mid_memory_id = [
                     mem["content"] for mem in tool_result_info.get("mid_chat_mem", []) if "content" in mem
                 ]
@@ -495,13 +500,10 @@ class PFChatting:
                 "tool_choice": {"type": "function", "function": {"name": "decide_reply_action"}},
             }
 
-            
-            
             response = await self.planner_llm._execute_request(
                 endpoint="/chat/completions", payload=payload, prompt=prompt
             )
 
-            
             if len(response) == 3:
                 _, _, tool_calls = response
                 if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
@@ -665,7 +667,6 @@ class PFChatting:
                 emoji_anchor = first_bot_msg if first_bot_msg else anchor_message
                 await self._handle_emoji(emoji_anchor, response_set, send_emoji)
 
-
         else:
             # logger.warning(f"{log_prefix}[Sender-{thinking_id}] 发送回复失败(_send_response_messages返回None)。思考消息{thinking_id}可能已被移除。")
             # 无需清理，因为_send_response_messages返回None意味着已处理/已删除
@@ -701,9 +702,7 @@ class PFChatting:
     async def _build_planner_prompt(self, observed_messages_str: str, current_mind: Optional[str]) -> str:
         """构建 Planner LLM 的提示词"""
 
-        prompt = (
-            f"你的名字是 {global_config.BOT_NICKNAME}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。\n"
-        )
+        prompt = f"你的名字是 {global_config.BOT_NICKNAME}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。\n"
 
         if observed_messages_str:
             prompt += "观察到的最新聊天内容如下 (最近的消息在最后)：\n---\n"
