@@ -3,7 +3,6 @@ from typing import Optional, Dict
 import asyncio
 from asyncio import Lock
 from ...moods.moods import MoodManager
-from ....config.config import global_config
 from ...chat.emoji_manager import emoji_manager
 from .heartFC_generator import ResponseGenerator
 from .messagesender import MessageManager
