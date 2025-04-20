@@ -14,7 +14,6 @@ from src.common.logger import get_module_logger, LogConfig, DEFAULT_CONFIG  # �
 from src.plugins.models.utils_model import LLMRequest
 from src.plugins.chat.utils import parse_text_timestamps
 from src.plugins.chat.utils_image import image_path_to_base64 # Local import needed after move
-from src.plugins.chat.message import Seg # Local import needed after move
 
 # 定义日志配置 (使用 loguru 格式)
 interest_log_config = LogConfig(
@@ -227,21 +226,27 @@ class PFChatting:
                         logger.info(f"{log_prefix} PFChatting: 聊太久了，麦麦打算休息一下 (计时器为 {current_timer:.1f}s)。退出PFChatting。")
                         break
 
+                # 记录循环周期开始时间，用于计时和休眠计算
                 loop_cycle_start_time = time.monotonic()
                 action_taken_this_cycle = False
                 acquired_lock = False
+                planner_start_db_time = 0.0 # 初始化
+
                 try:
                     # Use try_acquire pattern or timeout?
                     await self._processing_lock.acquire()
                     acquired_lock = True
                     logger.debug(f"{log_prefix} PFChatting: 循环获取到处理锁")
 
+                    # 在规划前记录数据库时间戳
+                    planner_start_db_time = time.time()
+
                     # --- Planner --- #
                     planner_result = await self._planner()
                     action = planner_result.get("action", "error")
                     reasoning = planner_result.get("reasoning", "Planner did not provide reasoning.")
                     emoji_query = planner_result.get("emoji_query", "")
-                    current_mind = planner_result.get("current_mind", "[Mind unavailable]")
+                    # current_mind = planner_result.get("current_mind", "[Mind unavailable]")
                     # send_emoji_from_tools = planner_result.get("send_emoji_from_tools", "") # Emoji from tools
                     observed_messages = planner_result.get("observed_messages", [])
                     llm_error = planner_result.get("llm_error", False)
@@ -304,10 +309,47 @@ class PFChatting:
                                 logger.error(f"{log_prefix} 循环: 发送表情失败: {e_emoji}")
                         else:
                             logger.warning(f"{log_prefix} 循环: 无法发送表情, 无法获取锚点.")
+                        action_taken_this_cycle = True # 即使发送失败，Planner 也决策了动作
 
                     elif action == "no_reply":
                         logger.info(f"{log_prefix} PFChatting: 麦麦决定不回复. 原因: {reasoning}")
-                        action_taken_this_cycle = False
+                        action_taken_this_cycle = False # 标记为未执行动作
+                        # --- 新增：等待新消息 ---
+                        logger.debug(f"{log_prefix} PFChatting: 开始等待新消息 (自 {planner_start_db_time})...")
+                        observation = None
+                        if self.sub_hf:
+                            observation = self.sub_hf._get_primary_observation()
+
+                        if observation:
+                            wait_start_time = time.monotonic()
+                            while True:
+                                # 检查计时器是否耗尽
+                                async with self._timer_lock:
+                                    if self._loop_timer <= 0:
+                                        logger.info(f"{log_prefix} PFChatting: 等待新消息时计时器耗尽。")
+                                        break # 计时器耗尽，退出等待
+
+                                # 检查是否有新消息
+                                has_new = await observation.has_new_messages_since(planner_start_db_time)
+                                if has_new:
+                                    logger.info(f"{log_prefix} PFChatting: 检测到新消息，结束等待。")
+                                    break # 收到新消息，退出等待
+
+                                # 检查等待是否超时（例如，防止无限等待）
+                                if time.monotonic() - wait_start_time > 60: # 等待60秒示例
+                                    logger.warning(f"{log_prefix} PFChatting: 等待新消息超时（60秒）。")
+                                    break # 超时退出
+
+                                # 等待一段时间再检查
+                                try:
+                                    await asyncio.sleep(1.5) # 检查间隔
+                                except asyncio.CancelledError:
+                                    logger.info(f"{log_prefix} 等待新消息的 sleep 被中断。")
+                                    raise # 重新抛出取消错误，以便外层循环处理
+
+                        else:
+                            logger.warning(f"{log_prefix} PFChatting: 无法获取 Observation 实例，无法等待新消息。")
+                        # --- 等待结束 ---
 
                     elif action == "error": # Action specifically set to error by planner
                         logger.error(f"{log_prefix} PFChatting: Planner返回错误状态. 原因: {reasoning}")
