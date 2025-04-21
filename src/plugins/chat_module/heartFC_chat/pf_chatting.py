@@ -25,7 +25,7 @@ logger = get_module_logger("PFCLoop", config=interest_log_config)  # Logger Name
 
 # Forward declaration for type hinting
 if TYPE_CHECKING:
-    from .heartFC_controler import HeartFC_Controller
+    from .heartFC_controler import HeartFCController
 
 PLANNER_TOOL_DEFINITION = [
     {
@@ -61,7 +61,7 @@ class PFChatting:
     只要计时器>0，循环就会继续。
     """
 
-    def __init__(self, chat_id: str, heartfc_controller_instance: "HeartFC_Controller"):
+    def __init__(self, chat_id: str, heartfc_controller_instance: "HeartFCController"):
         """
         初始化PFChatting实例。
 
@@ -771,7 +771,7 @@ class PFChatting:
             logger.error(traceback.format_exc())
             return None
 
-    # --- Methods moved from HeartFC_Controller start ---
+    # --- Methods moved from HeartFCController start ---
     async def _create_thinking_message(self, anchor_message: Optional[MessageRecv]) -> Optional[str]:
         """创建思考消息 (尝试锚定到 anchor_message)"""
         if not anchor_message or not anchor_message.chat_stream:

@@ -20,18 +20,18 @@ chat_config = LogConfig(
     file_format=CHAT_STYLE_CONFIG["file_format"],
 )
 
-logger = get_module_logger("HeartFC_Controller", config=chat_config)
+logger = get_module_logger("HeartFCController", config=chat_config)
 
 # 检测群聊兴趣的间隔时间
 INTEREST_MONITOR_INTERVAL_SECONDS = 1
 
 
-class HeartFC_Controller:
+class HeartFCController:
     _instance = None  # For potential singleton access if needed by MessageManager
 
     def __init__(self):
         # --- Updated Init ---
-        if HeartFC_Controller._instance is not None:
+        if HeartFCController._instance is not None:
             # Prevent re-initialization if used as a singleton
             return
         self.gpt = ResponseGenerator()
@@ -44,7 +44,7 @@ class HeartFC_Controller:
         self.pf_chatting_instances: Dict[str, PFChatting] = {}
         self._pf_chatting_lock = Lock()
         # --- End New PFChatting Management ---
-        HeartFC_Controller._instance = self  # Register instance
+        HeartFCController._instance = self  # Register instance
         # --- End Updated Init ---
         # --- Make dependencies accessible for PFChatting ---
         # These are accessed via the passed instance in PFChatting
@@ -58,7 +58,7 @@ class HeartFC_Controller:
     def get_instance(cls):
         if cls._instance is None:
             # This might indicate an issue if called before initialization
-            logger.warning("HeartFC_Controller get_instance called before initialization.")
+            logger.warning("HeartFCController get_instance called before initialization.")
             # Optionally, initialize here if a strict singleton pattern is desired
             # cls._instance = cls()
         return cls._instance
@@ -67,9 +67,9 @@ class HeartFC_Controller:
 
     async def start(self):
         """启动异步任务,如回复启动器"""
-        logger.debug("HeartFC_Controller 正在启动异步任务...")
+        logger.debug("HeartFCController 正在启动异步任务...")
         self._initialize_monitor_task()
-        logger.info("HeartFC_Controller 异步任务启动完成")
+        logger.info("HeartFCController 异步任务启动完成")
 
     def _initialize_monitor_task(self):
         """启动后台兴趣监控任务，可以检查兴趣是否足以开启心流对话"""
@@ -89,7 +89,7 @@ class HeartFC_Controller:
         async with self._pf_chatting_lock:
             if stream_id not in self.pf_chatting_instances:
                 logger.info(f"为流 {stream_id} 创建新的PFChatting实例")
-                # 传递 self (HeartFC_Controller 实例) 进行依赖注入
+                # 传递 self (HeartFCController 实例) 进行依赖注入
                 instance = PFChatting(stream_id, self)
                 # 执行异步初始化
                 if not await instance._initialize():
