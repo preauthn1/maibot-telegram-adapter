@@ -70,7 +70,7 @@ class PFChatting:
 
         Args:
             chat_id: The identifier for the chat stream (e.g., stream_id).
-            heartfc_controller_instance: 访问共享资源和方法的主HeartFC_Controller实例。
+            heartfc_controller_instance: 访问共享资源和方法的主HeartFCController实例。
         """
         self.heartfc_controller = heartfc_controller_instance  # Store the controller instance
         self.stream_id: str = chat_id

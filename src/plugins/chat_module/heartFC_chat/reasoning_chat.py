@@ -21,7 +21,7 @@ from src.plugins.person_info.relationship_manager import relationship_manager
 from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from src.plugins.utils.timer_calculater import Timer
 from .interest import InterestManager
-from .heartFC_controler import HeartFC_Controller  # 导入 HeartFC_Controller
+from .heartFC_controler import HeartFCController  # 导入 HeartFCController
 
 # 定义日志配置
 chat_config = LogConfig(
@@ -181,9 +181,9 @@ class ReasoningChat:
     async def _find_interested_message(self, chat: ChatStream) -> None:
         # 此函数设计为后台任务，轮询指定 chat 的兴趣消息。
         # 它通常由外部代码在 chat 流活跃时启动。
-        controller = HeartFC_Controller.get_instance()  # 获取控制器实例
+        controller = HeartFCController.get_instance()  # 获取控制器实例
         if not controller:
-            logger.error(f"无法获取 HeartFC_Controller 实例，无法检查 PFChatting 状态。stream: {chat.stream_id}")
+            logger.error(f"无法获取 HeartFCController 实例，无法检查 PFChatting 状态。stream: {chat.stream_id}")
             # 在没有控制器的情况下可能需要决定是继续处理还是完全停止？这里暂时假设继续
             pass  # 或者 return?
 
