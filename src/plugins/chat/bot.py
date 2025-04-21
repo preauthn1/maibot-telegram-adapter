@@ -7,7 +7,7 @@ from ..chat_module.only_process.only_message_process import MessageProcessor
 
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ..chat_module.reasoning_chat.reasoning_chat import ReasoningChat
-from ..chat_module.heartFC_chat.heartFC_processor import HeartFC_Processor
+from ..chat_module.heartFC_chat.heartFC_processor import HeartFCProcessor
 from ..utils.prompt_builder import Prompt, global_prompt_manager
 import traceback
 
@@ -29,7 +29,7 @@ class ChatBot:
         self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
         self.mood_manager.start_mood_update()  # 启动情绪更新
         self.reasoning_chat = ReasoningChat()
-        self.heartFC_processor = HeartFC_Processor()  # 新增
+        self.heartFC_processor = HeartFCProcessor()  # 新增
 
         # 创建初始化PFC管理器的任务，会在_ensure_started时执行
         self.only_process_chat = MessageProcessor()

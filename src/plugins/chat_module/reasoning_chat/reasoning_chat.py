@@ -1,25 +1,26 @@
 import time
-from random import random
 import traceback
-from typing import List
-from ...memory_system.Hippocampus import HippocampusManager
-from ...moods.moods import MoodManager
-from ....config.config import global_config
-from ...chat.emoji_manager import emoji_manager
+from random import random
+from typing import List, Optional
+
+from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
+from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from .reasoning_generator import ResponseGenerator
+from ...chat.chat_stream import chat_manager
+from ...chat.emoji_manager import emoji_manager
 from ...chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
+from ...chat.message_buffer import message_buffer
 from ...chat.messagesender import message_manager
-from ...storage.storage import MessageStorage
 from ...chat.utils import is_mentioned_bot_in_message
 from ...chat.utils_image import image_path_to_base64
-from ...willing.willing_manager import willing_manager
+from ...memory_system.Hippocampus import HippocampusManager
 from ...message import UserInfo, Seg
-from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
-from ...chat.chat_stream import chat_manager
+from ...moods.moods import MoodManager
 from ...person_info.relationship_manager import relationship_manager
-from ...chat.message_buffer import message_buffer
-from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
+from ...storage.storage import MessageStorage
 from ...utils.timer_calculater import Timer
+from ...willing.willing_manager import willing_manager
+from ....config.config import global_config
 
 # 定义日志配置
 chat_config = LogConfig(
@@ -61,7 +62,7 @@ class ReasoningChat:
         return thinking_id
 
     @staticmethod
-    async def _send_response_messages(message, chat, response_set: List[str], thinking_id) -> MessageSending:
+    async def _send_response_messages(message, chat, response_set: List[str], thinking_id) -> Optional[MessageSending]:
         """发送回复消息"""
         container = message_manager.get_container(chat.stream_id)
         thinking_message = None
@@ -74,7 +75,7 @@ class ReasoningChat:
 
         if not thinking_message:
             logger.warning("未找到对应的思考消息，可能已超时被移除")
-            return
+            return None
 
         thinking_start_time = thinking_message.thinking_start_time
         message_set = MessageSet(chat, thinking_id)

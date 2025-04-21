@@ -26,7 +26,7 @@ logger = get_module_logger("heartFC_processor", config=processor_config)
 # INTEREST_INCREASE_THRESHOLD = 0.5
 
 
-class HeartFC_Processor:
+class HeartFCProcessor:
     def __init__(self):
         self.storage = MessageStorage()
         self.interest_manager = InterestManager()
@@ -97,21 +97,21 @@ class HeartFC_Processor:
 
             # 处理缓冲器结果 (Bombing logic)
             if not buffer_result:
-                F_type = "seglist"
+                f_type = "seglist"
                 if message.message_segment.type != "seglist":
-                    F_type = message.message_segment.type
+                    f_type = message.message_segment.type
                 else:
                     if (
                         isinstance(message.message_segment.data, list)
                         and all(isinstance(x, Seg) for x in message.message_segment.data)
                         and len(message.message_segment.data) == 1
                     ):
-                        F_type = message.message_segment.data[0].type
-                if F_type == "text":
+                        f_type = message.message_segment.data[0].type
+                if f_type == "text":
                     logger.debug(f"触发缓冲，消息：{message.processed_plain_text}")
-                elif F_type == "image":
+                elif f_type == "image":
                     logger.debug("触发缓冲，表情包/图片等待中")
-                elif F_type == "seglist":
+                elif f_type == "seglist":
                     logger.debug("触发缓冲，消息列表等待中")
                 return  # 被缓冲器拦截，不生成回复
 
