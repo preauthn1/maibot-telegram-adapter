@@ -1946,15 +1946,14 @@ class HippocampusManager:
         valid_keywords: list[str],
         max_memory_num: int = 3,
         max_memory_length: int = 2,
-        max_depth: int = 3,
-        fast_retrieval: bool = False,
+        max_depth: int = 3
     ) -> list:
         """从文本中获取相关记忆的公共接口"""
         if not self._initialized:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         try:
             response = await self._hippocampus.get_memory_from_topic(
-                valid_keywords, max_memory_num, max_memory_length, max_depth, fast_retrieval
+                valid_keywords, max_memory_num, max_memory_length, max_depth
             )
         except Exception as e:
             logger.error(f"文本激活记忆失败: {e}")

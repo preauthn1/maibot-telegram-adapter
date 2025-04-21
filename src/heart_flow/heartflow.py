@@ -96,7 +96,7 @@ class Heartflow:
                 continue
 
             await self.do_a_thinking()
-            await asyncio.sleep(global_config.heart_flow_update_interval)  # 5分钟思考一次
+            await asyncio.sleep(global_config.heart_flow_update_interval * 3)  # 5分钟思考一次
 
     async def heartflow_start_working(self):
         # 启动清理任务
@@ -110,7 +110,7 @@ class Heartflow:
         print("TODO")
 
     async def do_a_thinking(self):
-        logger.debug("麦麦大脑袋转起来了")
+        # logger.debug("麦麦大脑袋转起来了")
         self.current_state.update_current_state_info()
 
         # 开始构建prompt
