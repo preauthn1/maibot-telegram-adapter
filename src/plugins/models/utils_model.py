@@ -68,13 +68,20 @@ error_code_mapping = {
 class LLMRequest:
     # 定义需要转换的模型列表，作为类变量避免重复
     MODELS_NEEDING_TRANSFORMATION = [
-        "o3-mini",
-        "o1-mini",
-        "o1-preview",
+        "o1",
         "o1-2024-12-17",
-        "o1-preview-2024-09-12",
-        "o3-mini-2025-01-31",
+        "o1-mini",
         "o1-mini-2024-09-12",
+        "o1-preview",
+        "o1-preview-2024-09-12",
+        "o1-pro",
+        "o1-pro-2025-03-19",
+        "o3",
+        "o3-2025-04-16",
+        "o3-mini",
+        "o3-mini-2025-01-31"
+        "o4-mini",
+        "o4-mini-2025-04-16",
     ]
 
     def __init__(self, model: dict, **kwargs):
@@ -800,6 +807,7 @@ class LLMRequest:
         policy = request_content["policy"]
         payload = request_content["payload"]
         keep_request = False
+        wait_time = 0.1
         if retry_count < policy["max_retries"] - 1:
             wait_time = policy["base_wait"] * (2**retry_count)
             keep_request = True
