@@ -1942,11 +1942,7 @@ class HippocampusManager:
         return response
 
     async def get_memory_from_topic(
-        self,
-        valid_keywords: list[str],
-        max_memory_num: int = 3,
-        max_memory_length: int = 2,
-        max_depth: int = 3
+        self, valid_keywords: list[str], max_memory_num: int = 3, max_memory_length: int = 2, max_depth: int = 3
     ) -> list:
         """从文本中获取相关记忆的公共接口"""
         if not self._initialized:

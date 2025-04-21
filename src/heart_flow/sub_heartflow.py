@@ -5,7 +5,6 @@ from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 import time
 from typing import Optional, List
-from datetime import datetime
 import traceback
 from src.plugins.chat.utils import parse_text_timestamps
 
@@ -76,14 +75,14 @@ class SubHeartflow:
         )
 
         self.main_heartflow_info = ""
-        
+
         self.last_active_time = time.time()  # 添加最后激活时间
-        self.should_stop = False # 添加停止标志
-        self.task: Optional[asyncio.Task] = None # 添加 task 属性
+        self.should_stop = False  # 添加停止标志
+        self.task: Optional[asyncio.Task] = None  # 添加 task 属性
 
         self.is_active = False
 
-        self.observations: List[ChattingObservation] = [] # 使用 List 类型提示
+        self.observations: List[ChattingObservation] = []  # 使用 List 类型提示
 
         self.running_knowledges = []
 
@@ -98,7 +97,7 @@ class SubHeartflow:
             # 检查是否被主心流标记为停止
             if self.should_stop:
                 logger.info(f"子心流 {self.subheartflow_id} 被标记为停止，正在退出后台任务...")
-                break # 退出循环以停止任务
+                break  # 退出循环以停止任务
 
             await asyncio.sleep(global_config.sub_heart_flow_update_interval)  # 定期检查销毁条件
 

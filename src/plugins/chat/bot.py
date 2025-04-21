@@ -123,8 +123,6 @@ class ChatBot:
                             await self.heartFC_processor.process_message(message_data)
                 else:
                     await self.heartFC_processor.process_message(message_data)
-                    
-                    
 
             if template_group_name:
                 async with global_prompt_manager.async_message_scope(template_group_name):

@@ -213,8 +213,8 @@ class BotConfig:
 
     # response
     response_mode: str = "heart_flow"  # 回复策略
-    model_reasoning_probability: float = 0.7 # 麦麦回答时选择推理模型(主要)模型概率
-    model_normal_probability: float = 0.3 # 麦麦回答时选择一般模型(次要)模型概率
+    model_reasoning_probability: float = 0.7  # 麦麦回答时选择推理模型(主要)模型概率
+    model_normal_probability: float = 0.3  # 麦麦回答时选择一般模型(次要)模型概率
     # MODEL_R1_DISTILL_PROBABILITY: float = 0.1  # R1蒸馏模型概率
 
     # emoji
@@ -407,10 +407,13 @@ class BotConfig:
 
         def response(parent: dict):
             response_config = parent["response"]
-            config.model_reasoning_probability = response_config.get("model_reasoning_probability", config.model_reasoning_probability)
-            config.model_normal_probability = response_config.get("model_normal_probability", config.model_normal_probability)
-            
-            
+            config.model_reasoning_probability = response_config.get(
+                "model_reasoning_probability", config.model_reasoning_probability
+            )
+            config.model_normal_probability = response_config.get(
+                "model_normal_probability", config.model_normal_probability
+            )
+
             # 添加 enable_heart_flowC 的加载逻辑 (假设它在 [response] 部分)
             if config.INNER_VERSION in SpecifierSet(">=1.4.0"):
                 config.enable_heart_flowC = response_config.get("enable_heart_flowC", config.enable_heart_flowC)
@@ -418,7 +421,6 @@ class BotConfig:
         def heartflow(parent: dict):
             heartflow_config = parent["heartflow"]
             # 加载新增的 heartflowC 参数
-            
 
             # 加载原有的 heartflow 参数
             # config.sub_heart_flow_update_interval = heartflow_config.get(
@@ -442,9 +444,15 @@ class BotConfig:
                     "compress_length_limit", config.compress_length_limit
                 )
             if config.INNER_VERSION in SpecifierSet(">=1.4.0"):
-                config.reply_trigger_threshold = heartflow_config.get("reply_trigger_threshold", config.reply_trigger_threshold)
-                config.probability_decay_factor_per_second = heartflow_config.get("probability_decay_factor_per_second", config.probability_decay_factor_per_second)
-                config.default_decay_rate_per_second = heartflow_config.get("default_decay_rate_per_second", config.default_decay_rate_per_second)
+                config.reply_trigger_threshold = heartflow_config.get(
+                    "reply_trigger_threshold", config.reply_trigger_threshold
+                )
+                config.probability_decay_factor_per_second = heartflow_config.get(
+                    "probability_decay_factor_per_second", config.probability_decay_factor_per_second
+                )
+                config.default_decay_rate_per_second = heartflow_config.get(
+                    "default_decay_rate_per_second", config.default_decay_rate_per_second
+                )
                 config.initial_duration = heartflow_config.get("initial_duration", config.initial_duration)
 
         def willing(parent: dict):

@@ -19,6 +19,7 @@ from .individuality.individuality import Individuality
 from .common.server import global_server
 from .plugins.chat_module.heartFC_chat.interest import InterestManager
 from .plugins.chat_module.heartFC_chat.heartFC_controler import HeartFC_Controller
+from .plugins.chat_module.heartFC_chat.reasoning_chat import ReasoningChat
 
 logger = get_module_logger("main")
 
@@ -117,8 +118,11 @@ class MainSystem:
             await interest_manager.start_background_tasks()
             logger.success("兴趣管理器后台任务启动成功")
 
-            # 初始化并独立启动 HeartFC_Chat
-            HeartFC_Controller()
+            # 初始化 ReasoningChat 单例 (确保它在需要之前被创建)
+            ReasoningChat.get_instance()
+            logger.success("ReasoningChat 单例初始化成功")
+
+            # 初始化并独立启动 HeartFC_Chat 控制器 (使用 get_instance 获取单例)
             heartfc_chat_instance = HeartFC_Controller.get_instance()
             if heartfc_chat_instance:
                 await heartfc_chat_instance.start()

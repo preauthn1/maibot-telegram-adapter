@@ -13,6 +13,7 @@ from src.do_tool.tool_use import ToolUser
 from .interest import InterestManager
 from src.plugins.chat.chat_stream import chat_manager
 from .pf_chatting import PFChatting
+import threading  # 导入 threading
 
 # 定义日志配置
 chat_config = LogConfig(
@@ -27,43 +28,58 @@ INTEREST_MONITOR_INTERVAL_SECONDS = 1
 
 
 class HeartFC_Controller:
-    _instance = None  # For potential singleton access if needed by MessageManager
+    _instance = None
+    _lock = threading.Lock()  # 使用 threading.Lock 替代 asyncio.Lock 以兼容 __new__
+    _initialized = False
 
-    def __init__(self):
-        # --- Updated Init ---
-        if HeartFC_Controller._instance is not None:
-            # Prevent re-initialization if used as a singleton
-            return
-        self.gpt = ResponseGenerator()
-        self.mood_manager = MoodManager.get_instance()
-        self.mood_manager.start_mood_update()
-        self.tool_user = ToolUser()
-        self.interest_manager = InterestManager()
-        self._interest_monitor_task: Optional[asyncio.Task] = None
-        # --- New PFChatting Management ---
-        self.pf_chatting_instances: Dict[str, PFChatting] = {}
-        self._pf_chatting_lock = Lock()
-        # --- End New PFChatting Management ---
-        HeartFC_Controller._instance = self  # Register instance
-        # --- End Updated Init ---
-        # --- Make dependencies accessible for PFChatting ---
-        # These are accessed via the passed instance in PFChatting
-        self.emoji_manager = emoji_manager
-        self.relationship_manager = relationship_manager
-        self.MessageManager = MessageManager  # Pass the class/singleton access
-        # --- End dependencies ---
-
-    # --- Added Class Method for Singleton Access ---
-    @classmethod
-    def get_instance(cls):
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            # This might indicate an issue if called before initialization
-            logger.warning("HeartFC_Controller get_instance called before initialization.")
-            # Optionally, initialize here if a strict singleton pattern is desired
-            # cls._instance = cls()
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
         return cls._instance
 
-    # --- End Added Class Method ---
+    def __init__(self):
+        if self._initialized:
+            return
+        with self.__class__._lock:  # 使用类锁确保初始化线程安全
+            if self._initialized:
+                return
+            logger.info("正在初始化 HeartFC_Controller 单例...")
+            self.gpt = ResponseGenerator()
+            self.mood_manager = MoodManager.get_instance()
+            self.mood_manager.start_mood_update()
+            self.tool_user = ToolUser()
+            self.interest_manager = InterestManager()
+            self._interest_monitor_task: Optional[asyncio.Task] = None
+            self.pf_chatting_instances: Dict[str, PFChatting] = {}
+            self._pf_chatting_lock = Lock()  # 这个可以是 asyncio.Lock，用于异步上下文
+            self.emoji_manager = emoji_manager
+            self.relationship_manager = relationship_manager
+            self.MessageManager = MessageManager
+            self._initialized = True
+            logger.info("HeartFC_Controller 单例初始化完成。")
+
+    @classmethod
+    def get_instance(cls):
+        """获取 HeartFC_Controller 的单例实例。"""
+        if cls._instance is None:
+            logger.warning("HeartFC_Controller 实例在首次 get_instance 时创建，可能未在 main 中正确初始化。")
+            cls()  # 调用构造函数创建
+        return cls._instance
+
+    # --- 新增：检查 PFChatting 状态的方法 --- #
+    def is_pf_chatting_active(self, stream_id: str) -> bool:
+        """检查指定 stream_id 的 PFChatting 循环是否处于活动状态。"""
+        # 注意：这里直接访问字典，不加锁，因为读取通常是安全的，
+        # 并且 PFChatting 实例的 _loop_active 状态由其自身的异步循环管理。
+        # 如果需要更强的保证，可以在访问 pf_instance 前获取 _pf_chatting_lock
+        pf_instance = self.pf_chatting_instances.get(stream_id)
+        if pf_instance and pf_instance._loop_active:  # 直接检查 PFChatting 实例的 _loop_active 属性
+            return True
+        return False
+
+    # --- 结束新增 --- #
 
     async def start(self):
         """启动异步任务,如回复启动器"""

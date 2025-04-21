@@ -45,6 +45,8 @@ class CurrentState:
     def __init__(self):
         self.current_state_info = ""
 
+        self.chat_status = "IDLE"
+
         self.mood_manager = MoodManager()
         self.mood = self.mood_manager.get_prompt()
 
@@ -70,7 +72,7 @@ class Heartflow:
         """定期清理不活跃的子心流"""
         while True:
             current_time = time.time()
-            inactive_subheartflows_ids = [] # 修改变量名以清晰表示存储的是ID
+            inactive_subheartflows_ids = []  # 修改变量名以清晰表示存储的是ID
 
             # 检查所有子心流
             # 使用 list(self._subheartflows.items()) 避免在迭代时修改字典
@@ -104,7 +106,7 @@ class Heartflow:
 
             # await self.do_a_thinking()
             # await asyncio.sleep(global_config.heart_flow_update_interval * 3)  # 5分钟思考一次
-            
+
             await asyncio.sleep(300)
 
     async def heartflow_start_working(self):
@@ -253,7 +255,7 @@ class Heartflow:
             # 创建并初始化观察对象
             logger.debug(f"为 {subheartflow_id} 创建 observation")
             observation = ChattingObservation(subheartflow_id)
-            await observation.initialize() # 等待初始化完成
+            await observation.initialize()  # 等待初始化完成
             subheartflow.add_observation(observation)
             logger.debug(f"为 {subheartflow_id} 添加 observation 成功")
 
@@ -269,7 +271,7 @@ class Heartflow:
         except Exception as e:
             # 记录详细错误信息
             logger.error(f"创建 subheartflow {subheartflow_id} 失败: {e}")
-            logger.error(traceback.format_exc()) # 记录完整的 traceback
+            logger.error(traceback.format_exc())  # 记录完整的 traceback
             # 考虑是否需要更具体的错误处理或资源清理逻辑
             return None
 
