@@ -1,7 +1,6 @@
 import traceback
 from typing import Optional, Dict
 import asyncio
-from asyncio import Lock
 import threading  # 导入 threading
 from ...moods.moods import MoodManager
 from ...chat.emoji_manager import emoji_manager
@@ -51,8 +50,8 @@ class HeartFCController:
         # 再次使用类锁保护初始化过程是更严谨的做法。
         # 如果确定 __init__ 逻辑本身是幂等的或非关键的，可以省略这里的锁。
         # 但为了保持原始逻辑的意图（防止重复初始化），这里保留检查。
-        with self.__class__._lock: # 确保初始化逻辑线程安全
-            if self._initialized: # 再次检查，防止锁等待期间其他线程已完成初始化
+        with self.__class__._lock:  # 确保初始化逻辑线程安全
+            if self._initialized:  # 再次检查，防止锁等待期间其他线程已完成初始化
                 return
 
             logger.info("正在初始化 HeartFCController 单例...")
@@ -68,9 +67,9 @@ class HeartFCController:
             self._interest_monitor_task: Optional[asyncio.Task] = None
             self.pf_chatting_instances: Dict[str, PFChatting] = {}
             # _pf_chatting_lock 用于保护 pf_chatting_instances 的异步操作
-            self._pf_chatting_lock = asyncio.Lock() # 这个是 asyncio.Lock，用于异步上下文
-            self.emoji_manager = emoji_manager # 假设是全局或已初始化的实例
-            self.relationship_manager = relationship_manager # 假设是全局或已初始化的实例
+            self._pf_chatting_lock = asyncio.Lock()  # 这个是 asyncio.Lock，用于异步上下文
+            self.emoji_manager = emoji_manager  # 假设是全局或已初始化的实例
+            self.relationship_manager = relationship_manager  # 假设是全局或已初始化的实例
             # MessageManager 可能是类本身或单例实例，根据其设计确定
             self.MessageManager = MessageManager
             self._initialized = True
@@ -81,14 +80,14 @@ class HeartFCController:
         """获取 HeartFCController 的单例实例。"""
         # 如果实例尚未创建，调用构造函数（这将触发 __new__ 和 __init__）
         if cls._instance is None:
-             # 在首次调用 get_instance 时创建实例。
-             # __new__ 中的锁会确保线程安全。
+            # 在首次调用 get_instance 时创建实例。
+            # __new__ 中的锁会确保线程安全。
             cls()
             # 添加日志记录，说明实例是在 get_instance 调用时创建的
             logger.info("HeartFCController 实例在首次 get_instance 时创建。")
         elif not cls._initialized:
             # 实例已创建但可能未初始化完成（理论上不太可能发生，除非 __init__ 异常）
-             logger.warning("HeartFCController 实例存在但尚未完成初始化。")
+            logger.warning("HeartFCController 实例存在但尚未完成初始化。")
         return cls._instance
 
     # --- 新增：检查 PFChatting 状态的方法 --- #

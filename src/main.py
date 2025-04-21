@@ -19,7 +19,6 @@ from .individuality.individuality import Individuality
 from .common.server import global_server
 from .plugins.chat_module.heartFC_chat.interest import InterestManager
 from .plugins.chat_module.heartFC_chat.heartFC_controler import HeartFCController
-from .plugins.chat_module.heartFC_chat.reasoning_chat import ReasoningChat
 
 logger = get_module_logger("main")
 
