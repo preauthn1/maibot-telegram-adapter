@@ -374,6 +374,22 @@ class PFChatting:
                             )
                             action_taken_this_cycle = False
 
+                    # --- Print Timer Results --- #
+                    if cycle_timers:  # 先检查cycle_timers是否非空
+                        timer_strings = []
+                        for name, elapsed in cycle_timers.items():
+                            # 直接格式化存储在字典中的浮点数 elapsed
+                            formatted_time = f"{elapsed * 1000:.2f}毫秒" if elapsed < 1 else f"{elapsed:.2f}秒"
+                            timer_strings.append(f"{name}: {formatted_time}")
+
+                        if timer_strings:  # 如果有有效计时器数据才打印
+                            logger.debug(
+                                f"{log_prefix} test testtesttesttesttesttesttesttesttesttest Cycle Timers: {'; '.join(timer_strings)}"
+                            )
+
+                    # --- Timer Decrement --- #
+                    cycle_duration = time.monotonic() - loop_cycle_start_time
+
                 except Exception as e_cycle:
                     logger.error(f"{log_prefix} 循环周期执行时发生错误: {e_cycle}")
                     logger.error(traceback.format_exc())
@@ -387,21 +403,6 @@ class PFChatting:
                         self._processing_lock.release()
                         logger.trace(f"{log_prefix} 循环释放了处理锁.")
 
-                # --- Print Timer Results --- #
-                if cycle_timers:  # 先检查cycle_timers是否非空
-                    timer_strings = []
-                    for name, elapsed in cycle_timers.items():
-                        # 直接格式化存储在字典中的浮点数 elapsed
-                        formatted_time = f"{elapsed * 1000:.2f}毫秒" if elapsed < 1 else f"{elapsed:.2f}秒"
-                        timer_strings.append(f"{name}: {formatted_time}")
-
-                    if timer_strings:  # 如果有有效计时器数据才打印
-                        logger.debug(
-                            f"{log_prefix} test testtesttesttesttesttesttesttesttesttest Cycle Timers: {'; '.join(timer_strings)}"
-                        )
-
-                # --- Timer Decrement --- #
-                cycle_duration = time.monotonic() - loop_cycle_start_time
                 async with self._timer_lock:
                     self._loop_timer -= cycle_duration
                     # Log timer decrement less aggressively
