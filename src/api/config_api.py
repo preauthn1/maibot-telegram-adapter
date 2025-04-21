@@ -1,10 +1,12 @@
 from typing import Dict, List, Optional
 import strawberry
+
 # from packaging.version import Version, InvalidVersion
 # from packaging.specifiers import SpecifierSet, InvalidSpecifier
 # from ..config.config import global_config
 # import os
 from packaging.version import Version
+
 
 @strawberry.type
 class BotConfig:
