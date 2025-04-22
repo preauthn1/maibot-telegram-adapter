@@ -137,7 +137,6 @@ class ChattingObservation(Observation):
                 )
             self.mid_memory_info = mid_memory_str
 
-
         self.talking_message_str = await build_readable_messages(messages=self.talking_message, timestamp_mode="normal")
 
         logger.trace(

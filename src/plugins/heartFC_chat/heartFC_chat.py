@@ -13,11 +13,12 @@ from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
 from src.plugins.utils.timer_calculater import Timer  # <--- Import Timer
+
 # --- Import necessary dependencies directly ---
-from .heartFC_generator import ResponseGenerator # Assuming this is the type for gpt
+from .heartFC_generator import ResponseGenerator  # Assuming this is the type for gpt
 from src.do_tool.tool_use import ToolUser
-from src.plugins.chat.emoji_manager import EmojiManager # Assuming this is the type
-from ..chat.message_sender import message_manager # <-- Import the global manager
+from src.plugins.chat.emoji_manager import EmojiManager  # Assuming this is the type
+from ..chat.message_sender import message_manager  # <-- Import the global manager
 # --- End import ---
 
 
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     # Keep this if HeartFCController methods are still needed elsewhere,
     # but the instance variable will be removed from HeartFChatting
     # from .heartFC_controler import HeartFCController
-    from src.heart_flow.heartflow import SubHeartflow, heartflow # <-- 同时导入 heartflow 实例用于类型检查
+    from src.heart_flow.heartflow import SubHeartflow, heartflow  # <-- 同时导入 heartflow 实例用于类型检查
 
 PLANNER_TOOL_DEFINITION = [
     {
@@ -74,16 +75,17 @@ class HeartFChatting:
     现在由其关联的 SubHeartflow 管理生命周期。
     """
 
-    def __init__(self,
-                chat_id: str,
-                # 显式依赖注入
-                gpt_instance: ResponseGenerator,  # 文本回复生成器
-                tool_user_instance: ToolUser,     # 工具使用实例
-                emoji_manager_instance: EmojiManager,  # 表情管理实例
-                ):
+    def __init__(
+        self,
+        chat_id: str,
+        # 显式依赖注入
+        gpt_instance: ResponseGenerator,  # 文本回复生成器
+        tool_user_instance: ToolUser,  # 工具使用实例
+        emoji_manager_instance: EmojiManager,  # 表情管理实例
+    ):
         """
         HeartFChatting 初始化函数
-        
+
         参数:
             chat_id: 聊天流唯一标识符(如stream_id)
             gpt_instance: 文本回复生成器实例
@@ -94,7 +96,7 @@ class HeartFChatting:
         self.stream_id: str = chat_id  # 聊天流ID
         self.chat_stream: Optional[ChatStream] = None  # 关联的聊天流
         self.sub_hf: Optional[SubHeartflow] = None  # 关联的子心流
-        
+
         # 初始化状态控制
         self._initialized = False  # 是否已初始化标志
         self._init_lock = asyncio.Lock()  # 初始化锁(确保只初始化一次)
@@ -145,6 +147,7 @@ class HeartFChatting:
 
                 # <-- 在这里导入 heartflow 实例
                 from src.heart_flow.heartflow import heartflow
+
                 self.sub_hf = heartflow.get_subheartflow(self.stream_id)
                 if not self.sub_hf:
                     logger.warning(f"{log_prefix} 获取SubHeartflow失败。一些功能可能受限。")
@@ -391,7 +394,9 @@ class HeartFChatting:
                                             logger.info(f"{log_prefix} 等待新消息的 sleep 被中断。")
                                             raise  # 重新抛出取消错误，以便外层循环处理
                             else:
-                                logger.warning(f"{log_prefix} HeartFChatting: 无法获取 Observation 实例，无法等待新消息。")
+                                logger.warning(
+                                    f"{log_prefix} HeartFChatting: 无法获取 Observation 实例，无法等待新消息。"
+                                )
                             # --- 等待结束 ---
 
                         elif action == "error":  # Action specifically set to error by planner
@@ -413,9 +418,7 @@ class HeartFChatting:
                             timer_strings.append(f"{name}: {formatted_time}")
 
                         if timer_strings:  # 如果有有效计时器数据才打印
-                            logger.debug(
-                                f"{log_prefix} 该次决策耗时: {'; '.join(timer_strings)}"
-                            )
+                            logger.debug(f"{log_prefix} 该次决策耗时: {'; '.join(timer_strings)}")
 
                     # --- Timer Decrement --- #
                     cycle_duration = time.monotonic() - loop_cycle_start_time
@@ -484,8 +487,12 @@ class HeartFChatting:
             self.sub_hf = heartflow.get_subheartflow(self.stream_id)
             if not self.sub_hf:
                 logger.error(f"{log_prefix}[Planner] SubHeartflow is not available. Cannot proceed.")
-                return {"action": "error", "reasoning": "SubHeartflow unavailable", "llm_error": True, "observed_messages": []}
-
+                return {
+                    "action": "error",
+                    "reasoning": "SubHeartflow unavailable",
+                    "llm_error": True,
+                    "observed_messages": [],
+                }
 
         try:
             # Access observation via self.sub_hf
@@ -503,9 +510,7 @@ class HeartFChatting:
         # --- (Moved from _replier_work) 1. 思考前使用工具 --- #
         try:
             # Access tool_user directly
-            tool_result = await self.tool_user.use_tool(
-                message_txt=observed_messages_str, sub_heartflow=self.sub_hf
-            )
+            tool_result = await self.tool_user.use_tool(message_txt=observed_messages_str, sub_heartflow=self.sub_hf)
             if tool_result.get("used_tools", False):
                 tool_result_info = tool_result.get("structured_info", {})
                 logger.debug(f"{log_prefix}[Planner] 规划前工具结果: {tool_result_info}")
@@ -620,7 +625,6 @@ class HeartFChatting:
         """
 
         try:
-
             # --- Create Placeholder --- #
             placeholder_id = f"mid_pf_{int(time.time() * 1000)}"
             placeholder_user = UserInfo(

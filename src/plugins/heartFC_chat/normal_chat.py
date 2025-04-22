@@ -22,6 +22,7 @@ from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from src.plugins.utils.timer_calculater import Timer
 from src.heart_flow.heartflow import heartflow
 from src.heart_flow.sub_heartflow import ChatState
+
 # 定义日志配置
 chat_config = LogConfig(
     console_format=CHAT_STYLE_CONFIG["console_format"],
@@ -129,7 +130,7 @@ class NormalChat:
                 is_head=not mark_head,
                 is_emoji=False,
                 thinking_start_time=thinking_start_time,
-                apply_set_reply_logic=True
+                apply_set_reply_logic=True,
             )
             if not mark_head:
                 mark_head = True
@@ -165,7 +166,7 @@ class NormalChat:
                     reply=message,
                     is_head=False,
                     is_emoji=True,
-                    apply_set_reply_logic=True
+                    apply_set_reply_logic=True,
                 )
                 await message_manager.add_message(bot_message)
 
@@ -212,13 +213,13 @@ class NormalChat:
                     if removed_item:
                         # logger.debug(f"[{stream_name}] 已从兴趣字典中移除消息 {msg_id} (因状态跳过)") # 减少日志
                         pass
-                    continue # 处理下一条消息
+                    continue  # 处理下一条消息
                 # --- 结束状态检查 --- #
 
                 # --- 检查 HeartFChatting 是否活跃 (改为检查 SubHeartflow 状态) --- #
                 is_focused = subheartflow.chat_state.chat_status == ChatState.FOCUSED
 
-                if is_focused: # New check: If the subflow is focused, NormalChat shouldn't process
+                if is_focused:  # New check: If the subflow is focused, NormalChat shouldn't process
                     removed_item = interest_dict.pop(msg_id, None)
                     if removed_item:
                         # logger.debug(f"[{stream_name}] SubHeartflow 处于 FOCUSED 状态，已跳过并移除 NormalChat 兴趣消息 {msg_id}") # Reduce noise
@@ -264,7 +265,7 @@ class NormalChat:
             )
             # 可以在这里添加 not_reply_handle 逻辑吗？ 如果不回复，也需要清理意愿。
             # 注意：willing_manager.setup 尚未调用
-            willing_manager.setup(message, chat, is_mentioned, interested_rate) # 先 setup
+            willing_manager.setup(message, chat, is_mentioned, interested_rate)  # 先 setup
             await willing_manager.not_reply_handle(message.message_info.message_id)
             willing_manager.delete(message.message_info.message_id)
             return
@@ -313,7 +314,7 @@ class NormalChat:
 
             # 生成回复
             sub_hf = heartflow.get_subheartflow(stream_id)
-            
+
             try:
                 with Timer("生成回复", timing_results):
                     response_set = await self.gpt.generate_response(

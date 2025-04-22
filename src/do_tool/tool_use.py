@@ -24,7 +24,9 @@ class ToolUser:
         )
 
     @staticmethod
-    async def _build_tool_prompt(message_txt: str, chat_stream: ChatStream = None, observation: ChattingObservation = None):
+    async def _build_tool_prompt(
+        message_txt: str, chat_stream: ChatStream = None, observation: ChattingObservation = None
+    ):
         """构建工具使用的提示词
 
         Args:
