@@ -193,7 +193,7 @@ class Heartflow:
             await asyncio.sleep(interval_seconds)
             try:
                 current_timestamp = time.time()
-                all_interest_states = self.get_all_interest_states()  # 获取所有子心流的兴趣状态
+                all_interest_states = await self.get_all_interest_states()  # 获取所有子心流的兴趣状态
 
                 # 以追加模式打开历史日志文件
                 # 移除 try-except IO 块，根据用户要求
@@ -343,15 +343,10 @@ class Heartflow:
 
                         for sub_hf in subflows_snapshot:
                             # Double-check if subflow still exists and is in CHAT state
-                            if (
-                                sub_hf.subheartflow_id in self._subheartflows
-                                and sub_hf.chat_state.chat_status == ChatState.CHAT
-                            ):
+                            if sub_hf.subheartflow_id in self._subheartflows and sub_hf.chat_state.chat_status == ChatState.CHAT:
                                 evaluated_count += 1
-                                if sub_hf.should_evaluate_reply():
-                                    stream_name = (
-                                        chat_manager.get_stream_name(sub_hf.subheartflow_id) or sub_hf.subheartflow_id
-                                    )
+                                if await sub_hf.should_evaluate_reply():
+                                    stream_name = chat_manager.get_stream_name(sub_hf.subheartflow_id) or sub_hf.subheartflow_id
                                     log_prefix = f"[{stream_name}]"
                                     logger.info(f"{log_prefix} 兴趣概率触发，尝试将状态从 CHAT 提升到 FOCUSED")
                                     # set_chat_state handles limit checks and HeartFChatting creation internally
@@ -378,18 +373,42 @@ class Heartflow:
 
             logger.info(f"当前状态:{self.current_state.mai_status.value}")
 
-    def get_all_interest_states(self) -> Dict[str, Dict]:  # 新增方法
+    async def get_all_interest_states(self) -> Dict[str, Dict]:  # <-- Make async
         """获取所有活跃子心流的当前兴趣状态"""
         states = {}
         # 创建副本以避免在迭代时修改字典
-        items_snapshot = list(self._subheartflows.items())
+        items_snapshot = list(self._subheartflows.items()) # Make a copy for safe iteration
+        tasks = []
+        results = {}
+
+        # Create tasks to get state concurrently
         for stream_id, subheartflow in items_snapshot:
-            try:
-                # 从 SubHeartflow 获取其 InterestChatting 的状态
-                states[stream_id] = subheartflow.get_interest_state()
-            except Exception as e:
-                logger.warning(f"[Heartflow] Error getting interest state for subheartflow {stream_id}: {e}")
-        return states
+            # Ensure subheartflow still exists before creating task
+            if stream_id in self._subheartflows:
+                tasks.append(asyncio.create_task(subheartflow.get_interest_state(), name=f"get_state_{stream_id}"))
+            else:
+                logger.warning(f"[Heartflow] Subheartflow {stream_id} disappeared before getting state.")
+
+        # Wait for all tasks to complete
+        if tasks:
+            done, pending = await asyncio.wait(tasks, timeout=5.0) # Add a timeout
+
+            if pending:
+                logger.warning(f"[Heartflow] Getting interest states timed out for {len(pending)} tasks.")
+                for task in pending:
+                    task.cancel()
+
+            for task in done:
+                stream_id = task.get_name().split("_")[-1] # Extract stream_id from task name
+                try:
+                    result = task.result()
+                    results[stream_id] = result
+                except asyncio.CancelledError:
+                     logger.warning(f"[Heartflow] Task to get interest state for {stream_id} was cancelled (timeout).")
+                except Exception as e:
+                    logger.warning(f"[Heartflow] Error getting interest state for subheartflow {stream_id}: {e}")
+
+        return results
 
     def cleanup_inactive_subheartflows(self, max_age_seconds=INACTIVE_THRESHOLD_SECONDS):  # 修改此方法以使用兴趣时间
         """

@@ -115,7 +115,7 @@ class InterestChatting:
         self.interest_dict[message.message_info.message_id] = (message, interest_value, is_mentioned)
         self.last_interaction_time = time.time()
 
-    def _calculate_decay(self, current_time: float):
+    async def _calculate_decay(self, current_time: float):
         time_delta = current_time - self.last_update_time
         if time_delta > 0:
             old_interest = self.interest_level
@@ -145,7 +145,7 @@ class InterestChatting:
             if old_interest != self.interest_level:
                 self.last_update_time = current_time
 
-    def _update_reply_probability(self, current_time: float):
+    async def _update_reply_probability(self, current_time: float):
         time_delta = current_time - self.last_update_time
         if time_delta <= 0:
             return
@@ -169,7 +169,7 @@ class InterestChatting:
             if previous_is_above:
                 if self.state_change_callback:
                     try:
-                        self.state_change_callback(ChatState.ABSENT)
+                        await self.state_change_callback(ChatState.ABSENT)
                     except Exception as e:
                         interest_logger.error(f"Error calling state_change_callback for ABSENT: {e}")
 
@@ -187,30 +187,30 @@ class InterestChatting:
 
         self.is_above_threshold = currently_above
 
-    def increase_interest(self, current_time: float, value: float):
-        self._update_reply_probability(current_time)
-        self._calculate_decay(current_time)
+    async def increase_interest(self, current_time: float, value: float):
+        await self._update_reply_probability(current_time)
+        await self._calculate_decay(current_time)
         self.interest_level += value
         self.interest_level = min(self.interest_level, self.max_interest)
         self.last_update_time = current_time
         self.last_interaction_time = current_time
 
-    def decrease_interest(self, current_time: float, value: float):
-        self._update_reply_probability(current_time)
+    async def decrease_interest(self, current_time: float, value: float):
+        await self._update_reply_probability(current_time)
         self.interest_level -= value
         self.interest_level = max(self.interest_level, 0.0)
         self.last_update_time = current_time
         self.last_interaction_time = current_time
 
-    def get_interest(self) -> float:
+    async def get_interest(self) -> float:
         current_time = time.time()
-        self._update_reply_probability(current_time)
-        self._calculate_decay(current_time)
+        await self._update_reply_probability(current_time)
+        await self._calculate_decay(current_time)
         self.last_update_time = current_time
         return self.interest_level
 
-    def get_state(self) -> dict:
-        interest = self.get_interest()
+    async def get_state(self) -> dict:
+        interest = await self.get_interest()
         return {
             "interest_level": round(interest, 2),
             "last_update_time": self.last_update_time,
@@ -219,9 +219,9 @@ class InterestChatting:
             "last_interaction_time": self.last_interaction_time,
         }
 
-    def should_evaluate_reply(self) -> bool:
+    async def should_evaluate_reply(self) -> bool:
         current_time = time.time()
-        self._update_reply_probability(current_time)
+        await self._update_reply_probability(current_time)
 
         if self.current_reply_probability > 0:
             trigger = random.random() < self.current_reply_probability
@@ -496,16 +496,16 @@ class SubHeartflow:
         logger.warning(f"SubHeartflow {self.subheartflow_id} 没有找到有效的 ChattingObservation")
         return None
 
-    def get_interest_state(self) -> dict:
-        return self.interest_chatting.get_state()
+    async def get_interest_state(self) -> dict:
+        return await self.interest_chatting.get_state()
 
-    def get_interest_level(self) -> float:
-        return self.interest_chatting.get_interest()
+    async def get_interest_level(self) -> float:
+        return await self.interest_chatting.get_interest()
 
-    def should_evaluate_reply(self) -> bool:
-        return self.interest_chatting.should_evaluate_reply()
+    async def should_evaluate_reply(self) -> bool:
+        return await self.interest_chatting.should_evaluate_reply()
 
-    def add_interest_dict_entry(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
+    async def add_interest_dict_entry(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
         self.interest_chatting.add_interest_dict(message, interest_value, is_mentioned)
 
     def get_interest_dict(self) -> Dict[str, tuple[MessageRecv, float, bool]]:
