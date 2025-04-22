@@ -20,7 +20,6 @@ from src.plugins.heartFC_chat.heartFC_generator import ResponseGenerator
 from src.do_tool.tool_use import ToolUser
 from src.plugins.chat.emoji_manager import emoji_manager # Module instance
 from src.plugins.person_info.relationship_manager import relationship_manager # Module instance
-from src.plugins.heartFC_chat.heartflow_message_sender import MessageManager
 # --- End imports ---
 
 heartflow_config = LogConfig(
@@ -66,9 +65,9 @@ LOG_INTERVAL_SECONDS = 3  # 日志记录间隔 (例如：3秒) - 保持与 inter
 
 # --- 新增：状态更新常量 ---
 STATE_UPDATE_INTERVAL_SECONDS = 30 # 状态更新检查间隔（秒）
-FIVE_MINUTES = 3 * 60
-FIFTEEN_MINUTES = 6 * 60
-TWENTY_MINUTES = 9 * 60
+FIVE_MINUTES = 1 * 60
+FIFTEEN_MINUTES = 5 * 60
+TWENTY_MINUTES = 10 * 60
 # --- 结束新增常量 ---
 
 
@@ -111,7 +110,7 @@ class MaiState(enum.Enum):
 class MaiStateInfo:
     def __init__(self):
 
-        # 使用枚举类型初始化状态，默认为不在线
+        # 使用枚举类型初始化状态，默认为正常聊天
         self.mai_status: MaiState = MaiState.OFFLINE
         self.mai_status_history = [] # 历史状态，包含 状态，最后时间
         self.last_status_change_time: float = time.time() # 新增：状态最后改变时间
@@ -157,7 +156,6 @@ class Heartflow:
         self.tool_user_instance = ToolUser()
         self.emoji_manager_instance = emoji_manager # Module instance
         self.relationship_manager_instance = relationship_manager # Module instance
-        self.message_manager_instance = MessageManager() # Instantiate the message manager
         # --- End moved dependencies ---
 
         # --- Background Task Management ---
@@ -463,7 +461,13 @@ class Heartflow:
         else:
             logger.warning("[Heartflow] 跳过创建状态更新任务: 任务已在运行或存在。")
 
-
+        # --- 新增：在启动时根据初始状态激活子心流 ---
+        if self.current_state.mai_status != MaiState.OFFLINE:
+            logger.info(f"[Heartflow] 初始状态为 {self.current_state.mai_status.value}，执行初始子心流激活检查。")
+            # 使用 create_task 确保它不会阻塞 heartflow_start_working 的完成
+            # 传递当前状态给激活函数，以便它知道激活的限制
+            asyncio.create_task(self._activate_random_subflows_to_chat(self.current_state.mai_status))
+        # --- 结束新增逻辑 ---
 
     @staticmethod
     async def _update_current_state():
@@ -646,11 +650,23 @@ class Heartflow:
         return list(self._subheartflows.keys())
 
     async def _stop_subheartflow(self, subheartflow_id: Any, reason: str):
-        """停止并移除指定的子心流"""
+        """停止并移除指定的子心流，确保 HeartFChatting 被关闭"""
         if subheartflow_id in self._subheartflows:
             subheartflow = self._subheartflows[subheartflow_id]
             stream_name = chat_manager.get_stream_name(subheartflow_id) or subheartflow_id
             logger.info(f"[Heartflow Limits] 停止子心流 {stream_name}. 原因: {reason}")
+
+            # --- 新增：在取消任务和删除前，先设置状态为 ABSENT 以关闭 HeartFChatting ---
+            try:
+                if subheartflow.chat_state.chat_status != ChatState.ABSENT:
+                     logger.debug(f"[Heartflow Limits] 将子心流 {stream_name} 状态设置为 ABSENT 以确保资源释放...")
+                     await subheartflow.set_chat_state(ChatState.ABSENT) # 调用异步方法
+                else:
+                     logger.debug(f"[Heartflow Limits] 子心流 {stream_name} 已经是 ABSENT 状态。")
+            except Exception as e:
+                 logger.error(f"[Heartflow Limits] 在停止子心流 {stream_name} 时设置状态为 ABSENT 出错: {e}")
+                 # 即使出错，仍继续尝试停止任务和移除
+            # --- 结束新增逻辑 ---
 
             # 标记停止并取消任务
             subheartflow.should_stop = True

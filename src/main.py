@@ -9,7 +9,7 @@ from .plugins.willing.willing_manager import willing_manager
 from .plugins.chat.chat_stream import chat_manager
 from .heart_flow.heartflow import heartflow
 from .plugins.memory_system.Hippocampus import HippocampusManager
-from .plugins.chat.messagesender import message_manager
+from .plugins.chat.message_sender import message_manager
 from .plugins.storage.storage import MessageStorage
 from .config.config import global_config
 from .plugins.chat.bot import chat_bot
@@ -101,9 +101,9 @@ class MainSystem:
         logger.success("个体特征初始化成功")
 
         try:
-            # 启动 Heartflow 的 MessageManager (负责消息发送/排队)
-            await heartflow.message_manager_instance.start()
-            logger.success("心流消息管理器启动成功")
+            # 启动全局消息管理器 (负责消息发送/排队)
+            await message_manager.start()
+            logger.success("全局消息管理器启动成功")
 
             # 启动心流系统主循环
             asyncio.create_task(heartflow.heartflow_start_working())

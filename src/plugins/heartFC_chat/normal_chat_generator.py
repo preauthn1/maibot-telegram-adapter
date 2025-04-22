@@ -86,9 +86,10 @@ class ResponseGenerator:
             prompt = await prompt_builder.build_prompt(
                 build_mode="normal",
                 reason= "",
+                current_mind_info="",
                 message_txt=message.processed_plain_text,
                 sender_name=sender_name,
-                subheartflow=sub_hf,
+                chat_stream=message.chat_stream,
             )
         logger.info(f"构建prompt时间: {t_build_prompt.human_readable}")
 

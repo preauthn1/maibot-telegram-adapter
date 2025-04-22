@@ -11,7 +11,6 @@ from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from ..utils.timer_calculater import Timer
 
 from src.plugins.moods.moods import MoodManager
-from src.heart_flow.sub_heartflow import SubHeartflow
 # 定义日志配置
 llm_config = LogConfig(
     # 使用消息发送专用样式
@@ -39,7 +38,7 @@ class ResponseGenerator:
 
     async def generate_response(
         self,
-        sub_hf: SubHeartflow,
+        current_mind_info: str,
         reason: str,
         message: MessageRecv,
         thinking_id: str,
@@ -56,7 +55,7 @@ class ResponseGenerator:
             current_model = self.model_normal
             current_model.temperature = global_config.llm_normal["temp"] * arousal_multiplier  # 激活度越高，温度越高
             model_response = await self._generate_response_with_model(
-                sub_hf, reason, message, current_model, thinking_id
+                current_mind_info, reason, message, current_model, thinking_id
             )
 
         if model_response:
@@ -71,7 +70,7 @@ class ResponseGenerator:
             return None
 
     async def _generate_response_with_model(
-        self, sub_hf: SubHeartflow, reason: str, message: MessageRecv, model: LLMRequest, thinking_id: str
+        self, current_mind_info: str, reason: str, message: MessageRecv, model: LLMRequest, thinking_id: str
     ) -> str:
         sender_name = ""
 
@@ -84,9 +83,10 @@ class ResponseGenerator:
             prompt = await prompt_builder.build_prompt(
                 build_mode="focus",
                 reason=reason,
+                current_mind_info=current_mind_info,
                 message_txt=message.processed_plain_text,
                 sender_name=sender_name,
-                subheartflow=sub_hf
+                chat_stream=message.chat_stream
             )
         logger.info(f"构建prompt时间: {t_build_prompt.human_readable}")
 

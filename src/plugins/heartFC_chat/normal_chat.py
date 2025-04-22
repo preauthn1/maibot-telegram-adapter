@@ -9,7 +9,7 @@ from ...config.config import global_config
 from ..chat.emoji_manager import emoji_manager
 from .normal_chat_generator import ResponseGenerator
 from ..chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
-from ..chat.messagesender import message_manager
+from ..chat.message_sender import message_manager
 from ..storage.storage import MessageStorage
 from ..chat.utils import is_mentioned_bot_in_message
 from ..chat.utils_image import image_path_to_base64
@@ -96,18 +96,18 @@ class NormalChat:
     @staticmethod
     async def _send_response_messages(message, chat, response_set: List[str], thinking_id) -> MessageSending:
         """发送回复消息"""
-        container = message_manager.get_container(chat.stream_id)
+        container = await message_manager.get_container(chat.stream_id)
         thinking_message = None
 
-        for msg in container.messages:
+        for msg in container.messages[:]:
             if isinstance(msg, MessageThinking) and msg.message_info.message_id == thinking_id:
                 thinking_message = msg
                 container.messages.remove(msg)
                 break
 
         if not thinking_message:
-            logger.warning("未找到对应的思考消息，可能已超时被移除")
-            return
+            logger.warning(f"[{chat.stream_id}] 未找到对应的思考消息 {thinking_id}，可能已超时被移除")
+            return None
 
         thinking_start_time = thinking_message.thinking_start_time
         message_set = MessageSet(chat, thinking_id)
@@ -130,12 +130,14 @@ class NormalChat:
                 is_head=not mark_head,
                 is_emoji=False,
                 thinking_start_time=thinking_start_time,
+                apply_set_reply_logic=True
             )
             if not mark_head:
                 mark_head = True
                 first_bot_msg = bot_message
             message_set.add_message(bot_message)
-        message_manager.add_message(message_set)
+
+        await message_manager.add_message(message_set)
 
         return first_bot_msg
 
@@ -164,8 +166,9 @@ class NormalChat:
                     reply=message,
                     is_head=False,
                     is_emoji=True,
+                    apply_set_reply_logic=True
                 )
-                message_manager.add_message(bot_message)
+                await message_manager.add_message(bot_message)
 
     async def _update_relationship(self, message: MessageRecv, response_set):
         """更新关系情绪"""
@@ -328,12 +331,13 @@ class NormalChat:
             if not response_set:
                 logger.info(f"[{chat.stream_id}] 模型未生成回复内容")
                 # 如果模型未生成回复，移除思考消息
-                container = message_manager.get_container(chat.stream_id)
+                container = await message_manager.get_container(chat.stream_id)
                 # thinking_message = None
                 for msg in container.messages[:]:  # Iterate over a copy
                     if isinstance(msg, MessageThinking) and msg.message_info.message_id == thinking_id:
                         # thinking_message = msg
                         container.messages.remove(msg)
+                        # container.remove_message(msg) # 直接移除
                         logger.debug(f"[{chat.stream_id}] 已移除未产生回复的思考消息 {thinking_id}")
                         break
                 return  # 不发送回复

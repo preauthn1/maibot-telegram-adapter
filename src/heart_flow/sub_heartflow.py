@@ -16,11 +16,13 @@ from ..plugins.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugins.chat.message import MessageRecv
 from src.plugins.chat.chat_stream import chat_manager
 import math
+from src.plugins.heartFC_chat.heartFC_chat import HeartFChatting
 
 # Type hinting for circular dependency
 if TYPE_CHECKING:
     from .heartflow import Heartflow, MaiState # Import Heartflow for type hinting
     from .sub_heartflow import ChatState # Keep ChatState here too?
+    from src.plugins.heartFC_chat.heartFC_chat import HeartFChatting # <-- Add for type hint
 
 # 定义常量 (从 interest.py 移动过来)
 MAX_INTEREST = 15.0
@@ -230,15 +232,38 @@ class InterestChatting:
 
 class SubHeartflow:
     def __init__(self, subheartflow_id, parent_heartflow: 'Heartflow'):
+        """子心流初始化函数
+        
+        Args:
+            subheartflow_id: 子心流唯一标识符
+            parent_heartflow: 父级心流实例
+        """
+        # 基础属性
         self.subheartflow_id = subheartflow_id
         self.parent_heartflow = parent_heartflow
-
-        self.current_mind = "你什么也没想"
-        self.past_mind = []
-        self.chat_state: ChatStateInfo = ChatStateInfo()
-
-        self.interest_chatting = InterestChatting(state_change_callback=self.set_chat_state)
-
+        self.bot_name = global_config.BOT_NICKNAME  # 机器人昵称
+        
+        # 思维状态相关
+        self.current_mind = "你什么也没想"  # 当前想法
+        self.past_mind = []  # 历史想法记录
+        self.main_heartflow_info = ""  # 主心流信息
+        
+        # 聊天状态管理
+        self.chat_state: ChatStateInfo = ChatStateInfo()  # 聊天状态信息
+        self.interest_chatting = InterestChatting(state_change_callback=self.set_chat_state)  # 兴趣聊天系统
+        
+        # 活动状态管理
+        self.last_active_time = time.time()  # 最后活跃时间
+        self.is_active = False  # 是否活跃标志
+        self.should_stop = False  # 停止标志
+        self.task: Optional[asyncio.Task] = None  # 后台任务
+        self.heart_fc_instance: Optional['HeartFChatting'] = None # <-- Add instance variable
+        
+        # 观察和知识系统
+        self.observations: List[ChattingObservation] = []  # 观察列表
+        self.running_knowledges = []  # 运行中的知识
+        
+        # LLM模型配置
         self.llm_model = LLMRequest(
             model=global_config.llm_sub_heartflow,
             temperature=global_config.llm_sub_heartflow["temp"],
@@ -246,33 +271,19 @@ class SubHeartflow:
             request_type="sub_heart_flow",
         )
 
-        self.main_heartflow_info = ""
-
-        self.last_active_time = time.time()
-        self.should_stop = False
-        self.task: Optional[asyncio.Task] = None
-
-        self.is_active = False
-
-        self.observations: List[ChattingObservation] = []
-
-        self.running_knowledges = []
-
-        self.bot_name = global_config.BOT_NICKNAME
-        logger.info(f"SubHeartflow {self.subheartflow_id} created with initial state: {self.chat_state.chat_status.value}")
-
-    def set_chat_state(self, new_state: 'ChatState'):
-        """更新sub_heartflow的聊天状态"""
+    async def set_chat_state(self, new_state: 'ChatState'):
+        """更新sub_heartflow的聊天状态，并管理 HeartFChatting 实例"""
 
         current_state = self.chat_state.chat_status
         if current_state == new_state:
+            logger.trace(f"[{self.subheartflow_id}] State already {current_state.value}, no change.")
             return # No change needed
 
         log_prefix = f"[{chat_manager.get_stream_name(self.subheartflow_id) or self.subheartflow_id}]"
+        current_mai_state = self.parent_heartflow.current_state.mai_status
 
-        # --- Limit Check before entering CHAT state --- #
+        # --- Entering CHAT state ---
         if new_state == ChatState.CHAT:
-            current_mai_state = self.parent_heartflow.current_state.mai_status
             normal_limit = current_mai_state.get_normal_chat_max_num()
             current_chat_count = self.parent_heartflow.count_subflows_by_state(ChatState.CHAT)
 
@@ -281,15 +292,61 @@ class SubHeartflow:
                 return # Block the state transition
             else:
                 logger.debug(f"{log_prefix} 允许从 {current_state.value} 转换到 CHAT (上限: {normal_limit}, 当前: {current_chat_count})" )
+                # If transitioning out of FOCUSED, shut down HeartFChatting first
+                if current_state == ChatState.FOCUSED and self.heart_fc_instance:
+                    logger.info(f"{log_prefix} 从 FOCUSED 转换到 CHAT，正在关闭 HeartFChatting...")
+                    await self.heart_fc_instance.shutdown()
+                    self.heart_fc_instance = None
 
-        # 如果检查通过或目标状态不是CHAT，则进行状态变更
+        # --- Entering FOCUSED state ---
+        elif new_state == ChatState.FOCUSED:
+            focused_limit = current_mai_state.get_focused_chat_max_num()
+            current_focused_count = self.parent_heartflow.count_subflows_by_state(ChatState.FOCUSED)
+
+            if current_focused_count >= focused_limit:
+                logger.debug(f"{log_prefix} 拒绝从 {current_state.value} 转换到 FOCUSED。原因：FOCUSED 状态已达上限 ({focused_limit})。当前数量: {current_focused_count}")
+                return # Block the state transition
+            else:
+                logger.debug(f"{log_prefix} 允许从 {current_state.value} 转换到 FOCUSED (上限: {focused_limit}, 当前: {current_focused_count})" )
+                if not self.heart_fc_instance:
+                    logger.info(f"{log_prefix} 状态转为 FOCUSED，创建并初始化 HeartFChatting 实例...")
+                    try:
+                        self.heart_fc_instance = HeartFChatting(
+                            chat_id=self.subheartflow_id,
+                            gpt_instance=self.parent_heartflow.gpt_instance,
+                            tool_user_instance=self.parent_heartflow.tool_user_instance,
+                            emoji_manager_instance=self.parent_heartflow.emoji_manager_instance,
+                        )
+                        # Initialize and potentially start the loop via add_time
+                        if await self.heart_fc_instance._initialize():
+                            # Give it an initial time boost to start the loop
+                            await self.heart_fc_instance.add_time()
+                            logger.info(f"{log_prefix} HeartFChatting 实例已创建并启动。")
+                        else:
+                            logger.error(f"{log_prefix} HeartFChatting 实例初始化失败，状态回滚到 {current_state.value}")
+                            self.heart_fc_instance = None
+                            return # Prevent state change if HeartFChatting fails to init
+                    except Exception as e:
+                        logger.error(f"{log_prefix} 创建 HeartFChatting 实例时出错: {e}")
+                        logger.error(traceback.format_exc())
+                        self.heart_fc_instance = None
+                        return # Prevent state change on error
+
+                else:
+                    logger.warning(f"{log_prefix} 尝试进入 FOCUSED 状态，但 HeartFChatting 实例已存在。")
+
+        # --- Entering ABSENT state (or any state other than FOCUSED) ---
+        elif current_state == ChatState.FOCUSED and self.heart_fc_instance:
+            logger.info(f"{log_prefix} 从 FOCUSED 转换到 {new_state.value}，正在关闭 HeartFChatting...")
+            await self.heart_fc_instance.shutdown()
+            self.heart_fc_instance = None
+
+
+        # --- Update state and timestamp if transition is allowed --- # 更新状态必须放在所有检查和操作之后
         self.chat_state.chat_status = new_state
-        # 状态变更时更新最后活跃时间
-        self.last_active_time = time.time()  
+        self.last_active_time = time.time()
         logger.info(f"{log_prefix} 聊天状态从 {current_state.value} 变更为 {new_state.value}")
 
-        # TODO: 考虑从FOCUSED状态转出时是否需要停止HeartFChatting
-        # 这部分逻辑可能更适合放在Heartflow的_stop_subheartflow或HeartFCController的循环中处理
 
     async def subheartflow_start_working(self):
         while True:
@@ -297,7 +354,8 @@ class SubHeartflow:
                 logger.info(f"子心流 {self.subheartflow_id} 被标记为停止，正在退出后台任务...")
                 break
 
-            await asyncio.sleep(global_config.sub_heart_flow_update_interval)
+            # await asyncio.sleep(global_config.sub_heart_flow_update_interval)
+            await asyncio.sleep(10)
 
     async def ensure_observed(self):
         observation = self._get_primary_observation()
