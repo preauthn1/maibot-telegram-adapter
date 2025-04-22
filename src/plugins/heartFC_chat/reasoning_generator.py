@@ -1,12 +1,12 @@
 from typing import List, Optional, Tuple, Union
 import random
 
-from ...models.utils_model import LLMRequest
-from ....config.config import global_config
-from ...chat.message import MessageThinking
-from .reasoning_prompt_builder import prompt_builder
-from ...chat.utils import process_llm_response
-from ...utils.timer_calculater import Timer
+from ..models.utils_model import LLMRequest
+from ...config.config import global_config
+from ..chat.message import MessageThinking
+from .heartFC_prompt_builder import prompt_builder
+from ..chat.utils import process_llm_response
+from ..utils.timer_calculater import Timer
 from src.common.logger import get_module_logger, LogConfig, LLM_STYLE_CONFIG
 from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 
@@ -84,8 +84,10 @@ class ResponseGenerator:
         logger.debug("开始使用生成回复-2")
         # 构建prompt
         with Timer() as t_build_prompt:
-            prompt = await prompt_builder._build_prompt(
-                message.chat_stream,
+            prompt = await prompt_builder.build_prompt(
+                build_mode="normal",
+                reason=message.reason,
+                chat_stream=message.chat_stream,
                 message_txt=message.processed_plain_text,
                 sender_name=sender_name,
                 stream_id=message.chat_stream.stream_id,
@@ -103,39 +105,8 @@ class ResponseGenerator:
             logger.exception("生成回复时出错")
             return None
 
-        # 保存到数据库
-        # self._save_to_db(
-        #     message=message,
-        #     sender_name=sender_name,
-        #     prompt=prompt,
-        #     content=content,
-        #     reasoning_content=reasoning_content,
-        #     # reasoning_content_check=reasoning_content_check if global_config.enable_kuuki_read else ""
-        # )
-
         return content
 
-    # def _save_to_db(
-    #     self,
-    #     message: MessageRecv,
-    #     sender_name: str,
-    #     prompt: str,
-    #     content: str,
-    #     reasoning_content: str,
-    # ):
-    #     """保存对话记录到数据库"""
-    #     db.reasoning_logs.insert_one(
-    #         {
-    #             "time": time.time(),
-    #             "chat_id": message.chat_stream.stream_id,
-    #             "user": sender_name,
-    #             "message": message.processed_plain_text,
-    #             "model": self.current_model_name,
-    #             "reasoning": reasoning_content,
-    #             "response": content,
-    #             "prompt": prompt,
-    #         }
-    #     )
 
     async def _get_emotion_tags(self, content: str, processed_plain_text: str):
         """提取情感标签，结合立场和情绪"""

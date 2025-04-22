@@ -124,15 +124,6 @@ class HeartFCController:
                 self.pf_chatting_instances[stream_id] = instance
             return self.pf_chatting_instances[stream_id]
 
-    # --- End Added PFChatting Instance Manager ---
-
-    # async def update_mai_Status(self):
-    #     """后台任务，定期检查更新麦麦状态"""
-    #     logger.info("麦麦状态更新循环开始...")
-    #     while True:
-    #         await asyncio.sleep(0)
-    #         self.heartflow.update_chat_status()
-
     async def _response_control_loop(self):
         """后台任务，定期检查兴趣度变化并触发回复"""
         logger.info("兴趣监控循环开始...")

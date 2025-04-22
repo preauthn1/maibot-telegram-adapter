@@ -17,7 +17,7 @@ from .common.logger import get_module_logger
 from .plugins.remote import heartbeat_thread  # noqa: F401
 from .individuality.individuality import Individuality
 from .common.server import global_server
-from .plugins.chat_module.heartFC_chat.heartFC_controler import HeartFCController
+from .plugins.heartFC_chat.heartFC_controler import HeartFCController
 
 logger = get_module_logger("main")
 
