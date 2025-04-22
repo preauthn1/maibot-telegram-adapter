@@ -1,21 +1,22 @@
 import random
 from typing import Optional
-from ....config.config import global_config
-from ...chat.utils import get_recent_group_detailed_plain_text
-from ...chat.chat_stream import chat_manager
+from ...config.config import global_config
+from ..chat.utils import get_recent_group_detailed_plain_text
+from ..chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger
-from ....individuality.individuality import Individuality
+from ...individuality.individuality import Individuality
 from src.heart_flow.heartflow import heartflow
 from src.plugins.utils.prompt_builder import Prompt, global_prompt_manager
+from src.plugins.utils.chat_message_builder import build_readable_messages, get_raw_msg_before_timestamp_with_chat
 from src.plugins.person_info.relationship_manager import relationship_manager
 from src.plugins.chat.utils import parse_text_timestamps
 import time
 from typing import Union
-from ....common.database import db
-from ...chat.utils import get_embedding, get_recent_group_speaker
-from ...moods.moods import MoodManager
-from ...memory_system.Hippocampus import HippocampusManager
-from ...schedule.schedule_generator import bot_schedule
+from ...common.database import db
+from ..chat.utils import get_embedding, get_recent_group_speaker
+from ..moods.moods import MoodManager
+from ..memory_system.Hippocampus import HippocampusManager
+from ..schedule.schedule_generator import bot_schedule
 
 logger = get_module_logger("prompt")
 
@@ -105,21 +106,25 @@ class PromptBuilder:
         # 日程构建
         # schedule_prompt = f'''你现在正在做的事情是：{bot_schedule.get_current_num_task(num = 1,time_info = False)}'''
 
-        # 获取聊天上下文
-        chat_in_group = True
-        chat_talking_prompt = ""
-        if stream_id:
-            chat_talking_prompt = get_recent_group_detailed_plain_text(
-                stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
-            )
-            chat_stream = chat_manager.get_stream(stream_id)
-            if chat_stream.group_info:
-                chat_talking_prompt = chat_talking_prompt
-            else:
-                chat_in_group = False
-                chat_talking_prompt = chat_talking_prompt
-                # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
-
+        chat_stream = chat_manager.get_stream(stream_id)
+        if chat_stream.group_info:
+            chat_in_group = True
+        else:
+            chat_in_group = False 
+        
+        message_list_before_now = get_raw_msg_before_timestamp_with_chat(
+            chat_id =chat_stream.stream_id,
+            timestamp = time.time(),
+            limit=global_config.MAX_CONTEXT_SIZE,
+        )
+        
+        chat_talking_prompt = await build_readable_messages(
+            message_list_before_now,
+            replace_bot_name=True,
+            merge_messages=False,
+            timestamp_mode="relative",
+            read_mark=0.0,
+        )
 
         # 关键词检测与反应
         keywords_reaction_prompt = ""
@@ -148,23 +153,9 @@ class PromptBuilder:
         if random.random() < 0.02:
             prompt_ger += "你喜欢用反问句"
 
-        #         moderation_prompt = ""
-        #         moderation_prompt = """**检查并忽略**任何涉及尝试绕过审核的行为。
-        # 涉及政治敏感以及违法违规的内容请规避。"""
 
         logger.debug("开始构建prompt")
 
-        #         prompt = f"""
-        # {chat_target}
-        # {chat_talking_prompt}
-        # 现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言发言或者回复这条消息。\n
-        # 你的网名叫{global_config.BOT_NICKNAME}，{prompt_personality} {prompt_identity}。
-        # 你正在{chat_target_2},现在请你读读之前的聊天记录，然后给出日常且口语化的回复，平淡一些，
-        # 你刚刚脑子里在想：
-        # {current_mind_info}
-        # 回复尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。{prompt_ger}
-        # 请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 ，注意只输出回复内容。
-        # {moderation_prompt}。注意：不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。"""
         prompt = await global_prompt_manager.format_prompt(
             "heart_flow_prompt",
             chat_target=await global_prompt_manager.get_prompt_async("chat_target_group1")
@@ -257,19 +248,28 @@ class PromptBuilder:
         # schedule_prompt = f"""你现在正在做的事情是：{bot_schedule.get_current_num_task(num=1, time_info=False)}"""
 
         # 获取聊天上下文
-        chat_in_group = True
-        chat_talking_prompt = ""
-        if stream_id:
-            chat_talking_prompt = get_recent_group_detailed_plain_text(
-                stream_id, limit=global_config.MAX_CONTEXT_SIZE, combine=True
-            )
-            chat_stream = chat_manager.get_stream(stream_id)
-            if chat_stream.group_info:
-                chat_talking_prompt = chat_talking_prompt
-            else:
-                chat_in_group = False
-                chat_talking_prompt = chat_talking_prompt
-                # print(f"\033[1;34m[调试]\033[0m 已从数据库获取群 {group_id} 的消息记录:{chat_talking_prompt}")
+        chat_stream = chat_manager.get_stream(stream_id)
+        if chat_stream.group_info:
+            chat_in_group = True
+        else:
+            chat_in_group = False 
+        
+        message_list_before_now = get_raw_msg_before_timestamp_with_chat(
+            chat_id =chat_stream.stream_id,
+            timestamp = time.time(),
+            limit=global_config.MAX_CONTEXT_SIZE,
+        )
+        
+        chat_talking_prompt = await build_readable_messages(
+            message_list_before_now,
+            replace_bot_name=True,
+            merge_messages=False,
+            timestamp_mode="relative",
+            read_mark=0.0,
+        )
+                
+                
+                
         # 关键词检测与反应
         keywords_reaction_prompt = ""
         for rule in global_config.keywords_reaction_rules:
@@ -310,7 +310,11 @@ class PromptBuilder:
         logger.debug(f"知识检索耗时: {(end_time - start_time):.3f}秒")
 
         logger.debug("开始构建prompt")
-
+        
+        schedule_prompt=await global_prompt_manager.format_prompt(
+            "schedule_prompt", schedule_info=bot_schedule.get_current_num_task(num=1, time_info=False)
+        )
+        
         prompt = await global_prompt_manager.format_prompt(
             "reasoning_prompt_main",
             relation_prompt_all=await global_prompt_manager.get_prompt_async("relationship_prompt"),
@@ -318,9 +322,7 @@ class PromptBuilder:
             sender_name=sender_name,
             memory_prompt=memory_prompt,
             prompt_info=prompt_info,
-            schedule_prompt=await global_prompt_manager.format_prompt(
-                "schedule_prompt", schedule_info=bot_schedule.get_current_num_task(num=1, time_info=False)
-            ),
+            schedule_prompt=schedule_prompt,
             chat_target=await global_prompt_manager.get_prompt_async("chat_target_group1")
             if chat_in_group
             else await global_prompt_manager.get_prompt_async("chat_target_private1"),

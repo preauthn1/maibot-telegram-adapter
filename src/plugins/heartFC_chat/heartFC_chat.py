@@ -203,7 +203,7 @@ class PFChatting:
                 self._processing_lock.release()
             # Remove instance from controller's dict? Only if it's truly done.
             # Consider if loop can be restarted vs instance destroyed.
-            # asyncio.create_task(self.heartfc_controller._remove_pf_chatting_instance(self.stream_id)) # Example cleanup
+            # asyncio.create_task(self.heartfc_controller._remove_heartFC_chat_instance(self.stream_id)) # Example cleanup
 
     async def _run_pf_loop(self):
         """
@@ -268,7 +268,7 @@ class PFChatting:
                             # Continue to timer decrement and sleep
 
                         elif action == "text_reply":
-                            logger.info(f"{log_prefix} PFChatting: 麦麦决定回复文本. 理由: {reasoning}")
+                            logger.debug(f"{log_prefix} PFChatting: 麦麦决定回复文本. 理由: {reasoning}")
                             action_taken_this_cycle = True
                             anchor_message = await self._get_anchor_message(observed_messages)
                             if not anchor_message:
@@ -387,7 +387,7 @@ class PFChatting:
 
                         if timer_strings:  # 如果有有效计时器数据才打印
                             logger.debug(
-                                f"{log_prefix} test testtesttesttesttesttesttesttesttesttest Cycle Timers: {'; '.join(timer_strings)}"
+                                f"{log_prefix} 该次决策耗时: {'; '.join(timer_strings)}"
                             )
 
                     # --- Timer Decrement --- #
@@ -580,30 +580,28 @@ class PFChatting:
         """
 
         try:
-            last_msg_dict = None
-            if observed_messages:
-                last_msg_dict = observed_messages[-1]
+            # last_msg_dict = None
+            # if observed_messages:
+            #     last_msg_dict = observed_messages[-1]
 
-            if last_msg_dict:
-                try:
-                    # anchor_message = MessageRecv(last_msg_dict, chat_stream=self.chat_stream)
-                    anchor_message = MessageRecv(last_msg_dict)  # 移除 chat_stream 参数
-                    anchor_message.update_chat_stream(self.chat_stream)  # 添加 update_chat_stream 调用
-                    if not (
-                        anchor_message
-                        and anchor_message.message_info
-                        and anchor_message.message_info.message_id
-                        and anchor_message.message_info.user_info
-                    ):
-                        raise ValueError("重构的 MessageRecv 缺少必要信息.")
-                    # logger.debug(f"{self._get_log_prefix()} 重构的锚点消息: ID={anchor_message.message_info.message_id}")
-                    return anchor_message
-                except Exception as e_reconstruct:
-                    logger.warning(
-                        f"{self._get_log_prefix()} 从观察到的消息重构 MessageRecv 失败: {e_reconstruct}. 创建占位符."
-                    )
-            # else:
-            # logger.warning(f"{self._get_log_prefix()} observed_messages 为空. 创建占位符锚点消息.")
+            # if last_msg_dict:
+            #     try:
+            #         anchor_message = MessageRecv(last_msg_dict)  # 移除 chat_stream 参数
+            #         anchor_message.update_chat_stream(self.chat_stream)  # 添加 update_chat_stream 调用
+            #         if not (
+            #             anchor_message
+            #             and anchor_message.message_info
+            #             and anchor_message.message_info.message_id
+            #             and anchor_message.message_info.user_info
+            #         ):
+            #             raise ValueError("重构的 MessageRecv 缺少必要信息.")
+            #         # logger.debug(f"{self._get_log_prefix()} 重构的锚点消息: ID={anchor_message.message_info.message_id}")
+            #         return anchor_message
+            #     except Exception as e_reconstruct:
+            #         logger.warning(
+            #             f"{self._get_log_prefix()} 从观察到的消息重构 MessageRecv 失败: {e_reconstruct}. 创建占位符."
+            #         )
+
 
             # --- Create Placeholder --- #
             placeholder_id = f"mid_pf_{int(time.time() * 1000)}"

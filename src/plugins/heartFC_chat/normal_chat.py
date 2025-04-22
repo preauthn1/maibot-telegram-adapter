@@ -4,23 +4,24 @@ from random import random
 import traceback
 import asyncio
 from typing import List, Dict
-from ...moods.moods import MoodManager
-from ....config.config import global_config
-from ...chat.emoji_manager import emoji_manager
-from .reasoning_generator import ResponseGenerator
-from ...chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
-from ...chat.messagesender import message_manager
-from ...storage.storage import MessageStorage
-from ...chat.utils import is_mentioned_bot_in_message
-from ...chat.utils_image import image_path_to_base64
-from ...willing.willing_manager import willing_manager
-from ...message import UserInfo, Seg
+from ..moods.moods import MoodManager
+from ...config.config import global_config
+from ..chat.emoji_manager import emoji_manager
+from .normal_chat_generator import ResponseGenerator
+from ..chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
+from ..chat.messagesender import message_manager
+from ..storage.storage import MessageStorage
+from ..chat.utils import is_mentioned_bot_in_message
+from ..chat.utils_image import image_path_to_base64
+from ..willing.willing_manager import willing_manager
+from ..message import UserInfo, Seg
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
-from src.plugins.chat.chat_stream import ChatStream
+from src.plugins.chat.chat_stream import ChatStream, chat_manager
 from src.plugins.person_info.relationship_manager import relationship_manager
 from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from src.plugins.utils.timer_calculater import Timer
 from src.heart_flow.heartflow import heartflow
+from src.heart_flow.sub_heartflow import ChatState
 from .heartFC_controler import HeartFCController
 
 # 定义日志配置
@@ -29,7 +30,7 @@ chat_config = LogConfig(
     file_format=CHAT_STYLE_CONFIG["file_format"],
 )
 
-logger = get_module_logger("reasoning_chat", config=chat_config)
+logger = get_module_logger("normal_chat", config=chat_config)
 
 
 class ReasoningChat:
@@ -187,69 +188,95 @@ class ReasoningChat:
             # 在没有控制器的情况下可能需要决定是继续处理还是完全停止？这里暂时假设继续
             pass  # 或者 return?
 
-        logger.info(f"[{stream_id}] 兴趣消息监控任务启动。")  # 增加启动日志
+        # logger.info(f"[{stream_id}] 兴趣消息监控任务启动。") # 减少日志
         while True:
             await asyncio.sleep(1)  # 每秒检查一次
 
-            # --- 修改：通过 heartflow 获取 subheartflow 和 interest_dict --- #
             subheartflow = heartflow.get_subheartflow(stream_id)
 
-            # 检查 subheartflow 是否存在以及是否被标记停止
             if not subheartflow or subheartflow.should_stop:
-                logger.info(f"[{stream_id}] SubHeartflow 不存在或已停止，兴趣消息监控任务退出。")
-                break  # 退出循环，任务结束
+                # logger.info(f"[{stream_id}] SubHeartflow 不存在或已停止，兴趣消息监控任务退出。") # 减少日志
+                break
 
-            # 从 subheartflow 获取 interest_dict
             interest_dict = subheartflow.get_interest_dict()
-            # --- 结束修改 --- #
-
-            # 创建 items 快照进行迭代，避免在迭代时修改字典
             items_to_process = list(interest_dict.items())
 
             if not items_to_process:
-                continue  # 没有需要处理的消息，继续等待
-
-            # logger.debug(f"[{stream_id}] 发现 {len(items_to_process)} 条待处理兴趣消息。") # 调试日志
+                continue
 
             for msg_id, (message, interest_value, is_mentioned) in items_to_process:
-                # --- 检查 PFChatting 是否活跃 --- #
+                # --- 在处理前检查 SubHeartflow 的状态 --- #
+                current_chat_state = subheartflow.chat_state.chat_status
+                stream_name = chat_manager.get_stream_name(stream_id) or stream_id
+
+                if current_chat_state != ChatState.CHAT:
+                    # 如果不是闲聊状态 (可能是 ABSENT 或 FOCUSED)，则跳过推理聊天
+                    # logger.debug(f"[{stream_name}] 跳过处理兴趣消息 {msg_id}，因为当前状态为 {current_chat_state.value}")
+                    # 移除消息并继续下一个
+                    removed_item = interest_dict.pop(msg_id, None)
+                    if removed_item:
+                        # logger.debug(f"[{stream_name}] 已从兴趣字典中移除消息 {msg_id} (因状态跳过)") # 减少日志
+                        pass
+                    continue # 处理下一条消息
+                # --- 结束状态检查 --- #
+
+                # --- 检查 PFChatting 是否活跃 (保持原有逻辑) --- #
                 pf_active = False
                 if controller:
-                    pf_active = controller.is_pf_chatting_active(stream_id)
+                    pf_active = controller.is_heartFC_chat_active(stream_id)
 
                 if pf_active:
-                    # 如果 PFChatting 活跃，则跳过处理，直接移除消息
                     removed_item = interest_dict.pop(msg_id, None)
                     if removed_item:
-                        logger.debug(f"[{stream_id}] PFChatting 活跃，已跳过并移除兴趣消息 {msg_id}")
-                    continue  # 处理下一条消息
+                        logger.debug(f"[{stream_name}] PFChatting 活跃，已跳过并移除兴趣消息 {msg_id}")
+                    continue
                 # --- 结束检查 --- #
 
-                # 只有当 PFChatting 不活跃时才执行以下处理逻辑
+                # 只有当状态为 CHAT 且 PFChatting 不活跃时才执行以下处理逻辑
                 try:
-                    # logger.debug(f"[{stream_id}] 正在处理兴趣消息 {msg_id} (兴趣值: {interest_value:.2f})" )
-                    await self.normal_reasoning_chat(
+                    await self.normal_normal_chat(
                         message=message,
-                        chat=chat,  # chat 对象仍然有效
+                        chat=chat,
                         is_mentioned=is_mentioned,
-                        interested_rate=interest_value,  # 使用从字典获取的原始兴趣值
+                        interested_rate=interest_value,
                     )
-                    # logger.debug(f"[{stream_id}] 处理完成消息 {msg_id}")
                 except Exception as e:
-                    logger.error(f"[{stream_id}] 处理兴趣消息 {msg_id} 时出错: {e}\n{traceback.format_exc()}")
+                    logger.error(f"[{stream_name}] 处理兴趣消息 {msg_id} 时出错: {e}\n{traceback.format_exc()}")
                 finally:
-                    # 无论处理成功与否（且PFChatting不活跃），都尝试从原始字典中移除该消息
-                    # 使用 pop(key, None) 避免 Key Error
                     removed_item = interest_dict.pop(msg_id, None)
                     if removed_item:
-                        logger.debug(f"[{stream_id}] 已从兴趣字典中移除消息 {msg_id}")
+                        # logger.debug(f"[{stream_name}] 已从兴趣字典中移除消息 {msg_id}") # 减少日志
+                        pass
 
-    async def normal_reasoning_chat(
+    async def normal_normal_chat(
         self, message: MessageRecv, chat: ChatStream, is_mentioned: bool, interested_rate: float
     ) -> None:
         timing_results = {}
         userinfo = message.message_info.user_info
         messageinfo = message.message_info
+        stream_id = chat.stream_id
+        stream_name = chat_manager.get_stream_name(stream_id) or stream_id
+
+        # --- 在开始时检查 SubHeartflow 状态 --- #
+        sub_hf = heartflow.get_subheartflow(stream_id)
+        if not sub_hf:
+            logger.warning(f"[{stream_name}] 无法获取 SubHeartflow，无法执行 normal_normal_chat。")
+            return
+
+        current_chat_state = sub_hf.chat_state.chat_status
+        if current_chat_state != ChatState.CHAT:
+            logger.debug(
+                f"[{stream_name}] 跳过 normal_normal_chat，因为 SubHeartflow 状态为 {current_chat_state.value} (需要 CHAT)。"
+            )
+            # 可以在这里添加 not_reply_handle 逻辑吗？ 如果不回复，也需要清理意愿。
+            # 注意：willing_manager.setup 尚未调用
+            willing_manager.setup(message, chat, is_mentioned, interested_rate) # 先 setup
+            await willing_manager.not_reply_handle(message.message_info.message_id)
+            willing_manager.delete(message.message_info.message_id)
+            return
+        # --- 结束状态检查 --- #
+
+        # --- 接下来的逻辑只在 ChatState.CHAT 状态下执行 --- #
 
         is_mentioned, reply_probability = is_mentioned_bot_in_message(message)
         # 意愿管理器：设置当前message信息

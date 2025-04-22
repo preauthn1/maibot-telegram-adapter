@@ -1,31 +1,31 @@
 import time
 import traceback
-from ...memory_system.Hippocampus import HippocampusManager
-from ....config.config import global_config
-from ...chat.message import MessageRecv
-from ...storage.storage import MessageStorage
-from ...chat.utils import is_mentioned_bot_in_message
-from ...message import Seg
+from ..memory_system.Hippocampus import HippocampusManager
+from ...config.config import global_config
+from ..chat.message import MessageRecv
+from ..storage.storage import MessageStorage
+from ..chat.utils import is_mentioned_bot_in_message
+from ..message import Seg
 from src.heart_flow.heartflow import heartflow
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
-from ...chat.chat_stream import chat_manager
-from ...chat.message_buffer import message_buffer
-from ...utils.timer_calculater import Timer
+from ..chat.chat_stream import chat_manager
+from ..chat.message_buffer import message_buffer
+from ..utils.timer_calculater import Timer
 from src.plugins.person_info.relationship_manager import relationship_manager
-from .reasoning_chat import ReasoningChat
+from .normal_chat import ReasoningChat
 
 # 定义日志配置
 processor_config = LogConfig(
     console_format=CHAT_STYLE_CONFIG["console_format"],
     file_format=CHAT_STYLE_CONFIG["file_format"],
 )
-logger = get_module_logger("heartFC_processor", config=processor_config)
+logger = get_module_logger("heartflow_processor", config=processor_config)
 
 
 class HeartFCProcessor:
     def __init__(self):
         self.storage = MessageStorage()
-        self.reasoning_chat = ReasoningChat.get_instance()
+        self.normal_chat = ReasoningChat.get_instance()
 
     async def process_message(self, message_data: str) -> None:
         """处理接收到的原始消息数据，完成消息解析、缓冲、过滤、存储、兴趣度计算与更新等核心流程。
@@ -77,7 +77,7 @@ class HeartFCProcessor:
 
             # --- 添加兴趣追踪启动 (现在移动到这里，确保 subheartflow 存在后启动) ---
             # 在获取到 chat 对象和确认 subheartflow 后，启动对该聊天流的兴趣监控
-            await self.reasoning_chat.start_monitoring_interest(chat)  # start_monitoring_interest 内部需要修改以适应
+            await self.normal_chat.start_monitoring_interest(chat)  # start_monitoring_interest 内部需要修改以适应
             # --- 结束添加 ---
 
             message.update_chat_stream(chat)
@@ -196,7 +196,7 @@ class HeartFCProcessor:
                         "",
                     )
                 else:
-                    logger.debug(f"已认识用户: {message.message_info.user_info.user_nickname}")
+                    # logger.debug(f"已认识用户: {message.message_info.user_info.user_nickname}")
                     if not await relationship_manager.is_qved_name(
                         message.message_info.platform, message.message_info.user_info.user_id
                     ):

@@ -171,7 +171,7 @@ class ToolUser:
 
                 # 如果有工具结果，返回结构化的信息
                 if structured_info:
-                    logger.info(f"工具调用收集到结构化信息: {json.dumps(structured_info, ensure_ascii=False)}")
+                    logger.debug(f"工具调用收集到结构化信息: {json.dumps(structured_info, ensure_ascii=False)}")
                     return {"used_tools": True, "structured_info": structured_info}
             else:
                 # 没有工具调用

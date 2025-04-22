@@ -112,7 +112,6 @@ class MainSystem:
             logger.success("心流系统启动成功")
 
             # 初始化并独立启动 HeartFCController
-            HeartFCController()
             heartfc_chat_instance = HeartFCController.get_instance()
             if heartfc_chat_instance:
                 await heartfc_chat_instance.start()

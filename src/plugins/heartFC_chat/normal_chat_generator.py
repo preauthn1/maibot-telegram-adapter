@@ -1,10 +1,9 @@
 from typing import List, Optional, Tuple, Union
 import random
-
 from ..models.utils_model import LLMRequest
 from ...config.config import global_config
 from ..chat.message import MessageThinking
-from .heartFC_prompt_builder import prompt_builder
+from .heartflow_prompt_builder import prompt_builder
 from ..chat.utils import process_llm_response
 from ..utils.timer_calculater import Timer
 from src.common.logger import get_module_logger, LogConfig, LLM_STYLE_CONFIG
@@ -86,7 +85,7 @@ class ResponseGenerator:
         with Timer() as t_build_prompt:
             prompt = await prompt_builder.build_prompt(
                 build_mode="normal",
-                reason=message.reason,
+                reason= "",
                 chat_stream=message.chat_stream,
                 message_txt=message.processed_plain_text,
                 sender_name=sender_name,
@@ -96,6 +95,8 @@ class ResponseGenerator:
 
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
+            
+            logger.info(f"prompt:{prompt}\n生成回复：{content}")
 
             info_catcher.catch_after_llm_generated(
                 prompt=prompt, response=content, reasoning_content=reasoning_content, model_name=self.current_model_name

@@ -3,11 +3,11 @@ import time
 from typing import Dict, List, Optional, Union
 
 from src.common.logger import get_module_logger
-from ...message.api import global_api
-from ...chat.message import MessageSending, MessageThinking, MessageSet
-from ...storage.storage import MessageStorage
-from ....config.config import global_config
-from ...chat.utils import truncate_message, calculate_typing_time, count_messages_between
+from ..message.api import global_api
+from ..chat.message import MessageSending, MessageThinking, MessageSet
+from ..storage.storage import MessageStorage
+from ...config.config import global_config
+from ..chat.utils import truncate_message, calculate_typing_time, count_messages_between
 
 from src.common.logger import LogConfig, SENDER_STYLE_CONFIG
 
@@ -216,9 +216,7 @@ class MessageManager:
                     thinking_start_time=message_earliest.thinking_start_time,
                     is_emoji=message_earliest.is_emoji,
                 )
-                logger.trace(f"\n{message_earliest.processed_plain_text},{typing_time},计算输入时间结束\n")
                 await asyncio.sleep(typing_time)
-                logger.debug(f"\n{message_earliest.processed_plain_text},{typing_time},等待输入时间结束\n")
 
                 await MessageSender().send_message(message_earliest)
                 await self.storage.store_message(message_earliest, message_earliest.chat_stream)
