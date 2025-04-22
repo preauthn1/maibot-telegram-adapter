@@ -154,15 +154,15 @@ class HeartFCProcessor:
             try:
                 # 获取当前时间，传递给 increase_interest
                 current_time = time.time()
-                subheartflow.interest_chatting.increase_interest(current_time, value=interested_rate)
-                current_interest = subheartflow.get_interest_level()  # 获取更新后的值
+                await subheartflow.interest_chatting.increase_interest(current_time, value=interested_rate)
+                current_interest = await subheartflow.get_interest_level()  # 获取更新后的值
 
                 logger.trace(
                     f"使用激活率 {interested_rate:.2f} 更新后 (通过缓冲后)，当前兴趣度: {current_interest:.2f} (Stream: {chat.stream_id})"
                 )
 
                 # 添加到 SubHeartflow 的 interest_dict
-                subheartflow.add_interest_dict_entry(message, interested_rate, is_mentioned)
+                await subheartflow.add_interest_dict_entry(message, interested_rate, is_mentioned)
                 logger.trace(
                     f"Message {message.message_info.message_id} added to interest dict for stream {chat.stream_id}"
                 )
