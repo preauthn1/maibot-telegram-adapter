@@ -832,7 +832,7 @@ class Heartflow:
                 stream_name = chat_manager.get_stream_name(flow.subheartflow_id) or flow.subheartflow_id
                 logger.debug(f"[Heartflow Activate] 正在将子心流 {stream_name} 状态设置为 CHAT。")
                 # 调用 set_chat_state，它内部会处理日志记录
-                flow.set_chat_state(ChatState.CHAT)
+                await flow.set_chat_state(ChatState.CHAT)
                 activated_count += 1
             else:
                 stream_name = chat_manager.get_stream_name(flow.subheartflow_id) or flow.subheartflow_id

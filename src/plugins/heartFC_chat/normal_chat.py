@@ -89,7 +89,7 @@ class NormalChat:
             thinking_start_time=thinking_time_point,
         )
 
-        message_manager.add_message(thinking_message)
+        await message_manager.add_message(thinking_message)
 
         return thinking_id
 
