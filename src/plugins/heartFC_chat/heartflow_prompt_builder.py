@@ -1,7 +1,5 @@
 import random
-from typing import Optional
 from ...config.config import global_config
-from ..chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger
 from ...individuality.individuality import Individuality
 from src.plugins.utils.prompt_builder import Prompt, global_prompt_manager

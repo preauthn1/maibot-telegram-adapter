@@ -272,7 +272,7 @@ class Heartflow:
                                 logger.debug(f"[Heartflow State] OFFLINE 持续时间达到，切换到 {next_state.value}")
                             else:
                                 # 保持 OFFLINE，重置计时器以开始新的5分钟计时
-                                logger.debug(f"[Heartflow State] OFFLINE 持续时间达到，保持 OFFLINE，重置计时器")
+                                logger.debug("[Heartflow State] OFFLINE 持续时间达到，保持 OFFLINE，重置计时器")
                                 self.current_state.last_status_change_time = current_time
                                 self.current_state.last_5min_check_time = current_time # 保持一致
                                 # 显式将 next_state 设为 OFFLINE 以便后续处理
@@ -312,10 +312,10 @@ class Heartflow:
 
                         # --- 新增逻辑：根据状态转换调整子心流 --- #
                         if previous_status == MaiState.OFFLINE and next_state != MaiState.OFFLINE:
-                            logger.info(f"[Heartflow] 主状态从 OFFLINE 激活，尝试激活子心流到 CHAT 状态。")
+                            logger.info("[Heartflow] 主状态从 OFFLINE 激活，尝试激活子心流到 CHAT 状态。")
                             await self._activate_random_subflows_to_chat(next_state)
                         elif next_state == MaiState.OFFLINE and previous_status != MaiState.OFFLINE:
-                            logger.info(f"[Heartflow] 主状态变为 OFFLINE，停用所有子心流活动。")
+                            logger.info("[Heartflow] 主状态变为 OFFLINE，停用所有子心流活动。")
                             await self._deactivate_all_subflows_on_offline()
                         # --- 结束新增逻辑 --- #
 
@@ -324,7 +324,7 @@ class Heartflow:
                         # 确保计时器被重置 (这在上面的持续时间规则中已处理，但为了清晰再次确认)
                         if time_in_current_status >= FIVE_MINUTES:
                             # 确保计时器已在上面重置，这里无需操作，只记录日志
-                            logger.debug(f"[Heartflow State] 保持 OFFLINE 状态，计时器已重置。")
+                            logger.debug("[Heartflow State] 保持 OFFLINE 状态，计时器已重置。")
                         pass # 无需状态转换，也无需调用激活/停用逻辑
 
                 # --- 如果没有确定 next_state (即没有触发任何切换规则) --- #
@@ -733,7 +733,8 @@ class Heartflow:
         focused_flows = []
         items_snapshot_after_normal = list(self._subheartflows.items())
         for flow_id, flow in items_snapshot_after_normal:
-            if flow_id not in self._subheartflows: continue # Double check
+            if flow_id not in self._subheartflows: 
+                continue # Double check
             if flow.chat_state.chat_status == ChatState.FOCUSED:
                 focused_flows.append((flow_id, flow.last_active_time))
 

@@ -22,7 +22,6 @@ from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from src.plugins.utils.timer_calculater import Timer
 from src.heart_flow.heartflow import heartflow
 from src.heart_flow.sub_heartflow import ChatState
-from src.heart_flow.heartflow import heartflow
 # 定义日志配置
 chat_config = LogConfig(
     console_format=CHAT_STYLE_CONFIG["console_format"],

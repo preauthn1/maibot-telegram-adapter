@@ -20,7 +20,7 @@ from src.plugins.heartFC_chat.heartFC_chat import HeartFChatting
 
 # Type hinting for circular dependency
 if TYPE_CHECKING:
-    from .heartflow import Heartflow, MaiState # Import Heartflow for type hinting
+    from .heartflow import Heartflow # Import Heartflow for type hinting
     from .sub_heartflow import ChatState # Keep ChatState here too?
     from src.plugins.heartFC_chat.heartFC_chat import HeartFChatting # <-- Add for type hint
 

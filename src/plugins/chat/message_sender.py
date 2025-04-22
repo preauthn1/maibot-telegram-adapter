@@ -135,13 +135,13 @@ class MessageContainer:
     def remove_message(self, message_to_remove: Union[MessageThinking, MessageSending]) -> bool:
         """移除指定的消息对象，如果消息存在则返回True，否则返回False"""
         try:
-            initial_len = len(self.messages)
+            _initial_len = len(self.messages)
             # 使用列表推导式或 filter 创建新列表，排除要删除的元素
             # self.messages = [msg for msg in self.messages if msg is not message_to_remove]
             # 或者直接 remove (如果确定对象唯一性)
             if message_to_remove in self.messages:
-                 self.messages.remove(message_to_remove)
-                 return True
+                self.messages.remove(message_to_remove)
+                return True
             # logger.debug(f"Removed message {getattr(message_to_remove, 'message_info', {}).get('message_id', 'UNKNOWN')}. Old len: {initial_len}, New len: {len(self.messages)}")
             # return len(self.messages) < initial_len
             return False
