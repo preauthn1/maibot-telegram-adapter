@@ -22,8 +22,7 @@ from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from src.plugins.utils.timer_calculater import Timer
 from src.heart_flow.heartflow import heartflow
 from src.heart_flow.sub_heartflow import ChatState
-from .heartFC_controler import HeartFCController
-
+from src.heart_flow.heartflow import heartflow
 # 定义日志配置
 chat_config = LogConfig(
     console_format=CHAT_STYLE_CONFIG["console_format"],
@@ -33,7 +32,7 @@ chat_config = LogConfig(
 logger = get_module_logger("normal_chat", config=chat_config)
 
 
-class ReasoningChat:
+class NormalChat:
     _instance = None
     _lock = threading.Lock()
     _initialized = False
@@ -53,21 +52,21 @@ class ReasoningChat:
         with self.__class__._lock:  # 使用类锁确保线程安全
             if self._initialized:
                 return
-            logger.info("正在初始化 ReasoningChat 单例...")  # 添加日志
+            logger.info("正在初始化 NormalChat 单例...")  # 添加日志
             self.storage = MessageStorage()
             self.gpt = ResponseGenerator()
             self.mood_manager = MoodManager.get_instance()
             # 用于存储每个 chat stream 的兴趣监控任务
             self._interest_monitoring_tasks: Dict[str, asyncio.Task] = {}
             self._initialized = True
-            logger.info("ReasoningChat 单例初始化完成。")  # 添加日志
+            logger.info("NormalChat 单例初始化完成。")  # 添加日志
 
     @classmethod
     def get_instance(cls):
-        """获取 ReasoningChat 的单例实例。"""
+        """获取 NormalChat 的单例实例。"""
         if cls._instance is None:
             # 如果实例还未创建（理论上应该在 main 中初始化，但作为备用）
-            logger.warning("ReasoningChat 实例在首次 get_instance 时创建。")
+            logger.warning("NormalChat 实例在首次 get_instance 时创建。")
             cls()  # 调用构造函数来创建实例
         return cls._instance
 
@@ -180,13 +179,7 @@ class ReasoningChat:
     async def _find_interested_message(self, chat: ChatStream) -> None:
         # 此函数设计为后台任务，轮询指定 chat 的兴趣消息。
         # 它通常由外部代码在 chat 流活跃时启动。
-        controller = HeartFCController.get_instance()  # 获取控制器实例
         stream_id = chat.stream_id  # 获取 stream_id
-
-        if not controller:
-            logger.error(f"无法获取 HeartFCController 实例，无法检查 PFChatting 状态。stream: {stream_id}")
-            # 在没有控制器的情况下可能需要决定是继续处理还是完全停止？这里暂时假设继续
-            pass  # 或者 return?
 
         # logger.info(f"[{stream_id}] 兴趣消息监控任务启动。") # 减少日志
         while True:
@@ -220,19 +213,18 @@ class ReasoningChat:
                     continue # 处理下一条消息
                 # --- 结束状态检查 --- #
 
-                # --- 检查 PFChatting 是否活跃 (保持原有逻辑) --- #
-                pf_active = False
-                if controller:
-                    pf_active = controller.is_heartFC_chat_active(stream_id)
+                # --- 检查 HeartFChatting 是否活跃 (改为检查 SubHeartflow 状态) --- #
+                is_focused = subheartflow.chat_state.chat_status == ChatState.FOCUSED
 
-                if pf_active:
+                if is_focused: # New check: If the subflow is focused, NormalChat shouldn't process
                     removed_item = interest_dict.pop(msg_id, None)
                     if removed_item:
-                        logger.debug(f"[{stream_name}] PFChatting 活跃，已跳过并移除兴趣消息 {msg_id}")
+                        # logger.debug(f"[{stream_name}] SubHeartflow 处于 FOCUSED 状态，已跳过并移除 NormalChat 兴趣消息 {msg_id}") # Reduce noise
+                        pass
                     continue
                 # --- 结束检查 --- #
 
-                # 只有当状态为 CHAT 且 PFChatting 不活跃时才执行以下处理逻辑
+                # 只有当状态为 CHAT 且 HeartFChatting 不活跃 (即 Subflow 不是 FOCUSED) 时才执行以下处理逻辑
                 try:
                     await self.normal_normal_chat(
                         message=message,
@@ -318,9 +310,12 @@ class ReasoningChat:
             info_catcher.catch_decide_to_response(message)
 
             # 生成回复
+            sub_hf = heartflow.get_subheartflow(stream_id)
+            
             try:
                 with Timer("生成回复", timing_results):
                     response_set = await self.gpt.generate_response(
+                        sub_hf=sub_hf,
                         message=message,
                         thinking_id=thinking_id,
                     )

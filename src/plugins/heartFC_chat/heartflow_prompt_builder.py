@@ -1,11 +1,10 @@
 import random
 from typing import Optional
+from src.heart_flow.sub_heartflow import SubHeartflow
 from ...config.config import global_config
-from ..chat.utils import get_recent_group_detailed_plain_text
 from ..chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger
 from ...individuality.individuality import Individuality
-from src.heart_flow.heartflow import heartflow
 from src.plugins.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugins.utils.chat_message_builder import build_readable_messages, get_raw_msg_before_timestamp_with_chat
 from src.plugins.person_info.relationship_manager import relationship_manager
@@ -83,21 +82,23 @@ class PromptBuilder:
 
     
     async def build_prompt(
-        self, build_mode,reason, chat_stream, message_txt: str, sender_name: str = "某人", stream_id: Optional[int] = None
+        self, build_mode,reason, message_txt: str, sender_name: str = "某人",subheartflow: SubHeartflow =None
     ) -> tuple[str, str]:
         
+        chat_stream = chat_manager.get_stream(subheartflow.subheartflow_id)
+        
         if build_mode == "normal":
-            return await self._build_prompt_normal(chat_stream, message_txt, sender_name, stream_id)
+            return await self._build_prompt_normal(chat_stream, message_txt, sender_name, subheartflow)
         
         elif build_mode == "focus":
-            return await self._build_prompt_focus(reason, chat_stream, message_txt, sender_name, stream_id)
+            return await self._build_prompt_focus(reason, chat_stream, message_txt, sender_name, subheartflow)
 
 
     
     async def _build_prompt_focus(
-        self, reason, chat_stream, message_txt: str, sender_name: str = "某人", stream_id: Optional[int] = None
+        self, reason, chat_stream, message_txt: str, sender_name: str = "某人", subheartflow: SubHeartflow =None
     ) -> tuple[str, str]:
-        current_mind_info = heartflow.get_subheartflow(stream_id).current_mind
+        current_mind_info = subheartflow.current_mind
 
         individuality = Individuality.get_instance()
         prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
@@ -106,7 +107,7 @@ class PromptBuilder:
         # 日程构建
         # schedule_prompt = f'''你现在正在做的事情是：{bot_schedule.get_current_num_task(num = 1,time_info = False)}'''
 
-        chat_stream = chat_manager.get_stream(stream_id)
+        chat_stream = chat_manager.get_stream(subheartflow.subheartflow_id)
         if chat_stream.group_info:
             chat_in_group = True
         else:
@@ -185,7 +186,7 @@ class PromptBuilder:
 
 
     async def _build_prompt_normal(
-        self, chat_stream, message_txt: str, sender_name: str = "某人", stream_id: Optional[int] = None
+        self, chat_stream, message_txt: str, sender_name: str = "某人", subheartflow=None
     ) -> tuple[str, str]:
         # 开始构建prompt
         prompt_personality = "你"
@@ -208,7 +209,7 @@ class PromptBuilder:
             (chat_stream.user_info.platform, chat_stream.user_info.user_id, chat_stream.user_info.user_nickname)
         ]
         who_chat_in_group += get_recent_group_speaker(
-            stream_id,
+            subheartflow.subheartflow_id,
             (chat_stream.user_info.platform, chat_stream.user_info.user_id),
             limit=global_config.MAX_CONTEXT_SIZE,
         )
@@ -248,7 +249,7 @@ class PromptBuilder:
         # schedule_prompt = f"""你现在正在做的事情是：{bot_schedule.get_current_num_task(num=1, time_info=False)}"""
 
         # 获取聊天上下文
-        chat_stream = chat_manager.get_stream(stream_id)
+        chat_stream = chat_manager.get_stream(subheartflow.subheartflow_id)
         if chat_stream.group_info:
             chat_in_group = True
         else:

@@ -132,21 +132,21 @@ class MessageManager:
     """管理所有聊天流的消息容器"""
 
     _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super(MessageManager, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
+    _lock = asyncio.Lock()
 
     def __init__(self):
-        # 确保 __init__ 只被调用一次
-        if not hasattr(self, "_initialized"):
-            self.containers: Dict[str, MessageContainer] = {}  # chat_id -> MessageContainer
-            self.storage = MessageStorage()
-            self._running = True
-            self._initialized = True
-            # 在实例首次创建时启动消息处理器
-            asyncio.create_task(self.start_processor())
+        if MessageManager._instance is not None:
+            raise Exception("This class is a singleton!")
+        else:
+            self.containers: Dict[str, MessageContainer] = {}
+            self._container_lock = asyncio.Lock()
+            self.running = True
+            MessageManager._instance = self
+
+    async def start(self):
+        """Starts the background processor task."""
+        asyncio.create_task(self.start_processor())
+        logger.info("MessageManager processor task started.")
 
     def get_container(self, chat_id: str) -> MessageContainer:
         """获取或创建聊天流的消息容器"""
@@ -225,7 +225,7 @@ class MessageManager:
 
     async def start_processor(self):
         """启动消息处理器"""
-        while self._running:
+        while self.running:
             await asyncio.sleep(1)
             tasks = []
             for chat_id in list(self.containers.keys()):  # 使用 list 复制 key，防止在迭代时修改字典

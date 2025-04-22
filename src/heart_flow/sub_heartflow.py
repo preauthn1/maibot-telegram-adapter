@@ -288,7 +288,7 @@ class SubHeartflow:
         self.last_active_time = time.time()  
         logger.info(f"{log_prefix} 聊天状态从 {current_state.value} 变更为 {new_state.value}")
 
-        # TODO: 考虑从FOCUSED状态转出时是否需要停止PFChatting
+        # TODO: 考虑从FOCUSED状态转出时是否需要停止HeartFChatting
         # 这部分逻辑可能更适合放在Heartflow的_stop_subheartflow或HeartFCController的循环中处理
 
     async def subheartflow_start_working(self):

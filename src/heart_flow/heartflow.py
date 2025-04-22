@@ -15,6 +15,13 @@ import enum
 import os  # 新增
 import json  # 新增
 from src.plugins.chat.chat_stream import chat_manager  # 新增
+# --- Add imports for merged dependencies ---
+from src.plugins.heartFC_chat.heartFC_generator import ResponseGenerator
+from src.do_tool.tool_use import ToolUser
+from src.plugins.chat.emoji_manager import emoji_manager # Module instance
+from src.plugins.person_info.relationship_manager import relationship_manager # Module instance
+from src.plugins.heartFC_chat.heartflow_message_sender import MessageManager
+# --- End imports ---
 
 heartflow_config = LogConfig(
     # 使用海马体专用样式
@@ -26,6 +33,7 @@ logger = get_module_logger("heartflow", config=heartflow_config)
 # Type hinting for circular dependency
 if TYPE_CHECKING:
     from src.heart_flow.sub_heartflow import SubHeartflow, ChatState # Keep SubHeartflow here too
+    # from src.plugins.heartFC_chat.heartFC_controler import HeartFCController # No longer needed
 
 def init_prompt():
     prompt = ""
@@ -143,14 +151,23 @@ class Heartflow:
 
         self._subheartflows: Dict[Any, 'SubHeartflow'] = {} # Update type hint
 
-        # --- 新增：日志和清理相关属性 (从 InterestManager 移动) ---
+        # --- Dependencies moved from HeartFCController ---
+        self.gpt_instance = ResponseGenerator()
+        self.mood_manager = MoodManager.get_instance() # Note: MaiStateInfo also has one, consider consolidating later if needed
+        self.tool_user_instance = ToolUser()
+        self.emoji_manager_instance = emoji_manager # Module instance
+        self.relationship_manager_instance = relationship_manager # Module instance
+        self.message_manager_instance = MessageManager() # Instantiate the message manager
+        # --- End moved dependencies ---
+
+        # --- Background Task Management ---
         self._history_log_file_path = os.path.join(LOG_DIRECTORY, HISTORY_LOG_FILENAME)
         self._ensure_log_directory()  # 初始化时确保目录存在
         self._cleanup_task: Optional[asyncio.Task] = None
         self._logging_task: Optional[asyncio.Task] = None
         self._state_update_task: Optional[asyncio.Task] = None # 新增：状态更新任务
         # 注意：衰减任务 (_decay_task) 不再需要，衰减在 SubHeartflow 的 InterestChatting 内部处理
-        # --- 结束新增属性 ---
+        # --- End moved dependencies ---
 
     def _ensure_log_directory(self):  # 新增方法 (从 InterestManager 移动)
         """确保日志目录存在"""
@@ -314,6 +331,38 @@ class Heartflow:
 
                 # --- 如果没有确定 next_state (即没有触发任何切换规则) --- #
                 # logger.debug(f"[Heartflow State] 状态未改变，保持 {current_status.value}") # 减少日志噪音
+
+                # --- Integrated Interest Evaluation Logic (formerly in Controller loop) ---
+                if self.current_state.mai_status != MaiState.OFFLINE:
+                    try:
+                        # Use snapshot for safe iteration
+                        subflows_snapshot = list(self._subheartflows.values())
+                        evaluated_count = 0
+                        promoted_count = 0
+
+                        for sub_hf in subflows_snapshot:
+                            # Double-check if subflow still exists and is in CHAT state
+                            if sub_hf.subheartflow_id in self._subheartflows and sub_hf.chat_state.chat_status == ChatState.CHAT:
+                                evaluated_count += 1
+                                if sub_hf.should_evaluate_reply():
+                                    stream_name = chat_manager.get_stream_name(sub_hf.subheartflow_id) or sub_hf.subheartflow_id
+                                    log_prefix = f"[{stream_name}]"
+                                    logger.info(f"{log_prefix} 兴趣概率触发，尝试将状态从 CHAT 提升到 FOCUSED")
+                                    # set_chat_state handles limit checks and HeartFChatting creation internally
+                                    await sub_hf.set_chat_state(ChatState.FOCUSED)
+                                    # Check if state actually changed (set_chat_state might block due to limits)
+                                    if sub_hf.chat_state.chat_status == ChatState.FOCUSED:
+                                        promoted_count += 1
+                                # else: # No need to log every non-trigger event
+                                    # logger.trace(f"[{sub_hf.subheartflow_id}] In CHAT state, but should_evaluate_reply returned False.")
+
+                        if evaluated_count > 0:
+                            logger.debug(f"[Heartflow Interest Eval] Evaluated {evaluated_count} CHAT flows. Promoted {promoted_count} to FOCUSED.")
+
+                    except Exception as e:
+                        logger.error(f"[Heartflow] 兴趣评估任务出错: {e}")
+                        logger.error(traceback.format_exc())
+                # --- End Integrated Interest Evaluation ---
 
             except Exception as e:
                 logger.error(f"[Heartflow] 状态更新任务出错: {e}")
@@ -549,7 +598,7 @@ class Heartflow:
         for _, flow in items_snapshot:
             # Check if flow still exists in the main dict in case it was removed concurrently
             if flow.subheartflow_id in self._subheartflows and flow.chat_state.chat_status == target_state:
-                 count += 1
+                count += 1
         return count
     # --- End helper method --- #
 
@@ -559,42 +608,25 @@ class Heartflow:
         创建本身不受限，因为初始状态是ABSENT。
         限制将在状态转换时检查。
         """
-        # --- 移除创建前的限制检查 --- #
-        # current_mai_state = self.current_state.mai_status
-        # normal_limit = current_mai_state.get_normal_chat_max_num()
-        # focused_limit = current_mai_state.get_focused_chat_max_num()
-        # total_limit = normal_limit + focused_limit
-        # current_active_count = 0
-        # items_snapshot = list(self._subheartflows.items())
-        # for _, flow in items_snapshot:
-        #     if flow.chat_state.chat_status == ChatState.CHAT or flow.chat_state.chat_status == ChatState.FOCUSED:
-        #         current_active_count += 1
-        # if current_active_count >= total_limit and total_limit > 0:
-        #     stream_name = chat_manager.get_stream_name(subheartflow_id) or subheartflow_id
-        #     logger.warning(f"[Heartflow Create] Skipped due to limit...")
-        #     return None
-        # --- 结束移除 --- #
 
         existing_subheartflow = self._subheartflows.get(subheartflow_id)
         if existing_subheartflow:
             return existing_subheartflow
 
-        logger.info(f"[Heartflow] 尝试创建新的 subheartflow: {subheartflow_id}")
+        # logger.info(f"[Heartflow] 尝试创建新的 subheartflow: {subheartflow_id}")
         try:
-            # --- Pass 'self' (Heartflow instance) to SubHeartflow constructor --- #
             subheartflow = SubHeartflow(subheartflow_id, self)
 
             # 创建并初始化观察对象
-            logger.debug(f"[Heartflow] 为 {subheartflow_id} 创建 observation")
+
             observation = ChattingObservation(subheartflow_id)
             await observation.initialize()
             subheartflow.add_observation(observation)
-            logger.debug(f"[Heartflow] 为 {subheartflow_id} 添加 observation 成功")
+
 
             # 创建并存储后台任务 (SubHeartflow 自己的后台任务)
             subheartflow.task = asyncio.create_task(subheartflow.subheartflow_start_working())
-            logger.debug(f"[Heartflow] 为 {subheartflow_id} 创建后台任务成功")
-
+            logger.debug(f"[Heartflow] 为 {subheartflow_id} 创建后台任务成功，添加 observation 成功")
             # 添加到管理字典
             self._subheartflows[subheartflow_id] = subheartflow
             logger.info(f"[Heartflow] 添加 subheartflow {subheartflow_id} 成功")
@@ -628,10 +660,11 @@ class Heartflow:
                 logger.debug(f"[Heartflow Limits] 已取消子心流 {stream_name} 的后台任务")
 
             # TODO: Ensure controller.stop_heartFC_chat is called if needed
-            from src.plugins.heartFC_chat.heartFC_controler import HeartFCController # Local import to avoid cycle
-            controller = HeartFCController.get_instance()
-            if controller and controller.is_heartFC_chat_active(subheartflow_id):
-                 await controller.stop_heartFC_chat(subheartflow_id)
+            # This is now handled by subheartflow.set_chat_state(ChatState.ABSENT) called in _stop_subheartflow
+            # from src.plugins.heartFC_chat.heartFC_controler import HeartFCController # Local import to avoid cycle
+            # controller = HeartFCController.get_instance()
+            # if controller and controller.is_heartFC_chat_active(subheartflow_id):
+            #      await controller.stop_heartFC_chat(subheartflow_id)
 
             # 从字典移除
             del self._subheartflows[subheartflow_id]
@@ -684,8 +717,8 @@ class Heartflow:
         focused_flows = []
         items_snapshot_after_normal = list(self._subheartflows.items())
         for flow_id, flow in items_snapshot_after_normal:
-             if flow_id not in self._subheartflows: continue # Double check
-             if flow.chat_state.chat_status == ChatState.FOCUSED:
+            if flow_id not in self._subheartflows: continue # Double check
+            if flow.chat_state.chat_status == ChatState.FOCUSED:
                 focused_flows.append((flow_id, flow.last_active_time))
 
         # 检查 Focused (FOCUSED) 限制
@@ -745,50 +778,50 @@ class Heartflow:
         """当主状态变为 OFFLINE 时，停止所有子心流的活动并设置为 ABSENT"""
         logger.info("[Heartflow Deactivate] 开始停用所有子心流...")
         try:
-            from src.plugins.heartFC_chat.heartFC_controler import HeartFCController # 本地导入避免循环依赖
-            controller = HeartFCController.get_instance()
-        except ImportError:
-            logger.warning("[Heartflow Deactivate] 无法导入 HeartFCController，将跳过停止 heartFC_chat。")
-            controller = None
-        except Exception as e:
-            logger.error(f"[Heartflow Deactivate] 获取 HeartFCController 实例时出错: {e}")
-            controller = None
+            # TODO: Ensure controller.stop_heartFC_chat is called if needed
+            # This is now handled by subheartflow.set_chat_state(ChatState.ABSENT) called in _stop_subheartflow
+            # from src.plugins.heartFC_chat.heartFC_controler import HeartFCController # Local import to avoid cycle
+            # controller = HeartFCController.get_instance()
+            # if controller and controller.is_heartFC_chat_active(flow_id):
+            #      await controller.stop_heartFC_chat(flow_id)
 
-        # 使用 ID 快照进行迭代
-        flow_ids_snapshot = list(self._subheartflows.keys())
-        deactivated_count = 0
+            # 使用 ID 快照进行迭代
+            flow_ids_snapshot = list(self._subheartflows.keys())
+            deactivated_count = 0
 
-        for flow_id in flow_ids_snapshot:
-            subflow = self._subheartflows.get(flow_id)
-            if not subflow:
-                continue # Subflow 可能在迭代过程中被清理
+            for flow_id in flow_ids_snapshot:
+                subflow = self._subheartflows.get(flow_id)
+                if not subflow:
+                    continue # Subflow 可能在迭代过程中被清理
 
-            stream_name = chat_manager.get_stream_name(flow_id) or flow_id
+                stream_name = chat_manager.get_stream_name(flow_id) or flow_id
 
-            try:
-                # 停止相关聊天进程 (例如 pf_chat)
-                if controller:
+                try:
+                    # 停止相关聊天进程 (例如 pf_chat)
                     # TODO: 确认是否有 reason_chat 需要停止，并添加相应逻辑
-                    if controller.is_heartFC_chat_active(flow_id):
-                        logger.debug(f"[Heartflow Deactivate] 正在停止子心流 {stream_name} 的 heartFC_chat。")
-                        await controller.stop_heartFC_chat(flow_id)
+                    # if controller:
+                    #     if controller.is_heartFC_chat_active(flow_id):
+                    #         logger.debug(f"[Heartflow Deactivate] 正在停止子心流 {stream_name} 的 heartFC_chat。")
+                    #         await controller.stop_heartFC_chat(flow_id)
 
-                # 设置状态为 ABSENT
-                if subflow.chat_state.chat_status != ChatState.ABSENT:
-                    logger.debug(f"[Heartflow Deactivate] 正在将子心流 {stream_name} 状态设置为 ABSENT。")
-                    # 调用 set_chat_state，它会处理日志和状态更新
-                    subflow.set_chat_state(ChatState.ABSENT)
-                    deactivated_count += 1
-                else:
-                    # 如果已经是 ABSENT，则无需再次设置，但记录一下检查
-                    logger.trace(f"[Heartflow Deactivate] 子心流 {stream_name} 已处于 ABSENT 状态。")
+                    # 设置状态为 ABSENT
+                    if subflow.chat_state.chat_status != ChatState.ABSENT:
+                        logger.debug(f"[Heartflow Deactivate] 正在将子心流 {stream_name} 状态设置为 ABSENT。")
+                        # 调用 set_chat_state，它会处理日志和状态更新
+                        subflow.set_chat_state(ChatState.ABSENT)
+                        deactivated_count += 1
+                    else:
+                        # 如果已经是 ABSENT，则无需再次设置，但记录一下检查
+                        logger.trace(f"[Heartflow Deactivate] 子心流 {stream_name} 已处于 ABSENT 状态。")
 
-            except Exception as e:
-                logger.error(f"[Heartflow Deactivate] 停用子心流 {stream_name} 时出错: {e}")
-                logger.error(traceback.format_exc())
+                except Exception as e:
+                    logger.error(f"[Heartflow Deactivate] 停用子心流 {stream_name} 时出错: {e}")
+                    logger.error(traceback.format_exc())
 
-        logger.info(f"[Heartflow Deactivate] 完成停用，共将 {deactivated_count} 个子心流设置为 ABSENT 状态 (不包括已是 ABSENT 的)。")
-    # --- 结束新增方法 --- #
+            logger.info(f"[Heartflow Deactivate] 完成停用，共将 {deactivated_count} 个子心流设置为 ABSENT 状态 (不包括已是 ABSENT 的)。")
+        except Exception as e:
+            logger.error(f"[Heartflow Deactivate] 停用所有子心流时出错: {e}")
+            logger.error(traceback.format_exc())
 
 init_prompt()
 # 创建一个全局的管理器实例
