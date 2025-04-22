@@ -11,6 +11,7 @@ from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from ..utils.timer_calculater import Timer
 
 from src.plugins.moods.moods import MoodManager
+
 # 定义日志配置
 llm_config = LogConfig(
     # 使用消息发送专用样式
@@ -78,7 +79,6 @@ class ResponseGenerator:
 
         sender_name = f"<{message.chat_stream.user_info.platform}:{message.chat_stream.user_info.user_id}:{message.chat_stream.user_info.user_nickname}:{message.chat_stream.user_info.user_cardname}>"
 
-        
         with Timer() as t_build_prompt:
             prompt = await prompt_builder.build_prompt(
                 build_mode="focus",
@@ -86,7 +86,7 @@ class ResponseGenerator:
                 current_mind_info=current_mind_info,
                 message_txt=message.processed_plain_text,
                 sender_name=sender_name,
-                chat_stream=message.chat_stream
+                chat_stream=message.chat_stream,
             )
         logger.info(f"构建prompt时间: {t_build_prompt.human_readable}")
 

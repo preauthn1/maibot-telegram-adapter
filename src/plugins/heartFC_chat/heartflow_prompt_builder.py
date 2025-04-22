@@ -42,7 +42,7 @@ def init_prompt():
 涉及政治敏感以及违法违规的内容请规避。""",
         "moderation_prompt",
     )
-    
+
     Prompt(
         """
 {relation_prompt_all}
@@ -77,23 +77,18 @@ class PromptBuilder:
         self.prompt_built = ""
         self.activate_messages = ""
 
-    
     async def build_prompt(
-        self, build_mode,reason,current_mind_info, message_txt: str, sender_name: str = "某人",chat_stream=None
+        self, build_mode, reason, current_mind_info, message_txt: str, sender_name: str = "某人", chat_stream=None
     ) -> tuple[str, str]:
-
         if build_mode == "normal":
             return await self._build_prompt_normal(chat_stream, message_txt, sender_name)
-        
+
         elif build_mode == "focus":
             return await self._build_prompt_focus(reason, current_mind_info, chat_stream, message_txt, sender_name)
 
-
-    
     async def _build_prompt_focus(
         self, reason, current_mind_info, chat_stream, message_txt: str, sender_name: str = "某人"
     ) -> tuple[str, str]:
-
         individuality = Individuality.get_instance()
         prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
         prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
@@ -104,14 +99,14 @@ class PromptBuilder:
         if chat_stream.group_info:
             chat_in_group = True
         else:
-            chat_in_group = False 
-        
+            chat_in_group = False
+
         message_list_before_now = get_raw_msg_before_timestamp_with_chat(
-            chat_id =chat_stream.stream_id,
-            timestamp = time.time(),
+            chat_id=chat_stream.stream_id,
+            timestamp=time.time(),
             limit=global_config.MAX_CONTEXT_SIZE,
         )
-        
+
         chat_talking_prompt = await build_readable_messages(
             message_list_before_now,
             replace_bot_name=True,
@@ -147,7 +142,6 @@ class PromptBuilder:
         if random.random() < 0.02:
             prompt_ger += "你喜欢用反问句"
 
-
         logger.debug("开始构建prompt")
 
         prompt = await global_prompt_manager.format_prompt(
@@ -176,11 +170,7 @@ class PromptBuilder:
 
         return prompt
 
-
-
-    async def _build_prompt_normal(
-        self, chat_stream, message_txt: str, sender_name: str = "某人"
-    ) -> tuple[str, str]:
+    async def _build_prompt_normal(self, chat_stream, message_txt: str, sender_name: str = "某人") -> tuple[str, str]:
         # 开始构建prompt
         prompt_personality = "你"
         # person
@@ -245,14 +235,14 @@ class PromptBuilder:
         if chat_stream.group_info:
             chat_in_group = True
         else:
-            chat_in_group = False 
-        
+            chat_in_group = False
+
         message_list_before_now = get_raw_msg_before_timestamp_with_chat(
-            chat_id =chat_stream.stream_id,
-            timestamp = time.time(),
+            chat_id=chat_stream.stream_id,
+            timestamp=time.time(),
             limit=global_config.MAX_CONTEXT_SIZE,
         )
-        
+
         chat_talking_prompt = await build_readable_messages(
             message_list_before_now,
             replace_bot_name=True,
@@ -260,9 +250,7 @@ class PromptBuilder:
             timestamp_mode="relative",
             read_mark=0.0,
         )
-                
-                
-                
+
         # 关键词检测与反应
         keywords_reaction_prompt = ""
         for rule in global_config.keywords_reaction_rules:
@@ -303,11 +291,11 @@ class PromptBuilder:
         logger.debug(f"知识检索耗时: {(end_time - start_time):.3f}秒")
 
         logger.debug("开始构建prompt")
-        
-        schedule_prompt=await global_prompt_manager.format_prompt(
+
+        schedule_prompt = await global_prompt_manager.format_prompt(
             "schedule_prompt", schedule_info=bot_schedule.get_current_num_task(num=1, time_info=False)
         )
-        
+
         prompt = await global_prompt_manager.format_prompt(
             "reasoning_prompt_main",
             relation_prompt_all=await global_prompt_manager.get_prompt_async("relationship_prompt"),
@@ -556,7 +544,6 @@ class PromptBuilder:
         else:
             # 返回所有找到的内容，用换行分隔
             return "\n".join(str(result["content"]) for result in results)
-
 
 
 init_prompt()

@@ -246,7 +246,7 @@ async def _build_readable_messages_internal(
                 if stripped_line.endswith("。"):
                     stripped_line = stripped_line[:-1]
                 output_lines.append(f"{stripped_line};")
-        output_lines.append("\n") # 在每个消息块后添加换行，保持可读性
+        output_lines.append("\n")  # 在每个消息块后添加换行，保持可读性
 
     # 移除可能的多余换行，然后合并
     formatted_string = "".join(output_lines).strip()
@@ -314,5 +314,4 @@ async def build_readable_messages(
             return f"{read_mark_line}{formatted_after}"
         else:
             # 理论上不应该发生，但作为保险
-            return read_mark_line.strip() # 如果前后都无消息，只返回标记行
-
+            return read_mark_line.strip()  # 如果前后都无消息，只返回标记行
