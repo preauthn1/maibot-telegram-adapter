@@ -4,7 +4,6 @@ from src.config.config import global_config
 from src.plugins.schedule.schedule_generator import bot_schedule
 from src.common.logger import get_module_logger, LogConfig, HEARTFLOW_STYLE_CONFIG
 from typing import Any, Optional
-from src.plugins.heartFC_chat.heartFC_generator import ResponseGenerator
 from src.do_tool.tool_use import ToolUser
 from src.plugins.person_info.relationship_manager import relationship_manager  # Module instance
 from src.heart_flow.mai_state_manager import MaiStateInfo, MaiStateManager
@@ -57,7 +56,6 @@ class Heartflow:
         )
 
         # 外部依赖模块
-        self.gpt_instance = ResponseGenerator()  # 响应生成器
         self.tool_user_instance = ToolUser()  # 工具使用模块
         self.relationship_manager_instance = relationship_manager  # 关系管理模块
 
