@@ -7,7 +7,7 @@ from src.plugins.utils.chat_message_builder import build_readable_messages, get_
 from src.plugins.person_info.relationship_manager import relationship_manager
 from src.plugins.chat.utils import get_embedding, parse_text_timestamps
 import time
-from typing import Union
+from typing import Union, Optional
 from ...common.database import db
 from ..chat.utils import get_recent_group_speaker
 from ..moods.moods import MoodManager
@@ -80,12 +80,13 @@ class PromptBuilder:
 
     async def build_prompt(
         self, build_mode, reason, current_mind_info, message_txt: str, sender_name: str = "某人", chat_stream=None
-    ) -> tuple[str, str]:
+    ) -> Optional[tuple[str, str]]:
         if build_mode == "normal":
             return await self._build_prompt_normal(chat_stream, message_txt, sender_name)
 
         elif build_mode == "focus":
             return await self._build_prompt_focus(reason, current_mind_info, chat_stream, message_txt, sender_name)
+        return None
 
     async def _build_prompt_focus(
         self, reason, current_mind_info, chat_stream, message_txt: str, sender_name: str = "某人"

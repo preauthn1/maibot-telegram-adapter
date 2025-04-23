@@ -97,6 +97,7 @@ class MaiState(enum.Enum):
             return 3
         elif self == MaiState.FOCUSED_CHAT:
             return 2
+        return None
 
     def get_focused_chat_max_num(self):
         if self == MaiState.OFFLINE:
@@ -107,6 +108,7 @@ class MaiState(enum.Enum):
             return 1
         elif self == MaiState.FOCUSED_CHAT:
             return 2
+        return None
 
 
 class MaiStateInfo:
@@ -879,7 +881,7 @@ class Heartflow:
                     if subflow.chat_state.chat_status != ChatState.ABSENT:
                         logger.debug(f"[Heartflow Deactivate] 正在将子心流 {stream_name} 状态设置为 ABSENT。")
                         # 调用 set_chat_state，它会处理日志和状态更新
-                        subflow.set_chat_state(ChatState.ABSENT)
+                        await subflow.set_chat_state(ChatState.ABSENT)
                         deactivated_count += 1
                     else:
                         # 如果已经是 ABSENT，则无需再次设置，但记录一下检查
