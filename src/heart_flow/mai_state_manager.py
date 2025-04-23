@@ -141,7 +141,7 @@ class MaiStateManager:
             logger.info("当前在[正常聊天]思考要不要继续聊下去......")
         elif current_status == MaiState.FOCUSED_CHAT:
             logger.info("当前在[专心聊天]思考要不要继续聊下去......")
-        
+
         # 1. 麦麦每分钟都有概率离线
         if time_since_last_min_check >= 60:
             if current_status != MaiState.OFFLINE:
@@ -188,8 +188,7 @@ class MaiStateManager:
                     choices_list = [MaiState.OFFLINE, MaiState.NORMAL_CHAT]
                     next_state = random.choices(choices_list, weights=weights, k=1)[0]
                     logger.debug(f"深入聊天结束，接下来 {next_state.value}")
-                    
-            
+
             if enable_unlimited_hfc_chat:
                 logger.debug("调试用：开挂了，强制切换到专注聊天")
                 next_state = MaiState.FOCUSED_CHAT
