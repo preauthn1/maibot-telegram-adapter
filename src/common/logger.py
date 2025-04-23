@@ -95,7 +95,6 @@ PFC_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-yellow>PFC</light-yellow> | "
             "<level>{message}</level>"
         ),
@@ -115,7 +114,6 @@ MOOD_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-green>心情</light-green> | "
             "<level>{message}</level>"
         ),
@@ -132,7 +130,6 @@ TOOL_USE_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<magenta>工具使用</magenta> | "
             "<level>{message}</level>"
         ),
@@ -151,7 +148,6 @@ RELATION_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-magenta>关系</light-magenta> | "
             "<level>{message}</level>"
         ),
@@ -169,7 +165,6 @@ CONFIG_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-cyan>配置</light-cyan> | "
             "<level>{message}</level>"
         ),
@@ -186,7 +181,6 @@ SENDER_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-yellow>消息发送</light-yellow> | "
             "<level>{message}</level>"
         ),
@@ -203,7 +197,6 @@ HEARTFLOW_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-yellow>麦麦大脑袋</light-yellow> | "
             "<level>{message}</level>"
         ),
@@ -222,7 +215,6 @@ SCHEDULE_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-yellow>在干嘛</light-yellow> | "
             "<level>{message}</level>"
         ),
@@ -239,7 +231,6 @@ LLM_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-yellow>麦麦组织语言</light-yellow> | "
             "<level>{message}</level>"
         ),
@@ -258,7 +249,6 @@ TOPIC_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-blue>话题</light-blue> | "
             "<level>{message}</level>"
         ),
@@ -276,7 +266,6 @@ CHAT_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-blue>见闻</light-blue> | "
             "<level>{message}</level>"
         ),
@@ -295,7 +284,6 @@ SUB_HEARTFLOW_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-blue>麦麦小脑袋</light-blue> | "
             "<level>{message}</level>"
         ),
@@ -314,7 +302,6 @@ WILLING_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-blue>意愿</light-blue> | "
             "<level>{message}</level>"
         ),
@@ -332,7 +319,6 @@ MAI_STATE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-blue>麦麦状态</light-blue> | "
             "<level>{message}</level>"
         ),
@@ -350,7 +336,6 @@ LPMM_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-
             "<light-yellow>LPMM</light-yellow> | "
             "<level>{message}</level>"
         ),
