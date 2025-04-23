@@ -230,7 +230,7 @@ class NormalChat:
         willing_log = f"[回复意愿:{await willing_manager.get_willing(self.stream_id):.2f}]" if is_willing else ""
         logger.info(
             f"[{current_time}][{mes_name}]"
-            f"{self.chat_stream.user_info.user_nickname}:"  # 使用 self.chat_stream
+            f"{message.message_info.user_info.user_nickname}:"  # 使用 self.chat_stream
             f"{message.processed_plain_text}{willing_log}[概率:{reply_probability * 100:.1f}%]"
         )
         do_reply = False
