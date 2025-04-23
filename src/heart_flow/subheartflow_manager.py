@@ -4,7 +4,7 @@ import random
 from typing import Dict, Any, Optional, List
 
 # 导入日志模块
-from src.common.logger import get_module_logger
+from src.common.logger import get_module_logger, LogConfig, SUBHEARTFLOW_MANAGER_STYLE_CONFIG
 
 # 导入聊天流管理模块
 from src.plugins.chat.chat_stream import chat_manager
@@ -15,7 +15,12 @@ from src.heart_flow.mai_state_manager import MaiState, MaiStateInfo
 from .observation import ChattingObservation
 
 # 初始化日志记录器
-logger = get_module_logger("subheartflow_manager")
+
+subheartflow_manager_log_config = LogConfig(
+    console_format=SUBHEARTFLOW_MANAGER_STYLE_CONFIG["console_format"],
+    file_format=SUBHEARTFLOW_MANAGER_STYLE_CONFIG["file_format"], 
+)
+logger = get_module_logger("subheartflow_manager", config=subheartflow_manager_log_config)
 
 # 子心流管理相关常量
 INACTIVE_THRESHOLD_SECONDS = 1200  # 子心流不活跃超时时间(秒)

@@ -385,6 +385,24 @@ BACKGROUND_TASKS_STYLE_CONFIG = {
     },
 }
 
+SUBHEARTFLOW_MANAGER_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<light-blue>小脑袋管理</light-blue> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 小脑袋管理 | {message}",
+    },
+    "simple": {
+        "console_format": (
+            "<level>{time:MM-DD HH:mm}</level> | <light-blue>小脑袋管理</light-blue> | <light-blue>{message}</light-blue>"
+        ),  # noqa: E501
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 小脑袋管理 | {message}",
+    },
+}
+
 WILLING_STYLE_CONFIG = {
     "advanced": {
         "console_format": (
@@ -482,6 +500,9 @@ EMOJI_STYLE_CONFIG = EMOJI_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else EMOJI_ST
 REMOTE_STYLE_CONFIG = REMOTE_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else REMOTE_STYLE_CONFIG["advanced"]
 BASE_TOOL_STYLE_CONFIG = BASE_TOOL_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else BASE_TOOL_STYLE_CONFIG["advanced"]
 PERSON_INFO_STYLE_CONFIG = PERSON_INFO_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else PERSON_INFO_STYLE_CONFIG["advanced"]
+SUBHEARTFLOW_MANAGER_STYLE_CONFIG = (
+    SUBHEARTFLOW_MANAGER_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else SUBHEARTFLOW_MANAGER_STYLE_CONFIG["advanced"]
+)
 BACKGROUND_TASKS_STYLE_CONFIG = (
     BACKGROUND_TASKS_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else BACKGROUND_TASKS_STYLE_CONFIG["advanced"]
 )
