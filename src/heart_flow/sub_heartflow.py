@@ -501,7 +501,7 @@ class SubHeartflow:
             extra_info_prompt = "无工具信息。\n"
 
         individuality = Individuality.get_instance()
-        prompt_personality = f"你的名字是{individuality.bot_nickname}，你"
+        prompt_personality = f"你的名字是{individuality.personality.bot_nickname}，你"
         prompt_personality += individuality.personality.personality_core
 
         if individuality.personality.personality_sides:
