@@ -226,11 +226,6 @@ class PromptBuilder:
                 "memory_prompt", related_memory_info=related_memory_info
             )
 
-        # print(f"相关记忆：{related_memory_info}")
-
-        # 日程构建
-        # schedule_prompt = f"""你现在正在做的事情是：{bot_schedule.get_current_num_task(num=1, time_info=False)}"""
-
         # 获取聊天上下文
         if chat_stream.group_info:
             chat_in_group = True
@@ -292,9 +287,12 @@ class PromptBuilder:
 
         logger.debug("开始构建prompt")
 
-        schedule_prompt = await global_prompt_manager.format_prompt(
-            "schedule_prompt", schedule_info=bot_schedule.get_current_num_task(num=1, time_info=False)
-        )
+        if global_config.ENABLE_SCHEDULE_GEN:
+            schedule_prompt = await global_prompt_manager.format_prompt(
+                "schedule_prompt", schedule_info=bot_schedule.get_current_num_task(num=1, time_info=False)
+            )
+        else:
+            schedule_prompt = ""
 
         prompt = await global_prompt_manager.format_prompt(
             "reasoning_prompt_main",
