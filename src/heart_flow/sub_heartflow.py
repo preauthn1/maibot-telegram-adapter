@@ -18,7 +18,7 @@ from src.plugins.chat.chat_stream import chat_manager
 import math
 from src.plugins.heartFC_chat.heartFC_chat import HeartFChatting
 from src.plugins.heartFC_chat.normal_chat import NormalChat
-from src.do_tool.tool_use import ToolUser
+# from src.do_tool.tool_use import ToolUser
 from src.heart_flow.mai_state_manager import MaiStateInfo
 
 

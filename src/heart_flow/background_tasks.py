@@ -6,7 +6,7 @@ from src.common.logger import get_module_logger, LogConfig, BACKGROUND_TASKS_STY
 
 # Need manager types for dependency injection
 from src.heart_flow.mai_state_manager import MaiStateManager, MaiStateInfo
-from src.heart_flow.subheartflow_manager import SubHeartflowManager, ChatState
+from src.heart_flow.subheartflow_manager import SubHeartflowManager
 from src.heart_flow.interest_logger import InterestLogger
 
 background_tasks_log_config = LogConfig(
@@ -97,7 +97,7 @@ class BackgroundTaskManager:
         ]
 
         # 统一启动所有任务
-        for task_var, task_func, task_name, log_level, log_msg, task_attr_name in task_configs:
+        for _task_var, task_func, task_name, log_level, log_msg, task_attr_name in task_configs:
             # 检查任务变量是否存在且未完成
             current_task_var = getattr(self, task_attr_name)
             if current_task_var is None or current_task_var.done():
