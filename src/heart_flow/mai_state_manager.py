@@ -123,18 +123,18 @@ class MaiStateManager:
         next_state: Optional[MaiState] = None
 
         if current_status == MaiState.OFFLINE:
-            logger.info("[麦麦聊天状态] 思考要不要上线看看......")
+            logger.info("[麦麦聊天状态] 当前[离线]，没看手机，思考要不要上线看看......")
         elif current_status == MaiState.PEEKING:
-            logger.info("[麦麦聊天状态] 思考要不要继续聊下去......")
+            logger.info("[麦麦聊天状态] 当前[在窥屏]，思考要不要继续聊下去......")
         elif current_status == MaiState.NORMAL_CHAT:
-            logger.info("[麦麦聊天状态] 思考要不要继续聊下去......")
+            logger.info("[麦麦聊天状态] 当前在[闲聊]思考要不要继续聊下去......")
         elif current_status == MaiState.FOCUSED_CHAT:
-            logger.info("[麦麦聊天状态] 思考要不要继续聊下去......")
+            logger.info("[麦麦聊天状态] 当前在[激情聊天]思考要不要继续聊下去......")
 
         # 1. 麦麦每分钟都有概率离线
-        if time_since_last_min_check >= 60:
+        if time_since_last_min_check >= 600:
             if current_status != MaiState.OFFLINE:
-                if random.random() < 0.03:  # 3% 概率切换到 OFFLINE，20分钟有50%的概率还在线
+                if random.random() < 0.1:  # 3% 概率切换到 OFFLINE，20分钟有50%的概率还在线
                     logger.debug(f"[麦麦聊天状态] 突然不想聊了，从 {current_status.value} 切换到 离线")
                     next_state = MaiState.OFFLINE
 
@@ -144,8 +144,8 @@ class MaiStateManager:
                 # OFFLINE 最多保持一分钟
                 # 目前是一个调试值，可以修改
                 if time_in_current_status >= 60:
-                    weights = [40, 40, 20]
-                    choices_list = [MaiState.PEEKING, MaiState.NORMAL_CHAT, MaiState.OFFLINE]
+                    weights = [30, 30, 20, 20]
+                    choices_list = [MaiState.PEEKING, MaiState.NORMAL_CHAT, MaiState.FOCUSED_CHAT, MaiState.OFFLINE]
                     next_state_candidate = random.choices(choices_list, weights=weights, k=1)[0]
                     if next_state_candidate != MaiState.OFFLINE:
                         next_state = next_state_candidate
@@ -155,7 +155,7 @@ class MaiStateManager:
                         next_state = MaiState.OFFLINE
 
             elif current_status == MaiState.PEEKING:
-                if time_in_current_status >= 120:  # PEEKING 最多持续 120 秒
+                if time_in_current_status >= 600:  # PEEKING 最多持续 600 秒
                     weights = [70, 20, 10]
                     choices_list = [MaiState.OFFLINE, MaiState.NORMAL_CHAT, MaiState.FOCUSED_CHAT]
                     next_state = random.choices(choices_list, weights=weights, k=1)[0]
