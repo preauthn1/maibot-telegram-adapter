@@ -262,42 +262,89 @@ class SubHeartflowManager:
 
         logger.info(f"[停用] 完成, 尝试停止{len(flow_ids)}个, 成功{stopped_count}个")
 
-    async def evaluate_interest_and_promote(self):
-        """评估CHAT状态的子心流兴趣度，满足条件则提升到FOCUSED状态"""
-        logger.debug("[子心流管理器] 开始兴趣评估周期...")
-        evaluated_count = 0
-        promoted_count = 0
+    async def evaluate_interest_and_promote(self, current_mai_state: MaiStateInfo):
+        """评估子心流兴趣度，满足条件且未达上限则提升到FOCUSED状态（基于start_hfc_probability）"""
+        log_prefix_manager = "[子心流管理器-兴趣评估]"
+        logger.debug(f"{log_prefix_manager} 开始周期... 当前状态: {current_mai_state.get_current_state().value}")
+
+        # 获取 FOCUSED 状态的数量上限
+        current_state_enum = current_mai_state.get_current_state()
+        focused_limit = current_state_enum.get_focused_chat_max_num()
+        if focused_limit <= 0:
+            logger.debug(f"{log_prefix_manager} 当前状态 ({current_state_enum.value}) 不允许 FOCUSED 子心流, 跳过提升检查。")
+            return
+
+        # 获取当前 FOCUSED 状态的数量 (初始值)
+        current_focused_count = self.count_subflows_by_state(ChatState.FOCUSED)
+        logger.debug(f"{log_prefix_manager} 专注上限: {focused_limit}, 当前专注数: {current_focused_count}")
 
         # 使用快照安全遍历
         subflows_snapshot = list(self.subheartflows.values())
-
-        for sub_hf in subflows_snapshot:
-            flow_id = sub_hf.subheartflow_id
-            if flow_id in self.subheartflows and self.subheartflows[flow_id].chat_state.chat_status == ChatState.CHAT:
-                evaluated_count += 1
+        promoted_count = 0 # 记录本次提升的数量
+        try:
+            for sub_hf in subflows_snapshot:
+                flow_id = sub_hf.subheartflow_id
                 stream_name = chat_manager.get_stream_name(flow_id) or flow_id
-                log_prefix = f"[{stream_name}]"
+                log_prefix_flow = f"[{stream_name}]"
 
-                should_promote = await sub_hf.should_evaluate_reply()
-                if should_promote:
-                    logger.info(f"{log_prefix} 兴趣评估触发升级: CHAT -> FOCUSED")
-                    states_num = (
-                        self.count_subflows_by_state(ChatState.ABSENT),
-                        self.count_subflows_by_state(ChatState.CHAT),
-                        self.count_subflows_by_state(ChatState.FOCUSED),
-                    )
-                    await sub_hf.set_chat_state(ChatState.FOCUSED, states_num)
-                    if (
-                        self.subheartflows.get(flow_id)
-                        and self.subheartflows[flow_id].chat_state.chat_status == ChatState.FOCUSED
-                    ):
+                # 只处理 CHAT 状态的子心流
+                if sub_hf.chat_state.chat_status != ChatState.CHAT:
+                    continue
+
+                # 检查是否满足提升概率
+                should_hfc = random.random() < sub_hf.interest_chatting.start_hfc_probability
+                if not should_hfc:
+                    continue
+
+                # --- 关键检查：检查 FOCUSED 数量是否已达上限 ---
+                # 注意：在循环内部再次获取当前数量，因为之前的提升可能已经改变了计数
+                # 使用已经记录并在循环中更新的 current_focused_count
+                if current_focused_count >= focused_limit:
+                    logger.debug(f"{log_prefix_manager} {log_prefix_flow} 达到专注上限 ({current_focused_count}/{focused_limit}), 无法提升。概率={sub_hf.interest_chatting.start_hfc_probability:.2f}")
+                    continue # 跳过这个子心流，继续检查下一个
+
+                # --- 执行提升 ---
+                # 获取当前实例以检查最新状态 (防御性编程)
+                current_subflow = self.subheartflows.get(flow_id)
+                if not current_subflow or current_subflow.chat_state.chat_status != ChatState.CHAT:
+                    logger.warning(f"{log_prefix_manager} {log_prefix_flow} 尝试提升时状态已改变或实例消失，跳过。")
+                    continue
+
+                logger.info(f"{log_prefix_manager} {log_prefix_flow} 兴趣评估触发升级 (prob={sub_hf.interest_chatting.start_hfc_probability:.2f}, 上限:{focused_limit}, 当前:{current_focused_count}) -> FOCUSED")
+
+                states_num = (
+                    self.count_subflows_by_state(ChatState.ABSENT),
+                    self.count_subflows_by_state(ChatState.CHAT), # 这个值在提升前计算
+                    current_focused_count, # 这个值在提升前计算
+                )
+
+                # --- 状态设置 ---
+                original_state = current_subflow.chat_state.chat_status # 记录原始状态
+                await current_subflow.set_chat_state(ChatState.FOCUSED, states_num)
+
+                # --- 状态验证 ---
+                final_subflow = self.subheartflows.get(flow_id)
+                if final_subflow:
+                    final_state = final_subflow.chat_state.chat_status
+                    if final_state == ChatState.FOCUSED:
+                        logger.debug(f"{log_prefix_manager} {log_prefix_flow} 成功从 {original_state.value} 升级到 FOCUSED 状态")
                         promoted_count += 1
-                        logger.debug(f"{log_prefix} 成功升级到FOCUSED状态")
-                    else:
-                        logger.info(f"{log_prefix} 升级FOCUSED可能被限制阻止")
+                        # 提升成功后，更新当前专注计数，以便后续检查能使用最新值
+                        current_focused_count += 1
+                    elif final_state == original_state: # 状态未变
+                        logger.warning(f"{log_prefix_manager} {log_prefix_flow} 尝试从 {original_state.value} 升级 FOCUSED 失败，状态仍为: {final_state.value} (可能被内部逻辑阻止)")
+                    else: # 状态变成其他了?
+                        logger.warning(f"{log_prefix_manager} {log_prefix_flow} 尝试从 {original_state.value} 升级 FOCUSED 后状态变为 {final_state.value}")
+                else: # 子心流消失了?
+                    logger.warning(f"{log_prefix_manager} {log_prefix_flow} 升级后验证时子心流 {flow_id} 消失")
 
-        if evaluated_count > 0:
-            logger.debug(f"[子心流管理器] 评估完成. 评估{evaluated_count}个CHAT流, 升级{promoted_count}个到FOCUSED")
+        except Exception as e:
+            logger.error(f"{log_prefix_manager} 兴趣评估周期出错: {e}", exc_info=True)
+
+        if promoted_count > 0:
+            logger.info(f"{log_prefix_manager} 评估周期结束, 成功提升 {promoted_count} 个子心流到 FOCUSED。")
+        else:
+            logger.debug(f"{log_prefix_manager} 评估周期结束, 未提升任何子心流。")
 
     def count_subflows_by_state(self, state: ChatState) -> int:
         """统计指定状态的子心流数量
