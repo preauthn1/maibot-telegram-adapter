@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from src.heart_flow.sub_heartflow import SubHeartflow  # For type hint in get_interest_states
 
 interest_logger_config = LogConfig(
-    console_format = INTEREST_STYLE_CONFIG["console_format"],
+    console_format=INTEREST_STYLE_CONFIG["console_format"],
     file_format=INTEREST_STYLE_CONFIG["file_format"],
 )
 logger = get_module_logger("interest_logger", config=interest_logger_config)
