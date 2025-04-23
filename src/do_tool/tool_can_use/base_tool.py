@@ -7,7 +7,7 @@ from src.common.logger import get_module_logger, LogConfig, BASE_TOOL_STYLE_CONF
 
 base_tool_log_config = LogConfig(
     console_format=BASE_TOOL_STYLE_CONFIG["console_format"],
-    file_format=BASE_TOOL_STYLE_CONFIG["file_format"],   
+    file_format=BASE_TOOL_STYLE_CONFIG["file_format"],
 )
 
 logger = get_module_logger("base_tool", config=base_tool_log_config)

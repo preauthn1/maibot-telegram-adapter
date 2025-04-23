@@ -346,7 +346,7 @@ BASE_TOOL_STYLE_CONFIG = {
             "<level>{time:MM-DD HH:mm}</level> | <light-blue>工具使用</light-blue> | <light-blue>{message}</light-blue>"
         ),  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 工具使用 | {message}",
-    }, 
+    },
 }
 
 PERSON_INFO_STYLE_CONFIG = {
@@ -364,7 +364,7 @@ PERSON_INFO_STYLE_CONFIG = {
             "<level>{time:MM-DD HH:mm}</level> | <light-blue>人物信息</light-blue> | <light-blue>{message}</light-blue>"
         ),  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 人物信息 | {message}",
-    }, 
+    },
 }
 
 BACKGROUND_TASKS_STYLE_CONFIG = {
