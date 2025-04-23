@@ -2,14 +2,19 @@ import asyncio
 import traceback
 from typing import Optional, Coroutine, Callable, Any, List
 
-from src.common.logger import get_module_logger
+from src.common.logger import get_module_logger, LogConfig, BACKGROUND_TASKS_STYLE_CONFIG
 
 # Need manager types for dependency injection
 from src.heart_flow.mai_state_manager import MaiStateManager, MaiStateInfo
 from src.heart_flow.subheartflow_manager import SubHeartflowManager
 from src.heart_flow.interest_logger import InterestLogger
 
-logger = get_module_logger("background_tasks")
+background_tasks_log_config = LogConfig(
+    console_format=BACKGROUND_TASKS_STYLE_CONFIG["console_format"],
+    file_format=BACKGROUND_TASKS_STYLE_CONFIG["file_format"], 
+)
+
+logger = get_module_logger("background_tasks", config=background_tasks_log_config)
 
 
 class BackgroundTaskManager:
