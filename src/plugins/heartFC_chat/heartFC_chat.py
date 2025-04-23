@@ -95,7 +95,7 @@ class HeartFChatting:
         # 基础属性
         self.stream_id: str = chat_id  # 聊天流ID
         self.chat_stream: Optional[ChatStream] = None  # 关联的聊天流
-        self.sub_hf: Optional[SubHeartflow] = None  # 关联的子心流
+        self.sub_hf: SubHeartflow = None  # 关联的子心流
 
         # 初始化状态控制
         self._initialized = False  # 是否已初始化标志
@@ -510,7 +510,11 @@ class HeartFChatting:
         # --- (Moved from _replier_work) 1. 思考前使用工具 --- #
         try:
             # Access tool_user directly
-            tool_result = await self.tool_user.use_tool(message_txt=observed_messages_str, sub_heartflow=self.sub_hf)
+            tool_result = await self.tool_user.use_tool(
+                message_txt=observed_messages_str,
+                chat_stream=self.chat_stream,
+                observation=self.sub_hf._get_primary_observation(),
+            )
             if tool_result.get("used_tools", False):
                 tool_result_info = tool_result.get("structured_info", {})
                 logger.debug(f"{log_prefix}[Planner] 规划前工具结果: {tool_result_info}")

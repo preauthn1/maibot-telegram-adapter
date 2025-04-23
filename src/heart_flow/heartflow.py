@@ -844,13 +844,6 @@ class Heartflow:
         """当主状态变为 OFFLINE 时，停止所有子心流的活动并设置为 ABSENT"""
         logger.info("[Heartflow Deactivate] 开始停用所有子心流...")
         try:
-            # TODO: Ensure controller.stop_heartFC_chat is called if needed
-            # This is now handled by subheartflow.set_chat_state(ChatState.ABSENT) called in _stop_subheartflow
-            # from src.plugins.heartFC_chat.heartFC_controler import HeartFCController # Local import to avoid cycle
-            # controller = HeartFCController.get_instance()
-            # if controller and controller.is_heartFC_chat_active(flow_id):
-            #      await controller.stop_heartFC_chat(flow_id)
-
             # 使用 ID 快照进行迭代
             flow_ids_snapshot = list(self._subheartflows.keys())
             deactivated_count = 0
@@ -863,13 +856,6 @@ class Heartflow:
                 stream_name = chat_manager.get_stream_name(flow_id) or flow_id
 
                 try:
-                    # 停止相关聊天进程 (例如 pf_chat)
-                    # TODO: 确认是否有 reason_chat 需要停止，并添加相应逻辑
-                    # if controller:
-                    #     if controller.is_heartFC_chat_active(flow_id):
-                    #         logger.debug(f"[Heartflow Deactivate] 正在停止子心流 {stream_name} 的 heartFC_chat。")
-                    #         await controller.stop_heartFC_chat(flow_id)
-
                     # 设置状态为 ABSENT
                     if subflow.chat_state.chat_status != ChatState.ABSENT:
                         logger.debug(f"[Heartflow Deactivate] 正在将子心流 {stream_name} 状态设置为 ABSENT。")
