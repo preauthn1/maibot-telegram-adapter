@@ -32,8 +32,8 @@ _custom_style_handlers: Dict[Tuple[str, str], List[int]] = {}  # 记录自定义
 current_file_path = Path(__file__).resolve()
 LOG_ROOT = "logs"
 
-SIMPLE_OUTPUT = os.getenv("SIMPLE_OUTPUT", "false")
-if SIMPLE_OUTPUT == "true" or SIMPLE_OUTPUT == "True":
+SIMPLE_OUTPUT = os.getenv("SIMPLE_OUTPUT", "false").strip().lower()
+if SIMPLE_OUTPUT == "true":
     SIMPLE_OUTPUT = True
 else:
     SIMPLE_OUTPUT = False
