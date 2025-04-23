@@ -132,9 +132,9 @@ class MaiStateManager:
             logger.info("[麦麦聊天状态] 当前在[激情聊天]思考要不要继续聊下去......")
 
         # 1. 麦麦每分钟都有概率离线
-        if time_since_last_min_check >= 600:
+        if time_since_last_min_check >= 60:
             if current_status != MaiState.OFFLINE:
-                if random.random() < 0.1:  # 3% 概率切换到 OFFLINE，20分钟有50%的概率还在线
+                if random.random() < 0.03:  # 3% 概率切换到 OFFLINE，20分钟有50%的概率还在线
                     logger.debug(f"[麦麦聊天状态] 突然不想聊了，从 {current_status.value} 切换到 离线")
                     next_state = MaiState.OFFLINE
 
