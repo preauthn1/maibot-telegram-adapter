@@ -54,7 +54,6 @@ class NormalChat:
     # 改为实例方法
     async def _create_thinking_message(self, message: MessageRecv) -> str:
         """创建思考消息"""
-        userinfo = message.message_info.user_info
         messageinfo = message.message_info
 
         bot_user_info = UserInfo(
@@ -208,8 +207,6 @@ class NormalChat:
             return
 
         timing_results = {}
-        userinfo = message.message_info.user_info
-        messageinfo = message.message_info
 
         reply_probability = 1.0 if is_mentioned else 0.0  # 如果被提及，基础概率为1，否则需要意愿判断
 
