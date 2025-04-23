@@ -476,7 +476,6 @@ class PromptBuilder:
         return related_info
 
     async def get_prompt_info(self, message: str, threshold: float):
-
         related_info = ""
         start_time = time.time()
 
@@ -486,7 +485,9 @@ class PromptBuilder:
 
         end_time = time.time()
         if found_knowledge_from_lpmm is not None:
-            logger.debug(f"从LPMM知识库获取知识，相关信息：{found_knowledge_from_lpmm[:100]}...，信息长度: {len(found_knowledge_from_lpmm)}")
+            logger.debug(
+                f"从LPMM知识库获取知识，相关信息：{found_knowledge_from_lpmm[:100]}...，信息长度: {len(found_knowledge_from_lpmm)}"
+            )
             related_info += found_knowledge_from_lpmm
             logger.debug(f"获取知识库内容耗时: {(end_time - start_time):.3f}秒")
             logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
@@ -497,8 +498,6 @@ class PromptBuilder:
             related_info += knowledge_from_old
             logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
             return related_info
-    
-    
 
     @staticmethod
     def get_info_from_db(
