@@ -26,7 +26,7 @@ LoguruLogger = logger.__class__
 
 # 全局注册表：记录模块与处理器ID的映射
 _handler_registry: Dict[str, List[int]] = {}
-_custom_style_handlers: Dict[Tuple[str, str], List[int]] = {} # 记录自定义样式处理器ID
+_custom_style_handlers: Dict[Tuple[str, str], List[int]] = {}  # 记录自定义样式处理器ID
 
 # 获取日志存储根地址
 current_file_path = Path(__file__).resolve()
@@ -43,9 +43,7 @@ if not SIMPLE_OUTPUT:
         "file_level": "DEBUG",
         # 格式配置
         "console_format": (
-            "<level>{time:YYYY-MM-DD HH:mm:ss}</level> | "
-            "<cyan>{extra[module]: <12}</cyan> | "
-            "<level>{message}</level>"
+            "<level>{time:YYYY-MM-DD HH:mm:ss}</level> | <cyan>{extra[module]: <12}</cyan> | <level>{message}</level>"
         ),
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | {message}",
         "log_dir": LOG_ROOT,
@@ -451,7 +449,7 @@ def get_module_logger(
         sink=sys.stderr,
         level=os.getenv("CONSOLE_LOG_LEVEL", console_level or current_config["console_level"]),
         format=current_config["console_format"],
-        filter=lambda record: record["extra"].get("module") == module_name and 'custom_style' not in record['extra'],
+        filter=lambda record: record["extra"].get("module") == module_name and "custom_style" not in record["extra"],
         enqueue=True,
     )
     handler_ids.append(console_id)
@@ -470,7 +468,7 @@ def get_module_logger(
         retention=current_config["retention"],
         compression=current_config["compression"],
         encoding="utf-8",
-        filter=lambda record: record["extra"].get("module") == module_name and 'custom_style' not in record['extra'],
+        filter=lambda record: record["extra"].get("module") == module_name and "custom_style" not in record["extra"],
         enqueue=True,
     )
     handler_ids.append(file_id)
