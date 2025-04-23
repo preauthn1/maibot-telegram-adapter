@@ -290,9 +290,9 @@ class SubHeartflowManager:
                 log_prefix_flow = f"[{stream_name}]"
 
                 # 只处理 CHAT 状态的子心流
-# The code snippet is checking if the `chat_status` attribute of `sub_hf.chat_state` is not equal to
-# `ChatState.CHAT`. If the condition is met, the code will continue to the next iteration of the loop
-# or block of code where this snippet is located.
+                # The code snippet is checking if the `chat_status` attribute of `sub_hf.chat_state` is not equal to
+                # `ChatState.CHAT`. If the condition is met, the code will continue to the next iteration of the loop
+                # or block of code where this snippet is located.
                 # if sub_hf.chat_state.chat_status != ChatState.CHAT:
                 #     continue
 
