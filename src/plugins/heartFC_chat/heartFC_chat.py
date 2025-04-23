@@ -73,10 +73,7 @@ class HeartFChatting:
     现在由其关联的 SubHeartflow 管理生命周期。
     """
 
-    def __init__(
-        self,
-        chat_id: str
-    ):
+    def __init__(self, chat_id: str):
         """
         HeartFChatting 初始化函数
 
@@ -195,7 +192,7 @@ class HeartFChatting:
             # 检查是否满足启动条件：未激活且计时器有时间
             if not self._loop_active and self._loop_timer > 0:
                 should_start_loop = True
-                self._loop_active = True # 在锁内标记为活动，防止重复启动
+                self._loop_active = True  # 在锁内标记为活动，防止重复启动
 
         if should_start_loop:
             # 检查是否已有任务在运行（理论上不应该，因为 _loop_active=False）
@@ -206,8 +203,8 @@ class HeartFChatting:
                     # 等待旧任务确实被取消
                     await asyncio.wait_for(self._loop_task, timeout=0.5)
                 except (asyncio.CancelledError, asyncio.TimeoutError):
-                    pass # 忽略取消或超时错误
-                self._loop_task = None # 清理旧任务引用
+                    pass  # 忽略取消或超时错误
+                self._loop_task = None  # 清理旧任务引用
 
             logger.info(f"{log_prefix} 计时器 > 0 且循环未激活，启动主循环...")
             # 创建新的循环任务
@@ -215,7 +212,7 @@ class HeartFChatting:
             # 添加完成回调
             self._loop_task.add_done_callback(self._handle_loop_completion)
         # else:
-            # logger.trace(f"{log_prefix} 不需要启动循环（已激活或计时器为0）") # 可以取消注释以进行调试
+        # logger.trace(f"{log_prefix} 不需要启动循环（已激活或计时器为0）") # 可以取消注释以进行调试
 
     def _handle_loop_completion(self, task: asyncio.Task):
         """当 _run_pf_loop 任务完成时执行的回调。"""

@@ -46,54 +46,59 @@ class BackgroundTaskManager:
         self.cleanup_interval = cleanup_interval
         self.log_interval = log_interval
         self.inactive_threshold = inactive_threshold  # For cleanup task
-        self.interest_eval_interval = interest_eval_interval # 存储兴趣评估间隔
+        self.interest_eval_interval = interest_eval_interval  # 存储兴趣评估间隔
 
         # Task references
         self._state_update_task: Optional[asyncio.Task] = None
         self._cleanup_task: Optional[asyncio.Task] = None
         self._logging_task: Optional[asyncio.Task] = None
-        self._interest_eval_task: Optional[asyncio.Task] = None # 新增兴趣评估任务引用
+        self._interest_eval_task: Optional[asyncio.Task] = None  # 新增兴趣评估任务引用
         self._tasks: List[Optional[asyncio.Task]] = []  # Keep track of all tasks
 
     async def start_tasks(self):
         """启动所有后台任务
-        
+
         功能说明:
         - 启动核心后台任务: 状态更新、清理、日志记录和兴趣评估
         - 每个任务启动前检查是否已在运行
         - 将任务引用保存到任务列表
         """
-        
+
         # 任务配置列表: (任务变量名, 任务函数, 任务名称, 日志级别, 额外日志信息, 任务对象引用属性名)
         task_configs = [
-            (self._state_update_task, 
-            lambda: self._run_state_update_cycle(self.update_interval),
-            "hf_state_update", 
-            "debug", 
-            f"聊天状态更新任务已启动 间隔:{self.update_interval}s",
-            "_state_update_task"),
-            
-            (self._cleanup_task,
-            self._run_cleanup_cycle,
-            "hf_cleanup",
-            "info",
-            f"清理任务已启动 间隔:{self.cleanup_interval}s 阈值:{self.inactive_threshold}s",
-            "_cleanup_task"),
-            
-            (self._logging_task,
-            self._run_logging_cycle,
-            "hf_logging",
-            "info",
-            f"日志任务已启动 间隔:{self.log_interval}s",
-            "_logging_task"),
-
+            (
+                self._state_update_task,
+                lambda: self._run_state_update_cycle(self.update_interval),
+                "hf_state_update",
+                "debug",
+                f"聊天状态更新任务已启动 间隔:{self.update_interval}s",
+                "_state_update_task",
+            ),
+            (
+                self._cleanup_task,
+                self._run_cleanup_cycle,
+                "hf_cleanup",
+                "info",
+                f"清理任务已启动 间隔:{self.cleanup_interval}s 阈值:{self.inactive_threshold}s",
+                "_cleanup_task",
+            ),
+            (
+                self._logging_task,
+                self._run_logging_cycle,
+                "hf_logging",
+                "info",
+                f"日志任务已启动 间隔:{self.log_interval}s",
+                "_logging_task",
+            ),
             # 新增兴趣评估任务配置
-            (self._interest_eval_task,
-            self._run_interest_eval_cycle,
-            "hf_interest_eval",
-            "debug", # 设为debug，避免过多日志
-            f"兴趣评估任务已启动 间隔:{self.interest_eval_interval}s",
-            "_interest_eval_task"),
+            (
+                self._interest_eval_task,
+                self._run_interest_eval_cycle,
+                "hf_interest_eval",
+                "debug",  # 设为debug，避免过多日志
+                f"兴趣评估任务已启动 间隔:{self.interest_eval_interval}s",
+                "_interest_eval_task",
+            ),
         ]
 
         # 统一启动所有任务
@@ -103,9 +108,9 @@ class BackgroundTaskManager:
             if current_task_var is None or current_task_var.done():
                 new_task = asyncio.create_task(task_func(), name=task_name)
                 setattr(self, task_attr_name, new_task)  # 更新任务变量
-                if new_task not in self._tasks: # 避免重复添加
+                if new_task not in self._tasks:  # 避免重复添加
                     self._tasks.append(new_task)
-                
+
                 # 根据配置记录不同级别的日志
                 getattr(logger, log_level)(log_msg)
             else:
@@ -164,7 +169,7 @@ class BackgroundTaskManager:
             #     logger.warning(f"任务 {task_name} 超时执行 ({elapsed:.2f}s > {interval}s)")
             await asyncio.sleep(sleep_time)
 
-        logger.debug(f"任务循环结束: {task_name}") # 调整日志信息
+        logger.debug(f"任务循环结束: {task_name}")  # 调整日志信息
 
     async def _perform_state_update_work(self):
         """执行状态更新工作"""
@@ -222,6 +227,7 @@ class BackgroundTaskManager:
         """执行一轮子心流兴趣评估与提升检查。"""
         # 直接调用 subheartflow_manager 的方法，并传递当前状态信息
         await self.subheartflow_manager.evaluate_interest_and_promote(self.mai_state_info)
+
     # --- 结束新增 ---
 
     # --- Specific Task Runners --- #
@@ -237,14 +243,15 @@ class BackgroundTaskManager:
 
     async def _run_logging_cycle(self):
         await self._run_periodic_loop(
-            task_name="State Logging",
-            interval=self.log_interval,
-            task_func=self._perform_logging_work
+            task_name="State Logging", interval=self.log_interval, task_func=self._perform_logging_work
         )
 
     # --- 新增兴趣评估任务运行器 ---
     async def _run_interest_eval_cycle(self):
         await self._run_periodic_loop(
-            task_name="Interest Evaluation", interval=self.interest_eval_interval, task_func=self._perform_interest_eval_work
+            task_name="Interest Evaluation",
+            interval=self.interest_eval_interval,
+            task_func=self._perform_interest_eval_work,
         )
+
     # --- 结束新增 ---

@@ -60,9 +60,7 @@ class InterestLogger:
         for subheartflow in all_flows:
             if self.subheartflow_manager.get_subheartflow(subheartflow.subheartflow_id):
                 tasks.append(
-                    asyncio.create_task(
-                        subheartflow.get_full_state(), name=f"get_state_{subheartflow.subheartflow_id}"
-                    )
+                    asyncio.create_task(subheartflow.get_full_state(), name=f"get_state_{subheartflow.subheartflow_id}")
                 )
             else:
                 logger.warning(f"子心流 {subheartflow.subheartflow_id} 在创建任务前已消失")
@@ -107,7 +105,7 @@ class InterestLogger:
                 "main_mind": main_mind,
                 "mai_state": mai_state_name,
                 "subflow_count": len(all_subflow_states),
-                "subflows": []
+                "subflows": [],
             }
 
             if not all_subflow_states:

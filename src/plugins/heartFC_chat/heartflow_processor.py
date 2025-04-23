@@ -69,7 +69,6 @@ class HeartFCProcessor:
 
             subheartflow = await heartflow.create_subheartflow(chat.stream_id)
 
-
             message.update_chat_stream(chat)
 
             await heartflow.create_subheartflow(chat.stream_id)

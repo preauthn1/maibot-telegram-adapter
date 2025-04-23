@@ -18,7 +18,7 @@ from .observation import ChattingObservation
 
 subheartflow_manager_log_config = LogConfig(
     console_format=SUBHEARTFLOW_MANAGER_STYLE_CONFIG["console_format"],
-    file_format=SUBHEARTFLOW_MANAGER_STYLE_CONFIG["file_format"], 
+    file_format=SUBHEARTFLOW_MANAGER_STYLE_CONFIG["file_format"],
 )
 logger = get_module_logger("subheartflow_manager", config=subheartflow_manager_log_config)
 
@@ -271,7 +271,9 @@ class SubHeartflowManager:
         current_state_enum = current_mai_state.get_current_state()
         focused_limit = current_state_enum.get_focused_chat_max_num()
         if focused_limit <= 0:
-            logger.debug(f"{log_prefix_manager} 当前状态 ({current_state_enum.value}) 不允许 FOCUSED 子心流, 跳过提升检查。")
+            logger.debug(
+                f"{log_prefix_manager} 当前状态 ({current_state_enum.value}) 不允许 FOCUSED 子心流, 跳过提升检查。"
+            )
             return
 
         # 获取当前 FOCUSED 状态的数量 (初始值)
@@ -280,7 +282,7 @@ class SubHeartflowManager:
 
         # 使用快照安全遍历
         subflows_snapshot = list(self.subheartflows.values())
-        promoted_count = 0 # 记录本次提升的数量
+        promoted_count = 0  # 记录本次提升的数量
         try:
             for sub_hf in subflows_snapshot:
                 flow_id = sub_hf.subheartflow_id
@@ -300,8 +302,10 @@ class SubHeartflowManager:
                 # 注意：在循环内部再次获取当前数量，因为之前的提升可能已经改变了计数
                 # 使用已经记录并在循环中更新的 current_focused_count
                 if current_focused_count >= focused_limit:
-                    logger.debug(f"{log_prefix_manager} {log_prefix_flow} 达到专注上限 ({current_focused_count}/{focused_limit}), 无法提升。概率={sub_hf.interest_chatting.start_hfc_probability:.2f}")
-                    continue # 跳过这个子心流，继续检查下一个
+                    logger.debug(
+                        f"{log_prefix_manager} {log_prefix_flow} 达到专注上限 ({current_focused_count}/{focused_limit}), 无法提升。概率={sub_hf.interest_chatting.start_hfc_probability:.2f}"
+                    )
+                    continue  # 跳过这个子心流，继续检查下一个
 
                 # --- 执行提升 ---
                 # 获取当前实例以检查最新状态 (防御性编程)
@@ -310,16 +314,18 @@ class SubHeartflowManager:
                     logger.warning(f"{log_prefix_manager} {log_prefix_flow} 尝试提升时状态已改变或实例消失，跳过。")
                     continue
 
-                logger.info(f"{log_prefix_manager} {log_prefix_flow} 兴趣评估触发升级 (prob={sub_hf.interest_chatting.start_hfc_probability:.2f}, 上限:{focused_limit}, 当前:{current_focused_count}) -> FOCUSED")
+                logger.info(
+                    f"{log_prefix_manager} {log_prefix_flow} 兴趣评估触发升级 (prob={sub_hf.interest_chatting.start_hfc_probability:.2f}, 上限:{focused_limit}, 当前:{current_focused_count}) -> FOCUSED"
+                )
 
                 states_num = (
                     self.count_subflows_by_state(ChatState.ABSENT),
-                    self.count_subflows_by_state(ChatState.CHAT), # 这个值在提升前计算
-                    current_focused_count, # 这个值在提升前计算
+                    self.count_subflows_by_state(ChatState.CHAT),  # 这个值在提升前计算
+                    current_focused_count,  # 这个值在提升前计算
                 )
 
                 # --- 状态设置 ---
-                original_state = current_subflow.chat_state.chat_status # 记录原始状态
+                original_state = current_subflow.chat_state.chat_status  # 记录原始状态
                 await current_subflow.set_chat_state(ChatState.FOCUSED, states_num)
 
                 # --- 状态验证 ---
@@ -327,15 +333,21 @@ class SubHeartflowManager:
                 if final_subflow:
                     final_state = final_subflow.chat_state.chat_status
                     if final_state == ChatState.FOCUSED:
-                        logger.debug(f"{log_prefix_manager} {log_prefix_flow} 成功从 {original_state.value} 升级到 FOCUSED 状态")
+                        logger.debug(
+                            f"{log_prefix_manager} {log_prefix_flow} 成功从 {original_state.value} 升级到 FOCUSED 状态"
+                        )
                         promoted_count += 1
                         # 提升成功后，更新当前专注计数，以便后续检查能使用最新值
                         current_focused_count += 1
-                    elif final_state == original_state: # 状态未变
-                        logger.warning(f"{log_prefix_manager} {log_prefix_flow} 尝试从 {original_state.value} 升级 FOCUSED 失败，状态仍为: {final_state.value} (可能被内部逻辑阻止)")
-                    else: # 状态变成其他了?
-                        logger.warning(f"{log_prefix_manager} {log_prefix_flow} 尝试从 {original_state.value} 升级 FOCUSED 后状态变为 {final_state.value}")
-                else: # 子心流消失了?
+                    elif final_state == original_state:  # 状态未变
+                        logger.warning(
+                            f"{log_prefix_manager} {log_prefix_flow} 尝试从 {original_state.value} 升级 FOCUSED 失败，状态仍为: {final_state.value} (可能被内部逻辑阻止)"
+                        )
+                    else:  # 状态变成其他了?
+                        logger.warning(
+                            f"{log_prefix_manager} {log_prefix_flow} 尝试从 {original_state.value} 升级 FOCUSED 后状态变为 {final_state.value}"
+                        )
+                else:  # 子心流消失了?
                     logger.warning(f"{log_prefix_manager} {log_prefix_flow} 升级后验证时子心流 {flow_id} 消失")
 
         except Exception as e:

@@ -349,7 +349,7 @@ class NormalChat:
         return False
 
     # 改为实例方法, 移除 chat 参数
-    
+
     async def start_chat(self):
         """为此 NormalChat 实例关联的 ChatStream 启动聊天任务（如果尚未运行）。"""
         if self._chat_task is None or self._chat_task.done():
@@ -357,7 +357,6 @@ class NormalChat:
             task = asyncio.create_task(self._find_interested_message())
             task.add_done_callback(lambda t: self._handle_task_completion(t))  # 回调现在是实例方法
             self._chat_task = task
-
 
     # 改为实例方法, 移除 stream_id 参数
     def _handle_task_completion(self, task: asyncio.Task):
@@ -403,4 +402,3 @@ class NormalChat:
                 # 确保任务状态更新，即使等待出错 (回调函数也会尝试更新)
                 if self._chat_task is task:
                     self._chat_task = None
-
