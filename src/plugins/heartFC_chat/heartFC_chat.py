@@ -159,7 +159,7 @@ class HeartFChatting:
         # 直接检查是否激活，无需检查计时器
         if not self._loop_active:
             should_start_loop = True
-            self._loop_active = True # 标记为活动，防止重复启动
+            self._loop_active = True  # 标记为活动，防止重复启动
 
         if should_start_loop:
             # 检查是否已有任务在运行（理论上不应该，因为 _loop_active=False）
@@ -210,7 +210,7 @@ class HeartFChatting:
         logger.info(f"{log_prefix} HeartFChatting: 麦麦打算好好聊聊 (进入专注模式)")
         try:
             thinking_id = ""
-            while True: # Loop indefinitely until cancelled
+            while True:  # Loop indefinitely until cancelled
                 cycle_timers = {}  # <--- Initialize timers dict for this cycle
 
                 # Access MessageManager directly
@@ -406,13 +406,12 @@ class HeartFChatting:
                 if cycle_duration > 0.1:
                     logger.debug(f"{log_prefix} HeartFChatting: 周期耗时 {cycle_duration:.2f}s.")
 
-
                 # --- Delay --- #
                 try:
                     sleep_duration = 0.0
                     if not action_taken_this_cycle and cycle_duration < 1.5:
                         sleep_duration = 1.5 - cycle_duration
-                    elif cycle_duration < 0.2: # Keep minimal sleep even after action
+                    elif cycle_duration < 0.2:  # Keep minimal sleep even after action
                         sleep_duration = 0.2
 
                     if sleep_duration > 0:
@@ -421,7 +420,7 @@ class HeartFChatting:
 
                 except asyncio.CancelledError:
                     logger.info(f"{log_prefix} Sleep interrupted, loop likely cancelling.")
-                    break # Exit loop immediately on cancellation
+                    break  # Exit loop immediately on cancellation
 
         except asyncio.CancelledError:
             logger.info(f"{log_prefix} HeartFChatting: 麦麦的聊天主循环被取消了")
