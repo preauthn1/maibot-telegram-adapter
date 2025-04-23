@@ -49,7 +49,7 @@ class InterestLogger:
             logger.debug("未找到任何子心流状态")
             return results
 
-        logger.debug(f"正在获取 {len(all_flows)} 个子心流的兴趣状态...")
+        # logger.debug(f"正在获取 {len(all_flows)} 个子心流的兴趣状态...")
         for subheartflow in all_flows:
             if self.subheartflow_manager.get_subheartflow(subheartflow.subheartflow_id):
                 tasks.append(
@@ -89,7 +89,7 @@ class InterestLogger:
 
     async def log_interest_states(self):
         """获取所有子心流的兴趣状态并写入日志文件。"""
-        logger.debug("开始定期记录兴趣状态...")
+        # logger.debug("开始定期记录兴趣状态...")
         try:
             current_timestamp = time.time()
             all_interest_states = await self.get_all_interest_states()
@@ -128,7 +128,7 @@ class InterestLogger:
                         }
                         f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
                         count += 1
-                logger.debug(f"成功记录 {count} 条兴趣历史到 {self._history_log_file_path}")
+                # logger.debug(f"成功记录 {count} 条兴趣历史到 {self._history_log_file_path}")
             except IOError as e:
                 logger.error(f"写入兴趣历史日志到 {self._history_log_file_path} 出错: {e}")
 

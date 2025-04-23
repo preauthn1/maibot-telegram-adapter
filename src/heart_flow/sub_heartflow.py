@@ -305,11 +305,11 @@ class SubHeartflow:
                     await self.heart_fc_instance.shutdown()  # 正确关闭 HeartFChatting
                     self.heart_fc_instance = None
 
-                    chat_stream = chat_manager.get_stream(self.chat_id)
-                    self.normal_chat_instance = NormalChat(
-                        chat_stream=chat_stream, interest_dict=self.get_interest_dict()
-                    )
-                    await self.normal_chat_instance.start_monitoring_interest()
+                chat_stream = chat_manager.get_stream(self.chat_id)
+                self.normal_chat_instance = NormalChat(
+                    chat_stream=chat_stream, interest_dict=self.get_interest_dict()
+                )
+                await self.normal_chat_instance.start_monitoring_interest()
                 # NormalChat 启动/停止逻辑将在下面处理
 
         elif new_state == ChatState.FOCUSED:

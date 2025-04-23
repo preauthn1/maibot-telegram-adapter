@@ -112,7 +112,7 @@ class BackgroundTaskManager:
         """周期性任务主循环"""
         while True:
             start_time = asyncio.get_event_loop().time()
-            logger.debug(f"开始执行后台任务: {task_name}")
+            # logger.debug(f"开始执行后台任务: {task_name}")
 
             try:
                 await task_func(**kwargs)  # 执行实际任务
