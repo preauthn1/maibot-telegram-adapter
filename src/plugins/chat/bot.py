@@ -3,7 +3,7 @@ from ...config.config import global_config
 from .message import MessageRecv
 from ..PFC.pfc_manager import PFCManager
 from .chat_stream import chat_manager
-from ..chat_module.only_process.only_message_process import MessageProcessor
+from .only_message_process import MessageProcessor
 
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ..heartFC_chat.heartflow_processor import HeartFCProcessor

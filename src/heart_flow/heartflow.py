@@ -23,7 +23,7 @@ logger = get_module_logger("heartflow", config=heartflow_config)
 
 # Task Intervals (should be in BackgroundTaskManager or config)
 CLEANUP_INTERVAL_SECONDS = 1200
-STATE_UPDATE_INTERVAL_SECONDS = 30
+STATE_UPDATE_INTERVAL_SECONDS = 60
 
 # Thresholds (should be in SubHeartflowManager or config)
 INACTIVE_THRESHOLD_SECONDS = 1200
@@ -63,7 +63,7 @@ class Heartflow:
 
         # 子系统初始化
         self.mind: Mind = Mind(self.subheartflow_manager, self.llm_model)  # 思考管理器
-        self.interest_logger: InterestLogger = InterestLogger(self.subheartflow_manager)  # 兴趣日志记录器
+        self.interest_logger: InterestLogger = InterestLogger(self.subheartflow_manager, self)  # 兴趣日志记录器
 
         # 后台任务管理器 (整合所有定时任务)
         self.background_task_manager: BackgroundTaskManager = BackgroundTaskManager(
