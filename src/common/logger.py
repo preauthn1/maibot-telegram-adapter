@@ -70,6 +70,24 @@ else:
     }
 
 
+MAIN_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<light-yellow>主程序</light-yellow> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 主程序 | {message}",
+    },
+    "simple": {
+        "console_format": (
+            "<level>{time:MM-DD HH:mm}</level> | <light-yellow>主程序</light-yellow> | <light-yellow>{message}</light-yellow>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 主程序 | {message}",
+    },
+}
+
 # 海马体日志样式配置
 MEMORY_STYLE_CONFIG = {
     "advanced": {
@@ -364,12 +382,32 @@ LPMM_STYLE_CONFIG = {
     },
 }
 
+# 兴趣log
+INTEREST_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<light-yellow>兴趣</light-yellow> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 兴趣 | {message}",
+    },
+    "simple": {
+        "console_format": (
+            "<level>{time:MM-DD HH:mm}</level> | <light-green>兴趣</light-green> | <light-green>{message}</light-green>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 兴趣 | {message}",
+    },
+}
+
 CONFIRM_STYLE_CONFIG = {
     "console_format": "<RED>{message}</RED>",  # noqa: E501
     "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | EULA与PRIVACY确认 | {message}",
 }
 
 # 根据SIMPLE_OUTPUT选择配置
+MAIN_STYLE_CONFIG = MAIN_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else MAIN_STYLE_CONFIG["advanced"]
 MEMORY_STYLE_CONFIG = MEMORY_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else MEMORY_STYLE_CONFIG["advanced"]
 TOPIC_STYLE_CONFIG = TOPIC_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else TOPIC_STYLE_CONFIG["advanced"]
 SENDER_STYLE_CONFIG = SENDER_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else SENDER_STYLE_CONFIG["advanced"]
@@ -388,6 +426,7 @@ CONFIG_STYLE_CONFIG = CONFIG_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else CONFIG
 TOOL_USE_STYLE_CONFIG = TOOL_USE_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else TOOL_USE_STYLE_CONFIG["advanced"]
 PFC_STYLE_CONFIG = PFC_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else PFC_STYLE_CONFIG["advanced"]
 LPMM_STYLE_CONFIG = LPMM_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else LPMM_STYLE_CONFIG["advanced"]
+INTEREST_STYLE_CONFIG = INTEREST_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else INTEREST_STYLE_CONFIG["advanced"]
 
 
 def is_registered_module(record: dict) -> bool:
