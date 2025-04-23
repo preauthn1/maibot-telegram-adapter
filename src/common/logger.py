@@ -33,6 +33,10 @@ current_file_path = Path(__file__).resolve()
 LOG_ROOT = "logs"
 
 SIMPLE_OUTPUT = os.getenv("SIMPLE_OUTPUT", "false")
+if SIMPLE_OUTPUT == "true" or SIMPLE_OUTPUT == "True":
+    SIMPLE_OUTPUT = True
+else:
+    SIMPLE_OUTPUT = False
 print(f"SIMPLE_OUTPUT: {SIMPLE_OUTPUT}")
 
 if not SIMPLE_OUTPUT:
