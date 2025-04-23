@@ -338,7 +338,7 @@ MAI_STATE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦状态 | {message}",
     },
     "simple": {
-        "console_format": "<green>{time:MM-DD HH:mm}</green> | <light-blue>麦麦状态</light-blue> | {message}",  # noqa: E501
+        "console_format": "<green>{time:MM-DD HH:mm}</green> | <light-blue>麦麦状态 | {message} </light-blue>",  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦状态 | {message}",
     },
 }
