@@ -51,14 +51,14 @@ class BackgroundTaskManager:
         self.log_interval = log_interval
         self.inactive_threshold = inactive_threshold  # For cleanup task
         self.interest_eval_interval = interest_eval_interval  # 存储兴趣评估间隔
-        self.random_deactivation_interval = random_deactivation_interval # 存储随机停用间隔
+        self.random_deactivation_interval = random_deactivation_interval  # 存储随机停用间隔
 
         # Task references
         self._state_update_task: Optional[asyncio.Task] = None
         self._cleanup_task: Optional[asyncio.Task] = None
         self._logging_task: Optional[asyncio.Task] = None
         self._interest_eval_task: Optional[asyncio.Task] = None  # 新增兴趣评估任务引用
-        self._random_deactivation_task: Optional[asyncio.Task] = None # 新增随机停用任务引用
+        self._random_deactivation_task: Optional[asyncio.Task] = None  # 新增随机停用任务引用
         self._tasks: List[Optional[asyncio.Task]] = []  # Keep track of all tasks
 
     async def start_tasks(self):
@@ -110,7 +110,7 @@ class BackgroundTaskManager:
                 self._random_deactivation_task,
                 self._run_random_deactivation_cycle,
                 "hf_random_deactivation",
-                "debug", # 设为debug，避免过多日志
+                "debug",  # 设为debug，避免过多日志
                 f"随机停用任务已启动 间隔:{self.random_deactivation_interval}s",
                 "_random_deactivation_task",
             ),
@@ -249,6 +249,7 @@ class BackgroundTaskManager:
     async def _perform_random_deactivation_work(self):
         """执行一轮子心流随机停用检查。"""
         await self.subheartflow_manager.randomly_deactivate_subflows()
+
     # --- 结束新增 ---
 
     # --- Specific Task Runners --- #

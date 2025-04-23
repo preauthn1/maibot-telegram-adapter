@@ -364,17 +364,17 @@ class SubHeartflow:
             if self.heart_fc_instance._loop_task is None or self.heart_fc_instance._loop_task.done():
                 logger.info(f"{log_prefix} HeartFChatting 实例存在但循环未运行，尝试启动...")
                 try:
-                    await self.heart_fc_instance.start() # 启动循环
+                    await self.heart_fc_instance.start()  # 启动循环
                     logger.info(f"{log_prefix} HeartFChatting 循环已启动。")
                     return True
                 except Exception as e:
                     logger.error(f"{log_prefix} 尝试启动现有 HeartFChatting 循环时出错: {e}")
                     logger.error(traceback.format_exc())
-                    return False # 启动失败
+                    return False  # 启动失败
             else:
                 # 任务正在运行
                 logger.debug(f"{log_prefix} HeartFChatting 已在运行中。")
-                return True # 已经在运行
+                return True  # 已经在运行
 
         # 如果实例不存在，则创建并启动
         logger.info(f"{log_prefix} 麦麦准备开始专注聊天 (创建新实例)...")
@@ -383,7 +383,7 @@ class SubHeartflow:
                 chat_id=self.chat_id,
             )
             if await self.heart_fc_instance._initialize():
-                await self.heart_fc_instance.start() # 初始化成功后启动循环
+                await self.heart_fc_instance.start()  # 初始化成功后启动循环
                 logger.info(f"{log_prefix} 麦麦已成功进入专注聊天模式 (新实例已启动)。")
                 return True
             else:
