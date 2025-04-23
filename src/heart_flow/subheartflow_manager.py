@@ -290,8 +290,11 @@ class SubHeartflowManager:
                 log_prefix_flow = f"[{stream_name}]"
 
                 # 只处理 CHAT 状态的子心流
-                if sub_hf.chat_state.chat_status != ChatState.CHAT:
-                    continue
+# The code snippet is checking if the `chat_status` attribute of `sub_hf.chat_state` is not equal to
+# `ChatState.CHAT`. If the condition is met, the code will continue to the next iteration of the loop
+# or block of code where this snippet is located.
+                # if sub_hf.chat_state.chat_status != ChatState.CHAT:
+                #     continue
 
                 # 检查是否满足提升概率
                 should_hfc = random.random() < sub_hf.interest_chatting.start_hfc_probability
@@ -310,7 +313,7 @@ class SubHeartflowManager:
                 # --- 执行提升 ---
                 # 获取当前实例以检查最新状态 (防御性编程)
                 current_subflow = self.subheartflows.get(flow_id)
-                if not current_subflow or current_subflow.chat_state.chat_status != ChatState.CHAT:
+                if not current_subflow:
                     logger.warning(f"{log_prefix_manager} {log_prefix_flow} 尝试提升时状态已改变或实例消失，跳过。")
                     continue
 
