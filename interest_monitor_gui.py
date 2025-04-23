@@ -128,53 +128,79 @@ class InterestMonitorApp:
                     read_count += 1
                     try:
                         log_entry = json.loads(line.strip())
-                        timestamp = log_entry.get("timestamp")
+                        timestamp = log_entry.get("timestamp") # 获取顶层时间戳
 
-                        # *** Add time filtering ***
-                        if timestamp is None or float(timestamp) < time_threshold:
-                            continue  # Skip old or invalid entries
-
-                        stream_id = log_entry.get("stream_id")
-                        interest_level = log_entry.get("interest_level")
-                        group_name = log_entry.get(
-                            "group_name", stream_id
-                        )  # *** Get group_name, fallback to stream_id ***
-                        reply_probability = log_entry.get("reply_probability")  # <--- 获取概率值
-
-                        # *** Check other required fields AFTER time filtering ***
-                        if stream_id is None or interest_level is None:
+                        # *** 时间过滤 ***
+                        if timestamp is None:
                             error_count += 1
-                            continue  # 跳过无效行
+                            continue # 跳过没有时间戳的行
+                        try:
+                            entry_timestamp = float(timestamp)
+                            if entry_timestamp < time_threshold:
+                                continue  # 跳过时间过早的条目
+                        except (ValueError, TypeError):
+                            error_count += 1
+                            continue # 跳过时间戳格式错误的行
 
-                        # 如果是第一次读到这个 stream_id，则创建 deque
-                        if stream_id not in new_stream_history:
-                            new_stream_history[stream_id] = deque(maxlen=MAX_HISTORY_POINTS)
-                            new_probability_history[stream_id] = deque(maxlen=MAX_HISTORY_POINTS)  # <--- 创建概率 deque
-                            # 检查是否已有颜色，没有则分配
-                            if stream_id not in self.stream_colors:
-                                self.stream_colors[stream_id] = self.get_random_color()
 
-                        # *** Store the latest display name found for this stream_id ***
-                        new_stream_display_names[stream_id] = group_name
+                        # --- 修改开始：迭代 subflows ---
+                        subflows = log_entry.get("subflows")
+                        if not isinstance(subflows, list): # 检查 subflows 是否存在且为列表
+                            error_count += 1
+                            continue # 跳过没有 subflows 或格式无效的行
 
-                        # 添加数据点
-                        new_stream_history[stream_id].append((float(timestamp), float(interest_level)))
-                        # 添加概率数据点 (如果存在)
-                        if reply_probability is not None:
+                        for subflow_entry in subflows:
+                            stream_id = subflow_entry.get("stream_id")
+                            interest_level = subflow_entry.get("interest_level")
+                            # 获取 group_name，如果不存在则回退到 stream_id
+                            group_name = subflow_entry.get("group_name", stream_id)
+                            reply_probability = subflow_entry.get("reply_probability") # 获取概率值
+
+                            # *** 检查必要的字段 ***
+                            # 注意：时间戳已在顶层检查过
+                            if stream_id is None or interest_level is None:
+                                # 这里可以选择记录子流错误，但暂时跳过
+                                continue  # 跳过无效的 subflow 条目
+
+                            # 确保 interest_level 可以转换为浮点数
                             try:
-                                new_probability_history[stream_id].append((float(timestamp), float(reply_probability)))
-                            except (TypeError, ValueError):
-                                # 如果概率值无效，可以跳过或记录一个默认值，这里跳过
-                                pass
+                                interest_level_float = float(interest_level)
+                            except (ValueError, TypeError):
+                                continue # 跳过 interest_level 无效的 subflow
+
+                            # 如果是第一次读到这个 stream_id，则创建 deque
+                            if stream_id not in new_stream_history:
+                                new_stream_history[stream_id] = deque(maxlen=MAX_HISTORY_POINTS)
+                                new_probability_history[stream_id] = deque(maxlen=MAX_HISTORY_POINTS) # 创建概率 deque
+                                # 检查是否已有颜色，没有则分配
+                                if stream_id not in self.stream_colors:
+                                    self.stream_colors[stream_id] = self.get_random_color()
+
+                            # *** 存储此 stream_id 最新的显示名称 ***
+                            new_stream_display_names[stream_id] = group_name
+
+                            # 添加数据点 (使用顶层时间戳)
+                            new_stream_history[stream_id].append((entry_timestamp, interest_level_float))
+
+                            # 添加概率数据点 (如果存在且有效)
+                            if reply_probability is not None:
+                                try:
+                                    # 尝试将概率转换为浮点数
+                                    probability_float = float(reply_probability)
+                                    new_probability_history[stream_id].append((entry_timestamp, probability_float))
+                                except (TypeError, ValueError):
+                                    # 如果概率值无效，可以跳过或记录一个默认值，这里跳过
+                                    pass
+                        # --- 修改结束 ---
 
                     except json.JSONDecodeError:
                         error_count += 1
                         # logger.warning(f"Skipping invalid JSON line: {line.strip()}")
                         continue  # 跳过无法解析的行
-                    except (TypeError, ValueError):
-                        error_count += 1
-                        # logger.warning(f"Skipping line due to data type error ({e}): {line.strip()}")
-                        continue  # 跳过数据类型错误的行
+                    # except (TypeError, ValueError) as e: # 这个外层 catch 可能不再需要，因为类型错误在内部处理了
+                    #     error_count += 1
+                    #     # logger.warning(f"Skipping line due to data type error ({e}): {line.strip()}")
+                    #     continue  # 跳过数据类型错误的行
 
             # 读取完成后，用新数据替换旧数据
             self.stream_history = new_stream_history
