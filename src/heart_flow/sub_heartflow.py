@@ -176,10 +176,8 @@ class InterestChatting:
         interest = self.interest_level  # 直接使用属性值
         return {
             "interest_level": round(interest, 2),
-            "last_update_time": self.last_update_time,
-            "current_reply_probability": round(self.current_reply_probability, 4),
+            "start_hfc_probability": round(self.start_hfc_probability, 4),
             "is_above_threshold": self.is_above_threshold,
-            "last_interaction_time": self.last_interaction_time,
         }
 
     async def should_evaluate_reply(self) -> bool:

@@ -136,10 +136,8 @@ class InterestLogger:
                     "sub_mind": state.get("current_mind", "未知"),
                     "sub_chat_state": state.get("chat_state", "未知"),
                     "interest_level": interest_state.get("interest_level", 0.0),
-                    "reply_probability": interest_state.get("current_reply_probability", 0.0),
+                    "start_hfc_probability": interest_state.get("start_hfc_probability", 0.0),
                     "is_above_threshold": interest_state.get("is_above_threshold", False),
-                    "last_active_time": state.get("last_active_time", 0.0),
-                    "last_interaction_time": interest_state.get("last_interaction_time", 0.0),
                 }
                 subflow_details.append(subflow_entry)
 

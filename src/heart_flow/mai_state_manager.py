@@ -13,6 +13,11 @@ mai_state_config = LogConfig(
 logger = get_module_logger("mai_state_manager", config=mai_state_config)
 
 
+
+enable_unlimited_hfc_chat = False
+
+
+
 class MaiState(enum.Enum):
     """
     聊天状态:
@@ -28,6 +33,11 @@ class MaiState(enum.Enum):
     FOCUSED_CHAT = "专心聊天"
 
     def get_normal_chat_max_num(self):
+        # 调试用
+        if enable_unlimited_hfc_chat:
+            return 1000
+        
+        
         if self == MaiState.OFFLINE:
             return 0
         elif self == MaiState.PEEKING:
@@ -38,6 +48,10 @@ class MaiState(enum.Enum):
             return 2
 
     def get_focused_chat_max_num(self):
+        # 调试用
+        if enable_unlimited_hfc_chat:
+            return 1000
+
         if self == MaiState.OFFLINE:
             return 0
         elif self == MaiState.PEEKING:
@@ -125,11 +139,11 @@ class MaiStateManager:
         if current_status == MaiState.OFFLINE:
             logger.info("当前[离线]，没看手机，思考要不要上线看看......")
         elif current_status == MaiState.PEEKING:
-            logger.info("当前[在窥屏]，思考要不要继续聊下去......")
+            logger.info("当前[看一眼]，思考要不要继续聊下去......")
         elif current_status == MaiState.NORMAL_CHAT:
-            logger.info("当前在[随便看]思考要不要继续聊下去......")
+            logger.info("当前在[正常聊天]思考要不要继续聊下去......")
         elif current_status == MaiState.FOCUSED_CHAT:
-            logger.info("当前在[专心看]思考要不要继续聊下去......")
+            logger.info("当前在[专心聊天]思考要不要继续聊下去......")
 
         # 1. 麦麦每分钟都有概率离线
         if time_since_last_min_check >= 60:
