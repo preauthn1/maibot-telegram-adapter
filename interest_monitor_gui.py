@@ -215,7 +215,9 @@ class InterestMonitorApp:
                             # 获取 group_name，如果不存在则回退到 stream_id
                             group_name = subflow_entry.get("group_name", stream_id)
                             # reply_probability = subflow_entry.get("reply_probability")  # 获取概率值 # <-- 注释掉旧行
-                            start_hfc_probability = subflow_entry.get("start_hfc_probability") # <-- 添加新行，读取新字段
+                            start_hfc_probability = subflow_entry.get(
+                                "start_hfc_probability"
+                            )  # <-- 添加新行，读取新字段
 
                             # *** 检查必要的字段 ***
                             # 注意：时间戳已在顶层检查过
@@ -254,11 +256,11 @@ class InterestMonitorApp:
 
                             # 添加概率数据点 (如果存在且有效)
                             # if reply_probability is not None: # <-- 注释掉旧判断
-                            if start_hfc_probability is not None: # <-- 修改判断条件
+                            if start_hfc_probability is not None:  # <-- 修改判断条件
                                 try:
                                     # 尝试将概率转换为浮点数
                                     # probability_float = float(reply_probability) # <-- 注释掉旧转换
-                                    probability_float = float(start_hfc_probability) # <-- 使用新变量
+                                    probability_float = float(start_hfc_probability)  # <-- 使用新变量
                                     new_probability_history[stream_id].append((entry_timestamp, probability_float))
                                 except (TypeError, ValueError):
                                     # 如果概率值无效，可以跳过或记录一个默认值，这里跳过
@@ -416,10 +418,10 @@ class InterestMonitorApp:
         self.ax_single_interest.set_ylim(0, 10)  # 固定 Y 轴范围 0-10
 
         # self.ax_single_probability.set_title("回复评估概率") # <-- 注释掉旧标题
-        self.ax_single_probability.set_title("HFC 启动概率") # <-- 修改标题
+        self.ax_single_probability.set_title("HFC 启动概率")  # <-- 修改标题
         self.ax_single_probability.set_xlabel("时间")
         # self.ax_single_probability.set_ylabel("概率") # <-- 注释掉旧标签
-        self.ax_single_probability.set_ylabel("HFC 概率") # <-- 修改 Y 轴标签
+        self.ax_single_probability.set_ylabel("HFC 概率")  # <-- 修改 Y 轴标签
         self.ax_single_probability.grid(True)
         self.ax_single_probability.set_ylim(0, 1.05)  # 固定 Y 轴范围 0-1
         self.ax_single_probability.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
