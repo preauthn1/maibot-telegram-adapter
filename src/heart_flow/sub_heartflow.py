@@ -358,30 +358,40 @@ class SubHeartflow:
         self.clear_interest_dict()  # 清理兴趣字典，准备专注聊天
 
         log_prefix = self.log_prefix
+        # 如果实例已存在，检查其循环任务状态
         if self.heart_fc_instance:
-            if not self.heart_fc_instance._loop_active:
-                logger.warning(f"{log_prefix} HeartFChatting 实例存在但未激活，尝试重新激活...")
-                await self.heart_fc_instance.add_time()  # 尝试添加时间以激活循环
-                return True  # 假设 add_time 会处理激活逻辑
+            # 如果任务已完成或不存在，则尝试重新启动
+            if self.heart_fc_instance._loop_task is None or self.heart_fc_instance._loop_task.done():
+                logger.info(f"{log_prefix} HeartFChatting 实例存在但循环未运行，尝试启动...")
+                try:
+                    await self.heart_fc_instance.start() # 启动循环
+                    logger.info(f"{log_prefix} HeartFChatting 循环已启动。")
+                    return True
+                except Exception as e:
+                    logger.error(f"{log_prefix} 尝试启动现有 HeartFChatting 循环时出错: {e}")
+                    logger.error(traceback.format_exc())
+                    return False # 启动失败
             else:
+                # 任务正在运行
                 logger.debug(f"{log_prefix} HeartFChatting 已在运行中。")
-                return True  # 已经在运行
+                return True # 已经在运行
 
-        logger.info(f"{log_prefix} 麦麦准备开始专注聊天...")
+        # 如果实例不存在，则创建并启动
+        logger.info(f"{log_prefix} 麦麦准备开始专注聊天 (创建新实例)...")
         try:
             self.heart_fc_instance = HeartFChatting(
                 chat_id=self.chat_id,
             )
             if await self.heart_fc_instance._initialize():
-                await self.heart_fc_instance.add_time()  # 初始化成功后添加初始时间
-                logger.info(f"{log_prefix} 麦麦已成功进入专注聊天模式。")
+                await self.heart_fc_instance.start() # 初始化成功后启动循环
+                logger.info(f"{log_prefix} 麦麦已成功进入专注聊天模式 (新实例已启动)。")
                 return True
             else:
                 logger.error(f"{log_prefix} HeartFChatting 初始化失败，无法进入专注模式。")
                 self.heart_fc_instance = None  # 初始化失败，清理实例
                 return False
         except Exception as e:
-            logger.error(f"{log_prefix} 创建或初始化 HeartFChatting 实例时出错: {e}")
+            logger.error(f"{log_prefix} 创建或启动 HeartFChatting 实例时出错: {e}")
             logger.error(traceback.format_exc())
             self.heart_fc_instance = None  # 创建或初始化异常，清理实例
             return False

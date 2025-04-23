@@ -358,6 +358,74 @@ class SubHeartflowManager:
         else:
             logger.debug(f"{log_prefix_manager} 评估周期结束, 未提升任何子心流。")
 
+    async def randomly_deactivate_subflows(self, deactivation_probability: float = 0.3):
+        """以一定概率将 FOCUSED 或 CHAT 状态的子心流回退到 ABSENT 状态。"""
+        log_prefix_manager = "[子心流管理器-随机停用]"
+        logger.debug(f"{log_prefix_manager} 开始随机停用检查... (概率: {deactivation_probability:.0%})")
+
+        # 使用快照安全遍历
+        subflows_snapshot = list(self.subheartflows.values())
+        deactivated_count = 0
+
+        # 预先计算状态数量，因为 set_chat_state 需要
+        states_num_before = (
+            self.count_subflows_by_state(ChatState.ABSENT),
+            self.count_subflows_by_state(ChatState.CHAT),
+            self.count_subflows_by_state(ChatState.FOCUSED),
+        )
+
+        try:
+            for sub_hf in subflows_snapshot:
+                flow_id = sub_hf.subheartflow_id
+                stream_name = chat_manager.get_stream_name(flow_id) or flow_id
+                log_prefix_flow = f"[{stream_name}]"
+                current_state = sub_hf.chat_state.chat_status
+
+                # 只处理 FOCUSED 或 CHAT 状态
+                if current_state not in [ChatState.FOCUSED, ChatState.CHAT]:
+                    continue
+
+                # 检查随机概率
+                if random.random() < deactivation_probability:
+                    logger.info(
+                        f"{log_prefix_manager} {log_prefix_flow} 随机触发停用 (从 {current_state.value}) -> ABSENT"
+                    )
+
+                    # 获取当前实例以检查最新状态
+                    current_subflow = self.subheartflows.get(flow_id)
+                    if not current_subflow or current_subflow.chat_state.chat_status != current_state:
+                        logger.warning(f"{log_prefix_manager} {log_prefix_flow} 尝试停用时状态已改变或实例消失，跳过。")
+                        continue
+
+                    # --- 状态设置 --- #
+                    # 注意：这里传递的状态数量是 *停用前* 的状态数量
+                    await current_subflow.set_chat_state(ChatState.ABSENT, states_num_before)
+
+                    # --- 状态验证 (可选) ---
+                    final_subflow = self.subheartflows.get(flow_id)
+                    if final_subflow:
+                        final_state = final_subflow.chat_state.chat_status
+                        if final_state == ChatState.ABSENT:
+                            logger.debug(
+                                f"{log_prefix_manager} {log_prefix_flow} 成功从 {current_state.value} 停用到 ABSENT 状态"
+                            )
+                            deactivated_count += 1
+                            # 注意：停用后不需要更新 states_num_before，因为它只用于 set_chat_state 的限制检查
+                        else:
+                            logger.warning(
+                                f"{log_prefix_manager} {log_prefix_flow} 尝试停用到 ABSENT 后状态仍为 {final_state.value}"
+                            )
+                    else:
+                        logger.warning(f"{log_prefix_manager} {log_prefix_flow} 停用后验证时子心流 {flow_id} 消失")
+
+        except Exception as e:
+            logger.error(f"{log_prefix_manager} 随机停用周期出错: {e}", exc_info=True)
+
+        if deactivated_count > 0:
+            logger.info(f"{log_prefix_manager} 随机停用周期结束, 成功停用 {deactivated_count} 个子心流。")
+        else:
+            logger.debug(f"{log_prefix_manager} 随机停用周期结束, 未停用任何子心流。")
+
     def count_subflows_by_state(self, state: ChatState) -> int:
         """统计指定状态的子心流数量
 
