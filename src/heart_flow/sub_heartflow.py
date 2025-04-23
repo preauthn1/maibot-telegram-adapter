@@ -535,7 +535,7 @@ class SubHeartflow:
         prompt = (await global_prompt_manager.get_prompt_async("sub_heartflow_prompt_before")).format(
             extra_info=extra_info_prompt,
             prompt_personality=prompt_personality,
-            bot_name=individuality.bot_nickname,
+            bot_name=individuality.personality.bot_nickname,
             current_thinking_info=current_thinking_info,
             time_now=time_now,
             chat_observe_info=chat_observe_info,
