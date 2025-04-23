@@ -375,7 +375,7 @@ class Heartflow:
 
     async def get_all_interest_states(self) -> Dict[str, Dict]:  # <-- Make async
         """获取所有活跃子心流的当前兴趣状态"""
-        states = {}
+        _states = {}
         # 创建副本以避免在迭代时修改字典
         items_snapshot = list(self._subheartflows.items()) # Make a copy for safe iteration
         tasks = []
