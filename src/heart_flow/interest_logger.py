@@ -5,7 +5,7 @@ import os
 import traceback
 from typing import TYPE_CHECKING, Dict, List
 
-from src.common.logger import get_module_logger
+from src.common.logger import get_module_logger, LogConfig, INTEREST_STYLE_CONFIG
 
 # Need chat_manager to get stream names
 from src.plugins.chat.chat_stream import chat_manager
@@ -15,7 +15,11 @@ if TYPE_CHECKING:
     from src.heart_flow.sub_heartflow import SubHeartflow
     from src.heart_flow.heartflow import Heartflow  # 导入 Heartflow 类型
 
-logger = get_module_logger("interest_logger")
+interest_logger_config = LogConfig(
+    console_format=INTEREST_STYLE_CONFIG["console_format"],
+    file_format=INTEREST_STYLE_CONFIG["file_format"],
+)
+logger = get_module_logger("interest_logger", config=interest_logger_config)
 
 # Consider moving log directory/filename constants here
 LOG_DIRECTORY = "logs/interest"
