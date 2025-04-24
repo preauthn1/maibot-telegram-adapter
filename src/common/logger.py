@@ -356,12 +356,12 @@ CHAT_STREAM_STYLE_CONFIG = {
             "<level>{level: <8}</level> | "
             "<light-blue>聊天流</light-blue> | "
             "<level>{message}</level>"
-        ), 
+        ),
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 聊天流 | {message}",
     },
     "simple": {
         "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <light-blue>聊天流</light-blue> | <light-blue>{message}</light-blue>" 
+            "<level>{time:MM-DD HH:mm}</level> | <light-blue>聊天流</light-blue> | <light-blue>{message}</light-blue>"
         ),
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 聊天流 | {message}",
     },
