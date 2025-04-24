@@ -404,8 +404,7 @@ class BotConfig:
                 config.save_pic = emoji_config.get("save_pic", config.save_pic)
                 config.save_emoji = emoji_config.get("save_emoji", config.save_emoji)
                 config.steal_emoji = emoji_config.get("steal_emoji", config.steal_emoji)
-            
-            
+
         def bot(parent: dict):
             # 机器人基础配置
             bot_config = parent["bot"]

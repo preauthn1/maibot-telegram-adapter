@@ -595,12 +595,12 @@ class HeartFChatting:
         self, observed_messages_str: str, current_mind: Optional[str], structured_info: Dict[str, Any]
     ) -> str:
         """构建 Planner LLM 的提示词"""
-        
+
         # 准备结构化信息块
         structured_info_block = ""
         if structured_info:
             structured_info_block = f"以下是一些额外的信息：\n{structured_info}\n"
-        
+
         # 准备聊天内容块
         chat_content_block = ""
         if observed_messages_str:
@@ -609,14 +609,14 @@ class HeartFChatting:
             chat_content_block += "\n---"
         else:
             chat_content_block = "当前没有观察到新的聊天内容。\n"
-        
+
         # 准备当前思维块
         current_mind_block = ""
         if current_mind:
             current_mind_block = f"\n---\n{current_mind}\n---\n\n"
         else:
             current_mind_block = " [没有特别的想法] \n\n"
-        
+
         # 获取提示词模板并填充数据
         prompt = (await global_prompt_manager.get_prompt_async("planner_prompt")).format(
             bot_name=global_config.BOT_NICKNAME,
@@ -624,7 +624,7 @@ class HeartFChatting:
             chat_content_block=chat_content_block,
             current_mind_block=current_mind_block,
         )
-        
+
         return prompt
 
     # --- 回复器 (Replier) 的定义 --- #
