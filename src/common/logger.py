@@ -480,7 +480,7 @@ MAI_STATE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦状态 | {message}",
     },
     "simple": {
-        "console_format": "<level>{time:MM-DD HH:mm}</level> | <light-blue>麦麦状态 | {message} </light-blue>",  # noqa: E501
+        "console_format": "<level>{time:MM-DD HH:mm}</level> | <fg #66CCFF>麦麦状态 | {message} </fg #66CCFF>",  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦状态 | {message}",
     },
 }
@@ -528,6 +528,25 @@ CONFIRM_STYLE_CONFIG = {
     "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | EULA与PRIVACY确认 | {message}",
 }
 
+# 天依蓝配置
+TIANYI_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<fg #66CCFF>天依</fg #66CCFF> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 天依 | {message}",
+    },
+    "simple": {
+        "console_format": (
+            "<level>{time:MM-DD HH:mm}</level> | <fg #66CCFF>天依</fg #66CCFF> | <fg #66CCFF>{message}</fg #66CCFF>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 天依 | {message}",
+    },
+}
+
 # 根据SIMPLE_OUTPUT选择配置
 MAIN_STYLE_CONFIG = MAIN_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else MAIN_STYLE_CONFIG["advanced"]
 EMOJI_STYLE_CONFIG = EMOJI_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else EMOJI_STYLE_CONFIG["advanced"]
@@ -563,6 +582,7 @@ TOOL_USE_STYLE_CONFIG = TOOL_USE_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else TO
 PFC_STYLE_CONFIG = PFC_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else PFC_STYLE_CONFIG["advanced"]
 LPMM_STYLE_CONFIG = LPMM_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else LPMM_STYLE_CONFIG["advanced"]
 INTEREST_STYLE_CONFIG = INTEREST_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else INTEREST_STYLE_CONFIG["advanced"]
+TIANYI_STYLE_CONFIG = TIANYI_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else TIANYI_STYLE_CONFIG["advanced"]
 
 
 def is_registered_module(record: dict) -> bool:

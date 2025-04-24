@@ -215,7 +215,7 @@ class EmojiManager:
                 self._initialized = True
                 # 更新表情包数量
                 # 启动时执行一次完整性检查
-                self.check_emoji_file_integrity()
+                # await self.check_emoji_file_integrity()
             except Exception:
                 logger.exception("初始化表情管理器失败")
 
@@ -391,7 +391,7 @@ class EmojiManager:
         await self.get_all_emoji_from_db()
         while True:
             logger.info("[扫描] 开始检查表情包完整性...")
-            self.check_emoji_file_integrity()
+            await self.check_emoji_file_integrity()
             logger.info("[扫描] 开始扫描新表情包...")
 
             # 检查表情包目录是否存在
@@ -463,6 +463,7 @@ class EmojiManager:
                 )
 
                 # 设置额外属性
+                emoji.hash = emoji_data.get("hash", "")
                 emoji.usage_count = emoji_data.get("usage_count", 0)
                 emoji.last_used_time = emoji_data.get("last_used_time", emoji_data.get("timestamp", time.time()))
                 emoji.register_time = emoji_data.get("timestamp", time.time())
@@ -710,7 +711,7 @@ class EmojiManager:
 
             # 分析情感含义
             emotion_prompt = f"""
-            基于这个表情包的描述：'{description}'，请列出1-3个可能的情感标签，每个标签用一个词组表示，格式如下：
+            基于这个表情包的描述：'{description}'，请列出1-2个可能的情感标签，每个标签用一个词组表示，格式如下：
             幽默的讽刺
             悲伤的无奈
             愤怒的抗议
@@ -748,7 +749,7 @@ class EmojiManager:
             new_emoji.emotion = emotions
 
             # 检查是否已经注册过
-            # 对比数据库中是否存在相同哈希值的表情包
+            # 对比内存中是否存在相同哈希值的表情包
             if await self.get_emoji_from_manager(new_emoji.hash):
                 logger.warning(f"[警告] 表情包已存在: {filename}")
                 return False

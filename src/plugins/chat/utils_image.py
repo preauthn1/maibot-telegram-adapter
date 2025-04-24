@@ -310,12 +310,15 @@ def image_path_to_base64(image_path: str) -> str:
         image_path: 图片文件路径
     Returns:
         str: base64编码的图片数据
+    Raises:
+        FileNotFoundError: 当图片文件不存在时
+        IOError: 当读取图片文件失败时
     """
-    try:
-        with open(image_path, "rb") as f:
-            image_data = f.read()
-            return base64.b64encode(image_data).decode("utf-8")
-    except Exception as e:
-        logger.error(f"读取图片失败: {image_path}, 错误: {str(e)}")
-        traceback.print_exc()
-        return None
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"图片文件不存在: {image_path}")
+    
+    with open(image_path, "rb") as f:
+        image_data = f.read()
+        if not image_data:
+            raise IOError(f"读取图片文件失败: {image_path}")
+        return base64.b64encode(image_data).decode("utf-8")
