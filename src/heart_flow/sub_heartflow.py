@@ -26,13 +26,6 @@ subheartflow_config = LogConfig(
 )
 logger = get_module_logger("subheartflow", config=subheartflow_config)
 
-interest_log_config = LogConfig(
-    console_format=SUB_HEARTFLOW_STYLE_CONFIG["console_format"],
-    file_format=SUB_HEARTFLOW_STYLE_CONFIG["file_format"],
-)
-interest_logger = get_module_logger("InterestChatting", config=interest_log_config)
-
-
 base_reply_probability = 0.05
 probability_increase_rate_per_second = 0.08
 max_reply_probability = 1
@@ -97,7 +90,7 @@ class InterestChatting:
 
         # 异常情况处理
         if self.decay_rate_per_second <= 0:
-            interest_logger.warning(f"衰减率({self.decay_rate_per_second})无效，重置兴趣值为0")
+            logger.warning(f"衰减率({self.decay_rate_per_second})无效，重置兴趣值为0")
             self.interest_level = 0.0
             return
 
@@ -106,7 +99,7 @@ class InterestChatting:
             decay_factor = math.pow(self.decay_rate_per_second, self.update_interval)
             self.interest_level *= decay_factor
         except ValueError as e:
-            interest_logger.error(
+            logger.error(
                 f"衰减计算错误: {e} 参数: 衰减率={self.decay_rate_per_second} 时间差={self.update_interval} 当前兴趣={self.interest_level}"
             )
             self.interest_level = 0.0
@@ -161,46 +154,46 @@ class InterestChatting:
                 # 正常超时，继续循环
                 continue
             except asyncio.CancelledError:
-                interest_logger.info("InterestChatting 更新循环被取消。")
+                logger.info("InterestChatting 更新循环被取消。")
                 break
             except Exception as e:
-                interest_logger.error(f"InterestChatting 更新循环出错: {e}")
-                interest_logger.error(traceback.format_exc())
+                logger.error(f"InterestChatting 更新循环出错: {e}")
+                logger.error(traceback.format_exc())
                 # 防止错误导致CPU飙升，稍作等待
                 await asyncio.sleep(5)
-        interest_logger.info("InterestChatting 更新循环已停止。")
+        logger.info("InterestChatting 更新循环已停止。")
 
     def start_updates(self, update_interval: float = 1.0):
         """启动后台更新任务"""
         if self.update_task is None or self.update_task.done():
             self._stop_event.clear()
             self.update_task = asyncio.create_task(self._run_update_loop(update_interval))
-            interest_logger.debug("后台兴趣更新任务已创建并启动。")
+            logger.debug("后台兴趣更新任务已创建并启动。")
         else:
-            interest_logger.debug("后台兴趣更新任务已在运行中。")
+            logger.debug("后台兴趣更新任务已在运行中。")
 
     async def stop_updates(self):
         """停止后台更新任务"""
         if self.update_task and not self.update_task.done():
-            interest_logger.info("正在停止 InterestChatting 后台更新任务...")
+            logger.info("正在停止 InterestChatting 后台更新任务...")
             self._stop_event.set()  # 发送停止信号
             try:
                 # 等待任务结束，设置超时
                 await asyncio.wait_for(self.update_task, timeout=5.0)
-                interest_logger.info("InterestChatting 后台更新任务已成功停止。")
+                logger.info("InterestChatting 后台更新任务已成功停止。")
             except asyncio.TimeoutError:
-                interest_logger.warning("停止 InterestChatting 后台任务超时，尝试取消...")
+                logger.warning("停止 InterestChatting 后台任务超时，尝试取消...")
                 self.update_task.cancel()
                 try:
                     await self.update_task  # 等待取消完成
                 except asyncio.CancelledError:
-                    interest_logger.info("InterestChatting 后台更新任务已被取消。")
+                    logger.info("InterestChatting 后台更新任务已被取消。")
             except Exception as e:
-                interest_logger.error(f"停止 InterestChatting 后台任务时发生异常: {e}")
+                logger.error(f"停止 InterestChatting 后台任务时发生异常: {e}")
             finally:
                 self.update_task = None
         else:
-            interest_logger.debug("InterestChatting 后台更新任务未运行或已完成。")
+            logger.debug("InterestChatting 后台更新任务未运行或已完成。")
 
     # --- 结束 新增方法 ---
 
