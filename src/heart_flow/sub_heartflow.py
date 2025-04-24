@@ -6,12 +6,10 @@ from src.config.config import global_config
 import time
 from typing import Optional, List, Dict, Callable
 import traceback
-from src.plugins.chat.utils import parse_text_timestamps
 import enum
 from src.common.logger import get_module_logger, LogConfig, SUB_HEARTFLOW_STYLE_CONFIG  # noqa: E402
 from src.individuality.individuality import Individuality
 import random
-from src.plugins.person_info.relationship_manager import relationship_manager
 from ..plugins.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugins.chat.message import MessageRecv
 from src.plugins.chat.chat_stream import chat_manager
@@ -20,7 +18,7 @@ from src.plugins.heartFC_chat.heartFC_chat import HeartFChatting
 from src.plugins.heartFC_chat.normal_chat import NormalChat
 from src.do_tool.tool_use import ToolUser
 from src.heart_flow.mai_state_manager import MaiStateInfo
-from src.plugins.utils.json_utils import safe_json_dumps, process_llm_tool_response, normalize_llm_response, process_llm_tool_calls
+from src.plugins.utils.json_utils import safe_json_dumps, normalize_llm_response, process_llm_tool_calls
 
 # 定义常量 (从 interest.py 移动过来)
 MAX_INTEREST = 15.0
@@ -114,8 +112,6 @@ class InterestChatting:
 
         self.above_threshold = False
         self.start_hfc_probability = 0.0
-        
-
 
     def add_interest_dict(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
         self.interest_dict[message.message_info.message_id] = (message, interest_value, is_mentioned)
@@ -293,7 +289,7 @@ class SubHeartflow:
         )
 
         self.log_prefix = chat_manager.get_stream_name(self.subheartflow_id) or self.subheartflow_id
-        
+
         self.structured_info = {}
 
     async def add_time_current_state(self, add_time: float):
@@ -484,36 +480,36 @@ class SubHeartflow:
     async def do_thinking_before_reply(self):
         """
         在回复前进行思考，生成内心想法并收集工具调用结果
-        
+
         返回:
             tuple: (current_mind, past_mind) 当前想法和过去的想法列表
         """
         # 更新活跃时间
         self.last_active_time = time.time()
-        
+
         # ---------- 1. 准备基础数据 ----------
         # 获取现有想法和情绪状态
         current_thinking_info = self.current_mind
         mood_info = self.chat_state.mood
-        
+
         # 获取观察对象
         observation = self._get_primary_observation()
         if not observation:
             logger.error(f"[{self.subheartflow_id}] 无法获取观察对象")
             self.update_current_mind("(我没看到任何聊天内容...)")
             return self.current_mind, self.past_mind
-            
+
         # 获取观察内容
         chat_observe_info = observation.get_observe_info()
-        
+
         # ---------- 2. 准备工具和个性化数据 ----------
         # 初始化工具
         tool_instance = ToolUser()
         tools = tool_instance._define_tools()
-        
+
         # 获取个性化信息
         individuality = Individuality.get_instance()
-        
+
         # 构建个性部分
         prompt_personality = f"你的名字是{individuality.personality.bot_nickname}，你"
         prompt_personality += individuality.personality.personality_core
@@ -547,9 +543,7 @@ class SubHeartflow:
 
         # 加权随机选择思考指导
         hf_do_next = local_random.choices(
-            [option[0] for option in hf_options], 
-            weights=[option[1] for option in hf_options], 
-            k=1
+            [option[0] for option in hf_options], weights=[option[1] for option in hf_options], k=1
         )[0]
 
         # ---------- 4. 构建最终提示词 ----------
@@ -570,16 +564,16 @@ class SubHeartflow:
         # ---------- 5. 执行LLM请求并处理响应 ----------
         content = ""  # 初始化内容变量
         reasoning_content = ""  # 初始化推理内容变量
-        
+
         try:
             # 调用LLM生成响应
             response = await self.llm_model.generate_response_tool_async(prompt=prompt, tools=tools)
-            
+
             # 标准化响应格式
             success, normalized_response, error_msg = normalize_llm_response(
                 response, log_prefix=f"[{self.subheartflow_id}] "
             )
-            
+
             if not success:
                 # 处理标准化失败情况
                 logger.warning(f"[{self.subheartflow_id}] {error_msg}")
@@ -588,23 +582,24 @@ class SubHeartflow:
                 # 从标准化响应中提取内容
                 if len(normalized_response) >= 2:
                     content = normalized_response[0]
-                    reasoning_content = normalized_response[1] if len(normalized_response) > 1 else ""
-                
+                    _reasoning_content = normalized_response[1] if len(normalized_response) > 1 else ""
+
                 # 处理可能的工具调用
                 if len(normalized_response) == 3:
                     # 提取并验证工具调用
                     success, valid_tool_calls, error_msg = process_llm_tool_calls(
                         normalized_response, log_prefix=f"[{self.subheartflow_id}] "
                     )
-                    
+
                     if success and valid_tool_calls:
                         # 记录工具调用信息
-                        tool_calls_str = ", ".join([
-                            call.get("function", {}).get("name", "未知工具") 
-                            for call in valid_tool_calls
-                        ])
-                        logger.info(f"[{self.subheartflow_id}] 模型请求调用{len(valid_tool_calls)}个工具: {tool_calls_str}")
-                        
+                        tool_calls_str = ", ".join(
+                            [call.get("function", {}).get("name", "未知工具") for call in valid_tool_calls]
+                        )
+                        logger.info(
+                            f"[{self.subheartflow_id}] 模型请求调用{len(valid_tool_calls)}个工具: {tool_calls_str}"
+                        )
+
                         # 收集工具执行结果
                         await self._execute_tool_calls(valid_tool_calls, tool_instance)
                     elif not success:
@@ -628,37 +623,34 @@ class SubHeartflow:
         self.update_current_mind(content)
 
         return self.current_mind, self.past_mind
-        
+
     async def _execute_tool_calls(self, tool_calls, tool_instance):
         """
         执行一组工具调用并收集结果
-        
+
         参数:
             tool_calls: 工具调用列表
             tool_instance: 工具使用器实例
         """
         tool_results = []
         structured_info = {}  # 动态生成键
-        
+
         # 执行所有工具调用
         for tool_call in tool_calls:
             try:
                 result = await tool_instance._execute_tool_call(tool_call)
                 if result:
                     tool_results.append(result)
-                    
+
                     # 使用工具名称作为键
                     tool_name = result["name"]
                     if tool_name not in structured_info:
                         structured_info[tool_name] = []
-                    
-                    structured_info[tool_name].append({
-                        "name": result["name"], 
-                        "content": result["content"]
-                    })
+
+                    structured_info[tool_name].append({"name": result["name"], "content": result["content"]})
             except Exception as tool_e:
                 logger.error(f"[{self.subheartflow_id}] 工具执行失败: {tool_e}")
-        
+
         # 如果有工具结果，记录并更新结构化信息
         if structured_info:
             logger.debug(f"工具调用收集到结构化信息: {safe_json_dumps(structured_info, ensure_ascii=False)}")

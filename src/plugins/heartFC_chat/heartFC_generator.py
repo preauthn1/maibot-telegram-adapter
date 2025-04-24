@@ -72,7 +72,13 @@ class HeartFCGenerator:
             return None
 
     async def _generate_response_with_model(
-        self, structured_info: str, current_mind_info: str, reason: str, message: MessageRecv, model: LLMRequest, thinking_id: str
+        self,
+        structured_info: str,
+        current_mind_info: str,
+        reason: str,
+        message: MessageRecv,
+        model: LLMRequest,
+        thinking_id: str,
     ) -> str:
         sender_name = ""
 

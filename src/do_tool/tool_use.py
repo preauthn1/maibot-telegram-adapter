@@ -159,7 +159,9 @@ class ToolUser:
                 tool_calls_str = ""
                 for tool_call in tool_calls:
                     tool_calls_str += f"{tool_call['function']['name']}\n"
-                logger.info(f"根据:\n{prompt}\n\n内容：{content}\n\n模型请求调用{len(tool_calls)}个工具: {tool_calls_str}")
+                logger.info(
+                    f"根据:\n{prompt}\n\n内容：{content}\n\n模型请求调用{len(tool_calls)}个工具: {tool_calls_str}"
+                )
                 tool_results = []
                 structured_info = {}  # 动态生成键
 

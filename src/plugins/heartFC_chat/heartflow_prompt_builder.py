@@ -81,13 +81,22 @@ class PromptBuilder:
         self.activate_messages = ""
 
     async def build_prompt(
-        self, build_mode, reason, current_mind_info, structured_info, message_txt: str, sender_name: str = "某人", chat_stream=None
+        self,
+        build_mode,
+        reason,
+        current_mind_info,
+        structured_info,
+        message_txt: str,
+        sender_name: str = "某人",
+        chat_stream=None,
     ) -> Optional[tuple[str, str]]:
         if build_mode == "normal":
             return await self._build_prompt_normal(chat_stream, message_txt, sender_name)
 
         elif build_mode == "focus":
-            return await self._build_prompt_focus(reason, current_mind_info, structured_info, chat_stream, message_txt, sender_name)
+            return await self._build_prompt_focus(
+                reason, current_mind_info, structured_info, chat_stream, message_txt, sender_name
+            )
         return None
 
     async def _build_prompt_focus(

@@ -328,7 +328,9 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     final_sentences = [content for content, sep in merged_segments if content]  # 只保留有内容的段
 
     # 清理可能引入的空字符串和仅包含空白的字符串
-    final_sentences = [s for s in final_sentences if s.strip()] # 过滤掉空字符串以及仅包含空白（如换行符、空格）的字符串
+    final_sentences = [
+        s for s in final_sentences if s.strip()
+    ]  # 过滤掉空字符串以及仅包含空白（如换行符、空格）的字符串
 
     logger.debug(f"分割并合并后的句子: {final_sentences}")
     return final_sentences

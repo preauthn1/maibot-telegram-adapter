@@ -2,6 +2,7 @@ import asyncio
 import time
 import traceback
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
+
 # import json  # 移除，因为使用了json_utils
 from src.plugins.chat.message import MessageRecv, BaseMessageInfo, MessageThinking, MessageSending
 from src.plugins.chat.message import MessageSet, Seg  # Local import needed after move
@@ -17,7 +18,7 @@ from src.plugins.heartFC_chat.heartFC_generator import HeartFCGenerator
 from src.do_tool.tool_use import ToolUser
 from ..chat.message_sender import message_manager  # <-- Import the global manager
 from src.plugins.chat.emoji_manager import emoji_manager
-from src.plugins.utils.json_utils import extract_tool_call_arguments, safe_json_dumps, process_llm_tool_response  # 导入新的JSON工具
+from src.plugins.utils.json_utils import process_llm_tool_response  # 导入新的JSON工具
 # --- End import ---
 
 
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
     # Keep this if HeartFCController methods are still needed elsewhere,
     # but the instance variable will be removed from HeartFChatting
     # from .heartFC_controler import HeartFCController
-    from src.heart_flow.heartflow import SubHeartflow, heartflow  # <-- 同时导入 heartflow 实例用于类型检查
+    from src.heart_flow.heartflow import SubHeartflow  # <-- 同时导入 heartflow 实例用于类型检查
 
 PLANNER_TOOL_DEFINITION = [
     {
@@ -327,7 +328,6 @@ class HeartFChatting:
                                 with Timer("Wait New Msg", cycle_timers):  # <--- Start Wait timer
                                     wait_start_time = time.monotonic()
                                     while True:
-
                                         # 检查是否有新消息
                                         has_new = await observation.has_new_messages_since(planner_start_db_time)
                                         if has_new:
@@ -424,7 +424,7 @@ class HeartFChatting:
         observed_messages: List[dict] = []
 
         current_mind: Optional[str] = None
-        llm_error = False  
+        llm_error = False
 
         try:
             observation = self.sub_hf._get_primary_observation()
@@ -434,19 +434,17 @@ class HeartFChatting:
         except Exception as e:
             logger.error(f"{log_prefix}[Planner] 获取观察信息时出错: {e}")
 
-
         try:
             current_mind, _past_mind = await self.sub_hf.do_thinking_before_reply()
         except Exception as e_subhf:
             logger.error(f"{log_prefix}[Planner] SubHeartflow 思考失败: {e_subhf}")
             current_mind = "[思考时出错]"
 
-
         # --- 使用 LLM 进行决策 --- #
         action = "no_reply"  # 默认动作
-        emoji_query = ""     # 默认表情查询
-        reasoning = "默认决策或获取决策失败" 
-        llm_error = False    # LLM错误标志
+        emoji_query = ""  # 默认表情查询
+        reasoning = "默认决策或获取决策失败"
+        llm_error = False  # LLM错误标志
 
         try:
             prompt = await self._build_planner_prompt(observed_messages_str, current_mind, self.sub_hf.structured_info)
@@ -475,21 +473,17 @@ class HeartFChatting:
 
             # 使用辅助函数处理工具调用响应
             success, arguments, error_msg = process_llm_tool_response(
-                response, 
-                expected_tool_name="decide_reply_action", 
-                log_prefix=f"{log_prefix}[Planner] "
+                response, expected_tool_name="decide_reply_action", log_prefix=f"{log_prefix}[Planner] "
             )
-            
+
             if success:
                 # 提取决策参数
                 action = arguments.get("action", "no_reply")
                 reasoning = arguments.get("reasoning", "未提供理由")
                 emoji_query = arguments.get("emoji_query", "")
-                
+
                 # 记录决策结果
-                logger.debug(
-                    f"{log_prefix}[Planner] 决策结果: {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'"
-                )
+                logger.debug(f"{log_prefix}[Planner] 决策结果: {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'")
             else:
                 # 处理工具调用失败
                 logger.warning(f"{log_prefix}[Planner] {error_msg}")
@@ -584,7 +578,7 @@ class HeartFChatting:
         """优雅关闭HeartFChatting实例，取消活动循环任务"""
         log_prefix = self._get_log_prefix()
         logger.info(f"{log_prefix} 正在关闭HeartFChatting...")
-        
+
         # 取消循环任务
         if self._loop_task and not self._loop_task.done():
             logger.info(f"{log_prefix} 正在取消HeartFChatting循环任务")
@@ -605,17 +599,19 @@ class HeartFChatting:
         if self._processing_lock.locked():
             self._processing_lock.release()
             logger.warning(f"{log_prefix} 已释放处理锁")
-            
+
         logger.info(f"{log_prefix} HeartFChatting关闭完成")
 
-    async def _build_planner_prompt(self, observed_messages_str: str, current_mind: Optional[str], structured_info: Dict[str, Any]) -> str:
+    async def _build_planner_prompt(
+        self, observed_messages_str: str, current_mind: Optional[str], structured_info: Dict[str, Any]
+    ) -> str:
         """构建 Planner LLM 的提示词"""
 
         prompt = f"你的名字是 {global_config.BOT_NICKNAME}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。\n"
 
         if structured_info:
             prompt += f"以下是一些额外的信息：\n{structured_info}\n"
-        
+
         if observed_messages_str:
             prompt += "观察到的最新聊天内容如下 (最近的消息在最后)：\n---\n"
             prompt += observed_messages_str

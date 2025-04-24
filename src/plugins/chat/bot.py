@@ -78,7 +78,6 @@ class ChatBot:
             groupinfo = message.message_info.group_info
             userinfo = message.message_info.user_info
 
-            
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
                 return
