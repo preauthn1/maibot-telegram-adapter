@@ -78,7 +78,7 @@ class HeartFCGenerator:
     ) -> str:
         info_catcher = info_catcher_manager.get_info_catcher(thinking_id)
 
-        with Timer() as t_build_prompt:
+        with Timer() as _build_prompt:
             prompt = await prompt_builder.build_prompt(
                 build_mode="focus",
                 reason=reason,
