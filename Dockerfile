@@ -6,25 +6,22 @@ WORKDIR /MaiMBot
 
 # 复制依赖列表
 COPY requirements.txt .
-# 同级目录下需要有 maim_message
-COPY maim_message /maim_message
+# 同级目录下需要有 maim_message MaiMBot-LPMM
+#COPY maim_message /maim_message
 COPY MaiMBot-LPMM /MaiMBot-LPMM
-COPY test_cpu.py /test_cpu.py
 
 # 编译器
 RUN apt-get update && apt-get install -y build-essential
 
-# test
-RUN cat /proc/cpuinfo
-RUN uv pip install --system py-cpuinfo
-RUN python /test_cpu.py
-RUN cd /MaiMBot-LPMM && uv pip install --system -r requirements.txt && uv pip install --system Cython py-cpuinfo setuptools
+# lpmm编译安装
+RUN cd /MaiMBot-LPMM && uv pip install --system -r requirements.txt
+RUN uv pip install --system Cython py-cpuinfo setuptools
 RUN cd /MaiMBot-LPMM/lib/quick_algo && python build_lib.py --cleanup --cythonize --install
 
 
 # 安装依赖
 RUN uv pip install --system --upgrade pip
-RUN uv pip install --system -e /maim_message
+#RUN uv pip install --system -e /maim_message
 RUN uv pip install --system -r requirements.txt
 
 # 复制项目代码
