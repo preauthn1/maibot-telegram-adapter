@@ -149,7 +149,7 @@ class HeartFCProcessor:
             current_time = time.strftime("%H:%M:%S", time.localtime(message.message_info.time))
             logger.info(
                 f"[{current_time}][{mes_name}]"
-                f"{chat.user_info.user_nickname}:"
+                f"{message.message_info.user_info.user_nickname}:"
                 f"{message.processed_plain_text}"
                 f"[兴趣度: {interested_rate:.2f}]"
             )
