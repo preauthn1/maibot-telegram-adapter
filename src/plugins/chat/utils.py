@@ -236,11 +236,11 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     """
     # 预处理：处理多余的换行符
     # 1. 将连续的换行符替换为单个换行符
-    text = re.sub(r'\n\s*\n+', '\n', text)
+    text = re.sub(r"\n\s*\n+", "\n", text)
     # 2. 处理换行符和其他分隔符的组合
-    text = re.sub(r'\n\s*([，,。;\s])', r'\1', text)
-    text = re.sub(r'([，,。;\s])\s*\n', r'\1', text)
-    
+    text = re.sub(r"\n\s*([，,。;\s])", r"\1", text)
+    text = re.sub(r"([，,。;\s])\s*\n", r"\1", text)
+
     # 处理两个汉字中间的换行符
     text = re.sub(r"([\u4e00-\u9fff])\n([\u4e00-\u9fff])", r"\1。\2", text)
 
@@ -420,12 +420,11 @@ def process_llm_response(text: str) -> List[str]:
     if len(sentences) > max_sentence_num:
         logger.warning(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
         return [f"{global_config.BOT_NICKNAME}不知道哦"]
-    
+
     # if extracted_contents:
     #     for content in extracted_contents:
     #         sentences.append(content)
-    
-    
+
     # 在所有句子处理完毕后，对包含占位符的列表进行恢复
     sentences = recover_kaomoji(sentences, kaomoji_mapping)
 

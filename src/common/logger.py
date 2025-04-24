@@ -5,7 +5,8 @@ import os
 from types import ModuleType
 from pathlib import Path
 from dotenv import load_dotenv
-'''
+
+"""
 日志颜色说明:
 
 1. 主程序(Main)
@@ -53,9 +54,7 @@ from dotenv import load_dotenv
 注意:
 1. 级别颜色遵循loguru默认配置
 2. 可通过环境变量修改日志级别
-'''
-
-
+"""
 
 
 # 加载 .env 文件
@@ -356,9 +355,7 @@ SUB_HEARTFLOW_STYLE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦小脑袋 | {message}",
     },
     "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <fg #3399FF>麦麦水群 | {message}</fg #3399FF>"
-        ),  # noqa: E501
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <fg #3399FF>麦麦水群 | {message}</fg #3399FF>"),  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦水群 | {message}",
     },
 }
@@ -374,9 +371,7 @@ SUB_HEARTFLOW_MIND_STYLE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦小脑袋 | {message}",
     },
     "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <fg #66CCFF>麦麦小脑袋 | {message}</fg #66CCFF>"
-        ),  # noqa: E501
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <fg #66CCFF>麦麦小脑袋 | {message}</fg #66CCFF>"),  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦小脑袋 | {message}",
     },
 }
@@ -392,9 +387,7 @@ SUBHEARTFLOW_MANAGER_STYLE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦水群[管理] | {message}",
     },
     "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <fg #3399FF>麦麦水群[管理] | {message}</fg #3399FF>"
-        ),  # noqa: E501
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <fg #3399FF>麦麦水群[管理] | {message}</fg #3399FF>"),  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦水群[管理] | {message}",
     },
 }

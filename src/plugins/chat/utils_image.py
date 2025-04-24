@@ -12,7 +12,6 @@ from ...config.config import global_config
 from ..models.utils_model import LLMRequest
 
 from src.common.logger import get_module_logger
-import traceback
 
 logger = get_module_logger("chat_image")
 
@@ -316,7 +315,7 @@ def image_path_to_base64(image_path: str) -> str:
     """
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"图片文件不存在: {image_path}")
-    
+
     with open(image_path, "rb") as f:
         image_data = f.read()
         if not image_data:
