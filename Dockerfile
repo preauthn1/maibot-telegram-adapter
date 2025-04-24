@@ -9,6 +9,7 @@ COPY requirements.txt .
 # 同级目录下需要有 maim_message
 COPY maim_message /maim_message
 COPY MaiMBot-LPMM /MaiMBot-LPMM
+COPY test_cpu.py /test_cpu.py
 
 # 编译器
 RUN apt-get update && apt-get install -y build-essential
@@ -16,7 +17,7 @@ RUN apt-get update && apt-get install -y build-essential
 # test
 RUN cat /proc/cpuinfo
 RUN uv pip install --system py-cpuinfo
-RUN python test_cpu.py
+RUN python /test_cpu.py
 
 # 安装依赖
 RUN uv pip install --system --upgrade pip
