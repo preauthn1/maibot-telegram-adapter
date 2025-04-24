@@ -402,7 +402,7 @@ class NormalChat:
                 # 确保任务状态更新，即使等待出错 (回调函数也会尝试更新)
                 if self._chat_task is task:
                     self._chat_task = None
-        
+
         # 清理所有未处理的思考消息
         try:
             container = await message_manager.get_container(self.stream_id)

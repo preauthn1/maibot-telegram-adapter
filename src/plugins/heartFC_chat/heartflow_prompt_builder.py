@@ -36,7 +36,7 @@ def init_prompt():
 {moderation_prompt}。注意：不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
         "heart_flow_prompt",
     )
-    
+
     # Planner提示词
     Prompt(
         """你的名字是 {bot_name}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。
@@ -56,7 +56,7 @@ def init_prompt():
 必须调用 'decide_reply_action' 工具并提供 'action' 和 'reasoning'。如果选择了 'emoji_reply' 或者选择了 'text_reply' 并想追加表情，则必须提供 'emoji_query'。""",
         "planner_prompt",
     )
-    
+
     Prompt("你正在qq群里聊天，下面是群里在聊的内容：", "chat_target_group1")
     Prompt("和群里聊天", "chat_target_group2")
     Prompt("你正在和{sender_name}聊天，这是你们之前聊的内容：", "chat_target_private1")
@@ -116,13 +116,14 @@ class PromptBuilder:
 
         elif build_mode == "focus":
             return await self._build_prompt_focus(
-                reason, current_mind_info, structured_info, chat_stream,
+                reason,
+                current_mind_info,
+                structured_info,
+                chat_stream,
             )
         return None
 
-    async def _build_prompt_focus(
-        self, reason, current_mind_info, structured_info, chat_stream
-    ) -> tuple[str, str]:
+    async def _build_prompt_focus(self, reason, current_mind_info, structured_info, chat_stream) -> tuple[str, str]:
         individuality = Individuality.get_instance()
         prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
         prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
