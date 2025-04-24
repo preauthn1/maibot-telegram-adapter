@@ -21,6 +21,8 @@ logger = get_module_logger("prompt")
 def init_prompt():
     Prompt(
         """
+你有以下信息可供参考：
+{structured_info}
 {chat_target}
 {chat_talking_prompt}
 现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言发言或者回复这条消息。\n
@@ -79,17 +81,17 @@ class PromptBuilder:
         self.activate_messages = ""
 
     async def build_prompt(
-        self, build_mode, reason, current_mind_info, message_txt: str, sender_name: str = "某人", chat_stream=None
+        self, build_mode, reason, current_mind_info, structured_info, message_txt: str, sender_name: str = "某人", chat_stream=None
     ) -> Optional[tuple[str, str]]:
         if build_mode == "normal":
             return await self._build_prompt_normal(chat_stream, message_txt, sender_name)
 
         elif build_mode == "focus":
-            return await self._build_prompt_focus(reason, current_mind_info, chat_stream, message_txt, sender_name)
+            return await self._build_prompt_focus(reason, current_mind_info, structured_info, chat_stream, message_txt, sender_name)
         return None
 
     async def _build_prompt_focus(
-        self, reason, current_mind_info, chat_stream, message_txt: str, sender_name: str = "某人"
+        self, reason, current_mind_info, structured_info, chat_stream, message_txt: str, sender_name: str = "某人"
     ) -> tuple[str, str]:
         individuality = Individuality.get_instance()
         prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
@@ -148,6 +150,7 @@ class PromptBuilder:
 
         prompt = await global_prompt_manager.format_prompt(
             "heart_flow_prompt",
+            structured_info=structured_info,
             chat_target=await global_prompt_manager.get_prompt_async("chat_target_group1")
             if chat_in_group
             else await global_prompt_manager.get_prompt_async("chat_target_private1"),

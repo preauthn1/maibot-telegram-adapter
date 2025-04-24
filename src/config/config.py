@@ -286,6 +286,7 @@ class BotConfig:
     llm_observation: Dict[str, str] = field(default_factory=lambda: {})
     llm_sub_heartflow: Dict[str, str] = field(default_factory=lambda: {})
     llm_heartflow: Dict[str, str] = field(default_factory=lambda: {})
+    llm_tool_use: Dict[str, str] = field(default_factory=lambda: {})
 
     api_urls: Dict[str, str] = field(default_factory=lambda: {})
 
