@@ -121,7 +121,7 @@ class ImageManager:
                 prompt = "这是一个动态图表情包，每一张图代表了动态图的某一帧，黑色背景代表透明，使用1-2个词描述一下表情包表达的情感和内容，简短一些"
                 description, _ = await self._llm.generate_response_for_image(prompt, image_base64, "jpg")
             else:
-                prompt = "这是一个表情包，请用使用1-2个词描述一下表情包所表达的情感和内容，简短一些"
+                prompt = "这是一个表情包，请用使用几个词描述一下表情包所表达的情感和内容，简短一些"
                 description, _ = await self._llm.generate_response_for_image(prompt, image_base64, image_format)
 
             cached_description = self._get_description_from_db(image_hash, "emoji")
@@ -130,7 +130,7 @@ class ImageManager:
                 return f"[表达了：{cached_description}]"
 
             # 根据配置决定是否保存图片
-            if global_config.EMOJI_SAVE:
+            if global_config.save_emoji:
                 # 生成文件名和路径
                 timestamp = int(time.time())
                 filename = f"{timestamp}_{image_hash[:8]}.{image_format}"
@@ -196,7 +196,7 @@ class ImageManager:
                 return "[图片]"
 
             # 根据配置决定是否保存图片
-            if global_config.EMOJI_SAVE:
+            if global_config.save_pic:
                 # 生成文件名和路径
                 timestamp = int(time.time())
                 filename = f"{timestamp}_{image_hash[:8]}.{image_format}"

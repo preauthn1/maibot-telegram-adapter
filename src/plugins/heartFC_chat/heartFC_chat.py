@@ -15,7 +15,7 @@ from src.plugins.utils.timer_calculater import Timer  # <--- Import Timer
 from src.plugins.heartFC_chat.heartFC_generator import HeartFCGenerator
 from src.do_tool.tool_use import ToolUser
 from ..chat.message_sender import message_manager  # <-- Import the global manager
-from src.plugins.chat.emoji_manager import emoji_manager
+from src.plugins.emoji_system.emoji_manager import emoji_manager
 from src.plugins.utils.json_utils import process_llm_tool_response  # 导入新的JSON工具
 from src.heart_flow.sub_mind import SubMind
 from src.heart_flow.observation import Observation

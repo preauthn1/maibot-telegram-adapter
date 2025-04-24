@@ -464,7 +464,7 @@ EMOJI_STYLE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 表情 | {message}",
     },
     "simple": {
-        "console_format": "<level>{time:MM-DD HH:mm}</level> | <light-blue>表情 | {message} </light-blue>",  # noqa: E501
+        "console_format": "<level>{time:MM-DD HH:mm}</level> | <yellow>表情 | {message} </yellow>",  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 表情 | {message}",
     },
 }

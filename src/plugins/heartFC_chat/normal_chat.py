@@ -6,7 +6,7 @@ from typing import List, Optional  # 导入 Optional
 
 from ..moods.moods import MoodManager
 from ...config.config import global_config
-from ..chat.emoji_manager import emoji_manager
+from ..emoji_system.emoji_manager import emoji_manager
 from .normal_chat_generator import NormalChatGenerator
 from ..chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
 from ..chat.message_sender import message_manager
