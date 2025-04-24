@@ -14,6 +14,7 @@ COPY MaiMBot-LPMM /MaiMBot-LPMM
 RUN apt-get update && apt-get install -y build-essential
 
 # test
+RUN cat /proc/cpuinfo
 RUN cat /proc/cpuinfo | grep avx2
 
 # 安装依赖
