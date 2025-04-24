@@ -18,6 +18,9 @@ RUN apt-get update && apt-get install -y build-essential
 RUN cat /proc/cpuinfo
 RUN uv pip install --system py-cpuinfo
 RUN python /test_cpu.py
+RUN cd /MaiMBot-LPMM && uv pip install --system -r requirements.txt
+RUN cd /MaiMBot-LPMM/lib/quick_algo && python build_lib.py --cleanup --cythonize --install
+
 
 # 安装依赖
 RUN uv pip install --system --upgrade pip
