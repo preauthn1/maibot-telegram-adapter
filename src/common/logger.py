@@ -349,6 +349,24 @@ BASE_TOOL_STYLE_CONFIG = {
     },
 }
 
+CHAT_STREAM_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<light-blue>聊天流</light-blue> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 聊天流 | {message}",
+    },
+    "simple": {
+        "console_format": (
+            "<level>{time:MM-DD HH:mm}</level> | <light-blue>聊天流</light-blue> | <light-blue>{message}</light-blue>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 聊天流 | {message}",
+    },
+}
+
 PERSON_INFO_STYLE_CONFIG = {
     "advanced": {
         "console_format": (
@@ -416,6 +434,22 @@ WILLING_STYLE_CONFIG = {
     "simple": {
         "console_format": "<level>{time:MM-DD HH:mm}</level> | <light-blue>意愿 | {message} </light-blue>",  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 意愿 | {message}",
+    },
+}
+
+PFC_ACTION_PLANNER_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<light-blue>PFC私聊规划</light-blue> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | PFC私聊规划 | {message}",
+    },
+    "simple": {
+        "console_format": "<level>{time:MM-DD HH:mm}</level> | <light-blue>PFC私聊规划 | {message} </light-blue>",  # noqa: E501
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | PFC私聊规划 | {message}",
     },
 }
 
@@ -497,6 +531,9 @@ CONFIRM_STYLE_CONFIG = {
 # 根据SIMPLE_OUTPUT选择配置
 MAIN_STYLE_CONFIG = MAIN_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else MAIN_STYLE_CONFIG["advanced"]
 EMOJI_STYLE_CONFIG = EMOJI_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else EMOJI_STYLE_CONFIG["advanced"]
+PFC_ACTION_PLANNER_STYLE_CONFIG = (
+    PFC_ACTION_PLANNER_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else PFC_ACTION_PLANNER_STYLE_CONFIG["advanced"]
+)
 REMOTE_STYLE_CONFIG = REMOTE_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else REMOTE_STYLE_CONFIG["advanced"]
 BASE_TOOL_STYLE_CONFIG = BASE_TOOL_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else BASE_TOOL_STYLE_CONFIG["advanced"]
 PERSON_INFO_STYLE_CONFIG = PERSON_INFO_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else PERSON_INFO_STYLE_CONFIG["advanced"]
@@ -507,6 +544,7 @@ BACKGROUND_TASKS_STYLE_CONFIG = (
     BACKGROUND_TASKS_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else BACKGROUND_TASKS_STYLE_CONFIG["advanced"]
 )
 MEMORY_STYLE_CONFIG = MEMORY_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else MEMORY_STYLE_CONFIG["advanced"]
+CHAT_STREAM_STYLE_CONFIG = CHAT_STREAM_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else CHAT_STREAM_STYLE_CONFIG["advanced"]
 TOPIC_STYLE_CONFIG = TOPIC_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else TOPIC_STYLE_CONFIG["advanced"]
 SENDER_STYLE_CONFIG = SENDER_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else SENDER_STYLE_CONFIG["advanced"]
 LLM_STYLE_CONFIG = LLM_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else LLM_STYLE_CONFIG["advanced"]

@@ -82,10 +82,9 @@ class ChatBot:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
                 return
 
-            if groupinfo:
-                if groupinfo.group_id not in global_config.talk_allowed_groups:
-                    logger.trace(f"群{groupinfo.group_id}被禁止回复")
-                    return
+            if groupinfo != None and groupinfo.group_id not in global_config.talk_allowed_groups:
+                logger.debug(f"群{groupinfo.group_id}被禁止回复")
+                return
 
             if message.message_info.template_info and not message.message_info.template_info.template_default:
                 template_group_name = message.message_info.template_info.template_name
