@@ -22,9 +22,6 @@ class Mind:
         self.subheartflow_manager = subheartflow_manager
         self.llm_model = llm_model
         self.individuality = Individuality.get_instance()
-        # Main mind state is still managed by Heartflow for now
-        # self.current_mind = "你什么也没想"
-        # self.past_mind = []
 
     async def do_a_thinking(self, current_main_mind: str, mai_state_info: "MaiStateInfo", schedule_info: str):
         """

@@ -19,6 +19,7 @@ from src.plugins.chat.emoji_manager import emoji_manager
 from src.plugins.utils.json_utils import process_llm_tool_response  # 导入新的JSON工具
 from src.heart_flow.sub_mind import SubMind
 from src.heart_flow.observation import Observation
+from src.plugins.heartFC_chat.heartflow_prompt_builder import global_prompt_manager
 # --- End import ---
 
 
@@ -594,39 +595,36 @@ class HeartFChatting:
         self, observed_messages_str: str, current_mind: Optional[str], structured_info: Dict[str, Any]
     ) -> str:
         """构建 Planner LLM 的提示词"""
-
-        prompt = f"你的名字是 {global_config.BOT_NICKNAME}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。\n"
-
+        
+        # 准备结构化信息块
+        structured_info_block = ""
         if structured_info:
-            prompt += f"以下是一些额外的信息：\n{structured_info}\n"
-
+            structured_info_block = f"以下是一些额外的信息：\n{structured_info}\n"
+        
+        # 准备聊天内容块
+        chat_content_block = ""
         if observed_messages_str:
-            prompt += "观察到的最新聊天内容如下 (最近的消息在最后)：\n---\n"
-            prompt += observed_messages_str
-            prompt += "\n---"
+            chat_content_block = "观察到的最新聊天内容如下 (最近的消息在最后)：\n---\n"
+            chat_content_block += observed_messages_str
+            chat_content_block += "\n---"
         else:
-            prompt += "当前没有观察到新的聊天内容。\n"
-
-        prompt += "\n看了以上内容，你产生的内心想法是："
+            chat_content_block = "当前没有观察到新的聊天内容。\n"
+        
+        # 准备当前思维块
+        current_mind_block = ""
         if current_mind:
-            prompt += f"\n---\n{current_mind}\n---\n\n"
+            current_mind_block = f"\n---\n{current_mind}\n---\n\n"
         else:
-            prompt += " [没有特别的想法] \n\n"
-
-        prompt += (
-            "请结合你的内心想法和观察到的聊天内容，分析情况并使用 'decide_reply_action' 工具来决定你的最终行动。\n"
-            "决策依据：\n"
-            "1. 如果聊天内容无聊、与你无关、或者你的内心想法认为不适合回复（例如在讨论你不懂或不感兴趣的话题），选择 'no_reply'。\n"
-            "2. 如果聊天内容值得回应，且适合用文字表达（参考你的内心想法），选择 'text_reply'。如果你有情绪想表达，想在文字后追加一个表达情绪的表情，请同时提供 'emoji_query' (例如：'开心的'、'惊讶的')。\n"
-            "3. 如果聊天内容或你的内心想法适合用一个表情来回应（例如表示赞同、惊讶、无语等），选择 'emoji_reply' 并提供表情主题 'emoji_query'。\n"
-            "4. 如果最后一条消息是你自己发的，并且之后没有人回复你，通常选择 'no_reply'，除非有特殊原因需要追问。\n"
-            "5. 除非大家都在这么做，或者有特殊理由，否则不要重复别人刚刚说过的话或简单附和。\n"
-            "6. 表情包是用来表达情绪的，不要直接回复或评价别人的表情包，而是根据对话内容和情绪选择是否用表情回应。\n"
-            "7. 如果观察到的内容只有你自己的发言，选择 'no_reply'。\n"
-            "8. 不要回复你自己的话，不要把自己的话当做别人说的。\n"
-            "必须调用 'decide_reply_action' 工具并提供 'action' 和 'reasoning'。如果选择了 'emoji_reply' 或者选择了 'text_reply' 并想追加表情，则必须提供 'emoji_query'。"
+            current_mind_block = " [没有特别的想法] \n\n"
+        
+        # 获取提示词模板并填充数据
+        prompt = (await global_prompt_manager.get_prompt_async("planner_prompt")).format(
+            bot_name=global_config.BOT_NICKNAME,
+            structured_info_block=structured_info_block,
+            chat_content_block=chat_content_block,
+            current_mind_block=current_mind_block,
         )
-
+        
         return prompt
 
     # --- 回复器 (Replier) 的定义 --- #
@@ -698,7 +696,6 @@ class HeartFChatting:
             return None
 
         chat = anchor_message.chat_stream
-        # Access MessageManager directly
         container = await message_manager.get_container(chat.stream_id)
         thinking_message = None
 
