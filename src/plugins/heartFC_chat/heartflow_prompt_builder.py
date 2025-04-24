@@ -23,7 +23,7 @@ def init_prompt():
         """
 {chat_target}
 {chat_talking_prompt}
-现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言发言或者回复这条消息。\n
+现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言或者回复这条消息。\n
 你的网名叫{bot_name}，{prompt_personality} {prompt_identity}。
 你正在{chat_target_2},现在请你读读之前的聊天记录，然后给出日常且口语化的回复，平淡一些，
 你刚刚脑子里在想：
@@ -52,7 +52,7 @@ def init_prompt():
 {schedule_prompt}
 {chat_target}
 {chat_talking_prompt}
-现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言发言或者回复这条消息。\n
+现在"{sender_name}"说的:{message_txt}。引起了你的注意，你想要在群里发言或者回复这条消息。\n
 你的网名叫{bot_name}，有人也叫你{bot_other_names}，{prompt_personality}。
 你正在{chat_target_2},现在请你读读之前的聊天记录，{mood_prompt}，然后给出日常且口语化的回复，平淡一些，
 尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。{prompt_ger}
