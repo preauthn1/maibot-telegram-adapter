@@ -654,8 +654,6 @@ class HeartFChatting:
                 logger.warning(f"{log_prefix}[Replier-{thinking_id}] LLM生成了一个空回复集。")
                 return None
 
-            # --- 准备并返回结果 --- #
-            # logger.info(f"{log_prefix}[Replier-{thinking_id}] 成功生成了回复集: {' '.join(response_set)[:50]}...")
             return response_set
 
         except Exception as e:

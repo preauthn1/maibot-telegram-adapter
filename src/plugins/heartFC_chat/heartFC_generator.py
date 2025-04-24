@@ -47,10 +47,6 @@ class HeartFCGenerator:
     ) -> Optional[List[str]]:
         """根据当前模型类型选择对应的生成函数"""
 
-        logger.info(
-            f"思考:{message.processed_plain_text[:30] + '...' if len(message.processed_plain_text) > 30 else message.processed_plain_text}"
-        )
-
         arousal_multiplier = MoodManager.get_instance().get_arousal_multiplier()
 
         with Timer() as t_generate_response:
@@ -80,11 +76,7 @@ class HeartFCGenerator:
         model: LLMRequest,
         thinking_id: str,
     ) -> str:
-        sender_name = ""
-
         info_catcher = info_catcher_manager.get_info_catcher(thinking_id)
-
-        sender_name = f"<{message.chat_stream.user_info.platform}:{message.chat_stream.user_info.user_id}:{message.chat_stream.user_info.user_nickname}:{message.chat_stream.user_info.user_cardname}>"
 
         with Timer() as t_build_prompt:
             prompt = await prompt_builder.build_prompt(
@@ -92,14 +84,16 @@ class HeartFCGenerator:
                 reason=reason,
                 current_mind_info=current_mind_info,
                 structured_info=structured_info,
-                message_txt=message.processed_plain_text,
-                sender_name=sender_name,
+                message_txt="",
+                sender_name="",
                 chat_stream=message.chat_stream,
             )
-        logger.info(f"构建prompt时间: {t_build_prompt.human_readable}")
+        # logger.info(f"构建prompt时间: {t_build_prompt.human_readable}")
 
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
+
+            logger.info(f"\nprompt:{prompt}\n生成回复{content}\n")
 
             info_catcher.catch_after_llm_generated(
                 prompt=prompt, response=content, reasoning_content=reasoning_content, model_name=self.current_model_name
