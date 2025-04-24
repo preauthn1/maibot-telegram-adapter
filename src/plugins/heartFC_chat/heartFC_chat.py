@@ -1,9 +1,7 @@
 import asyncio
 import time
 import traceback
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
-
-# import json  # 移除，因为使用了json_utils
+from typing import List, Optional, Dict, Any
 from src.plugins.chat.message import MessageRecv, BaseMessageInfo, MessageThinking, MessageSending
 from src.plugins.chat.message import MessageSet, Seg  # Local import needed after move
 from src.plugins.chat.chat_stream import ChatStream
@@ -19,6 +17,8 @@ from src.do_tool.tool_use import ToolUser
 from ..chat.message_sender import message_manager  # <-- Import the global manager
 from src.plugins.chat.emoji_manager import emoji_manager
 from src.plugins.utils.json_utils import process_llm_tool_response  # 导入新的JSON工具
+from src.heart_flow.sub_mind import SubMind
+from src.heart_flow.observation import Observation
 # --- End import ---
 
 
@@ -32,13 +32,6 @@ interest_log_config = LogConfig(
 )
 logger = get_module_logger("HeartFCLoop", config=interest_log_config)  # Logger Name Changed
 
-
-# Forward declaration for type hinting
-if TYPE_CHECKING:
-    # Keep this if HeartFCController methods are still needed elsewhere,
-    # but the instance variable will be removed from HeartFChatting
-    # from .heartFC_controler import HeartFCController
-    from src.heart_flow.heartflow import SubHeartflow  # <-- 同时导入 heartflow 实例用于类型检查
 
 PLANNER_TOOL_DEFINITION = [
     {
@@ -74,7 +67,12 @@ class HeartFChatting:
     其生命周期现在由其关联的 SubHeartflow 的 FOCUSED 状态控制。
     """
 
-    def __init__(self, chat_id: str):
+    def __init__(
+        self,
+        chat_id: str,
+        sub_mind: SubMind,
+        observations: Observation
+    ):
         """
         HeartFChatting 初始化函数
 
@@ -84,7 +82,8 @@ class HeartFChatting:
         # 基础属性
         self.stream_id: str = chat_id  # 聊天流ID
         self.chat_stream: Optional[ChatStream] = None  # 关联的聊天流
-        self.sub_hf: SubHeartflow = None  # 关联的子心流
+        self.sub_mind: SubMind = sub_mind  # 关联的子思维
+        self.observations: Observation = observations  # 关联的观察
 
         # 初始化状态控制
         self._initialized = False  # 是否已初始化标志
@@ -121,17 +120,9 @@ class HeartFChatting:
         log_prefix = self._get_log_prefix()  # 获取前缀
         try:
             self.chat_stream = chat_manager.get_stream(self.stream_id)
-
             if not self.chat_stream:
                 logger.error(f"{log_prefix} 获取ChatStream失败。")
                 return False
-
-            # <-- 在这里导入 heartflow 实例
-            from src.heart_flow.heartflow import heartflow
-
-            self.sub_hf = heartflow.get_subheartflow(self.stream_id)
-            if not self.sub_hf:
-                logger.warning(f"{log_prefix} 获取SubHeartflow失败。一些功能可能受限。")
 
             self._initialized = True
             logger.info(f"麦麦感觉到了，激发了HeartFChatting{log_prefix} 初始化成功。")
@@ -321,8 +312,8 @@ class HeartFChatting:
                             # --- 新增：等待新消息 ---
                             logger.debug(f"{log_prefix} HeartFChatting: 开始等待新消息 (自 {planner_start_db_time})...")
                             observation = None
-                            if self.sub_hf:
-                                observation = self.sub_hf._get_primary_observation()
+
+                            observation = self.observations[0]
 
                             if observation:
                                 with Timer("Wait New Msg", cycle_timers):  # <--- Start Wait timer
@@ -427,7 +418,7 @@ class HeartFChatting:
         llm_error = False
 
         try:
-            observation = self.sub_hf._get_primary_observation()
+            observation = self.observations[0]
             await observation.observe()
             observed_messages = observation.talking_message
             observed_messages_str = observation.talking_message_str
@@ -435,7 +426,7 @@ class HeartFChatting:
             logger.error(f"{log_prefix}[Planner] 获取观察信息时出错: {e}")
 
         try:
-            current_mind, _past_mind = await self.sub_hf.do_thinking_before_reply()
+            current_mind, _past_mind = await self.sub_mind.do_thinking_before_reply()
         except Exception as e_subhf:
             logger.error(f"{log_prefix}[Planner] SubHeartflow 思考失败: {e_subhf}")
             current_mind = "[思考时出错]"
@@ -447,7 +438,7 @@ class HeartFChatting:
         llm_error = False  # LLM错误标志
 
         try:
-            prompt = await self._build_planner_prompt(observed_messages_str, current_mind, self.sub_hf.structured_info)
+            prompt = await self._build_planner_prompt(observed_messages_str, current_mind, self.sub_mind.structured_info)
             payload = {
                 "model": self.planner_llm.model_name,
                 "messages": [{"role": "user", "content": prompt}],
@@ -655,8 +646,8 @@ class HeartFChatting:
         response_set: Optional[List[str]] = None
         try:
             response_set = await self.gpt_instance.generate_response(
-                structured_info=self.sub_hf.structured_info,
-                current_mind_info=self.sub_hf.current_mind,
+                structured_info=self.sub_mind.structured_info,
+                current_mind_info=self.sub_mind.current_mind,
                 reason=reason,
                 message=anchor_message,  # Pass anchor_message positionally (matches 'message' parameter)
                 thinking_id=thinking_id,  # Pass thinking_id positionally

@@ -1,24 +1,20 @@
 from .observation import Observation, ChattingObservation
 import asyncio
-from src.plugins.moods.moods import MoodManager
-from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 import time
 from typing import Optional, List, Dict, Callable
 import traceback
-import enum
 from src.common.logger import get_module_logger, LogConfig, SUB_HEARTFLOW_STYLE_CONFIG  # noqa: E402
-from src.individuality.individuality import Individuality
 import random
-from ..plugins.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugins.chat.message import MessageRecv
 from src.plugins.chat.chat_stream import chat_manager
 import math
 from src.plugins.heartFC_chat.heartFC_chat import HeartFChatting
 from src.plugins.heartFC_chat.normal_chat import NormalChat
-from src.do_tool.tool_use import ToolUser
 from src.heart_flow.mai_state_manager import MaiStateInfo
-from src.plugins.utils.json_utils import safe_json_dumps, normalize_llm_response, process_llm_tool_calls
+from src.heart_flow.chat_state_info import ChatState, ChatStateInfo
+from src.heart_flow.sub_mind import SubMind
+
 
 # 定义常量 (从 interest.py 移动过来)
 MAX_INTEREST = 15.0
@@ -35,42 +31,6 @@ interest_log_config = LogConfig(
     file_format=SUB_HEARTFLOW_STYLE_CONFIG["file_format"],
 )
 interest_logger = get_module_logger("InterestChatting", config=interest_log_config)
-
-
-def init_prompt():
-    prompt = ""
-    # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
-    prompt += "{extra_info}\n"
-    # prompt += "{prompt_schedule}\n"
-    # prompt += "{relation_prompt_all}\n"
-    prompt += "{prompt_personality}\n"
-    prompt += "刚刚你的想法是：\n我是{bot_name}，我想，{current_thinking_info}\n"
-    prompt += "-----------------------------------\n"
-    prompt += "现在是{time_now}，你正在上网，和qq群里的网友们聊天，群里正在聊的话题是：\n{chat_observe_info}\n"
-    prompt += "\n你现在{mood_info}\n"
-    # prompt += "你注意到{sender_name}刚刚说：{message_txt}\n"
-    prompt += "现在请你根据刚刚的想法继续思考，思考时可以想想如何对群聊内容进行回复，要不要对群里的话题进行回复，关注新话题，可以适当转换话题，大家正在说的话才是聊天的主题。\n"
-    prompt += "回复的要求是：平淡一些，简短一些，说中文，如果你要回复，最好只回复一个人的一个话题\n"
-    prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，等)，不要带有括号和动作描写。不要回复自己的发言，尽量不要说你说过的话。\n"
-    prompt += "现在请你先{hf_do_next}，不要分点输出,生成内心想法，文字不要浮夸"
-    prompt += "在输出完想法后，请你思考应该使用什么工具。如果你需要做某件事，来对消息和你的回复进行处理，请使用工具。\n"
-
-    Prompt(prompt, "sub_heartflow_prompt_before")
-
-
-class ChatState(enum.Enum):
-    ABSENT = "没在看群"
-    CHAT = "随便水群"
-    FOCUSED = "激情水群"
-
-
-class ChatStateInfo:
-    def __init__(self):
-        self.chat_status: ChatState = ChatState.ABSENT
-        self.current_state_time = 120
-
-        self.mood_manager = MoodManager()
-        self.mood = self.mood_manager.get_prompt()
 
 
 base_reply_probability = 0.05
@@ -112,7 +72,7 @@ class InterestChatting:
 
         self.above_threshold = False
         self.start_hfc_probability = 0.0
-
+    
     def add_interest_dict(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
         self.interest_dict[message.message_info.message_id] = (message, interest_value, is_mentioned)
         self.last_interaction_time = time.time()
@@ -259,15 +219,11 @@ class SubHeartflow:
 
         self.mai_states = mai_states
 
-        # 思维状态相关
-        self.current_mind = "什么也没想"  # 当前想法
-        self.past_mind = []  # 历史想法记录
-
         # 聊天状态管理
         self.chat_state: ChatStateInfo = ChatStateInfo()  # 该sub_heartflow的聊天状态信息
         self.interest_chatting = InterestChatting(
             state_change_callback=self.set_chat_state
-        )  # 该sub_heartflow的兴趣系统
+        ) 
 
         # 活动状态管理
         self.last_active_time = time.time()  # 最后活跃时间
@@ -281,16 +237,15 @@ class SubHeartflow:
         self.running_knowledges = []  # 运行中的知识
 
         # LLM模型配置
-        self.llm_model = LLMRequest(
-            model=global_config.llm_sub_heartflow,
-            temperature=global_config.llm_sub_heartflow["temp"],
-            max_tokens=800,
-            request_type="sub_heart_flow",
+        self.sub_mind = SubMind(
+            subheartflow_id=self.subheartflow_id,
+            chat_state=self.chat_state,
+            observations=self.observations
         )
 
-        self.log_prefix = chat_manager.get_stream_name(self.subheartflow_id) or self.subheartflow_id
 
-        self.structured_info = {}
+        self.log_prefix = chat_manager.get_stream_name(self.subheartflow_id) or self.subheartflow_id
+        
 
     async def add_time_current_state(self, add_time: float):
         self.current_state_time += add_time
@@ -381,6 +336,8 @@ class SubHeartflow:
         try:
             self.heart_fc_instance = HeartFChatting(
                 chat_id=self.chat_id,
+                sub_mind=self.sub_mind,
+                observations=self.observations
             )
             if await self.heart_fc_instance._initialize():
                 await self.heart_fc_instance.start()  # 初始化成功后启动循环
@@ -477,188 +434,9 @@ class SubHeartflow:
 
         logger.info(f"{self.log_prefix} 子心流后台任务已停止。")
 
-    async def do_thinking_before_reply(self):
-        """
-        在回复前进行思考，生成内心想法并收集工具调用结果
-
-        返回:
-            tuple: (current_mind, past_mind) 当前想法和过去的想法列表
-        """
-        # 更新活跃时间
-        self.last_active_time = time.time()
-
-        # ---------- 1. 准备基础数据 ----------
-        # 获取现有想法和情绪状态
-        current_thinking_info = self.current_mind
-        mood_info = self.chat_state.mood
-
-        # 获取观察对象
-        observation = self._get_primary_observation()
-        if not observation:
-            logger.error(f"[{self.subheartflow_id}] 无法获取观察对象")
-            self.update_current_mind("(我没看到任何聊天内容...)")
-            return self.current_mind, self.past_mind
-
-        # 获取观察内容
-        chat_observe_info = observation.get_observe_info()
-
-        # ---------- 2. 准备工具和个性化数据 ----------
-        # 初始化工具
-        tool_instance = ToolUser()
-        tools = tool_instance._define_tools()
-
-        # 获取个性化信息
-        individuality = Individuality.get_instance()
-
-        # 构建个性部分
-        prompt_personality = f"你的名字是{individuality.personality.bot_nickname}，你"
-        prompt_personality += individuality.personality.personality_core
-
-        # 随机添加个性侧面
-        if individuality.personality.personality_sides:
-            random_side = random.choice(individuality.personality.personality_sides)
-            prompt_personality += f"，{random_side}"
-
-        # 随机添加身份细节
-        if individuality.identity.identity_detail:
-            random_detail = random.choice(individuality.identity.identity_detail)
-            prompt_personality += f"，{random_detail}"
-
-        # 获取当前时间
-        time_now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-
-        # ---------- 3. 构建思考指导部分 ----------
-        # 创建本地随机数生成器，基于分钟数作为种子
-        local_random = random.Random()
-        current_minute = int(time.strftime("%M"))
-        local_random.seed(current_minute)
-
-        # 思考指导选项和权重
-        hf_options = [
-            ("继续生成你在这个聊天中的想法，在原来想法的基础上继续思考", 0.7),
-            ("生成你在这个聊天中的想法，在原来的想法上尝试新的话题", 0.1),
-            ("生成你在这个聊天中的想法，不要太深入", 0.1),
-            ("继续生成你在这个聊天中的想法，进行深入思考", 0.1),
-        ]
-
-        # 加权随机选择思考指导
-        hf_do_next = local_random.choices(
-            [option[0] for option in hf_options], weights=[option[1] for option in hf_options], k=1
-        )[0]
-
-        # ---------- 4. 构建最终提示词 ----------
-        # 获取提示词模板并填充数据
-        prompt = (await global_prompt_manager.get_prompt_async("sub_heartflow_prompt_before")).format(
-            extra_info="",  # 可以在这里添加额外信息
-            prompt_personality=prompt_personality,
-            bot_name=individuality.personality.bot_nickname,
-            current_thinking_info=current_thinking_info,
-            time_now=time_now,
-            chat_observe_info=chat_observe_info,
-            mood_info=mood_info,
-            hf_do_next=hf_do_next,
-        )
-
-        logger.debug(f"[{self.subheartflow_id}] 心流思考提示词构建完成")
-
-        # ---------- 5. 执行LLM请求并处理响应 ----------
-        content = ""  # 初始化内容变量
-        reasoning_content = ""  # 初始化推理内容变量
-
-        try:
-            # 调用LLM生成响应
-            response = await self.llm_model.generate_response_tool_async(prompt=prompt, tools=tools)
-
-            # 标准化响应格式
-            success, normalized_response, error_msg = normalize_llm_response(
-                response, log_prefix=f"[{self.subheartflow_id}] "
-            )
-
-            if not success:
-                # 处理标准化失败情况
-                logger.warning(f"[{self.subheartflow_id}] {error_msg}")
-                content = "LLM响应格式无法处理"
-            else:
-                # 从标准化响应中提取内容
-                if len(normalized_response) >= 2:
-                    content = normalized_response[0]
-                    _reasoning_content = normalized_response[1] if len(normalized_response) > 1 else ""
-
-                # 处理可能的工具调用
-                if len(normalized_response) == 3:
-                    # 提取并验证工具调用
-                    success, valid_tool_calls, error_msg = process_llm_tool_calls(
-                        normalized_response, log_prefix=f"[{self.subheartflow_id}] "
-                    )
-
-                    if success and valid_tool_calls:
-                        # 记录工具调用信息
-                        tool_calls_str = ", ".join(
-                            [call.get("function", {}).get("name", "未知工具") for call in valid_tool_calls]
-                        )
-                        logger.info(
-                            f"[{self.subheartflow_id}] 模型请求调用{len(valid_tool_calls)}个工具: {tool_calls_str}"
-                        )
-
-                        # 收集工具执行结果
-                        await self._execute_tool_calls(valid_tool_calls, tool_instance)
-                    elif not success:
-                        logger.warning(f"[{self.subheartflow_id}] {error_msg}")
-        except Exception as e:
-            # 处理总体异常
-            logger.error(f"[{self.subheartflow_id}] 执行LLM请求或处理响应时出错: {e}")
-            logger.error(traceback.format_exc())
-            content = "思考过程中出现错误"
-
-        # 记录最终思考结果
-        logger.debug(f"[{self.subheartflow_id}] 心流思考结果:\n{content}\n")
-
-        # 处理空响应情况
-        if not content:
-            content = "(不知道该想些什么...)"
-            logger.warning(f"[{self.subheartflow_id}] LLM返回空结果，思考失败。")
-
-        # ---------- 6. 更新思考状态并返回结果 ----------
-        # 更新当前思考内容
-        self.update_current_mind(content)
-
-        return self.current_mind, self.past_mind
-
-    async def _execute_tool_calls(self, tool_calls, tool_instance):
-        """
-        执行一组工具调用并收集结果
-
-        参数:
-            tool_calls: 工具调用列表
-            tool_instance: 工具使用器实例
-        """
-        tool_results = []
-        structured_info = {}  # 动态生成键
-
-        # 执行所有工具调用
-        for tool_call in tool_calls:
-            try:
-                result = await tool_instance._execute_tool_call(tool_call)
-                if result:
-                    tool_results.append(result)
-
-                    # 使用工具名称作为键
-                    tool_name = result["name"]
-                    if tool_name not in structured_info:
-                        structured_info[tool_name] = []
-
-                    structured_info[tool_name].append({"name": result["name"], "content": result["content"]})
-            except Exception as tool_e:
-                logger.error(f"[{self.subheartflow_id}] 工具执行失败: {tool_e}")
-
-        # 如果有工具结果，记录并更新结构化信息
-        if structured_info:
-            logger.debug(f"工具调用收集到结构化信息: {safe_json_dumps(structured_info, ensure_ascii=False)}")
-            self.structured_info = structured_info
 
     def update_current_mind(self, response):
-        self.past_mind.append(self.current_mind)
-        self.current_mind = response
+        self.sub_mind.update_current_mind(response)
 
     def add_observation(self, observation: Observation):
         for existing_obs in self.observations:
@@ -705,7 +483,7 @@ class SubHeartflow:
         interest_state = await self.get_interest_state()
         return {
             "interest_state": interest_state,
-            "current_mind": self.current_mind,
+            "current_mind": self.sub_mind.current_mind,
             "chat_state": self.chat_state.chat_status.value,
             "last_active_time": self.last_active_time,
         }
@@ -747,4 +525,4 @@ class SubHeartflow:
         logger.info(f"{self.log_prefix} 子心流关闭完成。")
 
 
-init_prompt()
+
