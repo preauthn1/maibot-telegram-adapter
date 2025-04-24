@@ -8,9 +8,13 @@ WORKDIR /MaiMBot
 COPY requirements.txt .
 # 同级目录下需要有 maim_message
 COPY maim_message /maim_message
+COPY MaiMBot-LPMM /MaiMBot-LPMM
 
 # 编译器
-RUN apt-get update && apt-get install -y g++
+RUN apt-get update && apt-get install -y build-essential
+
+# test
+RUN cat /proc/cpuinfo | grep avx2
 
 # 安装依赖
 RUN uv pip install --system --upgrade pip
