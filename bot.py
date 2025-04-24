@@ -8,11 +8,16 @@ import time
 import platform
 import traceback
 from dotenv import load_dotenv
-from src.common.logger import get_module_logger, LogConfig, CONFIRM_STYLE_CONFIG
+from src.common.logger import get_module_logger, LogConfig, CONFIRM_STYLE_CONFIG, MAIN_STYLE_CONFIG
 from src.common.crash_logger import install_crash_handler
 from src.main import MainSystem
 
-logger = get_module_logger("main_bot")
+
+main_log_config = LogConfig(
+    console_format=MAIN_STYLE_CONFIG["console_format"],
+    file_format=MAIN_STYLE_CONFIG["file_format"],
+)
+logger = get_module_logger("main_bot", config=main_log_config)
 confirm_logger_config = LogConfig(
     console_format=CONFIRM_STYLE_CONFIG["console_format"],
     file_format=CONFIRM_STYLE_CONFIG["file_format"],
@@ -52,6 +57,16 @@ def init_config():
 
         shutil.copy("template/bot_config_template.toml", "config/bot_config.toml")
         logger.info("复制完成，请修改config/bot_config.toml和.env中的配置后重新启动")
+    if not os.path.exists("config/lpmm_config.toml"):
+        logger.warning("检测到lpmm_config.toml不存在，正在从模板复制")
+
+        # 检查config目录是否存在
+        if not os.path.exists("config"):
+            os.makedirs("config")
+            logger.info("创建config目录")
+
+        shutil.copy("template/lpmm_config_template.toml", "config/lpmm_config.toml")
+        logger.info("复制完成，请修改config/lpmm_config.toml和.env中的配置后重新启动")
 
 
 def init_env():

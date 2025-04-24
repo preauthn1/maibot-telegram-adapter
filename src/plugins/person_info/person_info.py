@@ -1,4 +1,4 @@
-from src.common.logger import get_module_logger
+from src.common.logger import get_module_logger, LogConfig, PERSON_INFO_STYLE_CONFIG
 from ...common.database import db
 import copy
 import hashlib
@@ -33,7 +33,12 @@ PersonInfoManager 类方法功能摘要：
 9. personal_habit_deduction - 定时推断个人习惯
 """
 
-logger = get_module_logger("person_info")
+person_info_log_config = LogConfig(
+    console_format=PERSON_INFO_STYLE_CONFIG["console_format"],
+    file_format=PERSON_INFO_STYLE_CONFIG["file_format"],
+)
+
+logger = get_module_logger("person_info", config=person_info_log_config)
 
 person_info_default = {
     "person_id": None,
@@ -200,7 +205,7 @@ class PersonInfoManager:
             }"""
             # logger.debug(f"取名提示词：{qv_name_prompt}")
             response = await self.qv_name_llm.generate_response(qv_name_prompt)
-            logger.debug(f"取名提示词：{qv_name_prompt}\n取名回复：{response}")
+            logger.trace(f"取名提示词：{qv_name_prompt}\n取名回复：{response}")
             result = self._extract_json_from_text(response[0])
 
             if not result["nickname"]:

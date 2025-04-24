@@ -7,13 +7,18 @@ from src.plugins.chat.message import MessageRecv, BaseMessageInfo, MessageThinki
 from src.plugins.chat.message import MessageSet, Seg  # Local import needed after move
 from src.plugins.chat.chat_stream import ChatStream
 from src.plugins.chat.message import UserInfo
-from src.heart_flow.heartflow import heartflow, SubHeartflow
 from src.plugins.chat.chat_stream import chat_manager
 from src.common.logger import get_module_logger, LogConfig, PFC_STYLE_CONFIG  # 引入 DEFAULT_CONFIG
 from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
 from src.plugins.utils.timer_calculater import Timer  # <--- Import Timer
+from src.plugins.heartFC_chat.heartFC_generator import HeartFCGenerator
+from src.do_tool.tool_use import ToolUser
+from ..chat.message_sender import message_manager  # <-- Import the global manager
+from src.plugins.chat.emoji_manager import emoji_manager
+# --- End import ---
+
 
 INITIAL_DURATION = 60.0
 
@@ -23,12 +28,15 @@ interest_log_config = LogConfig(
     console_format=PFC_STYLE_CONFIG["console_format"],  # 使用默认控制台格式
     file_format=PFC_STYLE_CONFIG["file_format"],  # 使用默认文件格式
 )
-logger = get_module_logger("PFCLoop", config=interest_log_config)  # Logger Name Changed
+logger = get_module_logger("HeartFCLoop", config=interest_log_config)  # Logger Name Changed
 
 
 # Forward declaration for type hinting
 if TYPE_CHECKING:
-    from .heartFC_controler import HeartFCController
+    # Keep this if HeartFCController methods are still needed elsewhere,
+    # but the instance variable will be removed from HeartFChatting
+    # from .heartFC_controler import HeartFCController
+    from src.heart_flow.heartflow import SubHeartflow, heartflow  # <-- 同时导入 heartflow 实例用于类型检查
 
 PLANNER_TOOL_DEFINITION = [
     {
@@ -57,45 +65,44 @@ PLANNER_TOOL_DEFINITION = [
 ]
 
 
-class PFChatting:
+class HeartFChatting:
     """
-    管理一个连续的Plan-Filter-Check (现在改为Plan-Replier-Sender)循环
-    用于在特定聊天流中生成回复，由计时器控制。
-    只要计时器>0，循环就会继续。
+    管理一个连续的Plan-Replier-Sender循环
+    用于在特定聊天流中生成回复。
+    其生命周期现在由其关联的 SubHeartflow 的 FOCUSED 状态控制。
     """
 
-    def __init__(self, chat_id: str, heartfc_controller_instance: "HeartFCController"):
+    def __init__(self, chat_id: str):
         """
-        初始化PFChatting实例。
+        HeartFChatting 初始化函数
 
-        Args:
-            chat_id: The identifier for the chat stream (e.g., stream_id).
-            heartfc_controller_instance: 访问共享资源和方法的主HeartFCController实例。
+        参数:
+            chat_id: 聊天流唯一标识符(如stream_id)
         """
-        self.heartfc_controller = heartfc_controller_instance  # Store the controller instance
-        self.stream_id: str = chat_id
-        self.chat_stream: Optional[ChatStream] = None
-        self.sub_hf: Optional[SubHeartflow] = None
-        self._initialized = False
-        self._init_lock = asyncio.Lock()  # Ensure initialization happens only once
-        self._processing_lock = asyncio.Lock()  # 确保只有一个 Plan-Replier-Sender 周期在运行
-        self._timer_lock = asyncio.Lock()  # 用于安全更新计时器
+        # 基础属性
+        self.stream_id: str = chat_id  # 聊天流ID
+        self.chat_stream: Optional[ChatStream] = None  # 关联的聊天流
+        self.sub_hf: SubHeartflow = None  # 关联的子心流
 
-        # Access LLM config through the controller
+        # 初始化状态控制
+        self._initialized = False  # 是否已初始化标志
+        self._processing_lock = asyncio.Lock()  # 处理锁(确保单次Plan-Replier-Sender周期)
+
+        # 依赖注入存储
+        self.gpt_instance = HeartFCGenerator()  # 文本回复生成器
+        self.tool_user = ToolUser()  # 工具使用实例
+
+        # LLM规划器配置
         self.planner_llm = LLMRequest(
             model=global_config.llm_normal,
             temperature=global_config.llm_normal["temp"],
             max_tokens=1000,
-            request_type="action_planning",
+            request_type="action_planning",  # 用于动作规划
         )
 
-        # Internal state for loop control
-        self._loop_timer: float = 0.0  # Remaining time for the loop in seconds
-        self._loop_active: bool = False  # Is the loop currently running?
-        self._loop_task: Optional[asyncio.Task] = None  # Stores the main loop task
-        self._trigger_count_this_activation: int = 0  # Counts triggers within an active period
-        self._initial_duration: float = INITIAL_DURATION  # 首次触发增加的时间
-        self._last_added_duration: float = self._initial_duration  # <--- 新增：存储上次增加的时间
+        # 循环控制内部状态
+        self._loop_active: bool = False  # 循环是否正在运行
+        self._loop_task: Optional[asyncio.Task] = None  # 主循环任务
 
     def _get_log_prefix(self) -> str:
         """获取日志前缀，包含可读的流名称"""
@@ -107,79 +114,72 @@ class PFChatting:
         懒初始化以使用提供的标识符解析chat_stream和sub_hf。
         确保实例已准备好处理触发器。
         """
-        async with self._init_lock:
-            if self._initialized:
-                return True
-            log_prefix = self._get_log_prefix()  # 获取前缀
-            try:
-                self.chat_stream = chat_manager.get_stream(self.stream_id)
+        if self._initialized:
+            return True
+        log_prefix = self._get_log_prefix()  # 获取前缀
+        try:
+            self.chat_stream = chat_manager.get_stream(self.stream_id)
 
-                if not self.chat_stream:
-                    logger.error(f"{log_prefix} 获取ChatStream失败。")
-                    return False
-
-                self.sub_hf = heartflow.get_subheartflow(self.stream_id)
-                if not self.sub_hf:
-                    logger.warning(f"{log_prefix} 获取SubHeartflow失败。一些功能可能受限。")
-
-                self._initialized = True
-                logger.info(f"麦麦感觉到了，激发了PFChatting{log_prefix} 初始化成功。")
-                return True
-            except Exception as e:
-                logger.error(f"{log_prefix} 初始化失败: {e}")
-                logger.error(traceback.format_exc())
+            if not self.chat_stream:
+                logger.error(f"{log_prefix} 获取ChatStream失败。")
                 return False
 
-    async def add_time(self):
+            # <-- 在这里导入 heartflow 实例
+            from src.heart_flow.heartflow import heartflow
+
+            self.sub_hf = heartflow.get_subheartflow(self.stream_id)
+            if not self.sub_hf:
+                logger.warning(f"{log_prefix} 获取SubHeartflow失败。一些功能可能受限。")
+
+            self._initialized = True
+            logger.info(f"麦麦感觉到了，激发了HeartFChatting{log_prefix} 初始化成功。")
+            return True
+        except Exception as e:
+            logger.error(f"{log_prefix} 初始化失败: {e}")
+            logger.error(traceback.format_exc())
+            return False
+
+    async def start(self):
         """
-        为麦麦添加时间，麦麦有兴趣时，时间增加。
+        显式尝试启动 HeartFChatting 的主循环。
+        如果循环未激活，则启动循环。
         """
         log_prefix = self._get_log_prefix()
         if not self._initialized:
             if not await self._initialize():
-                logger.error(f"{log_prefix} 无法添加时间: 未初始化。")
+                logger.error(f"{log_prefix} 无法启动循环: 初始化失败。")
                 return
+        logger.info(f"{log_prefix} 尝试显式启动循环...")
+        await self._start_loop_if_needed()
 
-        async with self._timer_lock:
-            duration_to_add: float = 0.0
+    async def _start_loop_if_needed(self):
+        """检查是否需要启动主循环，如果未激活则启动。"""
+        log_prefix = self._get_log_prefix()
+        should_start_loop = False
+        # 直接检查是否激活，无需检查计时器
+        if not self._loop_active:
+            should_start_loop = True
+            self._loop_active = True  # 标记为活动，防止重复启动
 
-            if not self._loop_active:  # First trigger for this activation cycle
-                duration_to_add = self._initial_duration  # 使用初始值
-                self._last_added_duration = duration_to_add  # 更新上次增加的值
-                self._trigger_count_this_activation = 1  # Start counting
-                logger.info(
-                    f"{log_prefix} 麦麦有兴趣！ #{self._trigger_count_this_activation}. 麦麦打算聊： {duration_to_add:.2f}s."
-                )
-            else:  # Loop is already active, apply 50% reduction
-                self._trigger_count_this_activation += 1
-                duration_to_add = self._last_added_duration * 0.5
-                if duration_to_add < 1.5:
-                    duration_to_add = 1.5
-                # Update _last_added_duration only if it's >= 0.5 to prevent it from becoming too small
-                self._last_added_duration = duration_to_add
-                logger.info(
-                    f"{log_prefix} 麦麦兴趣增加！ #{self._trigger_count_this_activation}. 想继续聊： {duration_to_add:.2f}s, 麦麦还能聊： {self._loop_timer:.1f}s."
-                )
+        if should_start_loop:
+            # 检查是否已有任务在运行（理论上不应该，因为 _loop_active=False）
+            if self._loop_task and not self._loop_task.done():
+                logger.warning(f"{log_prefix} 发现之前的循环任务仍在运行（不符合预期）。取消旧任务。")
+                self._loop_task.cancel()
+                try:
+                    # 等待旧任务确实被取消
+                    await asyncio.wait_for(self._loop_task, timeout=0.5)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass  # 忽略取消或超时错误
+                self._loop_task = None  # 清理旧任务引用
 
-            # 添加计算出的时间
-            new_timer_value = self._loop_timer + duration_to_add
-            # Add max timer duration limit? e.g., max(0, min(new_timer_value, 300))
-            self._loop_timer = max(0, new_timer_value)
-            # Log less frequently, e.g., every 10 seconds or significant change?
-            # if self._trigger_count_this_activation % 5 == 0:
-            # logger.info(f"{log_prefix} 麦麦现在想聊{self._loop_timer:.1f}秒")
-
-            # Start the loop if it wasn't active and timer is positive
-            if not self._loop_active and self._loop_timer > 0:
-                self._loop_active = True
-                if self._loop_task and not self._loop_task.done():
-                    logger.warning(f"{log_prefix} 发现意外的循环任务正在进行。取消它。")
-                    self._loop_task.cancel()
-
-                self._loop_task = asyncio.create_task(self._run_pf_loop())
-                self._loop_task.add_done_callback(self._handle_loop_completion)
-            elif self._loop_active:
-                logger.trace(f"{log_prefix} 循环已经激活。计时器延长。")
+            logger.info(f"{log_prefix} 循环未激活，启动主循环...")
+            # 创建新的循环任务
+            self._loop_task = asyncio.create_task(self._run_pf_loop())
+            # 添加完成回调
+            self._loop_task.add_done_callback(self._handle_loop_completion)
+        # else:
+        # logger.trace(f"{log_prefix} 不需要启动循环（已激活）") # 可以取消注释以进行调试
 
     def _handle_loop_completion(self, task: asyncio.Task):
         """当 _run_pf_loop 任务完成时执行的回调。"""
@@ -187,51 +187,40 @@ class PFChatting:
         try:
             exception = task.exception()
             if exception:
-                logger.error(f"{log_prefix} PFChatting: 麦麦脱离了聊天(异常): {exception}")
+                logger.error(f"{log_prefix} HeartFChatting: 麦麦脱离了聊天(异常): {exception}")
                 logger.error(traceback.format_exc())  # Log full traceback for exceptions
             else:
-                logger.debug(f"{log_prefix} PFChatting: 麦麦脱离了聊天 (正常完成)")
+                # Loop completing normally now means it was cancelled/shutdown externally
+                logger.info(f"{log_prefix} HeartFChatting: 麦麦脱离了聊天 (外部停止)")
         except asyncio.CancelledError:
-            logger.info(f"{log_prefix} PFChatting: 麦麦脱离了聊天(任务取消)")
+            logger.info(f"{log_prefix} HeartFChatting: 麦麦脱离了聊天(任务取消)")
         finally:
             self._loop_active = False
             self._loop_task = None
-            self._last_added_duration = self._initial_duration
-            self._trigger_count_this_activation = 0
             if self._processing_lock.locked():
-                logger.warning(f"{log_prefix} PFChatting: 处理锁在循环结束时仍被锁定，强制释放。")
+                logger.warning(f"{log_prefix} HeartFChatting: 处理锁在循环结束时仍被锁定，强制释放。")
                 self._processing_lock.release()
-            # Remove instance from controller's dict? Only if it's truly done.
-            # Consider if loop can be restarted vs instance destroyed.
-            # asyncio.create_task(self.heartfc_controller._remove_pf_chatting_instance(self.stream_id)) # Example cleanup
 
     async def _run_pf_loop(self):
         """
-        主循环，当计时器>0时持续进行计划并可能回复消息
-        管理每个循环周期的处理锁
+        主循环，持续进行计划并可能回复消息，直到被外部取消。
+        管理每个循环周期的处理锁。
         """
         log_prefix = self._get_log_prefix()
-        logger.info(f"{log_prefix} PFChatting: 麦麦打算好好聊聊 (定时器: {self._loop_timer:.1f}s)")
+        logger.info(f"{log_prefix} HeartFChatting: 麦麦打算好好聊聊 (进入专注模式)")
         try:
             thinking_id = ""
-            while True:
+            while True:  # Loop indefinitely until cancelled
                 cycle_timers = {}  # <--- Initialize timers dict for this cycle
 
-                if self.heartfc_controller.MessageManager().check_if_sending_message_exist(self.stream_id, thinking_id):
-                    # logger.info(f"{log_prefix} PFChatting: 11111111111111111111111111111111麦麦还在发消息，等会再规划")
+                # Access MessageManager directly
+                if message_manager.check_if_sending_message_exist(self.stream_id, thinking_id):
+                    # logger.info(f"{log_prefix} HeartFChatting: 麦麦还在发消息，等会再规划")
                     await asyncio.sleep(1)
                     continue
                 else:
-                    # logger.info(f"{log_prefix} PFChatting: 11111111111111111111111111111111麦麦不发消息了，开始规划")
+                    # logger.info(f"{log_prefix} HeartFChatting: 麦麦不发消息了，开始规划")
                     pass
-
-                async with self._timer_lock:
-                    current_timer = self._loop_timer
-                    if current_timer <= 0:
-                        logger.info(
-                            f"{log_prefix} PFChatting: 聊太久了，麦麦打算休息一下 (计时器为 {current_timer:.1f}s)。退出PFChatting。"
-                        )
-                        break
 
                 # 记录循环周期开始时间，用于计时和休眠计算
                 loop_cycle_start_time = time.monotonic()
@@ -244,7 +233,7 @@ class PFChatting:
                         # Use try_acquire pattern or timeout?
                         await self._processing_lock.acquire()
                         acquired_lock = True
-                        # logger.debug(f"{log_prefix} PFChatting: 循环获取到处理锁")
+                        # logger.debug(f"{log_prefix} HeartFChatting: 循环获取到处理锁")
 
                         # 在规划前记录数据库时间戳
                         planner_start_db_time = time.time()
@@ -265,10 +254,10 @@ class PFChatting:
                             logger.error(f"{log_prefix} Planner LLM 失败，跳过本周期回复尝试。理由: {reasoning}")
                             # Optionally add a longer sleep?
                             action_taken_this_cycle = False  # Ensure no action is counted
-                            # Continue to timer decrement and sleep
+                            # Continue to sleep logic
 
                         elif action == "text_reply":
-                            logger.info(f"{log_prefix} PFChatting: 麦麦决定回复文本. 理由: {reasoning}")
+                            logger.debug(f"{log_prefix} HeartFChatting: 麦麦决定回复文本. 理由: {reasoning}")
                             action_taken_this_cycle = True
                             anchor_message = await self._get_anchor_message(observed_messages)
                             if not anchor_message:
@@ -290,7 +279,7 @@ class PFChatting:
                                             )
                                     except Exception as e_replier:
                                         logger.error(f"{log_prefix} 循环: 回复器工作失败: {e_replier}")
-                                        self._cleanup_thinking_message(thinking_id)
+                                        # self._cleanup_thinking_message(thinking_id) <-- Remove cleanup call
 
                                     if replier_result:
                                         # --- Sender Work --- #
@@ -306,13 +295,13 @@ class PFChatting:
                                         except Exception as e_sender:
                                             logger.error(f"{log_prefix} 循环: 发送器失败: {e_sender}")
                                             # _sender should handle cleanup, but double check
-                                            # self._cleanup_thinking_message(thinking_id)
+                                            # self._cleanup_thinking_message(thinking_id) <-- Remove cleanup call
                                     else:
                                         logger.warning(f"{log_prefix} 循环: 回复器未产生结果. 跳过发送.")
-                                        self._cleanup_thinking_message(thinking_id)
+                                        # self._cleanup_thinking_message(thinking_id) <-- Remove cleanup call
                         elif action == "emoji_reply":
                             logger.info(
-                                f"{log_prefix} PFChatting: 麦麦决定回复表情 ('{emoji_query}'). 理由: {reasoning}"
+                                f"{log_prefix} HeartFChatting: 麦麦决定回复表情 ('{emoji_query}'). 理由: {reasoning}"
                             )
                             action_taken_this_cycle = True
                             anchor = await self._get_anchor_message(observed_messages)
@@ -328,10 +317,10 @@ class PFChatting:
                             action_taken_this_cycle = True  # 即使发送失败，Planner 也决策了动作
 
                         elif action == "no_reply":
-                            logger.info(f"{log_prefix} PFChatting: 麦麦决定不回复. 原因: {reasoning}")
+                            logger.info(f"{log_prefix} HeartFChatting: 麦麦决定不回复. 原因: {reasoning}")
                             action_taken_this_cycle = False  # 标记为未执行动作
                             # --- 新增：等待新消息 ---
-                            logger.debug(f"{log_prefix} PFChatting: 开始等待新消息 (自 {planner_start_db_time})...")
+                            logger.debug(f"{log_prefix} HeartFChatting: 开始等待新消息 (自 {planner_start_db_time})...")
                             observation = None
                             if self.sub_hf:
                                 observation = self.sub_hf._get_primary_observation()
@@ -340,21 +329,21 @@ class PFChatting:
                                 with Timer("Wait New Msg", cycle_timers):  # <--- Start Wait timer
                                     wait_start_time = time.monotonic()
                                     while True:
-                                        # 检查计时器是否耗尽
-                                        async with self._timer_lock:
-                                            if self._loop_timer <= 0:
-                                                logger.info(f"{log_prefix} PFChatting: 等待新消息时计时器耗尽。")
-                                                break  # 计时器耗尽，退出等待
+                                        # Removed timer check within wait loop
+                                        # async with self._timer_lock:
+                                        #     if self._loop_timer <= 0:
+                                        #         logger.info(f"{log_prefix} HeartFChatting: 等待新消息时计时器耗尽。")
+                                        #         break # 计时器耗尽，退出等待
 
                                         # 检查是否有新消息
                                         has_new = await observation.has_new_messages_since(planner_start_db_time)
                                         if has_new:
-                                            logger.info(f"{log_prefix} PFChatting: 检测到新消息，结束等待。")
+                                            logger.info(f"{log_prefix} HeartFChatting: 检测到新消息，结束等待。")
                                             break  # 收到新消息，退出等待
 
                                         # 检查等待是否超时（例如，防止无限等待）
                                         if time.monotonic() - wait_start_time > 60:  # 等待60秒示例
-                                            logger.warning(f"{log_prefix} PFChatting: 等待新消息超时（60秒）。")
+                                            logger.warning(f"{log_prefix} HeartFChatting: 等待新消息超时（60秒）。")
                                             break  # 超时退出
 
                                         # 等待一段时间再检查
@@ -364,16 +353,18 @@ class PFChatting:
                                             logger.info(f"{log_prefix} 等待新消息的 sleep 被中断。")
                                             raise  # 重新抛出取消错误，以便外层循环处理
                             else:
-                                logger.warning(f"{log_prefix} PFChatting: 无法获取 Observation 实例，无法等待新消息。")
+                                logger.warning(
+                                    f"{log_prefix} HeartFChatting: 无法获取 Observation 实例，无法等待新消息。"
+                                )
                             # --- 等待结束 ---
 
                         elif action == "error":  # Action specifically set to error by planner
-                            logger.error(f"{log_prefix} PFChatting: Planner返回错误状态. 原因: {reasoning}")
+                            logger.error(f"{log_prefix} HeartFChatting: Planner返回错误状态. 原因: {reasoning}")
                             action_taken_this_cycle = False
 
                         else:  # Unknown action from planner
                             logger.warning(
-                                f"{log_prefix} PFChatting: Planner返回未知动作 '{action}'. 原因: {reasoning}"
+                                f"{log_prefix} HeartFChatting: Planner返回未知动作 '{action}'. 原因: {reasoning}"
                             )
                             action_taken_this_cycle = False
 
@@ -386,11 +377,9 @@ class PFChatting:
                             timer_strings.append(f"{name}: {formatted_time}")
 
                         if timer_strings:  # 如果有有效计时器数据才打印
-                            logger.debug(
-                                f"{log_prefix} test testtesttesttesttesttesttesttesttesttest Cycle Timers: {'; '.join(timer_strings)}"
-                            )
+                            logger.debug(f"{log_prefix} 该次决策耗时: {'; '.join(timer_strings)}")
 
-                    # --- Timer Decrement --- #
+                    # --- Timer Decrement Removed --- #
                     cycle_duration = time.monotonic() - loop_cycle_start_time
 
                 except Exception as e_cycle:
@@ -404,22 +393,25 @@ class PFChatting:
                 finally:
                     if acquired_lock:
                         self._processing_lock.release()
-                        logger.trace(f"{log_prefix} 循环释放了处理锁.")
+                        # logger.trace(f"{log_prefix} 循环释放了处理锁.") # Reduce noise
 
-                async with self._timer_lock:
-                    self._loop_timer -= cycle_duration
-                    # Log timer decrement less aggressively
-                    if cycle_duration > 0.1 or not action_taken_this_cycle:
-                        logger.debug(
-                            f"{log_prefix} PFChatting: 周期耗时 {cycle_duration:.2f}s. 剩余时间: {self._loop_timer:.1f}s."
-                        )
+                # --- Timer Decrement Logging Removed ---
+                # async with self._timer_lock:
+                #     self._loop_timer -= cycle_duration
+                #     # Log timer decrement less aggressively
+                #     if cycle_duration > 0.1 or not action_taken_this_cycle:
+                #         logger.debug(
+                #             f"{log_prefix} HeartFChatting: 周期耗时 {cycle_duration:.2f}s. 剩余时间: {self._loop_timer:.1f}s."
+                #         )
+                if cycle_duration > 0.1:
+                    logger.debug(f"{log_prefix} HeartFChatting: 周期耗时 {cycle_duration:.2f}s.")
 
                 # --- Delay --- #
                 try:
                     sleep_duration = 0.0
                     if not action_taken_this_cycle and cycle_duration < 1.5:
                         sleep_duration = 1.5 - cycle_duration
-                    elif cycle_duration < 0.2:
+                    elif cycle_duration < 0.2:  # Keep minimal sleep even after action
                         sleep_duration = 0.2
 
                     if sleep_duration > 0:
@@ -428,16 +420,16 @@ class PFChatting:
 
                 except asyncio.CancelledError:
                     logger.info(f"{log_prefix} Sleep interrupted, loop likely cancelling.")
-                    break
+                    break  # Exit loop immediately on cancellation
 
         except asyncio.CancelledError:
-            logger.info(f"{log_prefix} PFChatting: 麦麦的聊天主循环被取消了")
+            logger.info(f"{log_prefix} HeartFChatting: 麦麦的聊天主循环被取消了")
         except Exception as e_loop_outer:
-            logger.error(f"{log_prefix} PFChatting: 麦麦的聊天主循环意外出错: {e_loop_outer}")
+            logger.error(f"{log_prefix} HeartFChatting: 麦麦的聊天主循环意外出错: {e_loop_outer}")
             logger.error(traceback.format_exc())
         finally:
             # State reset is primarily handled by _handle_loop_completion callback
-            logger.info(f"{log_prefix} PFChatting: 麦麦的聊天主循环结束。")
+            logger.info(f"{log_prefix} HeartFChatting: 麦麦的聊天主循环结束。")
 
     async def _planner(self) -> Dict[str, Any]:
         """
@@ -451,20 +443,39 @@ class PFChatting:
         current_mind: Optional[str] = None
         llm_error = False  # Flag for LLM failure
 
+        # --- Ensure SubHeartflow is available ---
+        if not self.sub_hf:
+            # Attempt to re-fetch if missing (might happen if initialization order changes)
+            self.sub_hf = heartflow.get_subheartflow(self.stream_id)
+            if not self.sub_hf:
+                logger.error(f"{log_prefix}[Planner] SubHeartflow is not available. Cannot proceed.")
+                return {
+                    "action": "error",
+                    "reasoning": "SubHeartflow unavailable",
+                    "llm_error": True,
+                    "observed_messages": [],
+                }
+
         try:
+            # Access observation via self.sub_hf
             observation = self.sub_hf._get_primary_observation()
             await observation.observe()
             observed_messages = observation.talking_message
             observed_messages_str = observation.talking_message_str
         except Exception as e:
             logger.error(f"{log_prefix}[Planner] 获取观察信息时出错: {e}")
+            # Handle error gracefully, maybe return an error state
+            observed_messages_str = "[Error getting observation]"
+            # Consider returning error here if observation is critical
         # --- 结束获取观察信息 --- #
 
         # --- (Moved from _replier_work) 1. 思考前使用工具 --- #
         try:
-            # Access tool_user via controller
-            tool_result = await self.heartfc_controller.tool_user.use_tool(
-                message_txt=observed_messages_str, sub_heartflow=self.sub_hf
+            # Access tool_user directly
+            tool_result = await self.tool_user.use_tool(
+                message_txt=observed_messages_str,
+                chat_stream=self.chat_stream,
+                observation=self.sub_hf._get_primary_observation(),
             )
             if tool_result.get("used_tools", False):
                 tool_result_info = tool_result.get("structured_info", {})
@@ -580,31 +591,6 @@ class PFChatting:
         """
 
         try:
-            last_msg_dict = None
-            if observed_messages:
-                last_msg_dict = observed_messages[-1]
-
-            if last_msg_dict:
-                try:
-                    # anchor_message = MessageRecv(last_msg_dict, chat_stream=self.chat_stream)
-                    anchor_message = MessageRecv(last_msg_dict)  # 移除 chat_stream 参数
-                    anchor_message.update_chat_stream(self.chat_stream)  # 添加 update_chat_stream 调用
-                    if not (
-                        anchor_message
-                        and anchor_message.message_info
-                        and anchor_message.message_info.message_id
-                        and anchor_message.message_info.user_info
-                    ):
-                        raise ValueError("重构的 MessageRecv 缺少必要信息.")
-                    # logger.debug(f"{self._get_log_prefix()} 重构的锚点消息: ID={anchor_message.message_info.message_id}")
-                    return anchor_message
-                except Exception as e_reconstruct:
-                    logger.warning(
-                        f"{self._get_log_prefix()} 从观察到的消息重构 MessageRecv 失败: {e_reconstruct}. 创建占位符."
-                    )
-            # else:
-            # logger.warning(f"{self._get_log_prefix()} observed_messages 为空. 创建占位符锚点消息.")
-
             # --- Create Placeholder --- #
             placeholder_id = f"mid_pf_{int(time.time() * 1000)}"
             placeholder_user = UserInfo(
@@ -634,17 +620,6 @@ class PFChatting:
             logger.error(f"{self._get_log_prefix()} Error getting/creating anchor message: {e}")
             logger.error(traceback.format_exc())
             return None
-
-    def _cleanup_thinking_message(self, thinking_id: str):
-        """Safely removes the thinking message."""
-        log_prefix = self._get_log_prefix()
-        try:
-            # Access MessageManager via controller
-            container = self.heartfc_controller.MessageManager().get_container(self.stream_id)
-            container.remove_message(thinking_id, msg_type=MessageThinking)
-            logger.debug(f"{log_prefix} Cleaned up thinking message {thinking_id}.")
-        except Exception as e:
-            logger.error(f"{log_prefix} Error cleaning up thinking message {thinking_id}: {e}")
 
     # --- 发送器 (Sender) --- #
     async def _sender(
@@ -678,10 +653,10 @@ class PFChatting:
 
     async def shutdown(self):
         """
-        Gracefully shuts down the PFChatting instance by cancelling the active loop task.
+        Gracefully shuts down the HeartFChatting instance by cancelling the active loop task.
         """
         log_prefix = self._get_log_prefix()
-        logger.info(f"{log_prefix} Shutting down PFChatting...")
+        logger.info(f"{log_prefix} Shutting down HeartFChatting...")
         if self._loop_task and not self._loop_task.done():
             logger.info(f"{log_prefix} Cancelling active PF loop task.")
             self._loop_task.cancel()
@@ -701,7 +676,7 @@ class PFChatting:
         if self._processing_lock.locked():
             logger.warning(f"{log_prefix} Releasing processing lock during shutdown.")
             self._processing_lock.release()
-        logger.info(f"{log_prefix} PFChatting shutdown complete.")
+        logger.info(f"{log_prefix} HeartFChatting shutdown complete.")
 
     async def _build_planner_prompt(self, observed_messages_str: str, current_mind: Optional[str]) -> str:
         """构建 Planner LLM 的提示词"""
@@ -750,16 +725,11 @@ class PFChatting:
         log_prefix = self._get_log_prefix()
         response_set: Optional[List[str]] = None
         try:
-            # --- Generate Response with LLM --- #
-            # Access gpt instance via controller
-            gpt_instance = self.heartfc_controller.gpt
-            # logger.debug(f"{log_prefix}[Replier-{thinking_id}] Calling LLM to generate response...")
-
-            # Ensure generate_response has access to current_mind if it's crucial context
-            response_set = await gpt_instance.generate_response(
-                reason,
-                anchor_message,  # Pass anchor_message positionally (matches 'message' parameter)
-                thinking_id,  # Pass thinking_id positionally
+            response_set = await self.gpt_instance.generate_response(
+                current_mind_info=self.sub_hf.current_mind,
+                reason=reason,
+                message=anchor_message,  # Pass anchor_message positionally (matches 'message' parameter)
+                thinking_id=thinking_id,  # Pass thinking_id positionally
             )
 
             if not response_set:
@@ -799,8 +769,8 @@ class PFChatting:
             reply=anchor_message,  # 回复的是锚点消息
             thinking_start_time=thinking_time_point,
         )
-        # Access MessageManager via controller
-        self.heartfc_controller.MessageManager().add_message(thinking_message)
+        # Access MessageManager directly
+        await message_manager.add_message(thinking_message)
         return thinking_id
 
     async def _send_response_messages(
@@ -812,7 +782,8 @@ class PFChatting:
             return None
 
         chat = anchor_message.chat_stream
-        container = self.heartfc_controller.MessageManager().get_container(chat.stream_id)
+        # Access MessageManager directly
+        container = await message_manager.get_container(chat.stream_id)
         thinking_message = None
 
         # 移除思考消息
@@ -855,7 +826,8 @@ class PFChatting:
                 first_bot_msg = bot_message
             message_set.add_message(bot_message)
 
-        self.heartfc_controller.MessageManager().add_message(message_set)
+        # Access MessageManager directly
+        await message_manager.add_message(message_set)
         return first_bot_msg
 
     async def _handle_emoji(self, anchor_message: Optional[MessageRecv], response_set: List[str], send_emoji: str = ""):
@@ -866,13 +838,12 @@ class PFChatting:
             return
 
         chat = anchor_message.chat_stream
-        # Access emoji_manager via controller
-        emoji_manager_instance = self.heartfc_controller.emoji_manager
+
         if send_emoji:
-            emoji_raw = await emoji_manager_instance.get_emoji_for_text(send_emoji)
+            emoji_raw = await emoji_manager.get_emoji_for_text(send_emoji)
         else:
             emoji_text_source = "".join(response_set) if response_set else ""
-            emoji_raw = await emoji_manager_instance.get_emoji_for_text(emoji_text_source)
+            emoji_raw = await emoji_manager.get_emoji_for_text(emoji_text_source)
 
         if emoji_raw:
             emoji_path, _description = emoji_raw
@@ -894,5 +865,5 @@ class PFChatting:
                 is_head=False,
                 is_emoji=True,
             )
-            # Access MessageManager via controller
-            self.heartfc_controller.MessageManager().add_message(bot_message)
+            # Access MessageManager directly
+            await message_manager.add_message(bot_message)
