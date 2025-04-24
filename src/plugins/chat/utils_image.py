@@ -12,6 +12,7 @@ from ...config.config import global_config
 from ..models.utils_model import LLMRequest
 
 from src.common.logger import get_module_logger
+import traceback
 
 logger = get_module_logger("chat_image")
 
@@ -316,4 +317,5 @@ def image_path_to_base64(image_path: str) -> str:
             return base64.b64encode(image_data).decode("utf-8")
     except Exception as e:
         logger.error(f"读取图片失败: {image_path}, 错误: {str(e)}")
+        traceback.print_exc()
         return None

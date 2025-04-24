@@ -310,7 +310,7 @@ class EmojiManager:
 
             time_end = time.time()
             logger.info(f"[匹配] 搜索表情包用时: {time_end - time_start:.2f} 秒")
-            return os.path.join(selected_emoji.path, selected_emoji.filename), f"[ {selected_emoji.description} ]"
+            return selected_emoji.path, f"[ {selected_emoji.description} ]"
 
         except Exception as e:
             logger.error(f"[错误] 获取表情包失败: {str(e)}")
