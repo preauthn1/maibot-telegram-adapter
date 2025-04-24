@@ -67,12 +67,7 @@ class HeartFChatting:
     其生命周期现在由其关联的 SubHeartflow 的 FOCUSED 状态控制。
     """
 
-    def __init__(
-        self,
-        chat_id: str,
-        sub_mind: SubMind,
-        observations: Observation
-    ):
+    def __init__(self, chat_id: str, sub_mind: SubMind, observations: Observation):
         """
         HeartFChatting 初始化函数
 
@@ -438,7 +433,9 @@ class HeartFChatting:
         llm_error = False  # LLM错误标志
 
         try:
-            prompt = await self._build_planner_prompt(observed_messages_str, current_mind, self.sub_mind.structured_info)
+            prompt = await self._build_planner_prompt(
+                observed_messages_str, current_mind, self.sub_mind.structured_info
+            )
             payload = {
                 "model": self.planner_llm.model_name,
                 "messages": [{"role": "user", "content": prompt}],

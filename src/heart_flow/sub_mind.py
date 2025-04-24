@@ -19,7 +19,6 @@ subheartflow_config = LogConfig(
 logger = get_module_logger("subheartflow", config=subheartflow_config)
 
 
-
 def init_prompt():
     prompt = ""
     # prompt += f"麦麦的总体想法是：{self.main_heartflow_info}\n\n"
@@ -39,32 +38,26 @@ def init_prompt():
     prompt += "在输出完想法后，请你思考应该使用什么工具。如果你需要做某件事，来对消息和你的回复进行处理，请使用工具。\n"
 
     Prompt(prompt, "sub_heartflow_prompt_before")
-    
-    
+
 
 class SubMind:
-    def __init__(
-        self,
-        subheartflow_id: str,
-        chat_state: ChatStateInfo,
-        observations: Observation
-    ):
+    def __init__(self, subheartflow_id: str, chat_state: ChatStateInfo, observations: Observation):
         self.subheartflow_id = subheartflow_id
-        
+
         self.llm_model = LLMRequest(
             model=global_config.llm_sub_heartflow,
             temperature=global_config.llm_sub_heartflow["temp"],
             max_tokens=800,
             request_type="sub_heart_flow",
         )
-        
+
         self.chat_state = chat_state
         self.observations = observations
-        
+
         self.current_mind = ""
         self.past_mind = []
         self.structured_info = {}
-    
+
     async def do_thinking_before_reply(self):
         """
         在回复前进行思考，生成内心想法并收集工具调用结果
@@ -151,7 +144,7 @@ class SubMind:
 
         # ---------- 5. 执行LLM请求并处理响应 ----------
         content = ""  # 初始化内容变量
-        reasoning_content = ""  # 初始化推理内容变量
+        _reasoning_content = ""  # 初始化推理内容变量
 
         try:
             # 调用LLM生成响应
@@ -211,8 +204,7 @@ class SubMind:
         self.update_current_mind(content)
 
         return self.current_mind, self.past_mind
-    
-    
+
     async def _execute_tool_calls(self, tool_calls, tool_instance):
         """
         执行一组工具调用并收集结果
@@ -244,11 +236,10 @@ class SubMind:
         if structured_info:
             logger.debug(f"工具调用收集到结构化信息: {safe_json_dumps(structured_info, ensure_ascii=False)}")
             self.structured_info = structured_info
-            
-    
+
     def update_current_mind(self, response):
         self.past_mind.append(self.current_mind)
         self.current_mind = response
-        
-        
+
+
 init_prompt()

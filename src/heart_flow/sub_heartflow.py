@@ -72,7 +72,7 @@ class InterestChatting:
 
         self.above_threshold = False
         self.start_hfc_probability = 0.0
-    
+
     def add_interest_dict(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
         self.interest_dict[message.message_info.message_id] = (message, interest_value, is_mentioned)
         self.last_interaction_time = time.time()
@@ -221,9 +221,7 @@ class SubHeartflow:
 
         # 聊天状态管理
         self.chat_state: ChatStateInfo = ChatStateInfo()  # 该sub_heartflow的聊天状态信息
-        self.interest_chatting = InterestChatting(
-            state_change_callback=self.set_chat_state
-        ) 
+        self.interest_chatting = InterestChatting(state_change_callback=self.set_chat_state)
 
         # 活动状态管理
         self.last_active_time = time.time()  # 最后活跃时间
@@ -238,14 +236,10 @@ class SubHeartflow:
 
         # LLM模型配置
         self.sub_mind = SubMind(
-            subheartflow_id=self.subheartflow_id,
-            chat_state=self.chat_state,
-            observations=self.observations
+            subheartflow_id=self.subheartflow_id, chat_state=self.chat_state, observations=self.observations
         )
 
-
         self.log_prefix = chat_manager.get_stream_name(self.subheartflow_id) or self.subheartflow_id
-        
 
     async def add_time_current_state(self, add_time: float):
         self.current_state_time += add_time
@@ -335,9 +329,7 @@ class SubHeartflow:
         logger.info(f"{log_prefix} 麦麦准备开始专注聊天 (创建新实例)...")
         try:
             self.heart_fc_instance = HeartFChatting(
-                chat_id=self.chat_id,
-                sub_mind=self.sub_mind,
-                observations=self.observations
+                chat_id=self.chat_id, sub_mind=self.sub_mind, observations=self.observations
             )
             if await self.heart_fc_instance._initialize():
                 await self.heart_fc_instance.start()  # 初始化成功后启动循环
@@ -434,7 +426,6 @@ class SubHeartflow:
 
         logger.info(f"{self.log_prefix} 子心流后台任务已停止。")
 
-
     def update_current_mind(self, response):
         self.sub_mind.update_current_mind(response)
 
@@ -523,6 +514,3 @@ class SubHeartflow:
         self.chat_state.chat_status = ChatState.ABSENT  # 状态重置为不参与
 
         logger.info(f"{self.log_prefix} 子心流关闭完成。")
-
-
-
