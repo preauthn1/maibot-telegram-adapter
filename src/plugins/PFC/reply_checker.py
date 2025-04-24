@@ -21,7 +21,9 @@ class ReplyChecker:
         self.chat_observer = ChatObserver.get_instance(stream_id)
         self.max_retries = 2  # 最大重试次数
 
-    async def check(self, reply: str, goal: str, chat_history: List[Dict[str, Any]], retry_count: int = 0) -> Tuple[bool, str, bool]:
+    async def check(
+        self, reply: str, goal: str, chat_history: List[Dict[str, Any]], retry_count: int = 0
+    ) -> Tuple[bool, str, bool]:
         """检查生成的回复是否合适
 
         Args:
@@ -40,19 +42,24 @@ class ReplyChecker:
             bot_messages = []
             for msg in reversed(chat_history):
                 user_info = UserInfo.from_dict(msg.get("user_info", {}))
-                if str(user_info.user_id) == str(global_config.BOT_QQ): # 确保比较的是字符串
-                    bot_messages.append(msg.get('processed_plain_text', ''))
-                if len(bot_messages) >= 2: # 只和最近的两条比较
+                if str(user_info.user_id) == str(global_config.BOT_QQ):  # 确保比较的是字符串
+                    bot_messages.append(msg.get("processed_plain_text", ""))
+                if len(bot_messages) >= 2:  # 只和最近的两条比较
                     break
                 # 进行比较
             if bot_messages:
                 # 可以用简单比较，或者更复杂的相似度库 (如 difflib)
                 # 简单比较：是否完全相同
-                if reply == bot_messages[0]: # 和最近一条完全一样
+                if reply == bot_messages[0]:  # 和最近一条完全一样
                     logger.warning(f"ReplyChecker 检测到回复与上一条 Bot 消息完全相同: '{reply}'")
-                    return False, "回复内容与你上一条发言完全相同，请修改，可以选择深入话题或寻找其它话题或等待", False # 不合适，无需重新规划
+                    return (
+                        False,
+                        "回复内容与你上一条发言完全相同，请修改，可以选择深入话题或寻找其它话题或等待",
+                        False,
+                    )  # 不合适，无需重新规划
                 # 2. 相似度检查 (如果精确匹配未通过)
-                import difflib # 导入 difflib 库
+                import difflib  # 导入 difflib 库
+
                 # 计算编辑距离相似度，ratio() 返回 0 到 1 之间的浮点数
                 similarity_ratio = difflib.SequenceMatcher(None, reply, bot_messages[0]).ratio()
                 logger.debug(f"ReplyChecker - 相似度: {similarity_ratio:.2f}")
@@ -60,11 +67,17 @@ class ReplyChecker:
                 # 设置一个相似度阈值
                 similarity_threshold = 0.9
                 if similarity_ratio > similarity_threshold:
-                    logger.warning(f"ReplyChecker 检测到回复与上一条 Bot 消息高度相似 (相似度 {similarity_ratio:.2f}): '{reply}'")
-                    return False, f"拒绝发送：回复内容与你上一条发言高度相似 (相似度 {similarity_ratio:.2f})，请修改，可以选择深入话题或寻找其它话题或等待。", False
+                    logger.warning(
+                        f"ReplyChecker 检测到回复与上一条 Bot 消息高度相似 (相似度 {similarity_ratio:.2f}): '{reply}'"
+                    )
+                    return (
+                        False,
+                        f"拒绝发送：回复内容与你上一条发言高度相似 (相似度 {similarity_ratio:.2f})，请修改，可以选择深入话题或寻找其它话题或等待。",
+                        False,
+                    )
 
         except Exception as self_check_err:
-             logger.error(f"检查自身重复发言时出错: {self_check_err}")      
+            logger.error(f"检查自身重复发言时出错: {self_check_err}")
 
         for msg in chat_history[-20:]:
             time_str = datetime.datetime.fromtimestamp(msg["time"]).strftime("%H:%M:%S")
