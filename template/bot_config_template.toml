@@ -1,5 +1,5 @@
 [inner]
-version = "1.4.0"
+version = "1.4.1"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请在修改后将version的值进行变更
@@ -276,6 +276,7 @@ pri_out = 1.26
 
 #私聊PFC：需要开启PFC功能，默认三个模型均为硅基流动v3，如果需要支持多人同时私聊或频繁调用，建议把其中的一个或两个换成官方v3或其它模型，以免撞到429
 
+#PFC决策模型
 [model.llm_PFC_action_planner]
 name = "Pro/deepseek-ai/DeepSeek-V3"
 provider = "SILICONFLOW"
@@ -283,6 +284,7 @@ temp = 0.3
 pri_in = 2
 pri_out = 8
 
+#PFC聊天模型
 [model.llm_PFC_chat]
 name = "Pro/deepseek-ai/DeepSeek-V3"
 provider = "SILICONFLOW"
@@ -290,6 +292,7 @@ temp = 0.3
 pri_in = 2
 pri_out = 8
 
+#PFC检查模型
 [model.llm_PFC_reply_checker]
 name = "Pro/deepseek-ai/DeepSeek-V3"
 provider = "SILICONFLOW"

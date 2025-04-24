@@ -1,6 +1,6 @@
 import time
-from typing import Tuple, List, Dict, Any, Optional # 确保导入了必要的类型
-from src.common.logger import get_module_logger
+from typing import Tuple
+from src.common.logger import get_module_logger, LogConfig, PFC_ACTION_PLANNER_STYLE_CONFIG
 from ..models.utils_model import LLMRequest
 from ...config.config import global_config
 from .chat_observer import ChatObserver
@@ -9,7 +9,12 @@ from src.individuality.individuality import Individuality
 from .observation_info import ObservationInfo
 from .conversation_info import ConversationInfo
 
-logger = get_module_logger("action_planner")
+pfc_action_log_config = LogConfig(
+    console_format=PFC_ACTION_PLANNER_STYLE_CONFIG["console_format"],
+    file_format=PFC_ACTION_PLANNER_STYLE_CONFIG["file_format"],
+)
+
+logger = get_module_logger("action_planner", config=pfc_action_log_config)
 
 # 注意：这个 ActionPlannerInfo 类似乎没有在 ActionPlanner 中使用，
 # 如果确实没用，可以考虑移除，但暂时保留以防万一。
@@ -81,7 +86,7 @@ class ActionPlanner:
                             timeout_minutes_text = last_goal_text.split('，')[0].replace('你等待了','')
                             timeout_context = f"重要提示：你刚刚因为对方长时间（{timeout_minutes_text}）没有回复而结束了等待，这可能代表在对方看来本次聊天已结束，请基于此情况规划下一步，不要重复等待前的发言。\n"
                         except Exception:
-                            timeout_context = f"重要提示：你刚刚因为对方长时间没有回复而结束了等待，这可能代表在对方看来本次聊天已结束，请基于此情况规划下一步，不要重复等待前的发言。\n"
+                            timeout_context = "重要提示：你刚刚因为对方长时间没有回复而结束了等待，这可能代表在对方看来本次聊天已结束，请基于此情况规划下一步，不要重复等待前的发言。\n"
             else:
                 logger.debug("Conversation info goal_list is empty or not available for timeout check.")
         except AttributeError:
@@ -108,7 +113,7 @@ class ActionPlanner:
                         reasoning = "没有明确原因"
                     goal = str(goal) if goal is not None else "目标内容缺失"
                     reasoning = str(reasoning) if reasoning is not None else "没有明确原因"
-                    goal_str += f"- 目标：{goal}\n  原因：{reasoning}\n"
+                    goals_str += f"- 目标：{goal}\n  原因：{reasoning}\n"
             if not goals_str: # 如果循环后 goals_str 仍为空
                 goals_str = "- 目前没有明确对话目标，请考虑设定一个。\n"
         except AttributeError:
@@ -160,7 +165,7 @@ class ActionPlanner:
         identity_addon = ""
         if isinstance(identity_details_only, str):
             pronouns = ["你", "我", "他"]
-            original_details = identity_details_only
+            # original_details = identity_details_only
             for p in pronouns:
                 if identity_details_only.startswith(p):
                     identity_details_only = identity_details_only[len(p):]
@@ -205,10 +210,14 @@ class ActionPlanner:
                     final_reason = action_data.get("final_reason", "")
                     action_time = action_data.get("time", "")
                 elif isinstance(action_data, tuple):
-                    if len(action_data) > 0: action_type = action_data[0]
-                    if len(action_data) > 1: plan_reason = action_data[1]
-                    if len(action_data) > 2: status = action_data[2]
-                    if status == "recall" and len(action_data) > 3: final_reason = action_data[3]
+                    if len(action_data) > 0: 
+                        action_type = action_data[0]
+                    if len(action_data) > 1: 
+                        plan_reason = action_data[1]
+                    if len(action_data) > 2: 
+                        status = action_data[2]
+                    if status == "recall" and len(action_data) > 3: 
+                        final_reason = action_data[3]
 
                 reason_text = f", 失败/取消原因: {final_reason}" if final_reason else ""
                 summary_line = f"- 时间:{action_time}, 尝试行动:'{action_type}', 状态:{status}{reason_text}"
@@ -218,13 +227,13 @@ class ActionPlanner:
                     last_action_context += f"- 上次【规划】的行动是: '{action_type}'\n"
                     last_action_context += f"- 当时规划的【原因】是: {plan_reason}\n"
                     if status == "done":
-                        last_action_context += f"- 该行动已【成功执行】。\n"
+                        last_action_context += "- 该行动已【成功执行】。\n"
                     elif status == "recall":
-                        last_action_context += f"- 但该行动最终【未能执行/被取消】。\n"
+                        last_action_context += "- 但该行动最终【未能执行/被取消】。\n"
                         if final_reason:
                              last_action_context += f"- 【重要】失败/取消的具体原因是: “{final_reason}”\n"
                         else:
-                             last_action_context += f"- 【重要】失败/取消原因未明确记录。\n"
+                             last_action_context += "- 【重要】失败/取消原因未明确记录。\n"
                     else:
                         last_action_context += f"- 该行动当前状态: {status}\n"
 
