@@ -1,7 +1,7 @@
 import asyncio
 import time
 import traceback
-from typing import List, Optional, Dict, Any, Set, Deque
+from typing import List, Optional, Dict, Any, Deque
 from collections import deque
 from src.plugins.chat.message import MessageRecv, BaseMessageInfo, MessageThinking, MessageSending
 from src.plugins.chat.message import MessageSet, Seg  # Local import needed after move

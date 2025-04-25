@@ -371,7 +371,7 @@ class DirectMessageSender:
         # 处理消息
         await message.process()
 
-        message_json = message.to_dict()
+        _message_json = message.to_dict()
 
         # 发送消息
         try:

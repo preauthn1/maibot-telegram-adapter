@@ -49,7 +49,7 @@ class HeartFCGenerator:
 
         arousal_multiplier = MoodManager.get_instance().get_arousal_multiplier()
 
-        with Timer() as t_generate_response:
+        with Timer() as _generate_response:
             current_model = self.model_normal
             current_model.temperature = global_config.llm_normal["temp"] * arousal_multiplier  # 激活度越高，温度越高
             model_response = await self._generate_response_with_model(
