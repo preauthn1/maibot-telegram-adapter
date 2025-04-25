@@ -130,13 +130,19 @@ class SubMind:
         ]
 
         #上一次决策信息
-        last_action = last_cycle.action_type
-        last_reasoning = last_cycle.reasoning
-        is_replan = last_cycle.replanned
-        if is_replan:
-            if_replan_prompt = f"但是你有了上述想法之后，有了新消息，你决定重新思考后，你做了：{last_action}\n因为：{last_reasoning}\n"
+        if last_cycle.action_type:
+            last_action = last_cycle.action_type
+            last_reasoning = last_cycle.reasoning
+            is_replan = last_cycle.replanned
+            if is_replan:
+                if_replan_prompt = f"但是你有了上述想法之后，有了新消息，你决定重新思考后，你做了：{last_action}\n因为：{last_reasoning}\n"
+            else:
+                if_replan_prompt = f"出于这个想法，你刚才做了：{last_action}\n因为：{last_reasoning}\n"
         else:
-            if_replan_prompt = f"出于这个想法，你刚才做了：{last_action}\n因为：{last_reasoning}\n"
+            last_action = ""
+            last_reasoning = ""
+            is_replan = False
+            if_replan_prompt = ""
 
         last_loop_prompt = (await global_prompt_manager.get_prompt_async("last_loop")).format(
             current_thinking_info=current_thinking_info,
