@@ -5,7 +5,7 @@ import random  # <-- 添加导入
 from typing import List, Optional, Dict, Any, Deque
 from collections import deque
 from src.plugins.chat.message import MessageRecv, BaseMessageInfo, MessageThinking, MessageSending
-from src.plugins.chat.message import MessageSet, Seg  # Local import needed after move
+from src.plugins.chat.message import Seg  # Local import needed after move
 from src.plugins.chat.chat_stream import ChatStream
 from src.plugins.chat.message import UserInfo
 from src.plugins.chat.chat_stream import chat_manager
@@ -810,9 +810,7 @@ class HeartFChatting:
             # 它需要负责创建 MessageThinking 和 MessageSending 对象
             # 并调用 self.sender.register_thinking 和 self.sender.type_and_send_message
             first_bot_msg = await self._send_response_messages(
-                anchor_message=anchor_message,
-                response_set=response_set,
-                thinking_id=thinking_id
+                anchor_message=anchor_message, response_set=response_set, thinking_id=thinking_id
             )
 
             if first_bot_msg:
@@ -824,7 +822,9 @@ class HeartFChatting:
                     await self._handle_emoji(emoji_anchor, response_set, send_emoji)
             else:
                 # 如果 _send_response_messages 返回 None，表示在发送前就失败或没有消息可发送
-                logger.warning(f"{self.log_prefix}[Sender-{thinking_id}] 未能发送任何回复消息 (_send_response_messages 返回 None)。")
+                logger.warning(
+                    f"{self.log_prefix}[Sender-{thinking_id}] 未能发送任何回复消息 (_send_response_messages 返回 None)。"
+                )
                 # 这里可能不需要抛出异常，取决于 _send_response_messages 的具体实现
 
         except Exception as e:
@@ -979,7 +979,7 @@ class HeartFChatting:
 
         chat = anchor_message.chat_stream
         chat_id = chat.stream_id
-        stream_name = chat_manager.get_stream_name(chat_id) or chat_id # 获取流名称用于日志
+        stream_name = chat_manager.get_stream_name(chat_id) or chat_id  # 获取流名称用于日志
 
         # 检查思考过程是否仍在进行，并获取开始时间
         thinking_start_time = await self.heart_fc_sender.get_thinking_start_time(chat_id, thinking_id)
@@ -1015,21 +1015,22 @@ class HeartFChatting:
                 reply=anchor_message,  # 回复原始锚点
                 is_head=not mark_head,
                 is_emoji=False,
-                thinking_start_time=thinking_start_time, # 传递原始思考开始时间
+                thinking_start_time=thinking_start_time,  # 传递原始思考开始时间
             )
             try:
-
                 if not mark_head:
                     mark_head = True
-                    first_bot_msg = bot_message # 保存第一个成功发送的消息对象
-                    await self.heart_fc_sender.type_and_send_message(bot_message, type = False)
+                    first_bot_msg = bot_message  # 保存第一个成功发送的消息对象
+                    await self.heart_fc_sender.type_and_send_message(bot_message, type=False)
                 else:
-                    await self.heart_fc_sender.type_and_send_message(bot_message, type = True)
+                    await self.heart_fc_sender.type_and_send_message(bot_message, type=True)
 
-                reply_message_ids.append(part_message_id) # 记录我们生成的ID
+                reply_message_ids.append(part_message_id)  # 记录我们生成的ID
 
             except Exception as e:
-                logger.error(f"{self.log_prefix}[Sender-{thinking_id}] 发送回复片段 {i} ({part_message_id}) 时失败: {e}")
+                logger.error(
+                    f"{self.log_prefix}[Sender-{thinking_id}] 发送回复片段 {i} ({part_message_id}) 时失败: {e}"
+                )
                 # 这里可以选择是继续发送下一个片段还是中止
 
         # 在尝试发送完所有片段后，完成原始的 thinking_id 状态
@@ -1039,13 +1040,12 @@ class HeartFChatting:
             logger.error(f"{self.log_prefix}[Sender-{thinking_id}] 完成思考状态 {thinking_id} 时出错: {e}")
 
         self._current_cycle.set_response_info(
-            response_text=response_set, # 保留原始文本
-            anchor_message_id=anchor_message.message_info.message_id, # 保留锚点ID
-            reply_message_ids=reply_message_ids # 添加实际发送的ID列表
+            response_text=response_set,  # 保留原始文本
+            anchor_message_id=anchor_message.message_info.message_id,  # 保留锚点ID
+            reply_message_ids=reply_message_ids,  # 添加实际发送的ID列表
         )
 
-
-        return first_bot_msg # 返回第一个成功发送的消息对象
+        return first_bot_msg  # 返回第一个成功发送的消息对象
 
     async def _handle_emoji(self, anchor_message: Optional[MessageRecv], response_set: List[str], send_emoji: str = ""):
         """处理表情包 (尝试锚定到 anchor_message)，使用 HeartFCSender"""
@@ -1060,9 +1060,8 @@ class HeartFChatting:
         if emoji_raw:
             emoji_path, description = emoji_raw
 
-
             emoji_cq = image_path_to_base64(emoji_path)
-            thinking_time_point = round(time.time(), 2) # 用于唯一ID
+            thinking_time_point = round(time.time(), 2)  # 用于唯一ID
             message_segment = Seg(type="emoji", data=emoji_cq)
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ,
@@ -1076,7 +1075,7 @@ class HeartFChatting:
                 sender_info=anchor_message.message_info.user_info,
                 message_segment=message_segment,
                 reply=anchor_message,  # 回复原始锚点
-                is_head=False, # 表情通常不是头部消息
+                is_head=False,  # 表情通常不是头部消息
                 is_emoji=True,
                 # 不需要 thinking_start_time
             )
@@ -1085,7 +1084,6 @@ class HeartFChatting:
                 await self.heart_fc_sender.send_and_store(bot_message)
             except Exception as e:
                 logger.error(f"{self.log_prefix} 发送表情包 {bot_message.message_info.message_id} 时失败: {e}")
-
 
     def get_cycle_history(self, last_n: Optional[int] = None) -> List[Dict[str, Any]]:
         """获取循环历史记录
