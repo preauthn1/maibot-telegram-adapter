@@ -37,12 +37,15 @@ def init_prompt():
 {moderation_prompt}。注意：回复不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
         "heart_flow_prompt",
     )
-    
-    Prompt("""
+
+    Prompt(
+        """
 你有以下信息可供参考：
 {structured_info}
 以上的消息是你获取到的消息，或许可以帮助你更好地回复。
-""", "info_from_tools")
+""",
+        "info_from_tools",
+    )
 
     # Planner提示词 - 优化版
     Prompt(
@@ -187,11 +190,11 @@ class PromptBuilder:
             prompt_ger += "你喜欢用倒装句"
         if random.random() < 0.02:
             prompt_ger += "你喜欢用反问句"
-            
+
         if structured_info:
             structured_info_prompt = await global_prompt_manager.format_prompt(
-                "info_from_tools",
-                structured_info = structured_info)
+                "info_from_tools", structured_info=structured_info
+            )
         else:
             structured_info_prompt = ""
 

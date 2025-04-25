@@ -3,7 +3,7 @@ from src.common.logger import get_module_logger
 import asyncio
 from dataclasses import dataclass, field
 from .message import MessageRecv
-from ..message.message_base import BaseMessageInfo, GroupInfo, Seg
+from maim_message import BaseMessageInfo, GroupInfo, Seg
 import hashlib
 from typing import Dict
 from collections import OrderedDict

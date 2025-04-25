@@ -13,7 +13,7 @@ from src.common.logger import get_module_logger, LogConfig, PFC_STYLE_CONFIG  # 
 from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
-from src.plugins.utils.timer_calculater import Timer  # <--- Import Timer
+from src.plugins.utils.timer_calculator import Timer  # <--- Import Timer
 from src.plugins.heartFC_chat.heartFC_generator import HeartFCGenerator
 from src.do_tool.tool_use import ToolUser
 from ..chat.message_sender import message_manager  # <-- Import the global manager
@@ -40,31 +40,28 @@ logger = get_module_logger("HeartFCLoop", config=interest_log_config)  # Logger 
 
 
 # 默认动作定义
-DEFAULT_ACTIONS = {
-    "no_reply": "不回复",
-    "text_reply": "文本回复, 可选附带表情",
-    "emoji_reply": "仅表情回复"
-}
+DEFAULT_ACTIONS = {"no_reply": "不回复", "text_reply": "文本回复, 可选附带表情", "emoji_reply": "仅表情回复"}
+
 
 class ActionManager:
     """动作管理器：控制每次决策可以使用的动作"""
-    
+
     def __init__(self):
         # 初始化为默认动作集
         self._available_actions: Dict[str, str] = DEFAULT_ACTIONS.copy()
-        
+
     def get_available_actions(self) -> Dict[str, str]:
         """获取当前可用的动作集"""
         return self._available_actions
-        
+
     def add_action(self, action_name: str, description: str) -> bool:
         """
         添加新的动作
-        
+
         参数:
             action_name: 动作名称
             description: 动作描述
-            
+
         返回:
             bool: 是否添加成功
         """
@@ -72,14 +69,14 @@ class ActionManager:
             return False
         self._available_actions[action_name] = description
         return True
-        
+
     def remove_action(self, action_name: str) -> bool:
         """
         移除指定动作
-        
+
         参数:
             action_name: 动作名称
-            
+
         返回:
             bool: 是否移除成功
         """
@@ -87,58 +84,67 @@ class ActionManager:
             return False
         del self._available_actions[action_name]
         return True
-        
+
     def clear_actions(self):
         """清空所有动作"""
         self._available_actions.clear()
-        
+
     def reset_to_default(self):
         """重置为默认动作集"""
         self._available_actions = DEFAULT_ACTIONS.copy()
-        
+
     def get_planner_tool_definition(self) -> List[Dict[str, Any]]:
         """获取当前动作集对应的规划器工具定义"""
-        return [{
-            "type": "function",
-            "function": {
-                "name": "decide_reply_action",
-                "description": "根据当前聊天内容和上下文，决定机器人是否应该回复以及如何回复。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "action": {
-                            "type": "string",
-                            "enum": list(self._available_actions.keys()),
-                            "description": "决定采取的行动：" + 
-                                ", ".join([f"'{k}'({v})" for k, v in self._available_actions.items()]),
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "decide_reply_action",
+                    "description": "根据当前聊天内容和上下文，决定机器人是否应该回复以及如何回复。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "enum": list(self._available_actions.keys()),
+                                "description": "决定采取的行动："
+                                + ", ".join([f"'{k}'({v})" for k, v in self._available_actions.items()]),
+                            },
+                            "reasoning": {"type": "string", "description": "做出此决定的简要理由。"},
+                            "emoji_query": {
+                                "type": "string",
+                                "description": "如果行动是'emoji_reply'，指定表情的主题或概念。如果行动是'text_reply'且希望在文本后追加表情，也在此指定表情主题。",
+                            },
                         },
-                        "reasoning": {"type": "string", "description": "做出此决定的简要理由。"},
-                        "emoji_query": {
-                            "type": "string",
-                            "description": "如果行动是'emoji_reply'，指定表情的主题或概念。如果行动是'text_reply'且希望在文本后追加表情，也在此指定表情主题。",
-                        },
+                        "required": ["action", "reasoning"],
                     },
-                    "required": ["action", "reasoning"],
                 },
-            },
-        }]
+            }
+        ]
 
 
 # 在文件开头添加自定义异常类
 class HeartFCError(Exception):
     """麦麦聊天系统基础异常类"""
+
     pass
+
 
 class PlannerError(HeartFCError):
     """规划器异常"""
+
     pass
+
 
 class ReplierError(HeartFCError):
     """回复器异常"""
+
     pass
+
 
 class SenderError(HeartFCError):
     """发送器异常"""
+
     pass
 
 class HeartFChatting:
@@ -160,7 +166,7 @@ class HeartFChatting:
         self.chat_stream: Optional[ChatStream] = None  # 关联的聊天流
         self.sub_mind: SubMind = sub_mind  # 关联的子思维
         self.observations: List[Observation] = observations  # 关联的观察列表，用于监控聊天流状态
-        
+
         # 日志前缀
         self.log_prefix: str = f"[{chat_manager.get_stream_name(chat_id) or chat_id}]"
 
@@ -206,7 +212,7 @@ class HeartFChatting:
 
         # 更新日志前缀（以防流名称发生变化）
         self.log_prefix = f"[{chat_manager.get_stream_name(self.stream_id) or self.stream_id}]"
-        
+
         self._initialized = True
         logger.info(f"麦麦感觉到了，可以开始激情水群{self.log_prefix} ")
         return True
@@ -265,22 +271,22 @@ class HeartFChatting:
                 self._processing_lock.release()
 
     async def _hfc_loop(self):
-        """主循环，持续进行计划并可能回复消息，直到被外部取消。"""        
+        """主循环，持续进行计划并可能回复消息，直到被外部取消。"""
         try:
             while True:  # 主循环
                 # 创建新的循环信息
                 self._cycle_counter += 1
                 self._current_cycle = CycleInfo(self._cycle_counter)
-                
+
                 # 初始化周期状态
                 cycle_timers = {}
                 loop_cycle_start_time = time.monotonic()
-            
+
                 # 执行规划和处理阶段
                 async with self._get_cycle_context() as acquired_lock:
                     if not acquired_lock:
                         continue
-                        
+
                     # 记录规划开始时间点
                     planner_start_db_time = time.time()
                     
@@ -295,22 +301,22 @@ class HeartFChatting:
 
                     # 防止循环过快消耗资源
                     await self._handle_cycle_delay(action_taken, loop_cycle_start_time, self.log_prefix)
-                
+
                 # 等待直到所有消息都发送完成
                 with Timer("发送消息", cycle_timers):
                     while await self._should_skip_cycle(thinking_id):
                         await asyncio.sleep(0.2)
-                        
+
                 # 完成当前循环并保存历史
                 self._current_cycle.complete_cycle()
                 self._cycle_history.append(self._current_cycle)
-                
+
                 # 记录循环信息和计时器结果
                 timer_strings = []
                 for name, elapsed in cycle_timers.items():
                     formatted_time = f"{elapsed * 1000:.2f}毫秒" if elapsed < 1 else f"{elapsed:.2f}秒"
                     timer_strings.append(f"{name}: {formatted_time}")
-                
+
                 logger.debug(
                     f"{self.log_prefix}  第 #{self._current_cycle.cycle_id}次思考完成,"
                     f"耗时: {self._current_cycle.end_time - self._current_cycle.start_time:.2f}秒, "
@@ -328,7 +334,7 @@ class HeartFChatting:
     async def _get_cycle_context(self):
         """
         循环周期的上下文管理器
-        
+
         用于确保资源的正确获取和释放：
         1. 获取处理锁
         2. 执行操作
@@ -346,10 +352,10 @@ class HeartFChatting:
     async def _check_new_messages(self, start_time: float) -> bool:
         """
         检查从指定时间点后是否有新消息
-        
+
         参数:
             start_time: 开始检查的时间点
-            
+
         返回:
             bool: 是否有新消息
         """
@@ -363,9 +369,7 @@ class HeartFChatting:
             logger.error(f"{self.log_prefix} 检查新消息时出错: {e}")
             return False
 
-    async def _think_plan_execute_loop(
-        self, cycle_timers: dict, planner_start_db_time: float
-    ) -> tuple[bool, str]:
+    async def _think_plan_execute_loop(self, cycle_timers: dict, planner_start_db_time: float) -> tuple[bool, str]:
         """执行规划阶段"""
         try:
             # think:思考
@@ -398,7 +402,7 @@ class HeartFChatting:
             reasoning = planner_result.get("reasoning", "未提供理由")
             # 更新循环信息
             self._current_cycle.set_action_info(action, reasoning, True)
-            
+
             # 处理LLM错误
             if planner_result.get("llm_error"):
                 logger.error(f"{self.log_prefix} LLM失败: {reasoning}")
@@ -415,37 +419,32 @@ class HeartFChatting:
             return False, ""
 
     async def _handle_action(
-        self, 
-        action: str, 
-        reasoning: str, 
-        emoji_query: str,
-        cycle_timers: dict,
-        planner_start_db_time: float
+        self, action: str, reasoning: str, emoji_query: str, cycle_timers: dict, planner_start_db_time: float
     ) -> tuple[bool, str]:
         """
         处理规划动作
-        
+
         参数:
             action: 动作类型
             reasoning: 决策理由
             emoji_query: 表情查询
             cycle_timers: 计时器字典
             planner_start_db_time: 规划开始时间
-            
+
         返回:
             tuple[bool, str]: (是否执行了动作, 思考消息ID)
         """
         action_handlers = {
             "text_reply": self._handle_text_reply,
             "emoji_reply": self._handle_emoji_reply,
-            "no_reply": self._handle_no_reply
+            "no_reply": self._handle_no_reply,
         }
-        
+
         handler = action_handlers.get(action)
         if not handler:
             logger.warning(f"{self.log_prefix} 未知动作: {action}, 原因: {reasoning}")
             return False, ""
-            
+
         try:
             if action == "text_reply":
                 return await handler(reasoning, emoji_query, cycle_timers)
@@ -457,37 +456,35 @@ class HeartFChatting:
             logger.error(f"{self.log_prefix} 处理{action}时出错: {e}")
             return False, ""
 
-    async def _handle_text_reply(
-        self, reasoning: str, emoji_query: str, cycle_timers: dict
-    ) -> tuple[bool, str]:
+    async def _handle_text_reply(self, reasoning: str, emoji_query: str, cycle_timers: dict) -> tuple[bool, str]:
         """
         处理文本回复
-        
+
         工作流程：
         1. 获取锚点消息
         2. 创建思考消息
         3. 生成回复
         4. 发送消息
-        
+
         参数:
             reasoning: 回复原因
             emoji_query: 表情查询
             cycle_timers: 计时器字典
-            
+
         返回:
             tuple[bool, str]: (是否回复成功, 思考消息ID)
         """
-        
+
         # 获取锚点消息
         anchor_message = await self._get_anchor_message()
         if not anchor_message:
             raise PlannerError("无法获取锚点消息")
-            
+
         # 创建思考消息
         thinking_id = await self._create_thinking_message(anchor_message)
         if not thinking_id:
             raise PlannerError("无法创建思考消息")
-            
+
         try:
             # 生成回复
             with Timer("生成回复", cycle_timers):
@@ -496,10 +493,10 @@ class HeartFChatting:
                     thinking_id=thinking_id,
                     reason=reasoning,
                 )
-                
+
             if not reply:
                 raise ReplierError("回复生成失败")
-                
+
             # 发送消息
 
             await self._sender(
@@ -510,7 +507,7 @@ class HeartFChatting:
             )
                 
             return True, thinking_id
-            
+
         except (ReplierError, SenderError) as e:
             logger.error(f"{self.log_prefix} 回复失败: {e}")
             return True, thinking_id  # 仍然返回thinking_id以便跟踪
@@ -518,72 +515,68 @@ class HeartFChatting:
     async def _handle_emoji_reply(self, reasoning: str, emoji_query: str) -> bool:
         """
         处理表情回复
-        
+
         工作流程：
         1. 获取锚点消息
         2. 发送表情
-        
+
         参数:
             reasoning: 回复原因
             emoji_query: 表情查询
-            
+
         返回:
             bool: 是否发送成功
         """
         logger.info(f"{self.log_prefix} 决定回复表情({emoji_query}): {reasoning}")
-        
+
         try:
             anchor = await self._get_anchor_message()
             if not anchor:
                 raise PlannerError("无法获取锚点消息")
-                
+
             await self._handle_emoji(anchor, [], emoji_query)
             return True
-            
+
         except Exception as e:
             logger.error(f"{self.log_prefix} 表情发送失败: {e}")
             return False
 
-    async def _handle_no_reply(
-        self, reasoning: str, planner_start_db_time: float, cycle_timers: dict
-    ) -> bool:
+    async def _handle_no_reply(self, reasoning: str, planner_start_db_time: float, cycle_timers: dict) -> bool:
         """
         处理不回复的情况
-        
+
         工作流程：
         1. 等待新消息
         2. 超时或收到新消息时返回
-        
+
         参数:
             reasoning: 不回复的原因
             planner_start_db_time: 规划开始时间
             cycle_timers: 计时器字典
-            
+
         返回:
             bool: 是否成功处理
         """
         logger.info(f"{self.log_prefix} 决定不回复: {reasoning}")
-        
+
         observation = self.observations[0] if self.observations else None
-            
+
         try:
             with Timer("Wait New Msg", cycle_timers):
                 return await self._wait_for_new_message(observation, planner_start_db_time, self.log_prefix)
         except asyncio.CancelledError:
             logger.info(f"{self.log_prefix} 等待被中断")
             raise
-            
-    async def _wait_for_new_message(
-        self, observation, planner_start_db_time: float, log_prefix: str
-    ) -> bool:
+
+    async def _wait_for_new_message(self, observation, planner_start_db_time: float, log_prefix: str) -> bool:
         """
         等待新消息
-        
+
         参数:
             observation: 观察实例
             planner_start_db_time: 开始等待的时间
             log_prefix: 日志前缀
-            
+
         返回:
             bool: 是否检测到新消息
         """
@@ -592,11 +585,11 @@ class HeartFChatting:
             if await observation.has_new_messages_since(planner_start_db_time):
                 logger.info(f"{log_prefix} 检测到新消息")
                 return True
-                
+
             if time.monotonic() - wait_start_time > 60:
                 logger.warning(f"{log_prefix} 等待超时(60秒)")
                 return False
-                
+
             await asyncio.sleep(1.5)
 
     async def _should_skip_cycle(self, thinking_id: str) -> bool:
@@ -614,13 +607,11 @@ class HeartFChatting:
             if timer_strings:
                 logger.debug(f"{log_prefix} 该次决策耗时: {'; '.join(timer_strings)}")
 
-    async def _handle_cycle_delay(
-        self, action_taken_this_cycle: bool, cycle_start_time: float, log_prefix: str
-    ):
+    async def _handle_cycle_delay(self, action_taken_this_cycle: bool, cycle_start_time: float, log_prefix: str):
         """处理循环延迟"""
         cycle_duration = time.monotonic() - cycle_start_time
         # if cycle_duration > 0.1:
-            # logger.debug(f"{log_prefix} HeartFChatting: 周期耗时 {cycle_duration:.2f}s.")
+        # logger.debug(f"{log_prefix} HeartFChatting: 周期耗时 {cycle_duration:.2f}s.")
 
         try:
             sleep_duration = 0.0
@@ -639,7 +630,7 @@ class HeartFChatting:
     async def _get_submind_thinking(self, cycle_timers: dict) -> str:
         """
         获取子思维的思考结果
-        
+
         返回:
             str: 思考结果，如果思考失败则返回错误信息
         """
@@ -666,7 +657,7 @@ class HeartFChatting:
     async def _planner(self, current_mind: str, cycle_timers: dict, is_re_planned: bool = False) -> Dict[str, Any]:
         """
         规划器 (Planner): 使用LLM根据上下文决定是否和如何回复。
-        
+
         参数:
             current_mind: 子思维的当前思考结果
         """
@@ -734,7 +725,9 @@ class HeartFChatting:
                     action = arguments.get("action", "no_reply")
                     # 验证动作是否在可用动作集中
                     if action not in self.action_manager.get_available_actions():
-                        logger.warning(f"{self.log_prefix}[Planner] LLM返回了未授权的动作: {action}，使用默认动作no_reply")
+                        logger.warning(
+                            f"{self.log_prefix}[Planner] LLM返回了未授权的动作: {action}，使用默认动作no_reply"
+                        )
                         action = "no_reply"
                         reasoning = f"LLM返回了未授权的动作: {action}"
                     else:
@@ -742,7 +735,9 @@ class HeartFChatting:
                         emoji_query = arguments.get("emoji_query", "")
 
                     # 记录决策结果
-                    logger.debug(f"{self.log_prefix}[要做什么]\nPrompt:\n{prompt}\n\n决策结果: {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'")
+                    logger.debug(
+                        f"{self.log_prefix}[要做什么]\nPrompt:\n{prompt}\n\n决策结果: {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'"
+                    )
                 else:
                     # 处理工具调用失败
                     logger.warning(f"{self.log_prefix}[Planner] {error_msg}")
@@ -926,9 +921,6 @@ class HeartFChatting:
                 message=anchor_message,  # Pass anchor_message positionally (matches 'message' parameter)
                 thinking_id=thinking_id,  # Pass thinking_id positionally
             )
-            
-            
-            
 
             if not response_set:
                 logger.warning(f"{self.log_prefix}[Replier-{thinking_id}] LLM生成了一个空回复集。")
@@ -980,8 +972,7 @@ class HeartFChatting:
         # 记录锚点消息ID
         if self._current_cycle and anchor_message:
             self._current_cycle.set_response_info(
-                response_text=response_set,
-                anchor_message_id=anchor_message.message_info.message_id
+                response_text=response_set, anchor_message_id=anchor_message.message_info.message_id
             )
 
         chat = anchor_message.chat_stream
@@ -1056,9 +1047,7 @@ class HeartFChatting:
             emoji_path, description = emoji_raw
             # 记录表情信息
             if self._current_cycle:
-                self._current_cycle.set_response_info(
-                    emoji_info=f"表情: {description}, 路径: {emoji_path}"
-                )
+                self._current_cycle.set_response_info(emoji_info=f"表情: {description}, 路径: {emoji_path}")
 
             emoji_cq = image_path_to_base64(emoji_path)
             thinking_time_point = round(time.time(), 2)
@@ -1083,10 +1072,10 @@ class HeartFChatting:
 
     def get_cycle_history(self, last_n: Optional[int] = None) -> List[Dict[str, Any]]:
         """获取循环历史记录
-        
+
         参数:
             last_n: 获取最近n个循环的信息，如果为None则获取所有历史记录
-            
+
         返回:
             List[Dict[str, Any]]: 循环历史记录列表
         """
@@ -1100,4 +1089,3 @@ class HeartFChatting:
         if self._cycle_history:
             return self._cycle_history[-1].to_dict()
         return None
-

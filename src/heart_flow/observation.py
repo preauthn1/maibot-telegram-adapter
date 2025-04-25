@@ -22,7 +22,7 @@ class Observation:
         self.observe_type = observe_type
         self.observe_id = observe_id
         self.last_observe_time = datetime.now().timestamp()  # 初始化为当前时间
-    
+
     async def observe(self):
         pass
 

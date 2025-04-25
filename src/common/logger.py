@@ -321,9 +321,7 @@ CHAT_STYLE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 见闻 | {message}",
     },
     "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <green>见闻</green> | <green>{message}</green>"
-        ),  # noqa: E501
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <green>见闻</green> | <green>{message}</green>"),  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 见闻 | {message}",
     },
 }

@@ -29,10 +29,11 @@ EMOJI_DIR = os.path.join(BASE_DIR, "emoji")  # 表情包存储目录
 EMOJI_REGISTED_DIR = os.path.join(BASE_DIR, "emoji_registed")  # 已注册的表情包注册目录
 
 
-'''
+"""
 还没经过测试，有些地方数据库和内存数据同步可能不完全
 
-'''
+"""
+
 
 class MaiEmoji:
     """定义一个表情包"""
@@ -258,7 +259,7 @@ class EmojiManager:
                 if emoji.hash == hash:
                     emoji.usage_count += 1
                     break
-            
+
         except Exception as e:
             logger.error(f"记录表情使用失败: {str(e)}")
 
@@ -316,7 +317,9 @@ class EmojiManager:
 
             time_end = time.time()
 
-            logger.info(f"找到[{text_emotion}]表情包,用时:{time_end - time_start:.2f}秒: {selected_emoji.description}  (相似度: {similarity:.4f})")
+            logger.info(
+                f"找到[{text_emotion}]表情包,用时:{time_end - time_start:.2f}秒: {selected_emoji.description}  (相似度: {similarity:.4f})"
+            )
             return selected_emoji.path, f"[ {selected_emoji.description} ]"
 
         except Exception as e:
@@ -784,16 +787,15 @@ class EmojiManager:
             logger.error(f"[错误] 注册表情包失败: {str(e)}")
             logger.error(traceback.format_exc())
             return False
-    
-    
+
     async def clear_temp_emoji(self):
         """每天清理临时表情包
         清理/data/emoji和/data/image目录下的所有文件
         当目录中文件数超过50时，会全部删除
         """
-            
+
         logger.info("[清理] 开始清理临时表情包...")
-        
+
         # 清理emoji目录
         emoji_dir = os.path.join(BASE_DIR, "emoji")
         if os.path.exists(emoji_dir):
@@ -805,7 +807,7 @@ class EmojiManager:
                     if os.path.isfile(file_path):
                         os.remove(file_path)
                         logger.debug(f"[清理] 删除表情包文件: {filename}")
-        
+
         # 清理image目录
         image_dir = os.path.join(BASE_DIR, "image")
         if os.path.exists(image_dir):
@@ -817,10 +819,8 @@ class EmojiManager:
                     if os.path.isfile(file_path):
                         os.remove(file_path)
                         logger.debug(f"[清理] 删除图片文件: {filename}")
-        
+
         logger.success("[清理] 临时文件清理完成")
-            
-            
 
 
 # 创建全局单例
