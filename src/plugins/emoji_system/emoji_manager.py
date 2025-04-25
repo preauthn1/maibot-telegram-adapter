@@ -28,6 +28,11 @@ EMOJI_DIR = os.path.join("data", "emoji")  # 表情包存储目录
 EMOJI_REGISTED_DIR = os.path.join("data", "emoji_registed")  # 已注册的表情包注册目录
 
 
+'''
+还没经过测试，有些地方数据库和内存数据同步可能不完全
+
+'''
+
 class MaiEmoji:
     """定义一个表情包"""
 
@@ -247,10 +252,12 @@ class EmojiManager:
     def record_usage(self, hash: str):
         """记录表情使用次数"""
         try:
+            db.emoji.update_one({"hash": hash}, {"$inc": {"usage_count": 1}})
             for emoji in self.emoji_objects:
                 if emoji.hash == hash:
                     emoji.usage_count += 1
                     break
+            
         except Exception as e:
             logger.error(f"记录表情使用失败: {str(e)}")
 
@@ -304,12 +311,11 @@ class EmojiManager:
             selected_emoji, similarity = random.choice(top_5_emojis)
 
             # 更新使用次数
-            db.emoji.update_one({"hash": selected_emoji.hash}, {"$inc": {"usage_count": 1}})
-
-            logger.info(f"[匹配] 找到表情包: {selected_emoji.description} (相似度: {similarity:.4f})")
+            self.record_usage(selected_emoji.hash)
 
             time_end = time.time()
-            logger.info(f"[匹配] 搜索表情包用时: {time_end - time_start:.2f} 秒")
+
+            logger.info(f"找到[{text_emotion}]表情包,用时:{time_end - time_start:.2f}秒: {selected_emoji.description}  (相似度: {similarity:.4f})")
             return selected_emoji.path, f"[ {selected_emoji.description} ]"
 
         except Exception as e:

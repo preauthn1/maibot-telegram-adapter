@@ -57,9 +57,6 @@ class HeartFCGenerator:
             )
 
         if model_response:
-            logger.info(
-                f"{global_config.BOT_NICKNAME}的回复是：{model_response},生成回复时间: {t_generate_response.human_readable}"
-            )
             model_processed_response = await self._process_response(model_response)
 
             return model_processed_response

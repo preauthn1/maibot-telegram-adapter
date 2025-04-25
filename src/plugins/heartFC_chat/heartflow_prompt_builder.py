@@ -21,8 +21,7 @@ logger = get_module_logger("prompt")
 def init_prompt():
     Prompt(
         """
-你有以下信息可供参考：
-{structured_info}
+{info_from_tools}
 {chat_target}
 {chat_talking_prompt}
 现在你想要在群里发言或者回复。\n
@@ -38,6 +37,12 @@ def init_prompt():
 {moderation_prompt}。注意：回复不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
         "heart_flow_prompt",
     )
+    
+    Prompt("""
+你有以下信息可供参考：
+{structured_info}
+以上的消息是你获取到的消息，或许可以帮助你更好地回复。
+""", "info_from_tools")
 
     # Planner提示词
     Prompt(
@@ -47,13 +52,9 @@ def init_prompt():
 看了以上内容，你产生的内心想法是：
 {current_mind_block}
 请结合你的内心想法和观察到的聊天内容，分析情况并使用 'decide_reply_action' 工具来决定你的最终行动。
-决策依据：
+注意你必须参考以下决策依据来选择工具：
 1. 如果聊天内容无聊、与你无关、或者你的内心想法认为不适合回复（例如在讨论你不懂或不感兴趣的话题），选择 'no_reply'。
-2. 如果聊天内容值得回应，且适合用文字表达（参考你的内心想法），选择 'text_reply'。如果你有情绪想表达，想在文字后追加一个表达情绪的表情，请同时提供 'emoji_query' (每个标签用一个词组表示，格式如下：
-            幽默的讽刺
-            悲伤的无奈
-            愤怒的抗议
-            愤怒的讽刺)。
+2. 如果聊天内容值得回应，且适合用文字表达（参考你的内心想法），选择 'text_reply'。如果你有情绪想表达，想在文字后追加一个表达情绪的表情，请同时提供 'emoji_query' (每个标签用一个词组表示，格式例如：幽默的讽刺,单纯的开心,愤怒的抗议)。
 3. 如果聊天内容或你的内心想法适合用一个表情来回应，选择 'emoji_reply' 并提供表情主题 'emoji_query'。
 4. 如果最后一条消息是你自己发的，观察到的内容只有你自己的发言，并且之后没有人回复你，通常选择 'no_reply'，除非有特殊原因需要追问。
 5. 如果聊天记录中最新的消息是你自己发送的，并且你还想继续回复，你应该紧紧衔接你发送的消息，进行话题的深入，补充，或追问等等；。
@@ -152,7 +153,7 @@ class PromptBuilder:
             message_list_before_now,
             replace_bot_name=True,
             merge_messages=False,
-            timestamp_mode="relative",
+            timestamp_mode="normal",
             read_mark=0.0,
         )
 
@@ -162,12 +163,19 @@ class PromptBuilder:
             prompt_ger += "你喜欢用倒装句"
         if random.random() < 0.02:
             prompt_ger += "你喜欢用反问句"
+            
+        if structured_info:
+            structured_info_prompt = await global_prompt_manager.format_prompt(
+                "info_from_tools",
+                structured_info = structured_info)
+        else:
+            structured_info_prompt = ""
 
         logger.debug("开始构建prompt")
 
         prompt = await global_prompt_manager.format_prompt(
             "heart_flow_prompt",
-            structured_info=structured_info,
+            info_from_tools=structured_info_prompt,
             chat_target=await global_prompt_manager.get_prompt_async("chat_target_group1")
             if chat_in_group
             else await global_prompt_manager.get_prompt_async("chat_target_private1"),

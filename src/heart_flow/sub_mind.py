@@ -10,7 +10,7 @@ from ..plugins.utils.prompt_builder import Prompt, global_prompt_manager
 from src.do_tool.tool_use import ToolUser
 from src.plugins.utils.json_utils import safe_json_dumps, normalize_llm_response, process_llm_tool_calls
 from src.heart_flow.chat_state_info import ChatStateInfo
-
+from src.plugins.chat.chat_stream import chat_manager
 
 subheartflow_config = LogConfig(
     console_format=SUB_HEARTFLOW_STYLE_CONFIG["console_format"],
@@ -30,6 +30,8 @@ def init_prompt():
     prompt += "现在请你生成你的内心想法，要求思考群里正在进行的话题，之前大家聊过的话题，群里成员的关系。"
     prompt += "请你思考，要不要对群里的话题进行回复，以及如何对群聊内容进行回复\n"
     prompt += "回复的要求是：不要总是重复自己提到过的话题，如果你要回复，最好只回复一个人的一个话题\n"
+    prompt += "如果最后一条消息是你自己发的，观察到的内容只有你自己的发言，并且之后没有人回复你，不要回复。"
+    prompt += "如果聊天记录中最新的消息是你自己发送的，并且你还想继续回复，你应该紧紧衔接你发送的消息，进行话题的深入，补充，或追问等等。"
     prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，等)，不要回复自己的发言\n"
     prompt += "现在请你先输出想法，{hf_do_next}，不要分点输出,文字不要浮夸"
     prompt += "在输出完想法后，请你思考应该使用什么工具。工具可以帮你取得一些你不知道的信息，或者进行一些操作。"
@@ -138,7 +140,7 @@ class SubMind:
             hf_do_next=hf_do_next,
         )
 
-        logger.debug(f"[{self.subheartflow_id}] 心流思考提示词构建完成")
+        # logger.debug(f"[{self.subheartflow_id}] 心流思考提示词构建完成")
 
         # ---------- 5. 执行LLM请求并处理响应 ----------
         content = ""  # 初始化内容变量
@@ -190,7 +192,8 @@ class SubMind:
             content = "思考过程中出现错误"
 
         # 记录最终思考结果
-        logger.debug(f"[{self.subheartflow_id}] 心流思考结果:\n{content}\n")
+        name = chat_manager.get_stream_name(self.subheartflow_id)
+        logger.debug(f"[{name}] \nPrompt:\n{prompt}\n\n心流思考结果:\n{content}\n")
 
         # 处理空响应情况
         if not content:
