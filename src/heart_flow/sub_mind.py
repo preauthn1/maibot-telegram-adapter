@@ -25,18 +25,20 @@ def init_prompt():
     prompt += "{extra_info}\n"
     prompt += "{prompt_personality}\n"
     prompt += "{last_loop_prompt}\n"
-    prompt += "-----------------------------------\n"
     prompt += "现在是{time_now}，你正在上网，和qq群里的网友们聊天，以下是正在进行的聊天内容：\n{chat_observe_info}\n"
     prompt += "\n你现在{mood_info}\n"
-    prompt += "现在请你，阅读群里正在进行的聊天内容，思考群里的正在进行的话题，分析群里成员与你的关系。"
-    prompt += "请你思考，生成你的内心想法，包括你的思考，要不要对群里的话题进行回复，以及如何对群聊内容进行回复\n"
-    prompt += "回复的要求是：不要总是重复自己提到过的话题，如果你要回复，最好只回复一个人的一个话题\n"
-    prompt += "如果最后一条消息是你自己发的，观察到的内容只有你自己的发言，并且之后没有人回复你，不要回复。"
-    prompt += "如果聊天记录中最新的消息是你自己发送的，并且你还想继续回复，你应该紧紧衔接你发送的消息，进行话题的深入，补充，或追问等等。"
-    prompt += "请注意不要输出多余内容(包括前后缀，冒号和引号，括号， 表情，等)，不要回复自己的发言\n"
-    prompt += "现在请你先输出想法，{hf_do_next}，不要分点输出,文字不要浮夸"
-    prompt += "在输出完想法后，请你思考应该使用什么工具。工具可以帮你取得一些你不知道的信息，或者进行一些操作。"
-    prompt += "如果你需要做某件事，来对消息和你的回复进行处理，请使用工具。\n"
+    prompt += "请仔细阅读当前群聊内容，分析讨论话题和群成员关系，思考你要不要回复。"
+    prompt += "思考并输出你的内心想法\n"
+    prompt += "输出要求：\n"
+    prompt += "1. 根据聊天内容生成你的想法，{hf_do_next}\n"
+    prompt += "2. 不要分点、不要使用表情符号\n"
+    prompt += "3. 避免多余符号(冒号、引号、括号等)\n"
+    prompt += "4. 语言简洁自然，不要浮夸\n"
+    prompt += "5. 如果你刚发言，并且没有人回复你，不要回复\n"
+    prompt += "工具使用说明：\n"
+    prompt += "1. 输出想法后考虑是否需要使用工具\n"
+    prompt += "2. 工具可获取信息或执行操作\n"
+    prompt += "3. 如需处理消息或回复，请使用工具\n"
 
     Prompt(prompt, "sub_heartflow_prompt_before")
     
@@ -65,7 +67,7 @@ class SubMind:
         self.past_mind = []
         self.structured_info = {}
 
-    async def do_thinking_before_reply(self, last_cycle: CycleInfo):
+    async def do_thinking_before_reply(self, last_cycle: CycleInfo = None):
         """
         在回复前进行思考，生成内心想法并收集工具调用结果
 
@@ -123,14 +125,14 @@ class SubMind:
 
         # 思考指导选项和权重
         hf_options = [
-            ("继续生成你在这个聊天中的想法，在原来想法的基础上继续思考，但是不要纠结于同一个话题", 0.6),
-            ("生成你在这个聊天中的想法，在原来的想法上尝试新的话题", 0.1),
-            ("生成你在这个聊天中的想法，不要太深入", 0.2),
-            ("继续生成你在这个聊天中的想法，进行深入思考", 0.1),
+            ("可以参考之前的想法，在原来想法的基础上继续思考", 0.2),
+            ("可以参考之前的想法，在原来的想法上尝试新的话题", 0.4),
+            ("不要太深入", 0.2),
+            ("进行深入思考", 0.2),
         ]
 
         #上一次决策信息
-        if last_cycle.action_type:
+        if last_cycle != None:
             last_action = last_cycle.action_type
             last_reasoning = last_cycle.reasoning
             is_replan = last_cycle.replanned
@@ -143,11 +145,13 @@ class SubMind:
             last_reasoning = ""
             is_replan = False
             if_replan_prompt = ""
-
-        last_loop_prompt = (await global_prompt_manager.get_prompt_async("last_loop")).format(
-            current_thinking_info=current_thinking_info,
-            if_replan_prompt=if_replan_prompt
-        )
+        if current_thinking_info:
+            last_loop_prompt = (await global_prompt_manager.get_prompt_async("last_loop")).format(
+                current_thinking_info=current_thinking_info,
+                if_replan_prompt=if_replan_prompt
+            )
+        else:
+            last_loop_prompt = ""
         
         # 加权随机选择思考指导
         hf_do_next = local_random.choices(

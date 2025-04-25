@@ -405,7 +405,7 @@ class HeartFChatting:
                 return False, ""
                 
             # execute:执行
-            with Timer("执行", cycle_timers):
+            with Timer("执行动作", cycle_timers):
                 return await self._handle_action(action, reasoning, planner_result.get("emoji_query", ""), cycle_timers, planner_start_db_time)
                 
         except PlannerError as e:
@@ -490,7 +490,7 @@ class HeartFChatting:
             
         try:
             # 生成回复
-            with Timer("Replier", cycle_timers):
+            with Timer("生成回复", cycle_timers):
                 reply = await self._replier_work(
                     anchor_message=anchor_message,
                     thinking_id=thinking_id,
@@ -501,13 +501,13 @@ class HeartFChatting:
                 raise ReplierError("回复生成失败")
                 
             # 发送消息
-            with Timer("Sender", cycle_timers):
-                await self._sender(
-                    thinking_id=thinking_id,
-                    anchor_message=anchor_message,
-                    response_set=reply,
-                    send_emoji=emoji_query,
-                )
+
+            await self._sender(
+                thinking_id=thinking_id,
+                anchor_message=anchor_message,
+                response_set=reply,
+                send_emoji=emoji_query,
+            )
                 
             return True, thinking_id
             
@@ -675,7 +675,7 @@ class HeartFChatting:
         # 获取观察信息
         observation = self.observations[0]
         if is_re_planned:
-            observation.observe()
+            await observation.observe()
         observed_messages = observation.talking_message
         observed_messages_str = observation.talking_message_str
 
@@ -687,40 +687,40 @@ class HeartFChatting:
 
         try:
             # 构建提示词
-            with Timer("构建提示词", cycle_timers):
-                if is_re_planned:
-                    replan_prompt = await self._build_replan_prompt(
-                        self._current_cycle.action, self._current_cycle.reasoning
-                    )
-                    prompt = replan_prompt
-                else:
-                    replan_prompt = ""
-                prompt = await self._build_planner_prompt(
-                    observed_messages_str, current_mind, self.sub_mind.structured_info, replan_prompt
+
+            if is_re_planned:
+                replan_prompt = await self._build_replan_prompt(
+                    self._current_cycle.action_type, self._current_cycle.reasoning
                 )
-                payload = {
-                    "model": global_config.llm_plan["name"],
-                    "messages": [{"role": "user", "content": prompt}],
-                    "tools": self.action_manager.get_planner_tool_definition(),
-                    "tool_choice": {"type": "function", "function": {"name": "decide_reply_action"}},
-                }
+                prompt = replan_prompt
+            else:
+                replan_prompt = ""
+            prompt = await self._build_planner_prompt(
+                observed_messages_str, current_mind, self.sub_mind.structured_info, replan_prompt
+            )
+            payload = {
+                "model": global_config.llm_plan["name"],
+                "messages": [{"role": "user", "content": prompt}],
+                "tools": self.action_manager.get_planner_tool_definition(),
+                "tool_choice": {"type": "function", "function": {"name": "decide_reply_action"}},
+            }
 
             # 执行LLM请求
-            with Timer("LLM回复", cycle_timers):
-                try:
-                    response = await self.planner_llm._execute_request(
-                        endpoint="/chat/completions", payload=payload, prompt=prompt
-                    )
-                except Exception as req_e:
-                    logger.error(f"{self.log_prefix}[Planner] LLM请求执行失败: {req_e}")
-                    return {
-                        "action": "error",
-                        "reasoning": f"LLM请求执行失败: {req_e}",
-                        "emoji_query": "",
-                        "current_mind": current_mind,
-                        "observed_messages": observed_messages,
-                        "llm_error": True,
-                    }
+
+            try:
+                response = await self.planner_llm._execute_request(
+                    endpoint="/chat/completions", payload=payload, prompt=prompt
+                )
+            except Exception as req_e:
+                logger.error(f"{self.log_prefix}[Planner] LLM请求执行失败: {req_e}")
+                return {
+                    "action": "error",
+                    "reasoning": f"LLM请求执行失败: {req_e}",
+                    "emoji_query": "",
+                    "current_mind": current_mind,
+                    "observed_messages": observed_messages,
+                    "llm_error": True,
+                }
 
             # 处理LLM响应
             with Timer("使用工具", cycle_timers):
@@ -883,7 +883,7 @@ class HeartFChatting:
         # 准备聊天内容块
         chat_content_block = ""
         if observed_messages_str:
-            chat_content_block = "观察到的最新聊天内容如下 (最近的消息在最后)：\n---\n"
+            chat_content_block = "观察到的最新聊天内容如下：\n---\n"
             chat_content_block += observed_messages_str
             chat_content_block += "\n---"
         else:
@@ -892,9 +892,9 @@ class HeartFChatting:
         # 准备当前思维块
         current_mind_block = ""
         if current_mind:
-            current_mind_block = f"\n---\n{current_mind}\n---\n\n"
+            current_mind_block = f"{current_mind}"
         else:
-            current_mind_block = " [没有特别的想法] \n\n"
+            current_mind_block = "[没有特别的想法]"
 
         # 获取提示词模板并填充数据
         prompt = (await global_prompt_manager.get_prompt_async("planner_prompt")).format(
