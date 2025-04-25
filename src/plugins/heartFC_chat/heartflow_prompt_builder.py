@@ -51,6 +51,7 @@ def init_prompt():
 {chat_content_block}
 看了以上内容，你产生的内心想法是：
 {current_mind_block}
+{replan}
 请结合你的内心想法和观察到的聊天内容，分析情况并使用 'decide_reply_action' 工具来决定你的最终行动。
 注意你必须参考以下决策依据来选择工具：
 1. 如果聊天内容无聊、与你无关、或者你的内心想法认为不适合回复（例如在讨论你不懂或不感兴趣的话题），选择 'no_reply'。
@@ -64,6 +65,8 @@ def init_prompt():
         "planner_prompt",
     )
 
+    Prompt("你原本打算{action}，因为：{reasoning}，但是你看到了新的消息，你决定重新决定行动。", "replan_prompt")
+    
     Prompt("你正在qq群里聊天，下面是群里在聊的内容：", "chat_target_group1")
     Prompt("和群里聊天", "chat_target_group2")
     Prompt("你正在和{sender_name}聊天，这是你们之前聊的内容：", "chat_target_private1")
@@ -86,7 +89,7 @@ def init_prompt():
 你的网名叫{bot_name}，有人也叫你{bot_other_names}，{prompt_personality}。
 你正在{chat_target_2},现在请你读读之前的聊天记录，{mood_prompt}，然后给出日常且口语化的回复，平淡一些，
 尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。{prompt_ger}
-请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 
+请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，不要浮夸，平淡一些 ，不要重复自己说过的话。
 请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只输出回复内容。
 {moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号()，表情包，at或 @等 )。，只输出回复内容""",
         "reasoning_prompt_main",

@@ -192,7 +192,6 @@ class BotConfig:
     reply_trigger_threshold: float = 3.0  # 心流聊天触发阈值，越低越容易触发
     probability_decay_factor_per_second: float = 0.2  # 概率衰减因子，越大衰减越快
     default_decay_rate_per_second: float = 0.98  # 默认衰减率，越大衰减越慢
-    initial_duration: int = 60  # 初始持续时间，越大心流聊天持续的时间越长
 
     # sub_heart_flow_update_interval: int = 60  # 子心流更新频率，间隔 单位秒
     # sub_heart_flow_freeze_time: int = 120  # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
@@ -286,11 +285,11 @@ class BotConfig:
     vlm: Dict[str, str] = field(default_factory=lambda: {})
     moderation: Dict[str, str] = field(default_factory=lambda: {})
 
-    # 实验性
     llm_observation: Dict[str, str] = field(default_factory=lambda: {})
     llm_sub_heartflow: Dict[str, str] = field(default_factory=lambda: {})
     llm_heartflow: Dict[str, str] = field(default_factory=lambda: {})
     llm_tool_use: Dict[str, str] = field(default_factory=lambda: {})
+    llm_plan: Dict[str, str] = field(default_factory=lambda: {})
 
     api_urls: Dict[str, str] = field(default_factory=lambda: {})
 
@@ -448,7 +447,6 @@ class BotConfig:
                 config.default_decay_rate_per_second = heartflow_config.get(
                     "default_decay_rate_per_second", config.default_decay_rate_per_second
                 )
-                config.initial_duration = heartflow_config.get("initial_duration", config.initial_duration)
 
         def willing(parent: dict):
             willing_config = parent["willing"]
@@ -489,6 +487,7 @@ class BotConfig:
                 "llm_tool_use",
                 "llm_observation",
                 "llm_sub_heartflow",
+                "llm_plan",
                 "llm_heartflow",
                 "llm_PFC_action_planner",
                 "llm_PFC_chat",

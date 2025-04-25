@@ -11,6 +11,7 @@ from src.do_tool.tool_use import ToolUser
 from src.plugins.utils.json_utils import safe_json_dumps, normalize_llm_response, process_llm_tool_calls
 from src.heart_flow.chat_state_info import ChatStateInfo
 from src.plugins.chat.chat_stream import chat_manager
+from src.plugins.heartFC_chat.heartFC_Cycleinfo import CycleInfo
 
 subheartflow_config = LogConfig(
     console_format=SUB_HEARTFLOW_STYLE_CONFIG["console_format"],
@@ -23,12 +24,12 @@ def init_prompt():
     prompt = ""
     prompt += "{extra_info}\n"
     prompt += "{prompt_personality}\n"
-    prompt += "刚刚你的内心想法是：{current_thinking_info}\n"
+    prompt += "{last_loop_prompt}\n"
     prompt += "-----------------------------------\n"
     prompt += "现在是{time_now}，你正在上网，和qq群里的网友们聊天，以下是正在进行的聊天内容：\n{chat_observe_info}\n"
     prompt += "\n你现在{mood_info}\n"
-    prompt += "现在请你生成你的内心想法，要求思考群里正在进行的话题，之前大家聊过的话题，群里成员的关系。"
-    prompt += "请你思考，要不要对群里的话题进行回复，以及如何对群聊内容进行回复\n"
+    prompt += "现在请你，阅读群里正在进行的聊天内容，思考群里的正在进行的话题，分析群里成员与你的关系。"
+    prompt += "请你思考，生成你的内心想法，包括你的思考，要不要对群里的话题进行回复，以及如何对群聊内容进行回复\n"
     prompt += "回复的要求是：不要总是重复自己提到过的话题，如果你要回复，最好只回复一个人的一个话题\n"
     prompt += "如果最后一条消息是你自己发的，观察到的内容只有你自己的发言，并且之后没有人回复你，不要回复。"
     prompt += "如果聊天记录中最新的消息是你自己发送的，并且你还想继续回复，你应该紧紧衔接你发送的消息，进行话题的深入，补充，或追问等等。"
@@ -38,6 +39,12 @@ def init_prompt():
     prompt += "如果你需要做某件事，来对消息和你的回复进行处理，请使用工具。\n"
 
     Prompt(prompt, "sub_heartflow_prompt_before")
+    
+    prompt = ""
+    prompt += "刚刚你的内心想法是：{current_thinking_info}\n"
+    prompt += "{if_replan_prompt}\n"
+
+    Prompt(prompt, "last_loop")
 
 
 class SubMind:
@@ -58,7 +65,7 @@ class SubMind:
         self.past_mind = []
         self.structured_info = {}
 
-    async def do_thinking_before_reply(self):
+    async def do_thinking_before_reply(self, last_cycle: CycleInfo):
         """
         在回复前进行思考，生成内心想法并收集工具调用结果
 
@@ -122,6 +129,20 @@ class SubMind:
             ("继续生成你在这个聊天中的想法，进行深入思考", 0.1),
         ]
 
+        #上一次决策信息
+        last_action = last_cycle.action_type
+        last_reasoning = last_cycle.reasoning
+        is_replan = last_cycle.replanned
+        if is_replan:
+            if_replan_prompt = f"但是你有了上述想法之后，有了新消息，你决定重新思考后，你做了：{last_action}\n因为：{last_reasoning}\n"
+        else:
+            if_replan_prompt = f"出于这个想法，你刚才做了：{last_action}\n因为：{last_reasoning}\n"
+
+        last_loop_prompt = (await global_prompt_manager.get_prompt_async("last_loop")).format(
+            current_thinking_info=current_thinking_info,
+            if_replan_prompt=if_replan_prompt
+        )
+        
         # 加权随机选择思考指导
         hf_do_next = local_random.choices(
             [option[0] for option in hf_options], weights=[option[1] for option in hf_options], k=1
@@ -133,11 +154,11 @@ class SubMind:
             extra_info="",  # 可以在这里添加额外信息
             prompt_personality=prompt_personality,
             bot_name=individuality.personality.bot_nickname,
-            current_thinking_info=current_thinking_info,
             time_now=time_now,
             chat_observe_info=chat_observe_info,
             mood_info=mood_info,
             hf_do_next=hf_do_next,
+            last_loop_prompt=last_loop_prompt
         )
 
         # logger.debug(f"[{self.subheartflow_id}] 心流思考提示词构建完成")
