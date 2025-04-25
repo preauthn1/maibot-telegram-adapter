@@ -10,7 +10,7 @@ from src.heart_flow.heartflow import heartflow
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ..chat.chat_stream import chat_manager
 from ..chat.message_buffer import message_buffer
-from ..utils.timer_calculater import Timer
+from ..utils.timer_calculator import Timer
 from src.plugins.person_info.relationship_manager import relationship_manager
 from typing import Optional, Tuple
 

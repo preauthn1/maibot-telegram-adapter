@@ -12,7 +12,7 @@ from src.common.logger import get_module_logger, LogConfig, PFC_STYLE_CONFIG  # 
 from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
-from src.plugins.utils.timer_calculater import Timer  # <--- Import Timer
+from src.plugins.utils.timer_calculator import Timer  # <--- Import Timer
 from src.plugins.heartFC_chat.heartFC_generator import HeartFCGenerator
 from src.do_tool.tool_use import ToolUser
 from ..chat.message_sender import message_manager  # <-- Import the global manager
