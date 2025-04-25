@@ -57,7 +57,7 @@ class InterestChatting:
         self.max_reply_probability: float = max_probability
         self.current_reply_probability: float = 0.0
         self.is_above_threshold: bool = False
-        
+
         # 任务相关属性初始化
         self.update_task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()

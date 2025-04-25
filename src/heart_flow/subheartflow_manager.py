@@ -271,11 +271,10 @@ class SubHeartflowManager:
         log_prefix = "[兴趣评估]"
         current_state = current_mai_state.get_current_state()
         focused_limit = current_state.get_focused_chat_max_num()
-        
-        
+
         if int(time.time()) % 20 == 0:  # 每20秒输出一次
             logger.debug(f"{log_prefix} 当前状态 ({current_state.value}) 可以在{focused_limit}个群激情聊天")
-        
+
         if focused_limit <= 0:
             # logger.debug(f"{log_prefix} 当前状态 ({current_state.value}) 不允许 FOCUSED 子心流")
             return
@@ -288,22 +287,23 @@ class SubHeartflowManager:
         states_num = (
             self.count_subflows_by_state(ChatState.ABSENT),
             self.count_subflows_by_state(ChatState.CHAT),
-            current_focused_count
+            current_focused_count,
         )
 
         for sub_hf in list(self.subheartflows.values()):
             flow_id = sub_hf.subheartflow_id
             stream_name = chat_manager.get_stream_name(flow_id) or flow_id
-            
+
             # 跳过非CHAT状态或已经是FOCUSED状态的子心流
             if sub_hf.chat_state.chat_status == ChatState.FOCUSED:
                 continue
-            
+
             from .mai_state_manager import enable_unlimited_hfc_chat
+
             if not enable_unlimited_hfc_chat:
                 if sub_hf.chat_state.chat_status != ChatState.CHAT:
                     continue
-                
+
             # 检查是否满足提升概率
             if random.random() >= sub_hf.interest_chatting.start_hfc_probability:
                 continue
@@ -324,12 +324,12 @@ class SubHeartflowManager:
 
             # 执行状态提升
             await current_subflow.set_chat_state(ChatState.FOCUSED, states_num)
-            
-            # 验证提升结果
-            if (final_subflow := self.subheartflows.get(flow_id)) and \
-                final_subflow.chat_state.chat_status == ChatState.FOCUSED:
-                current_focused_count += 1
 
+            # 验证提升结果
+            if (
+                final_subflow := self.subheartflows.get(flow_id)
+            ) and final_subflow.chat_state.chat_status == ChatState.FOCUSED:
+                current_focused_count += 1
 
     async def randomly_deactivate_subflows(self, deactivation_probability: float = 0.1):
         """以一定概率将 FOCUSED 或 CHAT 状态的子心流回退到 ABSENT 状态。"""
