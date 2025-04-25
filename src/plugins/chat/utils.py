@@ -12,7 +12,7 @@ from ..models.utils_model import LLMRequest
 from ..utils.typo_generator import ChineseTypoGenerator
 from ...config.config import global_config
 from .message import MessageRecv, Message
-from ..message.message_base import UserInfo
+from maim_message import UserInfo
 from .chat_stream import ChatStream
 from ..moods.moods import MoodManager
 from ...common.database import db
