@@ -496,12 +496,13 @@ class HeartFChatting:
 
             # 发送消息
 
-            await self._sender(
-                thinking_id=thinking_id,
-                anchor_message=anchor_message,
-                response_set=reply,
-                send_emoji=emoji_query,
-            )
+            with Timer("发送消息", cycle_timers):
+                await self._sender(
+                    thinking_id=thinking_id,
+                    anchor_message=anchor_message,
+                    response_set=reply,
+                    send_emoji=emoji_query,
+                )
 
             return True, thinking_id
 
