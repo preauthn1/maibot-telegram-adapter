@@ -71,7 +71,8 @@ class KnowledgeFetcher:
                 sources.append(f"记忆片段{memory[0]}")
             knowledge = knowledge.strip(), "，".join(sources)
 
-        knowledge += "现在有以下**知识**可供参考：\n 请记住这些**知识**，并根据**知识**回答问题。\n"
+        knowledge += "现在有以下**知识**可供参考：\n "
         knowledge += self._lpmm_get_knowledge(query)
+        knowledge += "请记住这些**知识**，并根据**知识**回答问题。\n"
 
         return "未找到相关知识", "无记忆匹配"
