@@ -163,7 +163,7 @@ MOOD_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-            "</magenta>心情</magenta> | "
+            "<magenta>心情</magenta> | "
             "<level>{message}</level>"
         ),
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 心情 | {message}",

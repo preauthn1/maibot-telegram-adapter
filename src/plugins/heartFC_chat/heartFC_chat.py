@@ -343,51 +343,48 @@ class HeartFChatting:
                 # 初始化周期状态
                 cycle_timers = {}
                 loop_cycle_start_time = time.monotonic()
-                
-                with Timer("Total Cycle", cycle_timers):
-                    # 执行规划和处理阶段
-                    async with self._get_cycle_context() as acquired_lock:
-                        if not acquired_lock:
-                            continue
-                            
-                        # 记录规划开始时间点
-                        planner_start_db_time = time.time()
+            
+                # 执行规划和处理阶段
+                async with self._get_cycle_context() as acquired_lock:
+                    if not acquired_lock:
+                        continue
                         
-                        # 执行规划阶段
-                        with Timer("Planning Phase", cycle_timers):
-                            action_taken, thinking_id = await self._think_plan_execute(
-                                cycle_timers, planner_start_db_time
-                            )
-                            
-                        # 更新循环信息
-                        self._current_cycle.set_thinking_id(thinking_id)
-                        self._current_cycle.timers = cycle_timers
-
-                        # 防止循环过快消耗资源
-                        with Timer("Cycle Delay", cycle_timers):
-                            await self._handle_cycle_delay(action_taken, loop_cycle_start_time, self.log_prefix)
+                    # 记录规划开始时间点
+                    planner_start_db_time = time.time()
                     
-                    # 等待直到所有消息都发送完成
-                    with Timer("Wait Messages Complete", cycle_timers):
-                        while await self._should_skip_cycle(thinking_id):
-                            await asyncio.sleep(0.2)
-                            
-                    # 完成当前循环并保存历史
-                    self._current_cycle.complete_cycle()
-                    self._cycle_history.append(self._current_cycle)
-                    
-                    # 记录循环信息和计时器结果
-                    timer_strings = []
-                    for name, elapsed in cycle_timers.items():
-                        formatted_time = f"{elapsed * 1000:.2f}毫秒" if elapsed < 1 else f"{elapsed:.2f}秒"
-                        timer_strings.append(f"{name}: {formatted_time}")
-                    
-                    logger.debug(
-                        f"{self.log_prefix} 循环 #{self._current_cycle.cycle_id} 完成, "
-                        f"耗时: {self._current_cycle.end_time - self._current_cycle.start_time:.2f}秒, "
-                        f"动作: {self._current_cycle.action_type}"
-                        + (f"\n计时器详情: {'; '.join(timer_strings)}" if timer_strings else "")
+                    # 执行规划阶段  
+                    action_taken, thinking_id = await self._think_plan_execute_loop(
+                        cycle_timers, planner_start_db_time
                     )
+                        
+                    # 更新循环信息
+                    self._current_cycle.set_thinking_id(thinking_id)
+                    self._current_cycle.timers = cycle_timers
+
+                    # 防止循环过快消耗资源
+                    await self._handle_cycle_delay(action_taken, loop_cycle_start_time, self.log_prefix)
+                
+                # 等待直到所有消息都发送完成
+                with Timer("发送消息", cycle_timers):
+                    while await self._should_skip_cycle(thinking_id):
+                        await asyncio.sleep(0.2)
+                        
+                # 完成当前循环并保存历史
+                self._current_cycle.complete_cycle()
+                self._cycle_history.append(self._current_cycle)
+                
+                # 记录循环信息和计时器结果
+                timer_strings = []
+                for name, elapsed in cycle_timers.items():
+                    formatted_time = f"{elapsed * 1000:.2f}毫秒" if elapsed < 1 else f"{elapsed:.2f}秒"
+                    timer_strings.append(f"{name}: {formatted_time}")
+                
+                logger.debug(
+                    f"{self.log_prefix}  第 #{self._current_cycle.cycle_id}次思考完成,"
+                    f"耗时: {self._current_cycle.end_time - self._current_cycle.start_time:.2f}秒, "
+                    f"动作: {self._current_cycle.action_type}"
+                    + (f"\n计时器详情: {'; '.join(timer_strings)}" if timer_strings else "")
+                )
 
         except asyncio.CancelledError:
             logger.info(f"{self.log_prefix} HeartFChatting: 麦麦的激情水群(HFC)被取消了")
@@ -434,22 +431,22 @@ class HeartFChatting:
             logger.error(f"{self.log_prefix} 检查新消息时出错: {e}")
             return False
 
-    async def _think_plan_execute(
+    async def _think_plan_execute_loop(
         self, cycle_timers: dict, planner_start_db_time: float
     ) -> tuple[bool, str]:
         """执行规划阶段"""
         try:
             # 获取子思维思考结果
             current_mind = ""
-            with Timer("SubMind Thinking", cycle_timers):
+            with Timer("思考", cycle_timers):
                 current_mind = await self._get_submind_thinking()
                 # 记录子思维思考内容
                 if self._current_cycle:
                     self._current_cycle.set_response_info(sub_mind_thinking=current_mind)
             
             # 执行规划
-            with Timer("Planner", cycle_timers):
-                planner_result = await self._planner(current_mind)
+            with Timer("决策", cycle_timers):
+                planner_result = await self._planner(current_mind, cycle_timers)
                 
             # 在获取规划结果后检查新消息
             if await self._check_new_messages(planner_start_db_time):
@@ -471,7 +468,8 @@ class HeartFChatting:
                 return False, ""
                 
             # 根据动作类型执行对应处理
-            return await self._handle_action(action, reasoning, planner_result.get("emoji_query", ""), cycle_timers, planner_start_db_time)
+            with Timer("执行", cycle_timers):
+                return await self._handle_action(action, reasoning, planner_result.get("emoji_query", ""), cycle_timers, planner_start_db_time)
                 
         except PlannerError as e:
             logger.error(f"{self.log_prefix} 规划错误: {e}")
@@ -684,8 +682,8 @@ class HeartFChatting:
     ):
         """处理循环延迟"""
         cycle_duration = time.monotonic() - cycle_start_time
-        if cycle_duration > 0.1:
-            logger.debug(f"{log_prefix} HeartFChatting: 周期耗时 {cycle_duration:.2f}s.")
+        # if cycle_duration > 0.1:
+            # logger.debug(f"{log_prefix} HeartFChatting: 周期耗时 {cycle_duration:.2f}s.")
 
         try:
             sleep_duration = 0.0
@@ -718,7 +716,7 @@ class HeartFChatting:
             logger.error(traceback.format_exc())
             return "[思考时出错]"
 
-    async def _planner(self, current_mind: str) -> Dict[str, Any]:
+    async def _planner(self, current_mind: str, cycle_timers: dict) -> Dict[str, Any]:
         """
         规划器 (Planner): 使用LLM根据上下文决定是否和如何回复。
         
@@ -726,15 +724,12 @@ class HeartFChatting:
             current_mind: 子思维的当前思考结果
         """
         logger.info(f"{self.log_prefix}[Planner] 开始执行规划器")
-        
-        planner_timers = {}  # 用于存储各阶段计时结果
 
         # 获取观察信息
-        with Timer("获取观察信息", planner_timers):
-            observation = self.observations[0]
-            # await observation.observe()
-            observed_messages = observation.talking_message
-            observed_messages_str = observation.talking_message_str
+        observation = self.observations[0]
+        # await observation.observe()
+        observed_messages = observation.talking_message
+        observed_messages_str = observation.talking_message_str
 
         # --- 使用 LLM 进行决策 --- #
         action = "no_reply"  # 默认动作
@@ -744,7 +739,7 @@ class HeartFChatting:
 
         try:
             # 构建提示词
-            with Timer("构建提示词", planner_timers):
+            with Timer("构建提示词", cycle_timers):
                 prompt = await self._build_planner_prompt(
                     observed_messages_str, current_mind, self.sub_mind.structured_info
                 )
@@ -756,7 +751,7 @@ class HeartFChatting:
                 }
 
             # 执行LLM请求
-            with Timer("LLM请求", planner_timers):
+            with Timer("LLM回复", cycle_timers):
                 try:
                     response = await self.planner_llm._execute_request(
                         endpoint="/chat/completions", payload=payload, prompt=prompt
@@ -773,7 +768,7 @@ class HeartFChatting:
                     }
 
             # 处理LLM响应
-            with Timer("处理LLM响应", planner_timers):
+            with Timer("使用工具", cycle_timers):
                 # 使用辅助函数处理工具调用响应
                 success, arguments, error_msg = process_llm_tool_response(
                     response, expected_tool_name="decide_reply_action", log_prefix=f"{self.log_prefix}[Planner] "
