@@ -584,8 +584,8 @@ class HeartFChatting:
                 logger.info(f"{log_prefix} 检测到新消息")
                 return True
 
-            if time.monotonic() - wait_start_time > 60:
-                logger.warning(f"{log_prefix} 等待超时(60秒)")
+            if time.monotonic() - wait_start_time > 300:
+                logger.warning(f"{log_prefix} 等待超时(300秒)")
                 return False
 
             await asyncio.sleep(1.5)
