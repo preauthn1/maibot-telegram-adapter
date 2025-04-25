@@ -5,7 +5,7 @@ from src.common.logger import get_module_logger
 from ..models.utils_model import LLMRequest
 from ...config.config import global_config
 from .chat_observer import ChatObserver
-from ..message.message_base import UserInfo
+from maim_message import UserInfo
 
 logger = get_module_logger("reply_checker")
 

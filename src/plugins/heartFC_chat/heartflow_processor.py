@@ -5,7 +5,7 @@ from ...config.config import global_config
 from ..chat.message import MessageRecv
 from ..storage.storage import MessageStorage
 from ..chat.utils import is_mentioned_bot_in_message
-from ..message import Seg
+from maim_message import Seg
 from src.heart_flow.heartflow import heartflow
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from ..chat.chat_stream import chat_manager
