@@ -248,7 +248,7 @@ class Conversation:
 
         # --- 根据不同的 action 执行 ---
         if action == "direct_reply":
-            max_reply_attempts = 3 # 设置最大尝试次数（与 reply_checker.py 中的 max_retries 保持一致或稍大）
+            max_reply_attempts = 3  # 设置最大尝试次数（与 reply_checker.py 中的 max_retries 保持一致或稍大）
             reply_attempt_count = 0
             is_suitable = False
             need_replan = False
@@ -273,17 +273,19 @@ class Conversation:
                         reply=self.generated_reply,
                         goal=current_goal_str,
                         chat_history=observation_info.chat_history,
-                        retry_count=reply_attempt_count - 1, # 传递当前尝试次数（从0开始计数）
+                        retry_count=reply_attempt_count - 1,  # 传递当前尝试次数（从0开始计数）
                     )
-                    logger.info(f"第 {reply_attempt_count} 次检查结果: 合适={is_suitable}, 原因='{check_reason}', 需重新规划={need_replan}")
+                    logger.info(
+                        f"第 {reply_attempt_count} 次检查结果: 合适={is_suitable}, 原因='{check_reason}', 需重新规划={need_replan}"
+                    )
 
                     if is_suitable:
-                        final_reply_to_send = self.generated_reply # 保存合适的回复
-                        break # 回复合适，跳出循环
+                        final_reply_to_send = self.generated_reply  # 保存合适的回复
+                        break  # 回复合适，跳出循环
 
                     elif need_replan:
-                         logger.warning(f"第 {reply_attempt_count} 次检查建议重新规划，停止尝试。原因: {check_reason}")
-                         break # 如果检查器建议重新规划，也停止尝试
+                        logger.warning(f"第 {reply_attempt_count} 次检查建议重新规划，停止尝试。原因: {check_reason}")
+                        break  # 如果检查器建议重新规划，也停止尝试
 
                     # 如果不合适但不需要重新规划，循环会继续进行下一次尝试
                 except Exception as check_err:
@@ -310,7 +312,7 @@ class Conversation:
                     return
 
                 # 发送合适的回复
-                self.generated_reply = final_reply_to_send # 确保 self.generated_reply 是最终要发送的内容
+                self.generated_reply = final_reply_to_send  # 确保 self.generated_reply 是最终要发送的内容
                 await self._send_reply()
 
                 # 更新 action 历史状态为 done
@@ -326,7 +328,7 @@ class Conversation:
                 logger.warning(f"经过 {reply_attempt_count} 次尝试，未能生成合适的回复。最终原因: {check_reason}")
                 conversation_info.done_action[action_index].update(
                     {
-                        "status": "recall", # 标记为 recall 因为没有成功发送
+                        "status": "recall",  # 标记为 recall 因为没有成功发送
                         "final_reason": f"尝试{reply_attempt_count}次后失败: {check_reason}",
                         "time": datetime.datetime.now().strftime("%H:%M:%S"),
                     }
@@ -341,7 +343,7 @@ class Conversation:
                 wait_action_record = {
                     "action": "wait",
                     "plan_reason": "因 direct_reply 多次尝试失败而执行的后备等待",
-                    "status": "done", # wait 完成后可以认为是 done
+                    "status": "done",  # wait 完成后可以认为是 done
                     "time": datetime.datetime.now().strftime("%H:%M:%S"),
                     "final_reason": None,
                 }

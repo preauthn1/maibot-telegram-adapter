@@ -78,8 +78,9 @@ class ReplyChecker:
 
         except Exception as e:
             import traceback
+
             logger.error(f"检查回复时出错: 类型={type(e)}, 值={e}")
-            logger.error(traceback.format_exc()) # 打印详细的回溯信息
+            logger.error(traceback.format_exc())  # 打印详细的回溯信息
 
         for msg in chat_history[-20:]:
             time_str = datetime.datetime.fromtimestamp(msg["time"]).strftime("%H:%M:%S")
