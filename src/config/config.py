@@ -221,7 +221,6 @@ class BotConfig:
     max_emoji_num: int = 200  # 表情包最大数量
     max_reach_deletion: bool = True  # 开启则在达到最大数量时删除表情包，关闭则不会继续收集表情包
     EMOJI_CHECK_INTERVAL: int = 120  # 表情包检查间隔（分钟）
-    EMOJI_REGISTER_INTERVAL: int = 10  # 表情包注册间隔（分钟）
 
     save_pic: bool = False  # 是否保存图片
     save_emoji: bool = False  # 是否保存表情包
@@ -263,6 +262,7 @@ class BotConfig:
     chinese_typo_word_replace_rate = 0.02  # 整词替换概率
 
     # response_splitter
+    enable_kaomoji_protection = False  # 是否启用颜文字保护
     enable_response_splitter = True  # 是否启用回复分割器
     response_max_length = 100  # 回复允许的最大长度
     response_max_sentence_num = 3  # 回复允许的最大句子数
@@ -394,7 +394,6 @@ class BotConfig:
         def emoji(parent: dict):
             emoji_config = parent["emoji"]
             config.EMOJI_CHECK_INTERVAL = emoji_config.get("check_interval", config.EMOJI_CHECK_INTERVAL)
-            config.EMOJI_REGISTER_INTERVAL = emoji_config.get("register_interval", config.EMOJI_REGISTER_INTERVAL)
             config.EMOJI_CHECK_PROMPT = emoji_config.get("check_prompt", config.EMOJI_CHECK_PROMPT)
             config.EMOJI_CHECK = emoji_config.get("enable_check", config.EMOJI_CHECK)
             if config.INNER_VERSION in SpecifierSet(">=1.1.1"):
@@ -428,21 +427,9 @@ class BotConfig:
 
         def heartflow(parent: dict):
             heartflow_config = parent["heartflow"]
-            # 加载新增的 heartflowC 参数
-
-            # 加载原有的 heartflow 参数
-            # config.sub_heart_flow_update_interval = heartflow_config.get(
-            #     "sub_heart_flow_update_interval", config.sub_heart_flow_update_interval
-            # )
-            # config.sub_heart_flow_freeze_time = heartflow_config.get(
-            #     "sub_heart_flow_freeze_time", config.sub_heart_flow_freeze_time
-            # )
             config.sub_heart_flow_stop_time = heartflow_config.get(
                 "sub_heart_flow_stop_time", config.sub_heart_flow_stop_time
             )
-            # config.heart_flow_update_interval = heartflow_config.get(
-            #     "heart_flow_update_interval", config.heart_flow_update_interval
-            # )
             if config.INNER_VERSION in SpecifierSet(">=1.3.0"):
                 config.observation_context_size = heartflow_config.get(
                     "observation_context_size", config.observation_context_size
@@ -654,6 +641,10 @@ class BotConfig:
             config.response_max_sentence_num = response_splitter_config.get(
                 "response_max_sentence_num", config.response_max_sentence_num
             )
+            if config.INNER_VERSION in SpecifierSet(">=1.4.2"):
+                config.enable_kaomoji_protection = response_splitter_config.get(
+                    "enable_kaomoji_protection", config.enable_kaomoji_protection
+                )
 
         def groups(parent: dict):
             groups_config = parent["groups"]

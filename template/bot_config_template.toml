@@ -122,16 +122,12 @@ mentioned_bot_inevitable_reply = false # 提及 bot 必然回复
 at_bot_inevitable_reply = false # @bot 必然回复
 
 [emoji]
-max_emoji_num = 90 # 表情包最大数量
+max_emoji_num = 40 # 表情包最大数量
 max_reach_deletion = true # 开启则在达到最大数量时删除表情包，关闭则达到最大数量时不删除，只是不会继续收集表情包
-check_interval = 30 # 检查表情包（注册，破损，删除）的时间间隔(分钟)
-
-auto_save = true  # 是否保存表情包和图片
-
+check_interval = 10 # 检查表情包（注册，破损，删除）的时间间隔(分钟)
 save_pic = false # 是否保存图片
 save_emoji = false # 是否保存表情包
 steal_emoji = true # 是否偷取表情包，让麦麦可以发送她保存的这些表情包
-
 enable_check = false  # 是否启用表情包过滤，只有符合该要求的表情包才会被保存
 check_prompt = "符合公序良俗" # 表情包过滤要求，只有符合该要求的表情包才会被保存
 
@@ -185,6 +181,7 @@ word_replace_rate=0.006 # 整词替换概率
 enable_response_splitter = true # 是否启用回复分割器
 response_max_length = 256 # 回复允许的最大长度
 response_max_sentence_num = 4 # 回复允许的最大句子数
+enable_kaomoji_protection = false # 是否启用颜文字保护
 
 [remote] #发送统计信息，主要是看全球有多少只麦麦
 enable = true
