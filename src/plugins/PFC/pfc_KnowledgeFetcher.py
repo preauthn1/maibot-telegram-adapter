@@ -19,7 +19,7 @@ class KnowledgeFetcher:
             max_tokens=1000,
             request_type="knowledge_fetch",
         )
-    
+
     def _lpmm_get_knowledge(self, query: str) -> str:
         """获取相关知识
 
@@ -29,7 +29,7 @@ class KnowledgeFetcher:
         Returns:
             str: 构造好的,带相关度的知识
         """
-        
+
         logger.debug("正在从LPMM知识库中获取知识")
         try:
             knowledge_info = qa_manager.get_knowledge(query)
@@ -65,14 +65,13 @@ class KnowledgeFetcher:
         )
         knowledge = ""
         if related_memory:
-            
             sources = []
             for memory in related_memory:
                 knowledge += memory[1] + "\n"
                 sources.append(f"记忆片段{memory[0]}")
             knowledge = knowledge.strip(), "，".join(sources)
-        
-        knowledge +="现在有以下**知识**可供参考：\n 请记住这些**知识**，并根据**知识**回答问题。\n"
+
+        knowledge += "现在有以下**知识**可供参考：\n 请记住这些**知识**，并根据**知识**回答问题。\n"
         knowledge += self._lpmm_get_knowledge(query)
 
         return "未找到相关知识", "无记忆匹配"
