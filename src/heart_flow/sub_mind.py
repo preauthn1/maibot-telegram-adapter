@@ -27,7 +27,9 @@ def init_prompt():
     prompt += "{last_loop_prompt}\n"
     prompt += "现在是{time_now}，你正在上网，和qq群里的网友们聊天，以下是正在进行的聊天内容：\n{chat_observe_info}\n"
     prompt += "\n你现在{mood_info}\n"
-    prompt += "请仔细阅读当前群聊内容，分析讨论话题和群成员关系，分析你刚刚发言和别人对你的发言的反应，思考你要不要回复。"
+    prompt += (
+        "请仔细阅读当前群聊内容，分析讨论话题和群成员关系，分析你刚刚发言和别人对你的发言的反应，思考你要不要回复。"
+    )
     prompt += "思考并输出你的内心想法\n"
     prompt += "输出要求：\n"
     prompt += "1. 根据聊天内容生成你的想法，{hf_do_next}\n"
