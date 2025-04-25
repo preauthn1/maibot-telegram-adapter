@@ -41,7 +41,7 @@ def init_prompt():
     prompt += "3. 如需处理消息或回复，请使用工具\n"
 
     Prompt(prompt, "sub_heartflow_prompt_before")
-    
+
     prompt = ""
     prompt += "刚刚你的内心想法是：{current_thinking_info}\n"
     prompt += "{if_replan_prompt}\n"
@@ -131,7 +131,7 @@ class SubMind:
             ("进行深入思考", 0.2),
         ]
 
-        #上一次决策信息
+        # 上一次决策信息
         if last_cycle != None:
             last_action = last_cycle.action_type
             last_reasoning = last_cycle.reasoning
@@ -147,12 +147,11 @@ class SubMind:
             if_replan_prompt = ""
         if current_thinking_info:
             last_loop_prompt = (await global_prompt_manager.get_prompt_async("last_loop")).format(
-                current_thinking_info=current_thinking_info,
-                if_replan_prompt=if_replan_prompt
+                current_thinking_info=current_thinking_info, if_replan_prompt=if_replan_prompt
             )
         else:
             last_loop_prompt = ""
-        
+
         # 加权随机选择思考指导
         hf_do_next = local_random.choices(
             [option[0] for option in hf_options], weights=[option[1] for option in hf_options], k=1
@@ -168,7 +167,7 @@ class SubMind:
             chat_observe_info=chat_observe_info,
             mood_info=mood_info,
             hf_do_next=hf_do_next,
-            last_loop_prompt=last_loop_prompt
+            last_loop_prompt=last_loop_prompt,
         )
 
         # logger.debug(f"[{self.subheartflow_id}] 心流思考提示词构建完成")

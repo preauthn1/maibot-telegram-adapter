@@ -88,9 +88,12 @@ def init_prompt():
         "planner_prompt",
     )
 
-    Prompt('''你原本打算{action}，因为：{reasoning}
-但是你看到了新的消息，你决定重新决定行动。''', "replan_prompt")
-    
+    Prompt(
+        """你原本打算{action}，因为：{reasoning}
+但是你看到了新的消息，你决定重新决定行动。""",
+        "replan_prompt",
+    )
+
     Prompt("你正在qq群里聊天，下面是群里在聊的内容：", "chat_target_group1")
     Prompt("和群里聊天", "chat_target_group2")
     Prompt("你正在和{sender_name}聊天，这是你们之前聊的内容：", "chat_target_private1")

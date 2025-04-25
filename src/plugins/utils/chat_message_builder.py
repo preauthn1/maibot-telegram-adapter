@@ -168,10 +168,10 @@ async def _build_readable_messages_internal(
         user_info = msg.get("user_info", {})
         platform = user_info.get("platform")
         user_id = user_info.get("user_id")
-        
+
         user_nickname = user_info.get("user_nickname")
         user_cardname = user_info.get("user_cardname")
-        
+
         timestamp = msg.get("time")
         content = msg.get("processed_plain_text", "")  # 默认空字符串
 
@@ -311,9 +311,7 @@ async def build_readable_messages(
         )
 
         readable_read_mark = translate_timestamp_to_human_readable(read_mark, mode=timestamp_mode)
-        read_mark_line = (
-            f"\n--- 以上消息已读 (标记时间: {readable_read_mark}) ---\n--- 以下新消息未读---\n"
-        )
+        read_mark_line = f"\n--- 以上消息已读 (标记时间: {readable_read_mark}) ---\n--- 以下新消息未读---\n"
 
         # 组合结果，确保空部分不引入多余的标记或换行
         if formatted_before and formatted_after:

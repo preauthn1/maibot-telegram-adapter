@@ -387,7 +387,7 @@ class PersonInfoManager:
                         time_interval = [t for t in time_interval if 200 <= t <= 8000]
                         # --- 修改后的逻辑 ---
                         # 数据量检查 (至少需要 30 条有效间隔，并且足够进行头尾截断)
-                        if len(time_interval) >= 30 + 10: # 至少30条有效+头尾各5条
+                        if len(time_interval) >= 30 + 10:  # 至少30条有效+头尾各5条
                             time_interval.sort()
 
                             # 画图(log) - 这部分保留
@@ -397,8 +397,17 @@ class PersonInfoManager:
                             plt.figure(figsize=(10, 6))
                             # 使用截断前的数据画图，更能反映原始分布
                             time_series_original = pd.Series(time_interval)
-                            plt.hist(time_series_original, bins=50, density=True, alpha=0.4, color="pink", label="Histogram (Original Filtered)")
-                            time_series_original.plot(kind="kde", color="mediumpurple", linewidth=1, label="Density (Original Filtered)")
+                            plt.hist(
+                                time_series_original,
+                                bins=50,
+                                density=True,
+                                alpha=0.4,
+                                color="pink",
+                                label="Histogram (Original Filtered)",
+                            )
+                            time_series_original.plot(
+                                kind="kde", color="mediumpurple", linewidth=1, label="Density (Original Filtered)"
+                            )
                             plt.grid(True, alpha=0.2)
                             plt.xlim(0, 8000)
                             plt.title(f"Message Interval Distribution (User: {person_id[:8]}...)")
@@ -414,7 +423,7 @@ class PersonInfoManager:
                             trimmed_interval = time_interval[5:-5]
 
                             # 计算截断后数据的 37% 分位数
-                            if trimmed_interval: # 确保截断后列表不为空
+                            if trimmed_interval:  # 确保截断后列表不为空
                                 msg_interval = int(round(np.percentile(trimmed_interval, 37)))
                                 # 更新数据库
                                 await self.update_one_field(person_id, "msg_interval", msg_interval)
@@ -422,7 +431,9 @@ class PersonInfoManager:
                             else:
                                 logger.trace(f"用户{person_id}截断后数据为空，无法计算msg_interval")
                         else:
-                            logger.trace(f"用户{person_id}有效消息间隔数量 ({len(time_interval)}) 不足进行推断 (需要至少 {30+10} 条)")
+                            logger.trace(
+                                f"用户{person_id}有效消息间隔数量 ({len(time_interval)}) 不足进行推断 (需要至少 {30 + 10} 条)"
+                            )
                         # --- 修改结束 ---
                     except Exception as e:
                         logger.trace(f"用户{person_id}消息间隔计算失败: {type(e).__name__}: {str(e)}")

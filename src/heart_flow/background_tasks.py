@@ -231,7 +231,7 @@ class BackgroundTaskManager:
                     stopped_count += 1
             logger.info(f"[Background Task Cleanup] Cleanup cycle finished. Stopped {stopped_count} inactive flows.")
         # else:
-            # logger.debug("[Background Task Cleanup] Cleanup cycle finished. No inactive flows found.")
+        # logger.debug("[Background Task Cleanup] Cleanup cycle finished. No inactive flows found.")
 
     async def _perform_logging_work(self):
         """执行一轮状态日志记录。"""

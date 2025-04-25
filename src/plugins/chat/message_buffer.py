@@ -3,7 +3,7 @@ from src.common.logger import get_module_logger
 import asyncio
 from dataclasses import dataclass, field
 from .message import MessageRecv
-from maim_message import BaseMessageInfo, GroupInfo, Seg
+from maim_message import BaseMessageInfo, GroupInfo
 import hashlib
 from typing import Dict
 from collections import OrderedDict
@@ -128,8 +128,8 @@ class MessageBuffer:
             if result:
                 async with self.lock:  # 再次加锁
                     # 清理所有早于当前消息的已处理消息， 收集所有早于当前消息的F消息的processed_plain_text
-                    keep_msgs = OrderedDict() # 用于存放 T 消息之后的消息
-                    collected_texts = []      # 用于收集 T 消息及之前 F 消息的文本
+                    keep_msgs = OrderedDict()  # 用于存放 T 消息之后的消息
+                    collected_texts = []  # 用于收集 T 消息及之前 F 消息的文本
                     process_target_found = False
 
                     # 遍历当前用户的所有缓冲消息
@@ -138,7 +138,10 @@ class MessageBuffer:
                         if msg_id == message.message_info.message_id:
                             process_target_found = True
                             # 收集这条 T 消息的文本 (如果有)
-                            if hasattr(cache_msg.message, "processed_plain_text") and cache_msg.message.processed_plain_text:
+                            if (
+                                hasattr(cache_msg.message, "processed_plain_text")
+                                and cache_msg.message.processed_plain_text
+                            ):
                                 collected_texts.append(cache_msg.message.processed_plain_text)
                             # 不立即放入 keep_msgs，因为它之前的 F 消息也处理完了
 
@@ -150,15 +153,22 @@ class MessageBuffer:
                         else:
                             if cache_msg.result == "F":
                                 # 收集这条 F 消息的文本 (如果有)
-                                if hasattr(cache_msg.message, "processed_plain_text") and cache_msg.message.processed_plain_text:
+                                if (
+                                    hasattr(cache_msg.message, "processed_plain_text")
+                                    and cache_msg.message.processed_plain_text
+                                ):
                                     collected_texts.append(cache_msg.message.processed_plain_text)
                             elif cache_msg.result == "U":
                                 # 理论上不应该在 T 消息之前还有 U 消息，记录日志
-                                logger.warning(f"异常状态：在目标 T 消息 {message.message_info.message_id} 之前发现未处理的 U 消息 {cache_msg.message.message_info.message_id}")
+                                logger.warning(
+                                    f"异常状态：在目标 T 消息 {message.message_info.message_id} 之前发现未处理的 U 消息 {cache_msg.message.message_info.message_id}"
+                                )
                                 # 也可以选择收集其文本
-                                if hasattr(cache_msg.message, "processed_plain_text") and cache_msg.message.processed_plain_text:
+                                if (
+                                    hasattr(cache_msg.message, "processed_plain_text")
+                                    and cache_msg.message.processed_plain_text
+                                ):
                                     collected_texts.append(cache_msg.message.processed_plain_text)
-
 
                     # 更新当前消息 (message) 的 processed_plain_text
                     # 只有在收集到的文本多于一条，或者只有一条但与原始文本不同时才合并
@@ -172,9 +182,11 @@ class MessageBuffer:
                         if merged_text and merged_text != message.processed_plain_text:
                             message.processed_plain_text = merged_text
                             # 如果合并了文本，原消息不再视为纯 emoji
-                            if hasattr(message, 'is_emoji'):
+                            if hasattr(message, "is_emoji"):
                                 message.is_emoji = False
-                            logger.debug(f"合并了 {len(unique_texts)} 条消息的文本内容到当前消息 {message.message_info.message_id}")
+                            logger.debug(
+                                f"合并了 {len(unique_texts)} 条消息的文本内容到当前消息 {message.message_info.message_id}"
+                            )
 
                     # 更新缓冲池，只保留 T 消息之后的消息
                     self.buffer_pool[person_id_] = keep_msgs

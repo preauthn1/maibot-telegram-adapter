@@ -147,6 +147,7 @@ class SenderError(HeartFCError):
 
     pass
 
+
 class HeartFChatting:
     """
     管理一个连续的Plan-Replier-Sender循环
@@ -289,12 +290,10 @@ class HeartFChatting:
 
                     # 记录规划开始时间点
                     planner_start_db_time = time.time()
-                    
+
                     # 主循环：思考->决策->执行
-                    action_taken, thinking_id = await self._think_plan_execute_loop(
-                        cycle_timers, planner_start_db_time
-                    )
-                        
+                    action_taken, thinking_id = await self._think_plan_execute_loop(cycle_timers, planner_start_db_time)
+
                     # 更新循环信息
                     self._current_cycle.set_thinking_id(thinking_id)
                     self._current_cycle.timers = cycle_timers
@@ -377,16 +376,16 @@ class HeartFChatting:
             # 记录子思维思考内容
             if self._current_cycle:
                 self._current_cycle.set_response_info(sub_mind_thinking=current_mind)
-            
+
             # plan:决策
             with Timer("决策", cycle_timers):
                 planner_result = await self._planner(current_mind, cycle_timers)
-            
+
             action = planner_result.get("action", "error")
             reasoning = planner_result.get("reasoning", "未提供理由")
-            
+
             self._current_cycle.set_action_info(action, reasoning, False)
-            
+
             # 在获取规划结果后检查新消息
             if await self._check_new_messages(planner_start_db_time):
                 if random.random() < 0.3:
@@ -407,11 +406,13 @@ class HeartFChatting:
             if planner_result.get("llm_error"):
                 logger.error(f"{self.log_prefix} LLM失败: {reasoning}")
                 return False, ""
-                
+
             # execute:执行
             with Timer("执行动作", cycle_timers):
-                return await self._handle_action(action, reasoning, planner_result.get("emoji_query", ""), cycle_timers, planner_start_db_time)
-                
+                return await self._handle_action(
+                    action, reasoning, planner_result.get("emoji_query", ""), cycle_timers, planner_start_db_time
+                )
+
         except PlannerError as e:
             logger.error(f"{self.log_prefix} 规划错误: {e}")
             # 更新循环信息
@@ -505,7 +506,7 @@ class HeartFChatting:
                 response_set=reply,
                 send_emoji=emoji_query,
             )
-                
+
             return True, thinking_id
 
         except (ReplierError, SenderError) as e:
@@ -645,9 +646,7 @@ class HeartFChatting:
             with Timer("思考", cycle_timers):
                 # 获取上一个循环的动作
                 # 传递上一个循环的信息给 do_thinking_before_reply
-                current_mind, _past_mind = await self.sub_mind.do_thinking_before_reply(
-                    last_cycle=last_cycle
-                )
+                current_mind, _past_mind = await self.sub_mind.do_thinking_before_reply(last_cycle=last_cycle)
                 return current_mind
         except Exception as e:
             logger.error(f"{self.log_prefix}[SubMind] 思考失败: {e}")
@@ -854,19 +853,21 @@ class HeartFChatting:
             logger.warning(f"{self.log_prefix} 已释放处理锁")
 
         logger.info(f"{self.log_prefix} HeartFChatting关闭完成")
-    
-    async def _build_replan_prompt(
-        self, action: str, reasoning: str
-    ) -> str:
+
+    async def _build_replan_prompt(self, action: str, reasoning: str) -> str:
         """构建 Replanner LLM 的提示词"""
         prompt = (await global_prompt_manager.get_prompt_async("replan_prompt")).format(
             action=action,
             reasoning=reasoning,
         )
         return prompt
-    
+
     async def _build_planner_prompt(
-        self, observed_messages_str: str, current_mind: Optional[str], structured_info: Dict[str, Any], replan_prompt: str
+        self,
+        observed_messages_str: str,
+        current_mind: Optional[str],
+        structured_info: Dict[str, Any],
+        replan_prompt: str,
     ) -> str:
         """构建 Planner LLM 的提示词"""
 

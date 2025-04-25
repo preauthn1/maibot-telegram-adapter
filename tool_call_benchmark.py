@@ -212,7 +212,7 @@ async def run_alternating_tests(iterations=5):
         包含两种测试方法结果的元组
     """
     print(f"开始交替测试（每种方法{iterations}次）...")
-    
+
     # 初始化结果列表
     times_without_tools = []
     times_with_tools = []
@@ -221,7 +221,7 @@ async def run_alternating_tests(iterations=5):
 
     for i in range(iterations):
         print(f"\n第 {i + 1}/{iterations} 轮交替测试")
-        
+
         # 不使用工具的测试
         print("\n  执行不使用工具调用的测试...")
         start_time = time.time()
