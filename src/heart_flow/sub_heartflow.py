@@ -2,7 +2,7 @@ from .observation import Observation, ChattingObservation
 import asyncio
 from src.config.config import global_config
 import time
-from typing import Optional, List, Dict, Tuple, TYPE_CHECKING, Callable, Coroutine
+from typing import Optional, List, Dict, Tuple, Callable, Coroutine
 import traceback
 from src.common.logger import get_module_logger, LogConfig, SUB_HEARTFLOW_STYLE_CONFIG  # noqa: E402
 import random
