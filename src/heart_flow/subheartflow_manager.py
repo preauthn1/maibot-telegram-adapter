@@ -2,7 +2,7 @@ import asyncio
 import time
 import random
 from typing import Dict, Any, Optional, List
-import json # 导入 json 模块
+import json  # 导入 json 模块
 
 # 导入日志模块
 from src.common.logger import get_module_logger, LogConfig, SUBHEARTFLOW_MANAGER_STYLE_CONFIG
@@ -407,13 +407,13 @@ class SubHeartflowManager:
                         f"基于以上信息，该子心流是否表现出足够的活跃迹象或重要性，"
                         f"值得将其唤醒并进入常规聊天(CHAT)状态？\n"
                         f"请以 JSON 格式回答，包含一个键 'decision'，其值为 true 或 false.\n"
-                        f"例如：{{\"decision\": true}}\n"
+                        f'例如：{{"decision": true}}\n'
                         f"请只输出有效的 JSON 对象。"
                     )
 
                     # 调用LLM评估
                     should_activate = await self._llm_evaluate_state_transition(prompt)
-                    if should_activate is None: # 处理解析失败或意外情况
+                    if should_activate is None:  # 处理解析失败或意外情况
                         logger.warning(f"{log_prefix} [{stream_name}] LLM评估返回无效结果，跳过。")
                         continue
 
@@ -445,13 +445,13 @@ class SubHeartflowManager:
                         f"基于以上信息，该子心流是否表现出不活跃、对话结束或不再需要关注的迹象，"
                         f"应该让其进入休眠(ABSENT)状态？\n"
                         f"请以 JSON 格式回答，包含一个键 'decision'，其值为 true (表示应休眠) 或 false (表示不应休眠).\n"
-                        f"例如：{{\"decision\": true}}\n"
+                        f'例如：{{"decision": true}}\n'
                         f"请只输出有效的 JSON 对象。"
                     )
 
                     # 调用LLM评估
                     should_deactivate = await self._llm_evaluate_state_transition(prompt)
-                    if should_deactivate is None: # 处理解析失败或意外情况
+                    if should_deactivate is None:  # 处理解析失败或意外情况
                         logger.warning(f"{log_prefix} [{stream_name}] LLM评估返回无效结果，跳过。")
                         continue
 
@@ -482,24 +482,28 @@ class SubHeartflowManager:
         try:
             # --- 真实的 LLM 调用 ---
             response_text, _ = await self.llm_state_evaluator.generate_response_async(prompt)
-            logger.debug(f"{log_prefix} 使用模型 {self.llm_state_evaluator.model_name} 评估，原始响应: ```{response_text}```")
+            logger.debug(
+                f"{log_prefix} 使用模型 {self.llm_state_evaluator.model_name} 评估，原始响应: ```{response_text}```"
+            )
 
             # --- 解析 JSON 响应 ---
             try:
                 # 尝试去除可能的Markdown代码块标记
-                cleaned_response = response_text.strip().strip('`').strip()
-                if cleaned_response.startswith('json'):
+                cleaned_response = response_text.strip().strip("`").strip()
+                if cleaned_response.startswith("json"):
                     cleaned_response = cleaned_response[4:].strip()
 
                 data = json.loads(cleaned_response)
-                decision = data.get("decision") # 使用 .get() 避免 KeyError
+                decision = data.get("decision")  # 使用 .get() 避免 KeyError
 
                 if isinstance(decision, bool):
                     logger.debug(f"{log_prefix} LLM评估结果 (来自JSON): {'建议转换' if decision else '建议不转换'}")
                     return decision
                 else:
-                    logger.warning(f"{log_prefix} LLM 返回的 JSON 中 'decision' 键的值不是布尔型: {decision}。响应: {response_text}")
-                    return None # 值类型不正确
+                    logger.warning(
+                        f"{log_prefix} LLM 返回的 JSON 中 'decision' 键的值不是布尔型: {decision}。响应: {response_text}"
+                    )
+                    return None  # 值类型不正确
 
             except json.JSONDecodeError as json_err:
                 logger.warning(f"{log_prefix} LLM 返回的响应不是有效的 JSON: {json_err}。响应: {response_text}")
@@ -510,15 +514,15 @@ class SubHeartflowManager:
                 if "false" in response_text.lower():
                     logger.debug(f"{log_prefix} 在非JSON响应中找到 'false'，解释为建议不转换")
                     return False
-                return None # JSON 解析失败，也未找到关键词
-            except Exception as parse_err: # 捕获其他可能的解析错误
+                return None  # JSON 解析失败，也未找到关键词
+            except Exception as parse_err:  # 捕获其他可能的解析错误
                 logger.warning(f"{log_prefix} 解析 LLM JSON 响应时发生意外错误: {parse_err}。响应: {response_text}")
                 return None
 
         except Exception as e:
             logger.error(f"{log_prefix} 调用 LLM 或处理其响应时出错: {e}", exc_info=True)
             traceback.print_exc()
-            return None # LLM 调用或处理失败
+            return None  # LLM 调用或处理失败
 
     def count_subflows_by_state(self, state: ChatState) -> int:
         """统计指定状态的子心流数量"""

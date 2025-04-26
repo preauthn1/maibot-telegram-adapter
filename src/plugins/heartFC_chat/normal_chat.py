@@ -48,7 +48,7 @@ class NormalChat:
         self.mood_manager = MoodManager.get_instance()  # MoodManager 保持单例
         # 存储此实例的兴趣监控任务
         self.start_time = time.time()
-        
+
         self._chat_task: Optional[asyncio.Task] = None
         logger.info(f"[{self.stream_name}] NormalChat 实例初始化完成。")
 
@@ -325,12 +325,12 @@ class NormalChat:
         """处理启动时存在于 interest_dict 中的高兴趣消息。"""
         items_to_process = list(self.interest_dict.items())
         if not items_to_process:
-            return # 没有初始消息，直接返回
+            return  # 没有初始消息，直接返回
 
         logger.info(f"[{self.stream_name}] 发现 {len(items_to_process)} 条初始兴趣消息，开始处理高兴趣部分...")
-        interest_values = [item[1][1] for item in items_to_process] # 提取兴趣值列表
+        interest_values = [item[1][1] for item in items_to_process]  # 提取兴趣值列表
 
-        messages_to_reply = [] # 需要立即回复的消息
+        messages_to_reply = []  # 需要立即回复的消息
 
         if len(interest_values) == 1:
             # 如果只有一个消息，直接处理
@@ -342,7 +342,9 @@ class NormalChat:
                 mean_interest = statistics.mean(interest_values)
                 stdev_interest = statistics.stdev(interest_values)
                 threshold = mean_interest + stdev_interest
-                logger.info(f"[{self.stream_name}] 初始兴趣值 均值: {mean_interest:.2f}, 标准差: {stdev_interest:.2f}, 阈值: {threshold:.2f}")
+                logger.info(
+                    f"[{self.stream_name}] 初始兴趣值 均值: {mean_interest:.2f}, 标准差: {stdev_interest:.2f}, 阈值: {threshold:.2f}"
+                )
 
                 # 找出高于阈值的消息
                 for item in items_to_process:
@@ -351,7 +353,7 @@ class NormalChat:
                         messages_to_reply.append(item)
                 logger.info(f"[{self.stream_name}] 找到 {len(messages_to_reply)} 条高于阈值的初始消息进行处理。")
             except statistics.StatisticsError as e:
-                    logger.error(f"[{self.stream_name}] 计算初始兴趣统计值时出错: {e}，跳过初始处理。")
+                logger.error(f"[{self.stream_name}] 计算初始兴趣统计值时出错: {e}，跳过初始处理。")
 
         # 处理需要回复的消息
         processed_count = 0
@@ -359,18 +361,18 @@ class NormalChat:
             msg_id, (message, interest_value, is_mentioned) = item
             try:
                 logger.info(f"[{self.stream_name}] 处理初始高兴趣消息 {msg_id} (兴趣值: {interest_value:.2f})")
-                await self.normal_response(
-                    message=message, is_mentioned=is_mentioned, interested_rate=interest_value
-                )
+                await self.normal_response(message=message, is_mentioned=is_mentioned, interested_rate=interest_value)
                 processed_count += 1
             except Exception as e:
                 logger.error(f"[{self.stream_name}] 处理初始兴趣消息 {msg_id} 时出错: {e}\n{traceback.format_exc()}")
             finally:
                 # 无论成功与否都清空兴趣字典
                 self.interest_dict.clear()
-                
 
-        logger.info(f"[{self.stream_name}] 初始高兴趣消息处理完毕，共处理 {processed_count} 条。剩余 {len(self.interest_dict)} 条待轮询。")
+        logger.info(
+            f"[{self.stream_name}] 初始高兴趣消息处理完毕，共处理 {processed_count} 条。剩余 {len(self.interest_dict)} 条待轮询。"
+        )
+
     # --- 新增结束 ---
 
     # 保持 staticmethod, 因为不依赖实例状态, 但需要 chat 对象来获取日志上下文

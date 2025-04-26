@@ -87,12 +87,12 @@ class InterestChatting:
 
     def add_interest_dict(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
         """添加消息到兴趣字典
-        
+
         参数:
             message: 接收到的消息
             interest_value: 兴趣值
             is_mentioned: 是否被提及
-            
+
         功能:
             1. 将消息添加到兴趣字典
             2. 更新最后交互时间
@@ -101,7 +101,7 @@ class InterestChatting:
         # 添加新消息
         self.interest_dict[message.message_info.message_id] = (message, interest_value, is_mentioned)
         self.last_interaction_time = time.time()
-        
+
         # 如果字典长度超过10，删除最旧的消息
         if len(self.interest_dict) > 10:
             oldest_key = next(iter(self.interest_dict))
