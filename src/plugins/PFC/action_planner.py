@@ -240,7 +240,7 @@ class ActionPlanner:
                             last_action_context += "- 【重要】失败/取消原因未明确记录。\n"
                     else:
                         last_action_context += f"- 该行动当前状态: {status}\n"
-        print(f"chat_history_text:\n{chat_history_text}")
+
         # --- 构建最终的 Prompt ---
         prompt = f"""{persona_text}。现在你在参与一场QQ私聊，请根据以下【所有信息】审慎且灵活的决策下一步行动，可以发言，可以等待，可以倾听，可以调取知识：
 
