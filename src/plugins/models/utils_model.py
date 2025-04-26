@@ -820,6 +820,7 @@ class LLMRequest:
         policy = request_content["policy"]
         payload = request_content["payload"]
         wait_time = policy["base_wait"] * (2**retry_count)
+        keep_request = False
         if retry_count < policy["max_retries"] - 1:
             keep_request = True
         if isinstance(exception, RequestAbortException):
