@@ -255,7 +255,6 @@ class BackgroundTaskManager:
 
     # --- 结束新增 ---
 
-
     # --- 结束新增 ---
 
     # --- Specific Task Runners --- #
@@ -286,4 +285,3 @@ class BackgroundTaskManager:
             interval=self.interest_eval_interval,
             task_func=self._perform_interest_eval_work,
         )
-

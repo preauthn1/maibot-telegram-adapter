@@ -243,7 +243,7 @@ class SubHeartflow:
         self,
         subheartflow_id,
         mai_states: MaiStateInfo,
-        hfc_no_reply_callback: Callable[[], Coroutine[None, None, None]]
+        hfc_no_reply_callback: Callable[[], Coroutine[None, None, None]],
     ):
         """子心流初始化函数
 
@@ -380,8 +380,8 @@ class SubHeartflow:
             self.heart_fc_instance = HeartFChatting(
                 chat_id=self.subheartflow_id,
                 sub_mind=self.sub_mind,
-                observations=self.observations, # 传递所有观察者
-                on_consecutive_no_reply_callback=self.hfc_no_reply_callback # <-- Use stored callback
+                observations=self.observations,  # 传递所有观察者
+                on_consecutive_no_reply_callback=self.hfc_no_reply_callback,  # <-- Use stored callback
             )
 
             # 初始化并启动 HeartFChatting

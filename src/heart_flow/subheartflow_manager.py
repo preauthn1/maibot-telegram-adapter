@@ -2,8 +2,8 @@ import asyncio
 import time
 import random
 from typing import Dict, Any, Optional, List
-import json # 导入 json 模块
-import functools # <-- 新增导入
+import json  # 导入 json 模块
+import functools  # <-- 新增导入
 
 # 导入日志模块
 from src.common.logger import get_module_logger, LogConfig, SUBHEARTFLOW_MANAGER_STYLE_CONFIG
@@ -88,7 +88,7 @@ class SubHeartflowManager:
                 new_subflow = SubHeartflow(
                     subheartflow_id,
                     self.mai_state_info,
-                    hfc_callback # <-- 传递 partial 创建的回调
+                    hfc_callback,  # <-- 传递 partial 创建的回调
                 )
 
                 # 异步初始化
@@ -134,20 +134,23 @@ class SubHeartflowManager:
                 if subflow.chat_state.chat_status == ChatState.ABSENT:
                     return True
                 else:
-                    logger.warning(f"{log_prefix} 调用 change_chat_state 后，{stream_name} 状态仍为 {subflow.chat_state.chat_status.value}")
+                    logger.warning(
+                        f"{log_prefix} 调用 change_chat_state 后，{stream_name} 状态仍为 {subflow.chat_state.chat_status.value}"
+                    )
                     return False
             except Exception as e:
                 logger.error(f"{log_prefix} 设置 {stream_name} 状态为 ABSENT 时失败: {e}", exc_info=True)
                 return False
         else:
             logger.debug(f"{log_prefix} {stream_name} 已是 ABSENT 状态")
-            return True # 已经是目标状态，视为成功
+            return True  # 已经是目标状态，视为成功
+
     # --- 结束新增 ---
 
     async def sleep_subheartflow(self, subheartflow_id: Any, reason: str) -> bool:
         """停止指定的子心流并将其状态设置为 ABSENT"""
         log_prefix = "[子心流管理]"
-        async with self._lock: # 加锁以安全访问字典
+        async with self._lock:  # 加锁以安全访问字典
             subheartflow = self.subheartflows.get(subheartflow_id)
 
             stream_name = chat_manager.get_stream_name(subheartflow_id) or subheartflow_id
@@ -229,7 +232,7 @@ class SubHeartflowManager:
         changed_count = 0
         processed_count = 0
 
-        async with self._lock: # 获取锁以安全迭代
+        async with self._lock:  # 获取锁以安全迭代
             # 使用 list() 创建一个当前值的快照，防止在迭代时修改字典
             flows_to_update = list(self.subheartflows.values())
             processed_count = len(flows_to_update)
@@ -239,8 +242,7 @@ class SubHeartflowManager:
 
             for subflow in flows_to_update:
                 # 记录原始状态，以便统计实际改变的数量
-                original_state_was_absent = (subflow.chat_state.chat_status == ChatState.ABSENT)
-
+                original_state_was_absent = subflow.chat_state.chat_status == ChatState.ABSENT
 
                 success = await self._try_set_subflow_absent_internal(subflow, log_prefix)
 
@@ -345,7 +347,6 @@ class SubHeartflowManager:
                 log_prefix = f"[{stream_name}]"
                 current_subflow_state = sub_hf.chat_state.chat_status
 
-
                 _observation_summary = "没有可用的观察信息。"  # 默认值
 
                 first_observation = sub_hf.observations[0]
@@ -357,12 +358,10 @@ class SubHeartflowManager:
                 else:
                     logger.warning(f"{log_prefix} [{stream_name}] 第一个观察者不是 ChattingObservation 类型。")
 
-
-
                 # --- 获取麦麦状态 ---
                 mai_state_description = f"你当前状态: {current_mai_state.value}。"
-                
-                        # 获取个性化信息
+
+                # 获取个性化信息
                 individuality = Individuality.get_instance()
 
                 # 构建个性部分
@@ -378,7 +377,6 @@ class SubHeartflowManager:
                 if individuality.identity.identity_detail:
                     random_detail = random.choice(individuality.identity.identity_detail)
                     prompt_personality += f"，{random_detail}"
-                
 
                 # --- 针对 ABSENT 状态 ---
                 if current_subflow_state == ChatState.ABSENT:
@@ -392,14 +390,14 @@ class SubHeartflowManager:
                         f"进入常规聊天(CHAT)状态？\n"
                         f"给出你的判断，和理由，然后以 JSON 格式回答"
                         f"包含键 'decision'，如果要开始聊天，值为 true ，否则为 false.\n"
-                        f"包含键 'reason'，其值为你的理由。\n"  
-                        f"例如：{{\"decision\": true, \"reason\": \"因为我想聊天\"}}\n"
+                        f"包含键 'reason'，其值为你的理由。\n"
+                        f'例如：{{"decision": true, "reason": "因为我想聊天"}}\n'
                         f"请只输出有效的 JSON 对象。"
                     )
 
                     # 调用LLM评估
                     should_activate = await self._llm_evaluate_state_transition(prompt)
-                    if should_activate is None: # 处理解析失败或意外情况
+                    if should_activate is None:  # 处理解析失败或意外情况
                         logger.warning(f"{log_prefix}LLM评估返回无效结果，跳过。")
                         continue
 
@@ -435,14 +433,14 @@ class SubHeartflowManager:
                         f"还是暂时离开聊天，进入休眠状态？\n"
                         f"给出你的判断，和理由，然后以 JSON 格式回答"
                         f"包含键 'decision'，如果要离开聊天，值为 true ，否则为 false.\n"
-                        f"包含键 'reason'，其值为你的理由。\n"  
-                        f"例如：{{\"decision\": true, \"reason\": \"因为我想休息\"}}\n"
+                        f"包含键 'reason'，其值为你的理由。\n"
+                        f'例如：{{"decision": true, "reason": "因为我想休息"}}\n'
                         f"请只输出有效的 JSON 对象。"
                     )
 
                     # 调用LLM评估
                     should_deactivate = await self._llm_evaluate_state_transition(prompt)
-                    if should_deactivate is None: # 处理解析失败或意外情况
+                    if should_deactivate is None:  # 处理解析失败或意外情况
                         logger.warning(f"{log_prefix}LLM评估返回无效结果，跳过。")
                         continue
 
@@ -453,8 +451,6 @@ class SubHeartflowManager:
                             transitioned_to_absent += 1
                     else:
                         logger.info(f"{log_prefix}LLM建议不进入ABSENT状态。")
-                        
-                        
 
     async def _llm_evaluate_state_transition(self, prompt: str) -> Optional[bool]:
         """
@@ -573,6 +569,7 @@ class SubHeartflowManager:
         # 注意：这里不需要再获取锁，因为 request_absent_transition 内部会处理锁
         logger.debug(f"[管理器 HFC 处理器] 接收到来自 {subheartflow_id} 的 HFC 无回复信号")
         await self.request_absent_transition(subheartflow_id)
+
     # --- 结束新增 --- #
 
     # --- 新增：处理来自 HeartFChatting 的状态转换请求 --- #
@@ -608,4 +605,5 @@ class SubHeartflowManager:
                 logger.warning(
                     f"[状态转换请求] 收到对 {stream_name} 的请求，但其状态为 {current_state.value} (非 FOCUSED)，不执行转换"
                 )
+
     # --- 结束新增 --- #

@@ -154,14 +154,14 @@ class HeartFChatting:
     其生命周期现在由其关联的 SubHeartflow 的 FOCUSED 状态控制。
     """
 
-    CONSECUTIVE_NO_REPLY_THRESHOLD = 4 # 连续不回复的阈值
+    CONSECUTIVE_NO_REPLY_THRESHOLD = 4  # 连续不回复的阈值
 
     def __init__(
         self,
         chat_id: str,
         sub_mind: SubMind,
         observations: Observation,
-        on_consecutive_no_reply_callback: Callable[[], Coroutine[None, None, None]]
+        on_consecutive_no_reply_callback: Callable[[], Coroutine[None, None, None]],
     ):
         """
         HeartFChatting 初始化函数
@@ -209,8 +209,8 @@ class HeartFChatting:
         self._cycle_counter = 0
         self._cycle_history: Deque[CycleInfo] = deque(maxlen=10)  # 保留最近10个循环的信息
         self._current_cycle: Optional[CycleInfo] = None
-        self._lian_xu_bu_hui_fu_ci_shu: int = 0 # <--- 新增：连续不回复计数器
-        self._shutting_down: bool = False # <--- 新增：关闭标志位
+        self._lian_xu_bu_hui_fu_ci_shu: int = 0  # <--- 新增：连续不回复计数器
+        self._shutting_down: bool = False  # <--- 新增：关闭标志位
 
     async def _initialize(self) -> bool:
         """
@@ -309,9 +309,9 @@ class HeartFChatting:
                         # 如果未能获取锁（理论上不太可能，除非 shutdown 过程中释放了但又被抢了？）
                         # 或者也可以在这里再次检查 self._shutting_down
                         if self._shutting_down:
-                            break # 再次检查，确保退出
+                            break  # 再次检查，确保退出
                         logger.warning(f"{self.log_prefix} 未能获取循环处理锁，跳过本次循环。")
-                        await asyncio.sleep(0.1) # 短暂等待避免空转
+                        await asyncio.sleep(0.1)  # 短暂等待避免空转
                         continue
 
                     # 记录规划开始时间点
@@ -600,27 +600,30 @@ class HeartFChatting:
 
             if not self._shutting_down:
                 self._lian_xu_bu_hui_fu_ci_shu += 1
-                logger.debug(f"{self.log_prefix} 连续不回复计数增加: {self._lian_xu_bu_hui_fu_ci_shu}/{self.CONSECUTIVE_NO_REPLY_THRESHOLD}")
+                logger.debug(
+                    f"{self.log_prefix} 连续不回复计数增加: {self._lian_xu_bu_hui_fu_ci_shu}/{self.CONSECUTIVE_NO_REPLY_THRESHOLD}"
+                )
 
                 # 检查是否达到阈值
                 if self._lian_xu_bu_hui_fu_ci_shu >= self.CONSECUTIVE_NO_REPLY_THRESHOLD:
-                    logger.info(f"{self.log_prefix} 连续不回复达到阈值 ({self._lian_xu_bu_hui_fu_ci_shu}次)，调用回调请求状态转换")
+                    logger.info(
+                        f"{self.log_prefix} 连续不回复达到阈值 ({self._lian_xu_bu_hui_fu_ci_shu}次)，调用回调请求状态转换"
+                    )
                     # 调用回调。注意：这里不重置计数器，依赖回调函数成功改变状态来隐式重置上下文。
                     await self.on_consecutive_no_reply_callback()
 
-
-            return True 
+            return True
 
         except asyncio.CancelledError:
             # 如果在等待过程中任务被取消（可能是因为 shutdown）
             logger.info(f"{self.log_prefix} 处理 'no_reply' 时等待被中断 (CancelledError)")
             # 让异常向上传播，由 _hfc_loop 的异常处理逻辑接管
             raise
-        except Exception as e: # 捕获调用管理器或其他地方可能发生的错误
+        except Exception as e:  # 捕获调用管理器或其他地方可能发生的错误
             logger.error(f"{self.log_prefix} 处理 'no_reply' 时发生错误: {e}")
             logger.error(traceback.format_exc())
             # 发生意外错误时，可以选择是否重置计数器，这里选择不重置
-            return False # 表示动作未成功
+            return False  # 表示动作未成功
 
     async def _wait_for_new_message(self, observation, planner_start_db_time: float, log_prefix: str) -> bool:
         """
@@ -639,7 +642,7 @@ class HeartFChatting:
             # --- 在每次循环开始时检查关闭标志 ---
             if self._shutting_down:
                 logger.info(f"{log_prefix} 等待新消息时检测到关闭信号，中断等待。")
-                return False # 表示因为关闭而退出
+                return False  # 表示因为关闭而退出
             # -----------------------------------
 
             # 检查新消息
@@ -654,7 +657,7 @@ class HeartFChatting:
 
             try:
                 # 短暂休眠，让其他任务有机会运行，并能更快响应取消或关闭
-                await asyncio.sleep(0.5) # 缩短休眠时间
+                await asyncio.sleep(0.5)  # 缩短休眠时间
             except asyncio.CancelledError:
                 # 如果在休眠时被取消，再次检查关闭标志
                 # 如果是正常关闭，则不需要警告
@@ -910,7 +913,7 @@ class HeartFChatting:
     async def shutdown(self):
         """优雅关闭HeartFChatting实例，取消活动循环任务"""
         logger.info(f"{self.log_prefix} 正在关闭HeartFChatting...")
-        self._shutting_down = True # <-- 在开始关闭时设置标志位
+        self._shutting_down = True  # <-- 在开始关闭时设置标志位
 
         # 取消循环任务
         if self._loop_task and not self._loop_task.done():
