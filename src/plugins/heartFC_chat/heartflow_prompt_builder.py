@@ -535,23 +535,34 @@ class PromptBuilder:
 
         logger.debug(f"获取知识库内容，元消息：{message[:30]}...，消息长度: {len(message)}")
         # 从LPMM知识库获取知识
-        found_knowledge_from_lpmm = qa_manager.get_knowledge(message)
+        try:
+            found_knowledge_from_lpmm = qa_manager.get_knowledge(message)
 
-        end_time = time.time()
-        if found_knowledge_from_lpmm is not None:
-            logger.debug(
-                f"从LPMM知识库获取知识，相关信息：{found_knowledge_from_lpmm[:100]}...，信息长度: {len(found_knowledge_from_lpmm)}"
-            )
-            related_info += found_knowledge_from_lpmm
-            logger.debug(f"获取知识库内容耗时: {(end_time - start_time):.3f}秒")
-            logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
-            return related_info
-        else:
-            logger.debug("从LPMM知识库获取知识失败，使用旧版数据库进行检索")
-            knowledge_from_old = await self.get_prompt_info_old(message, threshold=0.38)
-            related_info += knowledge_from_old
-            logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
-            return related_info
+            end_time = time.time()
+            if found_knowledge_from_lpmm is not None:
+                logger.debug(
+                    f"从LPMM知识库获取知识，相关信息：{found_knowledge_from_lpmm[:100]}...，信息长度: {len(found_knowledge_from_lpmm)}"
+                )
+                related_info += found_knowledge_from_lpmm
+                logger.debug(f"获取知识库内容耗时: {(end_time - start_time):.3f}秒")
+                logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
+                return related_info
+            else:
+                logger.debug("从LPMM知识库获取知识失败，使用旧版数据库进行检索")
+                knowledge_from_old = await self.get_prompt_info_old(message, threshold=0.38)
+                related_info += knowledge_from_old
+                logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
+                return related_info
+        except Exception as e:
+            logger.error(f"获取知识库内容时发生异常: {str(e)}")
+            try:
+                knowledge_from_old = await self.get_prompt_info_old(message, threshold=0.38)
+                related_info += knowledge_from_old
+                logger.debug(f"异常后使用旧版数据库获取知识，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
+                return related_info
+            except Exception as e2:
+                logger.error(f"使用旧版数据库获取知识时也发生异常: {str(e2)}")
+                return ""
 
     @staticmethod
     def get_info_from_db(
