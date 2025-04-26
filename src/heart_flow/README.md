@@ -101,10 +101,12 @@ c HeartFChatting工作方式
 - **文件**: `subheartflow_manager.py`
 - **职责**:
     - 作为 `Heartflow` 的成员变量存在。
+    - **在初始化时接收并持有 `Heartflow` 的 `MaiStateInfo` 实例。**
     - 负责所有 `SubHeartflow` 实例的生命周期管理，包括：
-        - 创建和获取 (`create_or_get_subheartflow`)。
-        - 停止和清理 (`stop_subheartflow`, `cleanup_inactive_subheartflows`)。
-        - 根据 `Heartflow` 的状态和限制条件，激活、停用或调整子心流的状态。
+        - 创建和获取 (`get_or_create_subheartflow`)。
+        - 停止和清理 (`sleep_subheartflow`, `cleanup_inactive_subheartflows`)。
+        - 根据 `Heartflow` 的状态 (`self.mai_state_info`) 和限制条件，激活、停用或调整子心流的状态（例如 `enforce_subheartflow_limits`, `activate_random_subflows_to_chat`, `evaluate_interest_and_promote`）。
+    - **注意**: 不再提供直接获取所有 ID (`get_all_subheartflows_ids`) 或单个子心流 (`get_subheartflow`) 的公共方法。
 
 ### 1.5. 消息处理与回复流程 (Message Processing vs. Replying Flow)
 - **关注点分离**: 系统严格区分了接收和处理传入消息的流程与决定和生成回复的流程。
@@ -125,9 +127,10 @@ c HeartFChatting工作方式
 ### 2.1. Heart Flow 整体控制
 - **控制者**: 主心流 (`Heartflow`)
 - **核心职责**:
-    - 通过其成员 `SubHeartflowManager` 创建和管理子心流。
+    - 通过其成员 `SubHeartflowManager` 创建和管理子心流（**在创建 `SubHeartflowManager` 时会传入自身的 `MaiStateInfo`**）。
     - 通过其成员 `self.current_state: MaiStateInfo` 控制整体行为模式。
     - 管理系统级后台任务。
+    - **注意**: 不再提供直接获取所有子心流 ID (`get_all_subheartflows_streams_ids`) 的公共方法。
 
 ### 2.2. Heart Flow 状态 (`MaiStateInfo`)
 - **定义与管理**: `Heartflow` 持有 `MaiStateInfo` 的实例 (`self.current_state`) 来管理其状态。状态的枚举定义在 `my_state_manager.py` 中的 `MaiState`。
@@ -146,10 +149,10 @@ c HeartFChatting工作方式
     *   `ChatState.FOCUSED` (专注/认真水群): 专注聊天模式。激活 `HeartFlowChatInstance`。
 - **选择**: 子心流可以根据外部指令（来自 `SubHeartflowManager`）或内部逻辑（未来的扩展）选择进入 `ABSENT` 状态（不回复不观察），或进入 `CHAT` / `FOCUSED` 中的一种回复模式。
 - **状态转换机制** (由 `SubHeartflowManager` 驱动):
-    - **激活 `CHAT`**: 当 `Heartflow` 状态从 `OFFLINE` 变为允许聊天的状态时，`SubHeartflowManager` 会根据限制，选择部分 `ABSENT` 状态的子心流，**检查当前 CHAT 状态数量是否达到上限**，如果未达上限，则调用其 `set_chat_state` 方法将其转换为 `CHAT`。
-    - **激活 `FOCUSED`**: `SubHeartflowManager` 会定期评估处于 `CHAT` 状态的子心流的兴趣度 (`InterestChatting.start_hfc_probability`)，若满足条件且**检查当前 FOCUSED 状态数量未达上限**，则调用 `set_chat_state` 将其提升为 `FOCUSED`。
-    - **停用/回退**: `SubHeartflowManager` 可能因 `Heartflow` 状态变化、达到数量限制、长时间不活跃或随机概率等原因，调用 `set_chat_state` 将子心流状态设置为 `ABSENT` 或从 `FOCUSED` 回退到 `CHAT`。
-    - **注意**: `set_chat_state` 方法本身只负责执行状态转换和管理内部聊天实例（`NormalChatInstance`/`HeartFlowChatInstance`），不再进行限额检查。限额检查的责任完全由调用方（即 `SubHeartflowManager` 中的相关方法）承担。
+    - **激活 `CHAT`**: 当 `Heartflow` 状态从 `OFFLINE` 变为允许聊天的状态时，`SubHeartflowManager` 会根据限制（通过 `self.mai_state_info` 获取），选择部分 `ABSENT` 状态的子心流，**检查当前 CHAT 状态数量是否达到上限**，如果未达上限，则调用其 `change_chat_state` 方法将其转换为 `CHAT`。
+    - **激活 `FOCUSED`**: `SubHeartflowManager` 会定期评估处于 `CHAT` 状态的子心流的兴趣度 (`InterestChatting.start_hfc_probability`)，若满足条件且**检查当前 FOCUSED 状态数量未达上限**（通过 `self.mai_state_info` 获取限制），则调用 `change_chat_state` 将其提升为 `FOCUSED`。
+    - **停用/回退**: `SubHeartflowManager` 可能因 `Heartflow` 状态变化、达到数量限制、长时间不活跃或随机概率等原因，调用 `change_chat_state` 将子心流状态设置为 `ABSENT` 或从 `FOCUSED` 回退到 `CHAT`。
+    - **注意**: `change_chat_state` 方法本身只负责执行状态转换和管理内部聊天实例（`NormalChatInstance`/`HeartFlowChatInstance`），不再进行限额检查。限额检查的责任完全由调用方（即 `SubHeartflowManager` 中的相关方法，这些方法会使用内部存储的 `mai_state_info` 来获取限制）承担。
 
 ## 3. 聊天实例详解 (Chat Instances Explained)
 
@@ -185,23 +188,24 @@ c HeartFChatting工作方式
 
 1.  **启动**: `Heartflow` 启动，初始化 `MaiStateInfo` (例如 `OFFLINE`) 和 `SubHeartflowManager`。
 2.  **状态变化**: 用户操作或内部逻辑使 `Heartflow` 的 `current_state` 变为 `NORMAL_CHAT`。
-3.  **管理器响应**: `SubHeartflowManager` 检测到状态变化，根据 `NORMAL_CHAT` 的限制，调用 `create_or_get_subheartflow` 获取或创建子心流，并通过 `set_chat_state` 将部分子心流状态从 `ABSENT` 激活为 `CHAT`。
+3.  **管理器响应**: `SubHeartflowManager` 检测到状态变化，根据 `NORMAL_CHAT` 的限制，调用 `get_or_create_subheartflow` 获取或创建子心流，并通过 `change_chat_state` 将部分子心流状态从 `ABSENT` 激活为 `CHAT`。
 4.  **子心流激活**: 被激活的 `SubHeartflow` 启动其 `NormalChatInstance`。
 5.  **信息接收**: 该 `SubHeartflow` 的 `ChattingObservation` 开始从数据库拉取新消息。
 6.  **普通回复**: `NormalChatInstance` 处理观察到的信息，执行普通回复逻辑。
 7.  **兴趣评估**: `SubHeartflowManager` 定期评估该子心流的 `InterestChatting` 状态。
-8.  **提升状态**: 若兴趣度达标且 `Heartflow` 状态允许，`SubHeartflowManager` 调用该子心流的 `set_chat_state` 将其状态提升为 `FOCUSED`。
+8.  **提升状态**: 若兴趣度达标且 `Heartflow` 状态允许，`SubHeartflowManager` 调用该子心流的 `change_chat_state` 将其状态提升为 `FOCUSED`。
 9.  **子心流切换**: `SubHeartflow` 内部停止 `NormalChatInstance`，启动 `HeartFlowChatInstance`。
 10. **专注回复**: `HeartFlowChatInstance` 开始根据其逻辑进行更深入的交互。
-11. **状态回落/停用**: 若 `Heartflow` 状态变为 `OFFLINE`，`SubHeartflowManager` 会调用所有子心流的 `set_chat_state(ChatState.ABSENT)`，使其停止活动。
+11. **状态回落/停用**: 若 `Heartflow` 状态变为 `OFFLINE`，`SubHeartflowManager` 会调用所有子心流的 `change_chat_state(ChatState.ABSENT)`，使其停止活动。
 
 ## 5. 使用与配置 (Usage and Configuration)
 
 ### 5.1. 使用说明 (Code Examples)
-- **(内部)创建/获取子心流** (由 `SubHeartflowManager` 调用):
+- **(内部)创建/获取子心流** (由 `SubHeartflowManager` 调用, 示例):
   ```python
-  # subheartflow_manager.py
-  new_subflow = SubHeartflow(subheartflow_id, mai_states)
+  # subheartflow_manager.py (get_or_create_subheartflow 内部)
+  # 注意：mai_states 现在是 self.mai_state_info
+  new_subflow = SubHeartflow(subheartflow_id, self.mai_state_info)
   await new_subflow.initialize()
   observation = ChattingObservation(chat_id=subheartflow_id)
   new_subflow.add_observation(observation)

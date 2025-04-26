@@ -2,7 +2,7 @@ from .observation import Observation, ChattingObservation
 import asyncio
 from src.config.config import global_config
 import time
-from typing import Optional, List, Dict, Callable
+from typing import Optional, List, Dict, Callable, Tuple
 import traceback
 from src.common.logger import get_module_logger, LogConfig, SUB_HEARTFLOW_STYLE_CONFIG  # noqa: E402
 import random
@@ -41,7 +41,6 @@ class InterestChatting:
         increase_rate=probability_increase_rate_per_second,
         decay_factor=global_config.probability_decay_factor_per_second,
         max_probability=max_reply_probability,
-        state_change_callback: Optional[Callable[[ChatState], None]] = None,
     ):
         # 基础属性初始化
         self.interest_level: float = 0.0
@@ -69,13 +68,23 @@ class InterestChatting:
 
         self.above_threshold = False
         self.start_hfc_probability = 0.0
+    
+    async def initialize(self):
+        async with self._task_lock:
+            if self._is_running:
+                logger.debug("后台兴趣更新任务已在运行中。")
+                return
 
-    @classmethod
-    async def create(cls, *args, **kwargs):
-        """异步工厂方法，用于创建并初始化 InterestChatting 实例"""
-        instance = cls(*args, **kwargs)
-        await instance.start_updates(instance.update_interval)
-        return instance
+            # 清理已完成或已取消的任务
+            if self.update_task and (self.update_task.done() or self.update_task.cancelled()):
+                self.update_task = None
+
+            if not self.update_task:
+                self._stop_event.clear()
+                self._is_running = True
+                self.update_task = asyncio.create_task(self._run_update_loop(self.update_interval))
+                logger.debug("后台兴趣更新任务已创建并启动。")
+        
 
     def add_interest_dict(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
         self.interest_dict[message.message_info.message_id] = (message, interest_value, is_mentioned)
@@ -123,11 +132,11 @@ class InterestChatting:
             if self.start_hfc_probability != 0:
                 self.start_hfc_probability -= 0.1
 
-    async def increase_interest(self, current_time: float, value: float):
+    async def increase_interest(self, value: float):
         self.interest_level += value
         self.interest_level = min(self.interest_level, self.max_interest)
 
-    async def decrease_interest(self, current_time: float, value: float):
+    async def decrease_interest(self, value: float):
         self.interest_level -= value
         self.interest_level = max(self.interest_level, 0.0)
 
@@ -176,22 +185,6 @@ class InterestChatting:
             self._is_running = False
             logger.info("InterestChatting 更新循环已停止。")
 
-    async def start_updates(self, update_interval: float = 1.0):
-        """启动后台更新任务，使用锁确保并发安全"""
-        async with self._task_lock:
-            if self._is_running:
-                logger.debug("后台兴趣更新任务已在运行中。")
-                return
-
-            # 清理已完成或已取消的任务
-            if self.update_task and (self.update_task.done() or self.update_task.cancelled()):
-                self.update_task = None
-
-            if not self.update_task:
-                self._stop_event.clear()
-                self._is_running = True
-                self.update_task = asyncio.create_task(self._run_update_loop(update_interval))
-                logger.debug("后台兴趣更新任务已创建并启动。")
 
     async def stop_updates(self):
         """停止后台更新任务，使用锁确保并发安全"""
@@ -241,12 +234,14 @@ class SubHeartflow:
 
         # 这个聊天流的状态
         self.chat_state: ChatStateInfo = ChatStateInfo()
+        self.chat_state_changed_time: float = time.time()
+        self.chat_state_last_time: float = 0
+        self.history_chat_state: List[Tuple[ChatState, float]] = []
 
         # 兴趣检测器
-        self.interest_chatting = None
+        self.interest_chatting: InterestChatting = InterestChatting()
 
         # 活动状态管理
-        self.last_active_time = time.time()  # 最后活跃时间
         self.should_stop = False  # 停止标志
         self.task: Optional[asyncio.Task] = None  # 后台任务
 
@@ -269,23 +264,12 @@ class SubHeartflow:
         self.log_prefix = chat_manager.get_stream_name(self.subheartflow_id) or self.subheartflow_id
 
     async def initialize(self):
-        """异步初始化方法，创建兴趣检测器"""
-        self.interest_chatting = await InterestChatting.create(state_change_callback=self.set_chat_state)
-        logger.debug(f"{self.log_prefix} InterestChatting 实例已创建并初始化。")
+        """异步初始化方法，创建兴趣流"""
+        await self.interest_chatting.initialize()
+        logger.debug(f"{self.log_prefix} InterestChatting 实例已初始化。")
 
-    async def add_time_current_state(self, add_time: float):
-        """增加当前状态的时间"""
-        self.current_state_time += add_time
-
-    async def change_to_state_chat(self):
-        """改变到随便水群状态"""
-        self.current_state_time = 120
-        self._start_normal_chat()
-
-    async def change_to_state_focused(self):
-        """改变到认真水群状态"""
-        self.current_state_time = 60
-        self._start_heart_fc_chat()
+    def update_last_chat_state_time(self):
+        self.chat_state_last_time = time.time() - self.chat_state_changed_time
 
     async def _stop_normal_chat(self):
         """
@@ -381,11 +365,11 @@ class SubHeartflow:
             self.heart_fc_instance = None  # 创建或初始化异常，清理实例
             return False
 
-    async def set_chat_state(self, new_state: "ChatState"):
+    async def change_chat_state(self, new_state: "ChatState"):
         """更新sub_heartflow的聊天状态，并管理 HeartFChatting 和 NormalChat 实例及任务"""
         current_state = self.chat_state.chat_status
+        
         if current_state == new_state:
-            # logger.trace(f"{self.log_prefix} 状态已为 {current_state.value}, 无需更改。") # 减少日志噪音
             return
 
         log_prefix = self.log_prefix
@@ -422,9 +406,14 @@ class SubHeartflow:
 
         # --- 更新状态和最后活动时间 ---
         if state_changed:
-            logger.info(f"{log_prefix} 麦麦的聊天状态从 {current_state.value} 变更为 {new_state.value}")
+            self.update_last_chat_state_time()
+            self.history_chat_state.append((current_state, self.chat_state_last_time))
+            
+            logger.info(f"{log_prefix} 麦麦的聊天状态从 {current_state.value} （持续了 {self.chat_state_last_time} 秒） 变更为 {new_state.value}")
+            
             self.chat_state.chat_status = new_state
-            self.last_active_time = time.time()
+            self.chat_state_last_time = 0
+            self.chat_state_changed_time = time.time()
         else:
             # 如果因为某些原因（如启动失败）没有成功改变状态，记录一下
             logger.debug(
@@ -479,9 +468,6 @@ class SubHeartflow:
     async def should_evaluate_reply(self) -> bool:
         return await self.interest_chatting.should_evaluate_reply()
 
-    async def add_interest_dict_entry(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
-        self.interest_chatting.add_interest_dict(message, interest_value, is_mentioned)
-
     def get_interest_dict(self) -> Dict[str, tuple[MessageRecv, float, bool]]:
         return self.interest_chatting.interest_dict
 
@@ -495,7 +481,7 @@ class SubHeartflow:
             "interest_state": interest_state,
             "current_mind": self.sub_mind.current_mind,
             "chat_state": self.chat_state.chat_status.value,
-            "last_active_time": self.last_active_time,
+            "last_changed_state_time": self.last_changed_state_time,
         }
 
     async def shutdown(self):
