@@ -409,19 +409,23 @@ class NormalChat:
 
     async def start_chat(self):
         """为此 NormalChat 实例关联的 ChatStream 启动聊天任务（如果尚未运行），
-        并在启动前处理一次初始的高兴趣消息。"""
+        并在后台处理一次初始的高兴趣消息。""" # 文言文注释示例：启聊之始，若有遗珠，当于暗处拂拭，勿碍正途。
         if self._chat_task is None or self._chat_task.done():
-            # --- 修改：调用新的私有方法处理初始消息 ---
-            await self._process_initial_interest_messages()
+            # --- 修改：使用 create_task 启动初始消息处理 ---
+            logger.info(f"[{self.stream_name}] 开始后台处理初始兴趣消息...")
+            # 创建一个任务来处理初始消息，不阻塞当前流程
+            initial_process_task = asyncio.create_task(self._process_initial_interest_messages())
+            # 可以考虑给这个任务也添加完成回调来记录日志或处理错误
+            # initial_process_task.add_done_callback(...)
             # --- 修改结束 ---
 
-            # 启动后台轮询任务
+            # 启动后台轮询任务 (这部分不变)
             logger.info(f"[{self.stream_name}] 启动后台兴趣消息轮询任务...")
-            task = asyncio.create_task(self._reply_interested_message())
-            task.add_done_callback(lambda t: self._handle_task_completion(t))  # 回调现在是实例方法
-            self._chat_task = task
+            polling_task = asyncio.create_task(self._reply_interested_message()) # 注意变量名区分
+            polling_task.add_done_callback(lambda t: self._handle_task_completion(t))
+            self._chat_task = polling_task # self._chat_task 仍然指向主要的轮询任务
         else:
-            logger.info(f"[{self.stream_name}] 聊天任务已在运行中。")
+            logger.info(f"[{self.stream_name}] 聊天轮询任务已在运行中。")
 
     def _handle_task_completion(self, task: asyncio.Task):
         """任务完成回调处理"""

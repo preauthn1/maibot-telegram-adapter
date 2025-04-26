@@ -37,13 +37,13 @@ class MaiState(enum.Enum):
             return 1000
 
         if self == MaiState.OFFLINE:
-            return 0
+            return 10
         elif self == MaiState.PEEKING:
-            return 2
+            return 30
         elif self == MaiState.NORMAL_CHAT:
-            return 3
+            return 40
         elif self == MaiState.FOCUSED_CHAT:
-            return 2
+            return 30
 
     def get_focused_chat_max_num(self):
         # 调试用
@@ -51,13 +51,13 @@ class MaiState(enum.Enum):
             return 1000
 
         if self == MaiState.OFFLINE:
-            return 0
+            return 10
         elif self == MaiState.PEEKING:
-            return 1
+            return 20
         elif self == MaiState.NORMAL_CHAT:
-            return 1
+            return 30
         elif self == MaiState.FOCUSED_CHAT:
-            return 3
+            return 40
 
 
 class MaiStateInfo:
