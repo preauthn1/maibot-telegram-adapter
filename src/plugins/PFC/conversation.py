@@ -3,7 +3,7 @@ import asyncio
 import datetime
 
 # from .message_storage import MongoDBMessageStorage
-from src.plugins.utils.chat_message_builder import get_raw_msg_before_timestamp_with_chat
+from src.plugins.utils.chat_message_builder import build_readable_messages, get_raw_msg_before_timestamp_with_chat
 
 # from ...config.config import global_config
 from typing import Dict, Any
@@ -83,9 +83,17 @@ class Conversation:
                 timestamp=time.time(),
                 limit=30,  # 加载最近30条作为初始上下文，可以调整
             )
+            chat_talking_prompt = await build_readable_messages(
+                initial_messages,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="relative",
+                read_mark=0.0,
+            )
             if initial_messages:
                 # 将加载的消息填充到 ObservationInfo 的 chat_history
                 self.observation_info.chat_history = initial_messages
+                self.observation_info.chat_history_str = chat_talking_prompt + "\n"
                 self.observation_info.chat_history_count = len(initial_messages)
 
                 # 更新 ObservationInfo 中的时间戳等信息
@@ -163,7 +171,7 @@ class Conversation:
                     if hasattr(self.observation_info, "clear_unprocessed_messages"):
                         # 确保 clear_unprocessed_messages 方法存在
                         logger.debug(f"准备执行 direct_reply，清理 {initial_new_message_count} 条规划时已知的新消息。")
-                        self.observation_info.clear_unprocessed_messages()
+                        await self.observation_info.clear_unprocessed_messages()
                         # 手动重置计数器，确保状态一致性（理想情况下 clear 方法会做这个）
                         if hasattr(self.observation_info, "new_messages_count"):
                             self.observation_info.new_messages_count = 0
@@ -273,6 +281,7 @@ class Conversation:
                         reply=self.generated_reply,
                         goal=current_goal_str,
                         chat_history=observation_info.chat_history,
+                        chat_history_str=observation_info.chat_history_str,
                         retry_count=reply_attempt_count - 1,  # 传递当前尝试次数（从0开始计数）
                     )
                     logger.info(
@@ -442,7 +451,6 @@ class Conversation:
 
             # 发送消息
             await self.direct_sender.send_message(chat_stream=self.chat_stream, content=reply_content)
-            logger.info(f"消息已发送: {reply_content}")  # 可以在发送后加个日志确认
 
             # 原有的触发更新和等待代码
             self.chat_observer.trigger_update()
