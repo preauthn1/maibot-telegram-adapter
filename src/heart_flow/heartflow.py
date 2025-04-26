@@ -80,7 +80,6 @@ class Heartflow:
         # 不再需要传入 self.current_state
         return await self.subheartflow_manager.get_or_create_subheartflow(subheartflow_id)
 
-
     async def heartflow_start_working(self):
         """启动后台任务"""
         await self.background_task_manager.start_tasks()

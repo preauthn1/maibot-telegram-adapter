@@ -2,7 +2,7 @@ from .observation import Observation, ChattingObservation
 import asyncio
 from src.config.config import global_config
 import time
-from typing import Optional, List, Dict, Callable, Tuple
+from typing import Optional, List, Dict, Tuple
 import traceback
 from src.common.logger import get_module_logger, LogConfig, SUB_HEARTFLOW_STYLE_CONFIG  # noqa: E402
 import random
@@ -68,7 +68,7 @@ class InterestChatting:
 
         self.above_threshold = False
         self.start_hfc_probability = 0.0
-    
+
     async def initialize(self):
         async with self._task_lock:
             if self._is_running:
@@ -84,7 +84,6 @@ class InterestChatting:
                 self._is_running = True
                 self.update_task = asyncio.create_task(self._run_update_loop(self.update_interval))
                 logger.debug("后台兴趣更新任务已创建并启动。")
-        
 
     def add_interest_dict(self, message: MessageRecv, interest_value: float, is_mentioned: bool):
         self.interest_dict[message.message_info.message_id] = (message, interest_value, is_mentioned)
@@ -184,7 +183,6 @@ class InterestChatting:
         finally:
             self._is_running = False
             logger.info("InterestChatting 更新循环已停止。")
-
 
     async def stop_updates(self):
         """停止后台更新任务，使用锁确保并发安全"""
@@ -368,7 +366,7 @@ class SubHeartflow:
     async def change_chat_state(self, new_state: "ChatState"):
         """更新sub_heartflow的聊天状态，并管理 HeartFChatting 和 NormalChat 实例及任务"""
         current_state = self.chat_state.chat_status
-        
+
         if current_state == new_state:
             return
 
@@ -408,9 +406,11 @@ class SubHeartflow:
         if state_changed:
             self.update_last_chat_state_time()
             self.history_chat_state.append((current_state, self.chat_state_last_time))
-            
-            logger.info(f"{log_prefix} 麦麦的聊天状态从 {current_state.value} （持续了 {self.chat_state_last_time} 秒） 变更为 {new_state.value}")
-            
+
+            logger.info(
+                f"{log_prefix} 麦麦的聊天状态从 {current_state.value} （持续了 {self.chat_state_last_time} 秒） 变更为 {new_state.value}"
+            )
+
             self.chat_state.chat_status = new_state
             self.chat_state_last_time = 0
             self.chat_state_changed_time = time.time()

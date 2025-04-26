@@ -11,7 +11,7 @@ from src.plugins.chat.chat_stream import chat_manager
 
 # 导入心流相关类
 from src.heart_flow.sub_heartflow import SubHeartflow, ChatState
-from src.heart_flow.mai_state_manager import MaiState, MaiStateInfo
+from src.heart_flow.mai_state_manager import MaiStateInfo
 from .observation import ChattingObservation
 
 # 初始化日志记录器
@@ -32,15 +32,13 @@ class SubHeartflowManager:
     def __init__(self, mai_state_info: MaiStateInfo):
         self.subheartflows: Dict[Any, "SubHeartflow"] = {}
         self._lock = asyncio.Lock()  # 用于保护 self.subheartflows 的访问
-        self.mai_state_info: MaiStateInfo = mai_state_info # 存储传入的 MaiStateInfo 实例
+        self.mai_state_info: MaiStateInfo = mai_state_info  # 存储传入的 MaiStateInfo 实例
 
     def get_all_subheartflows(self) -> List["SubHeartflow"]:
         """获取所有当前管理的 SubHeartflow 实例列表 (快照)。"""
         return list(self.subheartflows.values())
-    
-    async def get_or_create_subheartflow(
-        self, subheartflow_id: Any
-    ) -> Optional["SubHeartflow"]:
+
+    async def get_or_create_subheartflow(self, subheartflow_id: Any) -> Optional["SubHeartflow"]:
         """获取或创建指定ID的子心流实例
 
         Args:
@@ -136,7 +134,7 @@ class SubHeartflowManager:
             absent_last_time = subheartflow.chat_state_last_time
             if max_age_seconds and (current_time - absent_last_time) > max_age_seconds:
                 flows_to_stop.append(subheartflow_id)
-                
+
         return flows_to_stop
 
     async def enforce_subheartflow_limits(self):
@@ -251,21 +249,30 @@ class SubHeartflowManager:
             # 再次检查子心流是否仍然存在于管理器中，以防万一在迭代过程中被移除
 
             if subflow.chat_state.chat_status != ChatState.ABSENT:
-                logger.debug(f"正在将子心流 {stream_name} 的状态从 {subflow.chat_state.chat_status.value} 更改为 ABSENT")
+                logger.debug(
+                    f"正在将子心流 {stream_name} 的状态从 {subflow.chat_state.chat_status.value} 更改为 ABSENT"
+                )
                 try:
                     # 调用 change_chat_state 将状态设置为 ABSENT
                     await subflow.change_chat_state(ChatState.ABSENT)
                     # 验证状态是否真的改变了
-                    if flow_id in self.subheartflows and self.subheartflows[flow_id].chat_state.chat_status == ChatState.ABSENT:
+                    if (
+                        flow_id in self.subheartflows
+                        and self.subheartflows[flow_id].chat_state.chat_status == ChatState.ABSENT
+                    ):
                         changed_count += 1
                     else:
-                        logger.warning(f"[停用] 尝试更改子心流 {stream_name} 状态后，状态仍未变为 ABSENT 或子心流已消失。")
+                        logger.warning(
+                            f"[停用] 尝试更改子心流 {stream_name} 状态后，状态仍未变为 ABSENT 或子心流已消失。"
+                        )
                 except Exception as e:
                     logger.error(f"[停用] 更改子心流 {stream_name} 状态为 ABSENT 时出错: {e}", exc_info=True)
             else:
                 logger.debug(f"[停用] 子心流 {stream_name} 已处于 ABSENT 状态，无需更改。")
 
-        logger.info(f"下限完成，共处理 {len(flows_to_update)} 个子心流，成功将 {changed_count} 个子心流的状态更改为 ABSENT。")
+        logger.info(
+            f"下限完成，共处理 {len(flows_to_update)} 个子心流，成功将 {changed_count} 个子心流的状态更改为 ABSENT。"
+        )
 
     async def evaluate_interest_and_promote(self):
         """评估子心流兴趣度，满足条件且未达上限则提升到FOCUSED状态（基于start_hfc_probability）"""
@@ -440,4 +447,3 @@ class SubHeartflowManager:
                     logger.error(f"删除 SubHeartflow {subheartflow_id} 时出错: {e}", exc_info=True)
             else:
                 logger.warning(f"尝试删除不存在的 SubHeartflow: {subheartflow_id}")
-

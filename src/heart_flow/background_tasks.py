@@ -227,24 +227,22 @@ class BackgroundTaskManager:
         """
         # 获取需要清理的子心流列表(包含ID和原因)
         flows_to_stop = self.subheartflow_manager.get_inactive_subheartflows()
-        
+
         if not flows_to_stop:
             return  # 没有需要清理的子心流直接返回
 
         logger.info(f"准备删除 {len(flows_to_stop)} 个不活跃(1h)子心流")
         stopped_count = 0
-        
+
         # 逐个停止子心流
         for flow_id in flows_to_stop:
             success = await self.subheartflow_manager.delete_subflow(flow_id)
             if success:
                 stopped_count += 1
                 logger.debug(f"[清理任务] 已停止子心流 {flow_id}")
-        
+
         # 记录最终清理结果
         logger.info(f"[清理任务] 清理完成, 共停止 {stopped_count}/{len(flows_to_stop)} 个子心流")
-
-
 
     async def _perform_logging_work(self):
         """执行一轮状态日志记录。"""
