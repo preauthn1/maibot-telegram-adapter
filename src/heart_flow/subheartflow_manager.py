@@ -74,8 +74,6 @@ class SubHeartflowManager:
                 # logger.debug(f"获取到已存在的子心流: {subheartflow_id}")
                 return subflow
 
-            # 创建新的子心流实例
-            # logger.info(f"子心流 {subheartflow_id} 不存在，正在创建...")
             try:
                 # 初始化子心流
                 new_subflow = SubHeartflow(subheartflow_id, mai_states)
@@ -118,7 +116,7 @@ class SubHeartflowManager:
                     self.count_subflows_by_state(ChatState.CHAT),
                     self.count_subflows_by_state(ChatState.FOCUSED),
                 )
-                await subheartflow.set_chat_state(ChatState.ABSENT, states_num)
+                await subheartflow.set_chat_state(ChatState.ABSENT)
             else:
                 logger.debug(f"[子心流管理] {stream_name} 已是ABSENT状态")
         except Exception as e:
@@ -235,13 +233,15 @@ class SubHeartflowManager:
 
             logger.debug(f"[激活] 正在激活子心流{stream_name}")
 
-            states_num = (
-                self.count_subflows_by_state(ChatState.ABSENT),
-                self.count_subflows_by_state(ChatState.CHAT),
-                self.count_subflows_by_state(ChatState.FOCUSED),
-            )
+            # --- 限额检查 --- #
+            current_chat_count = self.count_subflows_by_state(ChatState.CHAT)
+            if current_chat_count >= limit:
+                logger.warning(f"[激活] 跳过{stream_name}, 普通聊天已达上限 ({current_chat_count}/{limit})")
+                continue # 跳过此子心流，继续尝试激活下一个
+            # --- 结束限额检查 --- #
 
-            await flow.set_chat_state(ChatState.CHAT, states_num)
+            # 移除 states_num 参数
+            await flow.set_chat_state(ChatState.CHAT)
 
             if flow.chat_state.chat_status == ChatState.CHAT:
                 activated_count += 1
@@ -319,11 +319,11 @@ class SubHeartflowManager:
                 continue
 
             logger.info(
-                f"{log_prefix} [{stream_name}] 触发 激情水群 (概率={current_subflow.interest_chatting.start_hfc_probability:.2f})"
+                f"{log_prefix} [{stream_name}] 触发 认真水群 (概率={current_subflow.interest_chatting.start_hfc_probability:.2f})"
             )
 
             # 执行状态提升
-            await current_subflow.set_chat_state(ChatState.FOCUSED, states_num)
+            await current_subflow.set_chat_state(ChatState.FOCUSED)
 
             # 验证提升结果
             if (
@@ -372,7 +372,7 @@ class SubHeartflowManager:
 
                     # --- 状态设置 --- #
                     # 注意：这里传递的状态数量是 *停用前* 的状态数量
-                    await current_subflow.set_chat_state(ChatState.ABSENT, states_num_before)
+                    await current_subflow.set_chat_state(ChatState.ABSENT)
 
                     # --- 状态验证 (可选) ---
                     final_subflow = self.subheartflows.get(flow_id)
@@ -383,7 +383,6 @@ class SubHeartflowManager:
                                 f"{log_prefix_manager} {log_prefix_flow} 成功从 {current_state.value} 停用到 ABSENT 状态"
                             )
                             deactivated_count += 1
-                            # 注意：停用后不需要更新 states_num_before，因为它只用于 set_chat_state 的限制检查
                         else:
                             logger.warning(
                                 f"{log_prefix_manager} {log_prefix_flow} 尝试停用到 ABSENT 后状态仍为 {final_state.value}"
