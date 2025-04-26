@@ -151,11 +151,31 @@ c HeartFChatting工作方式
     - `ChatState.CHAT` (随便看看/水群): 普通聊天模式。激活 `NormalChatInstance`。
     *   `ChatState.FOCUSED` (专注/认真水群): 专注聊天模式。激活 `HeartFlowChatInstance`。
 - **选择**: 子心流可以根据外部指令（来自 `SubHeartflowManager`）或内部逻辑（未来的扩展）选择进入 `ABSENT` 状态（不回复不观察），或进入 `CHAT` / `FOCUSED` 中的一种回复模式。
-- **状态转换机制** (由 `SubHeartflowManager` 驱动):
-    - **激活 `CHAT`**: 当 `Heartflow` 状态从 `OFFLINE` 变为允许聊天的状态时，`SubHeartflowManager` 会根据限制（通过 `self.mai_state_info` 获取），选择部分 `ABSENT` 状态的子心流，**检查当前 CHAT 状态数量是否达到上限**，如果未达上限，则调用其 `change_chat_state` 方法将其转换为 `CHAT`。此外，`evaluate_and_transition_subflows_by_llm` 方法也会根据 LLM 的判断，在未达上限时将 `ABSENT` 状态的子心流激活为 `CHAT`。
-    - **激活 `FOCUSED`**: `SubHeartflowManager` 会定期评估处于 `CHAT` 状态的子心流的兴趣度 (`InterestChatting.start_hfc_probability`)，若满足条件且**检查当前 FOCUSED 状态数量未达上限**（通过 `self.mai_state_info` 获取限制），则调用 `change_chat_state` 将其提升为 `FOCUSED`。
-    - **停用/回退**: `SubHeartflowManager` 可能因 `Heartflow` 状态变化、达到数量限制、长时间不活跃、随机概率 (`randomly_deactivate_subflows`)、LLM 评估 (`evaluate_and_transition_subflows_by_llm` 判断 `CHAT` 状态子心流应休眠) 或收到来自 `HeartFChatting` 的连续不回复回调信号 (`request_absent_transition`) 等原因，调用 `change_chat_state` 将子心流状态设置为 `ABSENT` 或从 `FOCUSED` 回退到 `CHAT`。当子心流进入 `ABSENT` 状态后，如果持续一小时不活跃，才会被后台清理任务删除。
-    - **注意**: `change_chat_state` 方法本身只负责执行状态转换和管理内部聊天实例（`NormalChatInstance`/`HeartFlowChatInstance`），不再进行限额检查。限额检查的责任完全由调用方（即 `SubHeartflowManager` 中的相关方法，这些方法会使用内部存储的 `mai_state_info` 来获取限制）承担。
+- **状态转换机制** (由 `SubHeartflowManager` 驱动，更细致的说明):
+    - **初始状态**: 新创建的 `SubHeartflow` 默认为 `ABSENT` 状态。
+    - **`ABSENT` -> `CHAT` (激活闲聊)**:
+        - **触发条件**: `Heartflow` 的主状态 (`MaiState`) 允许 `CHAT` 模式，且当前 `CHAT` 状态的子心流数量未达上限。
+        - **判定机制**: `SubHeartflowManager` 中的 `evaluate_and_transition_subflows_by_llm` 方法调用大模型(LLM)。LLM 读取该群聊的近期内容和结合自身个性信息，判断是否"想"在该群开始聊天。
+        - **执行**: 若 LLM 判断为是，且名额未满，`SubHeartflowManager` 调用 `change_chat_state(ChatState.CHAT)`。
+    - **`CHAT` -> `FOCUSED` (激活专注)**:
+        - **触发条件**: 子心流处于 `CHAT` 状态，其内部维护的"开屎热聊"概率 (`InterestChatting.start_hfc_probability`) 达到预设阈值（表示对当前聊天兴趣浓厚），同时 `Heartflow` 的主状态允许 `FOCUSED` 模式，且 `FOCUSED` 名额未满。
+        - **判定机制**: `SubHeartflowManager` 中的 `evaluate_interest_and_promote` 方法定期检查满足条件的 `CHAT` 子心流。
+        - **执行**: 若满足所有条件，`SubHeartflowManager` 调用 `change_chat_state(ChatState.FOCUSED)`。
+        - **注意**: 无法从 `ABSENT` 直接跳到 `FOCUSED`，必须先经过 `CHAT`。
+    - **`FOCUSED` -> `ABSENT` (退出专注)**:
+        - **主要途径 (内部驱动)**: 在 `FOCUSED` 状态下运行的 `HeartFlowChatInstance` 连续多次决策为 `no_reply` (例如达到 5 次，次数可配)，它会通过回调函数 (`request_absent_transition`) 请求 `SubHeartflowManager` 将其状态**直接**设置为 `ABSENT`。
+        - **其他途径 (外部驱动)**:
+            - `Heartflow` 主状态变为 `OFFLINE`，`SubHeartflowManager` 强制所有子心流变为 `ABSENT`。
+            - `SubHeartflowManager` 因 `FOCUSED` 名额超限 (`enforce_subheartflow_limits`) 或随机停用 (`randomly_deactivate_subflows`) 而将其设置为 `ABSENT`。
+    - **`CHAT` -> `ABSENT` (退出闲聊)**:
+        - **主要途径 (内部驱动)**: `SubHeartflowManager` 中的 `evaluate_and_transition_subflows_by_llm` 方法调用 LLM。LLM 读取群聊内容和结合自身状态，判断是否"不想"继续在此群闲聊。
+        - **执行**: 若 LLM 判断为是，`SubHeartflowManager` 调用 `change_chat_state(ChatState.ABSENT)`。
+        - **其他途径 (外部驱动)**:
+            - `Heartflow` 主状态变为 `OFFLINE`。
+            - `SubHeartflowManager` 因 `CHAT` 名额超限或随机停用。
+    - **全局强制 `ABSENT`**: 当 `Heartflow` 的 `MaiState` 变为 `OFFLINE` 时，`SubHeartflowManager` 会调用所有子心流的 `change_chat_state(ChatState.ABSENT)`，强制它们全部停止活动。
+    - **状态变更执行者**: `change_chat_state` 方法仅负责执行状态的切换和对应聊天实例的启停，不进行名额检查。名额检查的责任由 `SubHeartflowManager` 中的各个决策方法承担。
+    - **最终清理**: 进入 `ABSENT` 状态的子心流不会立即被删除，只有在 `ABSENT` 状态持续一小时 (`INACTIVE_THRESHOLD_SECONDS`) 后，才会被后台清理任务 (`cleanup_inactive_subheartflows`) 删除。
 
 ## 3. 聊天实例详解 (Chat Instances Explained)
 
@@ -219,77 +239,3 @@ c HeartFChatting工作方式
   self.observations.append(observation)
   ```
 
-### 5.2. 配置参数 (Key Parameters)
-- `sub_heart_flow_stop_time`: (已废弃，现在由 `INACTIVE_THRESHOLD_SECONDS` in `subheartflow_manager.py` 控制) 子心流在 `ABSENT` 状态持续多久后被后台任务清理，默认为 3600 秒 (1 小时)。
-- `sub_heart_flow_freeze_time`: 子心流冻结时间 (当前文档未明确体现，可能需要审阅代码确认)。
-- `heart_flow_update_interval`: 主心流更新其状态或执行管理操作的频率 (需要审阅 `Heartflow` 代码确认)。
-
-### 5.3. 之后可以做的 (Future Work)
-- **智能化 MaiState 状态转换**:
-    - 当前 `MaiState` (整体状态，如 `OFFLINE`, `NORMAL_CHAT` 等) 的转换逻辑 (`MaiStateManager`) 较为简单，主要依赖时间和随机性。
-    - 未来的计划是让主心流 (`Heartflow`) 负责决策自身的 `MaiState`。
-    - 该决策将综合考虑以下信息：
-        - 各个子心流 (`SubHeartflow`) 的活动状态和信息摘要。
-        - 主心流自身的状态和历史信息。
-        - (可能) 结合预设的日程安排 (Schedule) 信息。
-    - 目标是让 Mai 的整体状态变化更符合逻辑和上下文。 (计划在 064 实现)
-
-- **参数化与动态调整聊天行为**:
-    - 将 `NormalChatInstance` 和 `HeartFlowChatInstance` 中的关键行为参数（例如：回复概率、思考频率、兴趣度阈值、状态转换条件等）提取出来，使其更易于配置。
-    - 允许每个 `SubHeartflow` (即每个聊天场景) 拥有其独立的参数配置，实现"千群千面"。
-    - 开发机制，使得这些参数能够被动态调整：
-        - 基于外部反馈：例如，根据用户评价（"话太多"或"太冷淡"）调整回复频率。
-        - 基于环境分析：例如，根据群消息的活跃度自动调整参与度。
-        - 基于学习：通过分析历史交互数据，优化特定群聊下的行为模式。
-    - 目标是让 Mai 在不同群聊中展现出更适应环境、更个性化的交互风格。
-
-- **动态 Prompt 生成与人格塑造**:
-    - 当前 Prompt (提示词) 相对静态。计划实现动态或半结构化的 Prompt 生成。
-    - Prompt 内容可根据以下因素调整：
-        - **人格特质**: 通过参数化配置（如友善度、严谨性等），影响 Prompt 的措辞、语气和思考倾向，塑造更稳定和独特的人格。
-        - **当前情绪**: 将实时情绪状态融入 Prompt，使回复更符合当下心境。
-    - 目标：提升 `HeartFlowChatInstance` (HFC) 回复的多样性、一致性和真实感。
-    - 前置：需要重构 Prompt 构建逻辑，可能引入 `PromptBuilder` 并提供标准接口 (认为是必须步骤)。
-
-- **扩展观察系统 (Observation System)**:
-    - 目前主要依赖 `ChattingObservation` 获取消息。
-    - 计划引入更多 `Observation` 类型，为 `SubHeartflow` 提供更丰富的上下文：
-        - Mai 的全局状态 (`MaiStateInfo`)。
-        - `SubHeartflow` 自身的聊天状态 (`ChatStateInfo`) 和参数配置。
-        - Mai 的系统配置、连接平台信息。
-        - 其他相关聊天或系统的聚合信息。
-    - 目标：让 `SubHeartflow` 基于更全面的信息进行决策。
-
-- **增强工具调用能力 (Enhanced Tool Usage)**:
-    - 扩展 `HeartFlowChatInstance` (HFC) 可用的工具集。
-    - 考虑引入"元工具"或分层工具机制，允许 HFC 在需要时（如深度思考）访问更强大的工具，例如：
-        - 修改自身或其他 `SubHeartflow` 的聊天参数。
-        - 请求改变 Mai 的全局状态 (`MaiState`)。
-        - 管理日程或执行更复杂的分析任务。
-    - 目标：提升 HFC 的自主决策和行动能力，即使会增加一定的延迟。
-
-- **基于历史学习的行为模式应用**:
-    - **学习**: 分析过往聊天记录，提取和学习具体的行为模式（如特定梗的用法、情境化回应风格等）。可能需要专门的分析模块。
-    - **存储与匹配**: 需要有效的方法存储学习到的行为模式，并开发强大的 **匹配** 机制，在运行时根据当前情境检索最合适的模式。**(匹配的准确性是关键)**
-    - **应用与评估**: 将匹配到的行为模式融入 HFC 的决策和回复生成（例如，将其整合进 Prompt）。之后需评估该行为模式应用的实际效果。
-    - **人格塑造**: 通过学习到的实际行为来动态塑造人格，作为静态人设描述的补充或替代，使其更生动自然。
-
-- **标准化人设生成 (Standardized Persona Generation)**:
-    - **目标**: 解决手动配置 `人设` 文件缺乏标准、难以全面描述个性的问题，并生成更丰富、可操作的人格资源。
-    - **方法**: 利用大型语言模型 (LLM) 辅助生成标准化的、结构化的人格**资源包**。
-    - **生成内容**: 不仅生成描述性文本（替代现有 `individual` 配置），还可以同时生成与该人格配套的：
-        - **相关工具 (Tools)**: 该人格倾向于使用的工具或能力。
-        - **初始记忆/知识库 (Memories/Knowledge)**: 定义其背景和知识基础。
-        - **核心行为模式 (Core Behavior Patterns)**: 预置一些典型的行为方式，可作为行为学习的起点。
-    - **实现途径**: 
-        - 通过与 LLM 的交互式对话来定义和细化人格及其配套资源。
-        - 让 LLM 分析提供的文本材料（如小说、背景故事）来提取人格特质和相关信息。
-    - **优势**: 替代易出错且标准不一的手动配置，生成更丰富、一致、包含配套资源且易于系统理解和应用的人格包。
-
-- **优化表情包处理与理解 (Enhanced Emoji Handling and Understanding)**:
-    - **面临挑战**:
-        - **历史记录表示**: 如何在聊天历史中有效表示表情包，供 LLM 理解。
-        - **语义理解**: 如何让 LLM 准确把握表情包的含义、情感和语境。
-        - **场景判断与选择**: 如何让 LLM 判断何时适合使用表情包，并选择最贴切的一个。
-    - **目标**: 提升 Mai 理解和运用表情包的能力，使交互更自然生动。
-    - **说明**: 可能需要较多时间进行数据处理和模型调优，但对改善体验潜力巨大。

@@ -37,7 +37,7 @@ class MaiState(enum.Enum):
             return 1000
 
         if self == MaiState.OFFLINE:
-            return 10
+            return 0
         elif self == MaiState.PEEKING:
             return 30
         elif self == MaiState.NORMAL_CHAT:
@@ -51,7 +51,7 @@ class MaiState(enum.Enum):
             return 1000
 
         if self == MaiState.OFFLINE:
-            return 10
+            return 0
         elif self == MaiState.PEEKING:
             return 20
         elif self == MaiState.NORMAL_CHAT:
