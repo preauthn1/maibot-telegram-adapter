@@ -558,7 +558,9 @@ class PromptBuilder:
             try:
                 knowledge_from_old = await self.get_prompt_info_old(message, threshold=0.38)
                 related_info += knowledge_from_old
-                logger.debug(f"异常后使用旧版数据库获取知识，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
+                logger.debug(
+                    f"异常后使用旧版数据库获取知识，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}"
+                )
                 return related_info
             except Exception as e2:
                 logger.error(f"使用旧版数据库获取知识时也发生异常: {str(e2)}")
