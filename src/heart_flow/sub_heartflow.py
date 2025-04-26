@@ -241,7 +241,7 @@ class SubHeartflow:
 
         # 这个聊天流的状态
         self.chat_state: ChatStateInfo = ChatStateInfo()
-        
+
         # 兴趣检测器
         self.interest_chatting = None
 
@@ -249,7 +249,7 @@ class SubHeartflow:
         self.last_active_time = time.time()  # 最后活跃时间
         self.should_stop = False  # 停止标志
         self.task: Optional[asyncio.Task] = None  # 后台任务
-        
+
         # 随便水群 normal_chat 和 认真水群 heartFC_chat 实例
         # CHAT模式激活 随便水群  FOCUS模式激活 认真水群
         self.heart_fc_instance: Optional[HeartFChatting] = None  # 该sub_heartflow的HeartFChatting实例
@@ -304,7 +304,7 @@ class SubHeartflow:
         """
         启动 NormalChat 实例，
         进入 CHAT 状态时使用
-        
+
         确保 HeartFChatting 已停止
         """
         await self._stop_heart_fc_chat()  # 确保 专注聊天已停止

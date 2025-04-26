@@ -111,11 +111,6 @@ class SubHeartflowManager:
             # 设置状态为ABSENT释放资源
             if subheartflow.chat_state.chat_status != ChatState.ABSENT:
                 logger.debug(f"[子心流管理] 设置 {stream_name} 状态为ABSENT")
-                states_num = (
-                    self.count_subflows_by_state(ChatState.ABSENT),
-                    self.count_subflows_by_state(ChatState.CHAT),
-                    self.count_subflows_by_state(ChatState.FOCUSED),
-                )
                 await subheartflow.set_chat_state(ChatState.ABSENT)
             else:
                 logger.debug(f"[子心流管理] {stream_name} 已是ABSENT状态")
@@ -237,7 +232,7 @@ class SubHeartflowManager:
             current_chat_count = self.count_subflows_by_state(ChatState.CHAT)
             if current_chat_count >= limit:
                 logger.warning(f"[激活] 跳过{stream_name}, 普通聊天已达上限 ({current_chat_count}/{limit})")
-                continue # 跳过此子心流，继续尝试激活下一个
+                continue  # 跳过此子心流，继续尝试激活下一个
             # --- 结束限额检查 --- #
 
             # 移除 states_num 参数
@@ -283,12 +278,6 @@ class SubHeartflowManager:
         if current_focused_count >= focused_limit:
             logger.debug(f"{log_prefix} 已达专注上限 ({current_focused_count}/{focused_limit})")
             return
-
-        states_num = (
-            self.count_subflows_by_state(ChatState.ABSENT),
-            self.count_subflows_by_state(ChatState.CHAT),
-            current_focused_count,
-        )
 
         for sub_hf in list(self.subheartflows.values()):
             flow_id = sub_hf.subheartflow_id
@@ -339,13 +328,6 @@ class SubHeartflowManager:
         # 使用快照安全遍历
         subflows_snapshot = list(self.subheartflows.values())
         deactivated_count = 0
-
-        # 预先计算状态数量，因为 set_chat_state 需要
-        states_num_before = (
-            self.count_subflows_by_state(ChatState.ABSENT),
-            self.count_subflows_by_state(ChatState.CHAT),
-            self.count_subflows_by_state(ChatState.FOCUSED),
-        )
 
         try:
             for sub_hf in subflows_snapshot:
