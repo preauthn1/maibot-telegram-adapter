@@ -358,15 +358,15 @@ class NormalChat:
         # 处理需要回复的消息
         processed_count = 0
         # --- 修改：迭代前创建要处理的ID列表副本，防止迭代时修改 ---
-        messages_to_process_initially = list(messages_to_reply) # 创建副本
+        messages_to_process_initially = list(messages_to_reply)  # 创建副本
         # --- 修改结束 ---
-        for item in messages_to_process_initially: # 使用副本迭代
+        for item in messages_to_process_initially:  # 使用副本迭代
             msg_id, (message, interest_value, is_mentioned) = item
             # --- 修改：在处理前尝试 pop，防止竞争 ---
             popped_item = self.interest_dict.pop(msg_id, None)
             if popped_item is None:
                 logger.warning(f"[{self.stream_name}] 初始兴趣消息 {msg_id} 在处理前已被移除，跳过。")
-                continue # 如果消息已被其他任务处理（pop），则跳过
+                continue  # 如果消息已被其他任务处理（pop），则跳过
             # --- 修改结束 ---
 
             try:
@@ -416,7 +416,7 @@ class NormalChat:
 
     async def start_chat(self):
         """为此 NormalChat 实例关联的 ChatStream 启动聊天任务（如果尚未运行），
-        并在后台处理一次初始的高兴趣消息。""" # 文言文注释示例：启聊之始，若有遗珠，当于暗处拂拭，勿碍正途。
+        并在后台处理一次初始的高兴趣消息。"""  # 文言文注释示例：启聊之始，若有遗珠，当于暗处拂拭，勿碍正途。
         if self._chat_task is None or self._chat_task.done():
             # --- 修改：使用 create_task 启动初始消息处理 ---
             logger.info(f"[{self.stream_name}] 开始后台处理初始兴趣消息...")
@@ -428,9 +428,9 @@ class NormalChat:
 
             # 启动后台轮询任务 (这部分不变)
             logger.info(f"[{self.stream_name}] 启动后台兴趣消息轮询任务...")
-            polling_task = asyncio.create_task(self._reply_interested_message()) # 注意变量名区分
+            polling_task = asyncio.create_task(self._reply_interested_message())  # 注意变量名区分
             polling_task.add_done_callback(lambda t: self._handle_task_completion(t))
-            self._chat_task = polling_task # self._chat_task 仍然指向主要的轮询任务
+            self._chat_task = polling_task  # self._chat_task 仍然指向主要的轮询任务
         else:
             logger.info(f"[{self.stream_name}] 聊天轮询任务已在运行中。")
 
