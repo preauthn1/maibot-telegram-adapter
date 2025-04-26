@@ -19,8 +19,9 @@ from .observation import ChattingObservation
 # 导入LLM请求工具
 from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
-
+from src.individuality.individuality import Individuality
 import traceback
+
 
 # 初始化日志记录器
 
@@ -110,24 +111,53 @@ class SubHeartflowManager:
                 logger.error(f"创建子心流 {subheartflow_id} 失败: {e}", exc_info=True)
                 return None
 
+    # --- 新增：内部方法，用于尝试将单个子心流设置为 ABSENT ---
+    async def _try_set_subflow_absent_internal(self, subflow: "SubHeartflow", log_prefix: str) -> bool:
+        """
+        尝试将给定的子心流对象状态设置为 ABSENT (内部方法，不处理锁)。
+
+        Args:
+            subflow: 子心流对象。
+            log_prefix: 用于日志记录的前缀 (例如 "[子心流管理]" 或 "[停用]")。
+
+        Returns:
+            bool: 如果状态成功变为 ABSENT 或原本就是 ABSENT，返回 True；否则返回 False。
+        """
+        flow_id = subflow.subheartflow_id
+        stream_name = chat_manager.get_stream_name(flow_id) or flow_id
+
+        if subflow.chat_state.chat_status != ChatState.ABSENT:
+            logger.debug(f"{log_prefix} 设置 {stream_name} 状态为 ABSENT")
+            try:
+                await subflow.change_chat_state(ChatState.ABSENT)
+                # 再次检查以确认状态已更改 (change_chat_state 内部应确保)
+                if subflow.chat_state.chat_status == ChatState.ABSENT:
+                    return True
+                else:
+                    logger.warning(f"{log_prefix} 调用 change_chat_state 后，{stream_name} 状态仍为 {subflow.chat_state.chat_status.value}")
+                    return False
+            except Exception as e:
+                logger.error(f"{log_prefix} 设置 {stream_name} 状态为 ABSENT 时失败: {e}", exc_info=True)
+                return False
+        else:
+            logger.debug(f"{log_prefix} {stream_name} 已是 ABSENT 状态")
+            return True # 已经是目标状态，视为成功
+    # --- 结束新增 ---
+
     async def sleep_subheartflow(self, subheartflow_id: Any, reason: str) -> bool:
-        """停止指定的子心流并清理资源"""
-        subheartflow = self.subheartflows.get(subheartflow_id)
-        if not subheartflow:
-            return False
+        """停止指定的子心流并将其状态设置为 ABSENT"""
+        log_prefix = "[子心流管理]"
+        async with self._lock: # 加锁以安全访问字典
+            subheartflow = self.subheartflows.get(subheartflow_id)
 
-        stream_name = chat_manager.get_stream_name(subheartflow_id) or subheartflow_id
-        logger.info(f"[子心流管理] 正在停止 {stream_name}, 原因: {reason}")
+            stream_name = chat_manager.get_stream_name(subheartflow_id) or subheartflow_id
+            logger.info(f"{log_prefix} 正在停止 {stream_name}, 原因: {reason}")
 
-        try:
-            # 设置状态为ABSENT释放资源
-            if subheartflow.chat_state.chat_status != ChatState.ABSENT:
-                logger.debug(f"[子心流管理] 设置 {stream_name} 状态为ABSENT")
-                await subheartflow.change_chat_state(ChatState.ABSENT)
-            else:
-                logger.debug(f"[子心流管理] {stream_name} 已是ABSENT状态")
-        except Exception as e:
-            logger.error(f"[子心流管理] 设置ABSENT状态失败: {e}")
+            # 调用内部方法处理状态变更
+            success = await self._try_set_subflow_absent_internal(subheartflow, log_prefix)
+
+            return success
+        # 锁在此处自动释放
 
     def get_inactive_subheartflows(self, max_age_seconds=INACTIVE_THRESHOLD_SECONDS):
         """识别并返回需要清理的不活跃(处于ABSENT状态超过一小时)子心流(id, 原因)"""
@@ -195,44 +225,37 @@ class SubHeartflowManager:
 
     async def deactivate_all_subflows(self):
         """将所有子心流的状态更改为 ABSENT (例如主状态变为OFFLINE时调用)"""
-        # logger.info("[停用] 开始将所有子心流状态设置为 ABSENT")
-        # 使用 list() 创建一个当前值的快照，防止在迭代时修改字典
-        flows_to_update = list(self.subheartflows.values())
-
-        if not flows_to_update:
-            logger.debug("[停用] 无活跃子心流，无需操作")
-            return
-
+        log_prefix = "[停用]"
         changed_count = 0
-        for subflow in flows_to_update:
-            flow_id = subflow.subheartflow_id
-            stream_name = chat_manager.get_stream_name(flow_id) or flow_id
-            # 再次检查子心流是否仍然存在于管理器中，以防万一在迭代过程中被移除
+        processed_count = 0
 
-            if subflow.chat_state.chat_status != ChatState.ABSENT:
-                logger.debug(
-                    f"正在将子心流 {stream_name} 的状态从 {subflow.chat_state.chat_status.value} 更改为 ABSENT"
-                )
-                try:
-                    # 调用 change_chat_state 将状态设置为 ABSENT
-                    await subflow.change_chat_state(ChatState.ABSENT)
-                    # 验证状态是否真的改变了
-                    if (
-                        flow_id in self.subheartflows
-                        and self.subheartflows[flow_id].chat_state.chat_status == ChatState.ABSENT
-                    ):
+        async with self._lock: # 获取锁以安全迭代
+            # 使用 list() 创建一个当前值的快照，防止在迭代时修改字典
+            flows_to_update = list(self.subheartflows.values())
+            processed_count = len(flows_to_update)
+            if not flows_to_update:
+                logger.debug(f"{log_prefix} 无活跃子心流，无需操作")
+                return
+
+            for subflow in flows_to_update:
+                # 记录原始状态，以便统计实际改变的数量
+                original_state_was_absent = (subflow.chat_state.chat_status == ChatState.ABSENT)
+
+
+                success = await self._try_set_subflow_absent_internal(subflow, log_prefix)
+
+                # 如果成功设置为 ABSENT 且原始状态不是 ABSENT，则计数
+                if success and not original_state_was_absent:
+                    if subflow.chat_state.chat_status == ChatState.ABSENT:
                         changed_count += 1
                     else:
-                        logger.warning(
-                            f"[停用] 尝试更改子心流 {stream_name} 状态后，状态仍未变为 ABSENT 或子心流已消失。"
-                        )
-                except Exception as e:
-                    logger.error(f"[停用] 更改子心流 {stream_name} 状态为 ABSENT 时出错: {e}", exc_info=True)
-            else:
-                logger.debug(f"[停用] 子心流 {stream_name} 已处于 ABSENT 状态，无需更改。")
+                        # 这种情况理论上不应发生，如果内部方法返回 True 的话
+                        stream_name = chat_manager.get_stream_name(subflow.subheartflow_id) or subflow.subheartflow_id
+                        logger.warning(f"{log_prefix} 内部方法声称成功但 {stream_name} 状态未变为 ABSENT。")
+        # 锁在此处自动释放
 
         logger.info(
-            f"下限完成，共处理 {len(flows_to_update)} 个子心流，成功将 {changed_count} 个子心流的状态更改为 ABSENT。"
+            f"{log_prefix} 完成，共处理 {processed_count} 个子心流，成功将 {changed_count} 个非 ABSENT 子心流的状态更改为 ABSENT。"
         )
 
     async def evaluate_interest_and_promote(self):
@@ -328,6 +351,7 @@ class SubHeartflowManager:
                 first_observation = sub_hf.observations[0]
                 if isinstance(first_observation, ChattingObservation):
                     # 组合中期记忆和当前聊天内容
+                    first_observation.observe()
                     current_chat = first_observation.talking_message_str or "当前无聊天内容。"
                     combined_summary = f"当前聊天内容:\n{current_chat}"
                 else:
@@ -336,19 +360,40 @@ class SubHeartflowManager:
 
 
                 # --- 获取麦麦状态 ---
-                mai_state_description = f"麦麦当前状态: {current_mai_state.value}。"
+                mai_state_description = f"你当前状态: {current_mai_state.value}。"
+                
+                        # 获取个性化信息
+                individuality = Individuality.get_instance()
+
+                # 构建个性部分
+                prompt_personality = f"你正在扮演名为{individuality.personality.bot_nickname}的人类，你"
+                prompt_personality += individuality.personality.personality_core
+
+                # 随机添加个性侧面
+                if individuality.personality.personality_sides:
+                    random_side = random.choice(individuality.personality.personality_sides)
+                    prompt_personality += f"，{random_side}"
+
+                # 随机添加身份细节
+                if individuality.identity.identity_detail:
+                    random_detail = random.choice(individuality.identity.identity_detail)
+                    prompt_personality += f"，{random_detail}"
+                
 
                 # --- 针对 ABSENT 状态 ---
                 if current_subflow_state == ChatState.ABSENT:
                     # 构建Prompt
                     prompt = (
-                        f"子心流 [{stream_name}] 当前处于非活跃(ABSENT)状态.\n"
+                        f"{prompt_personality}\n"
+                        f"你当前没有在： [{stream_name}] 群中聊天。\n"
                         f"{mai_state_description}\n"
-                        f"最近观察到的内容摘要:\n---\n{combined_summary}\n---\n"
-                        f"基于以上信息，该子心流是否表现出足够的活跃迹象或重要性，"
-                        f"值得将其唤醒并进入常规聊天(CHAT)状态？\n"
-                        f"请以 JSON 格式回答，包含一个键 'decision'，其值为 true 或 false.\n"
-                        f"例如：{{\"decision\": true}}\n"
+                        f"这个群里最近的聊天内容是:\n---\n{combined_summary}\n---\n"
+                        f"基于以上信息，请判断你是否愿意在这个群开始闲聊，"
+                        f"进入常规聊天(CHAT)状态？\n"
+                        f"给出你的判断，和理由，然后以 JSON 格式回答"
+                        f"包含键 'decision'，如果要开始聊天，值为 true ，否则为 false.\n"
+                        f"包含键 'reason'，其值为你的理由。\n"  
+                        f"例如：{{\"decision\": true, \"reason\": \"因为我想聊天\"}}\n"
                         f"请只输出有效的 JSON 对象。"
                     )
 
@@ -382,13 +427,16 @@ class SubHeartflowManager:
                 elif current_subflow_state == ChatState.CHAT:
                     # 构建Prompt
                     prompt = (
-                        f"子心流 [{stream_name}] 当前处于常规聊天(CHAT)状态.\n"
+                        f"{prompt_personality}\n"
+                        f"你正在在： [{stream_name}] 群中聊天。\n"
                         f"{mai_state_description}\n"
-                        f"最近观察到的内容摘要:\n---\n{combined_summary}\n---\n"
-                        f"基于以上信息，该子心流是否表现出不活跃、对话结束或不再需要关注的迹象，"
-                        f"应该让其进入休眠(ABSENT)状态？\n"
-                        f"请以 JSON 格式回答，包含一个键 'decision'，其值为 true (表示应休眠) 或 false (表示不应休眠).\n"
-                        f"例如：{{\"decision\": true}}\n"
+                        f"这个群里最近的聊天内容是:\n---\n{combined_summary}\n---\n"
+                        f"基于以上信息，请判断你是否愿意在这个群继续闲聊，"
+                        f"还是暂时离开聊天，进入休眠状态？\n"
+                        f"给出你的判断，和理由，然后以 JSON 格式回答"
+                        f"包含键 'decision'，如果要离开聊天，值为 true ，否则为 false.\n"
+                        f"包含键 'reason'，其值为你的理由。\n"  
+                        f"例如：{{\"decision\": true, \"reason\": \"因为我想休息\"}}\n"
                         f"请只输出有效的 JSON 对象。"
                     )
 
@@ -423,7 +471,8 @@ class SubHeartflowManager:
         try:
             # --- 真实的 LLM 调用 ---
             response_text, _ = await self.llm_state_evaluator.generate_response_async(prompt)
-            logger.debug(f"{log_prefix} 使用模型 {self.llm_state_evaluator.model_name} 评估")
+            # logger.debug(f"{log_prefix} 使用模型 {self.llm_state_evaluator.model_name} 评估")
+            logger.debug(f"{log_prefix} 原始输入: {prompt}")
             logger.debug(f"{log_prefix} 原始响应: {response_text}")
 
             # --- 解析 JSON 响应 ---
