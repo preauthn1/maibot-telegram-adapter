@@ -478,19 +478,21 @@ class SubHeartflowManager:
             # --- 解析 JSON 响应 ---
             try:
                 # 尝试去除可能的Markdown代码块标记
-                cleaned_response = response_text.strip().strip('`').strip()
-                if cleaned_response.startswith('json'):
+                cleaned_response = response_text.strip().strip("`").strip()
+                if cleaned_response.startswith("json"):
                     cleaned_response = cleaned_response[4:].strip()
 
                 data = json.loads(cleaned_response)
-                decision = data.get("decision") # 使用 .get() 避免 KeyError
+                decision = data.get("decision")  # 使用 .get() 避免 KeyError
 
                 if isinstance(decision, bool):
                     logger.debug(f"{log_prefix} LLM评估结果 (来自JSON): {'建议转换' if decision else '建议不转换'}")
                     return decision
                 else:
-                    logger.warning(f"{log_prefix} LLM 返回的 JSON 中 'decision' 键的值不是布尔型: {decision}。响应: {response_text}")
-                    return None # 值类型不正确
+                    logger.warning(
+                        f"{log_prefix} LLM 返回的 JSON 中 'decision' 键的值不是布尔型: {decision}。响应: {response_text}"
+                    )
+                    return None  # 值类型不正确
 
             except json.JSONDecodeError as json_err:
                 logger.warning(f"{log_prefix} LLM 返回的响应不是有效的 JSON: {json_err}。响应: {response_text}")
@@ -501,15 +503,15 @@ class SubHeartflowManager:
                 if "false" in response_text.lower():
                     logger.debug(f"{log_prefix} 在非JSON响应中找到 'false'，解释为建议不转换")
                     return False
-                return None # JSON 解析失败，也未找到关键词
-            except Exception as parse_err: # 捕获其他可能的解析错误
+                return None  # JSON 解析失败，也未找到关键词
+            except Exception as parse_err:  # 捕获其他可能的解析错误
                 logger.warning(f"{log_prefix} 解析 LLM JSON 响应时发生意外错误: {parse_err}。响应: {response_text}")
                 return None
 
         except Exception as e:
             logger.error(f"{log_prefix} 调用 LLM 或处理其响应时出错: {e}", exc_info=True)
             traceback.print_exc()
-            return None # LLM 调用或处理失败
+            return None  # LLM 调用或处理失败
 
     def count_subflows_by_state(self, state: ChatState) -> int:
         """统计指定状态的子心流数量"""
