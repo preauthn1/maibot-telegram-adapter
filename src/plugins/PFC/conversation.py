@@ -280,6 +280,7 @@ class Conversation:
                         reply=self.generated_reply,
                         goal=current_goal_str,
                         chat_history=observation_info.chat_history,
+                        chat_history_str=observation_info.chat_history_str,
                         retry_count=reply_attempt_count - 1,  # 传递当前尝试次数（从0开始计数）
                     )
                     logger.info(
