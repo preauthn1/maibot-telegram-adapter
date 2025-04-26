@@ -357,17 +357,24 @@ class NormalChat:
 
         # 处理需要回复的消息
         processed_count = 0
-        for item in messages_to_reply:
+        # --- 修改：迭代前创建要处理的ID列表副本，防止迭代时修改 ---
+        messages_to_process_initially = list(messages_to_reply) # 创建副本
+        # --- 修改结束 ---
+        for item in messages_to_process_initially: # 使用副本迭代
             msg_id, (message, interest_value, is_mentioned) = item
+            # --- 修改：在处理前尝试 pop，防止竞争 ---
+            popped_item = self.interest_dict.pop(msg_id, None)
+            if popped_item is None:
+                logger.warning(f"[{self.stream_name}] 初始兴趣消息 {msg_id} 在处理前已被移除，跳过。")
+                continue # 如果消息已被其他任务处理（pop），则跳过
+            # --- 修改结束 ---
+
             try:
                 logger.info(f"[{self.stream_name}] 处理初始高兴趣消息 {msg_id} (兴趣值: {interest_value:.2f})")
                 await self.normal_response(message=message, is_mentioned=is_mentioned, interested_rate=interest_value)
                 processed_count += 1
             except Exception as e:
-                logger.error(f"[{self.stream_name}] 处理初始兴趣消息 {msg_id} 时出错: {e}\n{traceback.format_exc()}")
-            finally:
-                # 无论成功与否都清空兴趣字典
-                self.interest_dict.clear()
+                logger.error(f"[{self.stream_name}] 处理初始兴趣消息 {msg_id} 时出错: {e}\\n{traceback.format_exc()}")
 
         logger.info(
             f"[{self.stream_name}] 初始高兴趣消息处理完毕，共处理 {processed_count} 条。剩余 {len(self.interest_dict)} 条待轮询。"
@@ -414,7 +421,7 @@ class NormalChat:
             # --- 修改：使用 create_task 启动初始消息处理 ---
             logger.info(f"[{self.stream_name}] 开始后台处理初始兴趣消息...")
             # 创建一个任务来处理初始消息，不阻塞当前流程
-            initial_process_task = asyncio.create_task(self._process_initial_interest_messages())
+            _initial_process_task = asyncio.create_task(self._process_initial_interest_messages())
             # 可以考虑给这个任务也添加完成回调来记录日志或处理错误
             # initial_process_task.add_done_callback(...)
             # --- 修改结束 ---

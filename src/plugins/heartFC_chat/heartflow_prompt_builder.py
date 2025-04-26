@@ -63,7 +63,7 @@ def init_prompt():
 - 话题无关/无聊/不感兴趣
 - 最后一条消息是你自己发的且无人回应你
 - 讨论你不懂的专业话题
-- 你发送了太多消息
+- 你发送了太多消息，且无人回复
 
 2. 文字回复(text_reply)适用：
 - 有实质性内容需要表达
@@ -81,6 +81,7 @@ def init_prompt():
 - 不要和自己聊天
 
 【必须遵守】
+- 遵守回复原则
 - 必须调用工具并包含action和reasoning
 - 你可以选择文字回复(text_reply)，纯表情回复(emoji_reply)，不回复(no_reply)
 - 选择text_reply或emoji_reply时必须提供emoji_query
