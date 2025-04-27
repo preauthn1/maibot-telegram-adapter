@@ -279,7 +279,7 @@ class ActionPlanner:
                     final_reason = action_data.get("final_reason", "")
                     action_time = action_data.get("time", "")
                 elif isinstance(action_data, tuple):
-                     # 假设旧格式兼容
+                    # 假设旧格式兼容
                     if len(action_data) > 0: action_type = action_data[0]
                     if len(action_data) > 1: plan_reason = action_data[1] # 可能是规划原因或最终原因
                     if len(action_data) > 2: status = action_data[2]
@@ -311,10 +311,10 @@ class ActionPlanner:
         # --- 选择 Prompt ---
         if last_successful_reply_action in ['direct_reply', 'send_new_message']:
             prompt_template = PROMPT_FOLLOW_UP
-            logger.info("使用 PROMPT_FOLLOW_UP (追问决策)")
+            logger.debug(f"使用 PROMPT_FOLLOW_UP (追问决策)")
         else:
             prompt_template = PROMPT_INITIAL_REPLY
-            logger.info("使用 PROMPT_INITIAL_REPLY (首次/非连续回复决策)")
+            logger.debug("使用 PROMPT_INITIAL_REPLY (首次/非连续回复决策)")
 
         # --- 格式化最终的 Prompt ---
         prompt = prompt_template.format(

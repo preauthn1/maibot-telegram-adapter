@@ -114,15 +114,15 @@ class ReplyGenerator:
         # 获取聊天历史记录 (chat_history_text)
         chat_history_text = observation_info.chat_history_str
         if observation_info.new_messages_count > 0 and observation_info.unprocessed_messages:
-             new_messages_list = observation_info.unprocessed_messages
-             new_messages_str = await build_readable_messages(
-                 new_messages_list,
-                 replace_bot_name=True,
-                 merge_messages=False,
-                 timestamp_mode="relative",
-                 read_mark=0.0,
-             )
-             chat_history_text += f"\n--- 以下是 {observation_info.new_messages_count} 条新消息 ---\n{new_messages_str}"
+            new_messages_list = observation_info.unprocessed_messages
+            new_messages_str = await build_readable_messages(
+                new_messages_list,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="relative",
+                read_mark=0.0,
+            )
+            chat_history_text += f"\n--- 以下是 {observation_info.new_messages_count} 条新消息 ---\n{new_messages_str}"
         elif not chat_history_text:
             chat_history_text = "还没有聊天记录。"
 
@@ -162,7 +162,7 @@ class ReplyGenerator:
         logger.debug(f"发送到LLM的生成提示词:\n------\n{prompt}\n------")
         try:
             content, _ = await self.llm.generate_response_async(prompt)
-            logger.info(f"生成的回复: {content}")
+            logger.debug(f"生成的回复: {content}")
             # 移除旧的检查新消息逻辑，这应该由 conversation 控制流处理
             return content
 
