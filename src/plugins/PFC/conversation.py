@@ -146,7 +146,7 @@ class Conversation:
                 # --- 在规划前记录当前新消息数量 ---
                 initial_new_message_count = 0
                 if hasattr(self.observation_info, "new_messages_count"):
-                    initial_new_message_count = self.observation_info.new_messages_count
+                    initial_new_message_count = self.observation_info.new_messages_count + 1  # 算上麦麦自己发的那一条
                 else:
                     logger.warning("ObservationInfo missing 'new_messages_count' before planning.")
 
