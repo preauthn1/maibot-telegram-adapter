@@ -536,7 +536,7 @@ class Conversation:
                 if not hasattr(self, 'waiter'):
                     logger.error("Waiter 未初始化，无法等待。")
                     raise AttributeError("Waiter not initialized")
-                timeout_occurred = await self.waiter.wait(self.conversation_info)
+                _timeout_occurred = await self.waiter.wait(self.conversation_info)
                 action_successful = True # Wait 完成就算成功
             except Exception as wait_err:
                 logger.error(f"等待时出错: {wait_err}")

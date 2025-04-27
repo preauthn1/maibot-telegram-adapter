@@ -279,11 +279,16 @@ class ActionPlanner:
                     action_time = action_data.get("time", "")
                 elif isinstance(action_data, tuple):
                     # 假设旧格式兼容
-                    if len(action_data) > 0: action_type = action_data[0]
-                    if len(action_data) > 1: plan_reason = action_data[1] # 可能是规划原因或最终原因
-                    if len(action_data) > 2: status = action_data[2]
-                    if status == "recall" and len(action_data) > 3: final_reason = action_data[3]
-                    elif status == "done" and action_type in ["direct_reply", "send_new_message"]: plan_reason = "成功发送" # 简化显示
+                    if len(action_data) > 0:
+                        action_type = action_data[0]
+                    if len(action_data) > 1:
+                        plan_reason = action_data[1] # 可能是规划原因或最终原因
+                    if len(action_data) > 2:
+                        status = action_data[2]
+                    if status == "recall" and len(action_data) > 3:
+                        final_reason = action_data[3]
+                    elif status == "done" and action_type in ["direct_reply", "send_new_message"]:
+                        plan_reason = "成功发送" # 简化显示
 
                 reason_text = f", 失败/取消原因: {final_reason}" if final_reason else ""
                 summary_line = f"- 时间:{action_time}, 尝试行动:'{action_type}', 状态:{status}{reason_text}"
@@ -310,7 +315,7 @@ class ActionPlanner:
         # --- 选择 Prompt ---
         if last_successful_reply_action in ['direct_reply', 'send_new_message']:
             prompt_template = PROMPT_FOLLOW_UP
-            logger.debug(f"使用 PROMPT_FOLLOW_UP (追问决策)")
+            logger.debug("使用 PROMPT_FOLLOW_UP (追问决策)")
         else:
             prompt_template = PROMPT_INITIAL_REPLY
             logger.debug("使用 PROMPT_INITIAL_REPLY (首次/非连续回复决策)")
