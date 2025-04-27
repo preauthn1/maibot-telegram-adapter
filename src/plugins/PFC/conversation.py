@@ -308,7 +308,9 @@ class Conversation:
                 # 2. 检查回复 (逻辑不变)
                 self.state = ConversationState.CHECKING
                 try:
+                    print(conversation_info.goal_list)
                     current_goal_str = conversation_info.goal_list[0]["goal"] if conversation_info.goal_list else ""
+                    print("跳过小虫虫\n")
                     is_suitable, check_reason, need_replan = await self.reply_generator.check_reply(
                         reply=self.generated_reply,
                         goal=current_goal_str,
