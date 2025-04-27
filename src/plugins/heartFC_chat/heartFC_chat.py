@@ -762,9 +762,15 @@ class HeartFChatting:
             # 执行LLM请求
 
             try:
+                print("prompt")
+                print("prompt")
+                print("prompt")
+                print(payload)
+                print(prompt)
                 response = await self.planner_llm._execute_request(
                     endpoint="/chat/completions", payload=payload, prompt=prompt
                 )
+                print(response)
             except Exception as req_e:
                 logger.error(f"{self.log_prefix}[Planner] LLM请求执行失败: {req_e}")
                 return {
@@ -779,6 +785,9 @@ class HeartFChatting:
             # 处理LLM响应
             with Timer("使用工具", cycle_timers):
                 # 使用辅助函数处理工具调用响应
+                print(1111122222222222)
+                print(response)
+                
                 success, arguments, error_msg = process_llm_tool_response(
                     response, expected_tool_name="decide_reply_action", log_prefix=f"{self.log_prefix}[Planner] "
                 )

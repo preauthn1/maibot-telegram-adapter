@@ -213,6 +213,9 @@ def process_llm_tool_calls(response: List[Any], log_prefix: str = "") -> Tuple[b
         元组 (成功标志, 工具调用列表, 错误消息)
     """
     # 确保响应格式正确
+    print(response)
+    print(11111111111111111)
+    
     if len(response) != 3:
         return False, [], f"LLM响应元素数量不正确: 预期3个元素，实际{len(response)}个"
 
