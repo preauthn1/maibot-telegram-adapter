@@ -244,7 +244,7 @@ class ActionPlanner:
                         last_action_context += f"- 该行动当前状态: {status}\n"
 
         # --- 构建最终的 Prompt ---
-        prompt = f"""{persona_text}。现在你在参与一场QQ私聊，请根据以下【所有信息】审慎且灵活的决策下一步行动，可以发言，可以等待，可以倾听，可以调取知识：
+        prompt = f"""{persona_text}。现在你在参与一场QQ私聊，请根据以下【所有信息】审慎且灵活的决策下一步行动，可以发言，可以等待，可以倾听，可以调取知识，甚至可以屏蔽对方：
 
 【当前对话目标】
 {goals_str if goals_str.strip() else "- 目前没有明确对话目标，请考虑设定一个。"}
@@ -261,12 +261,13 @@ class ActionPlanner:
 
 ------
 可选行动类型以及解释：
-etch_knowledge: 需要调取知识，当需要专业知识或特定信息时选择，对方若提到你太认识的人名或实体也可以尝试
+etch_knowledge: 需要调取知识，当需要专业知识或特定信息时选择，对方若提到你太认识的人名或实体也可以尝试选择
 wait: 暂时不说话，等待对方回复（尤其是在你刚发言后、或上次发言因重复、发言过多被拒时、或不确定做什么时，这是较安全的选择）
-listening: 倾听对方发言，当你认为对方话才说到一半，发言明显未结束时采用
+listening: 倾听对方发言，当你认为对方话才说到一半，发言明显未结束时选择
 direct_reply: 直接回复或发送新消息，允许适当的追问和深入话题，**但是避免在因重复被拒后立即使用，也不要在对方没有回复的情况下过多的“消息轰炸”或重复发言**
 rethink_goal: 重新思考对话目标，当发现对话目标不再适用或对话卡住时选择，注意私聊的环境是灵活的，有可能需要经常选择
 end_conversation: 结束对话，对方长时间没回复或者当你觉得对话告一段落时可以选择
+block_and_ignore: 更加极端的结束对话方式，直接结束对话并在一段时间内无视对方所有发言（屏蔽），当对话让你感到十分不适，或你遭到各类骚扰时选择
 
 请以JSON格式输出你的决策：
 {{
@@ -292,7 +293,7 @@ end_conversation: 结束对话，对方长时间没回复或者当你觉得对�
             reason = result.get("reason", "LLM未提供原因，默认等待")
 
             # 验证action类型
-            valid_actions = ["direct_reply", "fetch_knowledge", "wait", "listening", "rethink_goal", "end_conversation"]
+            valid_actions = ["direct_reply", "fetch_knowledge", "wait", "listening", "rethink_goal", "end_conversation", "block_and_ignore"]
             if action not in valid_actions:
                 logger.warning(f"LLM返回了未知的行动类型: '{action}'，强制改为 wait")
                 reason = f"(原始行动'{action}'无效，已强制改为wait) {reason}"
