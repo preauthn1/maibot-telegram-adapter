@@ -1,6 +1,6 @@
 import random
 from ...config.config import global_config
-from src.common.logger import get_module_logger
+from src.common.logger_manager import get_logger
 from ...individuality.individuality import Individuality
 from src.plugins.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugins.utils.chat_message_builder import build_readable_messages, get_raw_msg_before_timestamp_with_chat
@@ -15,7 +15,7 @@ from ..memory_system.Hippocampus import HippocampusManager
 from ..schedule.schedule_generator import bot_schedule
 from ..knowledge.knowledge_lib import qa_manager
 
-logger = get_module_logger("prompt")
+logger = get_logger("prompt")
 
 
 def init_prompt():

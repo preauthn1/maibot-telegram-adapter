@@ -1,6 +1,6 @@
 import time
 from typing import Tuple
-from src.common.logger import get_module_logger, LogConfig, PFC_ACTION_PLANNER_STYLE_CONFIG
+from src.common.logger_manager import get_logger
 from ..models.utils_model import LLMRequest
 from ...config.config import global_config
 from .chat_observer import ChatObserver
@@ -10,12 +10,9 @@ from .observation_info import ObservationInfo
 from .conversation_info import ConversationInfo
 from src.plugins.utils.chat_message_builder import build_readable_messages
 
-pfc_action_log_config = LogConfig(
-    console_format=PFC_ACTION_PLANNER_STYLE_CONFIG["console_format"],
-    file_format=PFC_ACTION_PLANNER_STYLE_CONFIG["file_format"],
-)
 
-logger = get_module_logger("action_planner", config=pfc_action_log_config)
+
+logger = get_logger("pfc_action_planner")
 
 
 # 注意：这个 ActionPlannerInfo 类似乎没有在 ActionPlanner 中使用，

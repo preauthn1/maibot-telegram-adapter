@@ -9,7 +9,7 @@ from src.plugins.chat.message import Seg  # Local import needed after move
 from src.plugins.chat.chat_stream import ChatStream
 from src.plugins.chat.message import UserInfo
 from src.plugins.chat.chat_stream import chat_manager
-from src.common.logger import get_module_logger, LogConfig, PFC_STYLE_CONFIG  # 引入 DEFAULT_CONFIG
+from src.common.logger_manager import get_logger
 from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
@@ -30,12 +30,7 @@ from .heartFC_sender import HeartFCSender
 INITIAL_DURATION = 60.0
 
 
-# 定义日志配置 (使用 loguru 格式)
-interest_log_config = LogConfig(
-    console_format=PFC_STYLE_CONFIG["console_format"],  # 使用默认控制台格式
-    file_format=PFC_STYLE_CONFIG["file_format"],  # 使用默认文件格式
-)
-logger = get_module_logger("HeartFCLoop", config=interest_log_config)  # Logger Name Changed
+logger = get_logger("interest")  # Logger Name Changed
 
 
 # 默认动作定义

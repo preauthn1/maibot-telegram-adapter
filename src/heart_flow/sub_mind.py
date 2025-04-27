@@ -3,7 +3,7 @@ from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 import time
 import traceback
-from src.common.logger import get_module_logger, LogConfig, SUB_HEARTFLOW_STYLE_CONFIG  # noqa: E402
+from src.common.logger_manager import get_logger
 from src.individuality.individuality import Individuality
 import random
 from ..plugins.utils.prompt_builder import Prompt, global_prompt_manager
@@ -13,11 +13,8 @@ from src.heart_flow.chat_state_info import ChatStateInfo
 from src.plugins.chat.chat_stream import chat_manager
 from src.plugins.heartFC_chat.heartFC_Cycleinfo import CycleInfo
 
-subheartflow_config = LogConfig(
-    console_format=SUB_HEARTFLOW_STYLE_CONFIG["console_format"],
-    file_format=SUB_HEARTFLOW_STYLE_CONFIG["file_format"],
-)
-logger = get_module_logger("subheartflow", config=subheartflow_config)
+
+logger = get_logger("sub_heartflow")
 
 
 def init_prompt():
