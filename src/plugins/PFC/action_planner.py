@@ -21,7 +21,7 @@ logger = get_module_logger("action_planner", config=pfc_action_log_config)
 # --- 定义 Prompt 模板 ---
 
 # Prompt(1): 首次回复或非连续回复时的决策 Prompt
-PROMPT_INITIAL_REPLY = """{persona_text}。现在你在参与一场QQ私聊，请根据以下【所有信息】审慎且灵活的决策下一步行动，可以回复，可以等待，可以倾听，可以调取知识，甚至可以屏蔽对方：
+PROMPT_INITIAL_REPLY = """{persona_text}。现在你在参与一场QQ私聊，请根据以下【所有信息】审慎且灵活的决策下一步行动，可以回复，可以倾听，可以调取知识，甚至可以屏蔽对方：
 
 【当前对话目标】
 {goals_str}
