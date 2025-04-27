@@ -505,7 +505,7 @@ class Conversation:
                 if not hasattr(self, 'waiter'):
                     logger.error("Waiter 未初始化，无法倾听。")
                     raise AttributeError("Waiter not initialized")
-                timeout_occurred = await self.waiter.wait_listening(conversation_info)
+                await self.waiter.wait_listening(conversation_info)
                 action_successful = True # Listening 完成就算成功
             except Exception as listen_err:
                 logger.error(f"倾听时出错: {listen_err}")
