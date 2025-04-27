@@ -267,7 +267,7 @@ class Conversation:
     ):
         """处理规划的行动"""
 
-        logger.info(f"执行行动: {action}, 原因: {reason}")
+        logger.debug(f"执行行动: {action}, 原因: {reason}")
 
         # 记录action历史 (逻辑不变)
         current_action_record = {

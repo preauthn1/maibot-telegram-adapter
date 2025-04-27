@@ -94,11 +94,9 @@ class ChatObserver:
         """
         try:
             # 发送新消息通知
-            # logger.info(f"发送新ccchandleer消息通知: {message}")
             notification = create_new_message_notification(
                 sender="chat_observer", target="observation_info", message=message
             )
-            # logger.info(f"发送新消ddddd息通知: {notification}")
             # print(self.notification_manager)
             await self.notification_manager.send_notification(notification)
         except Exception as e:

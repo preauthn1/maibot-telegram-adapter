@@ -162,7 +162,7 @@ class ReplyGenerator:
         logger.debug(f"发送到LLM的生成提示词:\n------\n{prompt}\n------")
         try:
             content, _ = await self.llm.generate_response_async(prompt)
-            logger.info(f"生成的回复: {content}")
+            logger.debug(f"生成的回复: {content}")
             # 移除旧的检查新消息逻辑，这应该由 conversation 控制流处理
             return content
 
