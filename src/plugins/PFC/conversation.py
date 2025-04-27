@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 from ..chat.message import Message
 from .pfc_types import ConversationState
 from .pfc import ChatObserver, GoalAnalyzer, DirectMessageSender
-from src.common.logger import get_module_logger
+from src.common.logger_manager import get_logger
 from .action_planner import ActionPlanner
 from .observation_info import ObservationInfo
 from .conversation_info import ConversationInfo # 确保导入 ConversationInfo
@@ -23,7 +23,7 @@ from .waiter import Waiter
 
 import traceback
 
-logger = get_module_logger("pfc_conversation")
+logger = get_logger("pfc")
 
 
 class Conversation:
