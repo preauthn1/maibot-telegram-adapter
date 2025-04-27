@@ -279,7 +279,7 @@ class ActionPlanner:
                     final_reason = action_data.get("final_reason", "")
                     action_time = action_data.get("time", "")
                 elif isinstance(action_data, tuple):
-                     # 假设旧格式兼容
+                    # 假设旧格式兼容
                     if len(action_data) > 0: action_type = action_data[0]
                     if len(action_data) > 1: plan_reason = action_data[1] # 可能是规划原因或最终原因
                     if len(action_data) > 2: status = action_data[2]

@@ -114,15 +114,15 @@ class ReplyGenerator:
         # 获取聊天历史记录 (chat_history_text)
         chat_history_text = observation_info.chat_history_str
         if observation_info.new_messages_count > 0 and observation_info.unprocessed_messages:
-             new_messages_list = observation_info.unprocessed_messages
-             new_messages_str = await build_readable_messages(
-                 new_messages_list,
-                 replace_bot_name=True,
-                 merge_messages=False,
-                 timestamp_mode="relative",
-                 read_mark=0.0,
-             )
-             chat_history_text += f"\n--- 以下是 {observation_info.new_messages_count} 条新消息 ---\n{new_messages_str}"
+            new_messages_list = observation_info.unprocessed_messages
+            new_messages_str = await build_readable_messages(
+                new_messages_list,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="relative",
+                read_mark=0.0,
+            )
+            chat_history_text += f"\n--- 以下是 {observation_info.new_messages_count} 条新消息 ---\n{new_messages_str}"
         elif not chat_history_text:
             chat_history_text = "还没有聊天记录。"
 
