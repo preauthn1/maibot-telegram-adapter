@@ -9,7 +9,6 @@ from src.common.logger_manager import get_logger
 from src.plugins.chat.utils import calculate_typing_time
 
 
-
 logger = get_logger("sender")
 
 

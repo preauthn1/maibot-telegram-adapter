@@ -87,6 +87,7 @@ MODULE_LOGGER_CONFIGS = {
     # ...如有更多模块，继续添加...
 }
 
+
 def get_logger(module_name: str):
     style_config = MODULE_LOGGER_CONFIGS.get(module_name)
     if style_config:

@@ -83,8 +83,6 @@ def cosine_similarity(v1, v2):
     return dot_product / (norm1 * norm2)
 
 
-
-
 logger = get_logger("memory")
 
 

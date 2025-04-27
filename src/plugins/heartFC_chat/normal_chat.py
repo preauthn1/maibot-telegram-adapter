@@ -21,7 +21,6 @@ from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
 from src.plugins.utils.timer_calculator import Timer
 
 
-
 logger = get_logger("chat")
 
 

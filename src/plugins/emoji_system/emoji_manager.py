@@ -17,7 +17,6 @@ from ..models.utils_model import LLMRequest
 from src.common.logger_manager import get_logger
 
 
-
 logger = get_logger("emoji")
 
 BASE_DIR = os.path.join("data")

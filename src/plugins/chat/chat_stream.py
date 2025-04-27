@@ -11,7 +11,6 @@ from maim_message import GroupInfo, UserInfo
 from src.common.logger_manager import get_logger
 
 
-
 logger = get_logger("chat_stream")
 
 
