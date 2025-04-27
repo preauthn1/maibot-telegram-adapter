@@ -215,7 +215,7 @@ def process_llm_tool_calls(response: List[Any], log_prefix: str = "") -> Tuple[b
     # 确保响应格式正确
     print(response)
     print(11111111111111111)
-    
+
     if len(response) != 3:
         return False, [], f"LLM响应元素数量不正确: 预期3个元素，实际{len(response)}个"
 
@@ -280,7 +280,9 @@ def process_llm_tool_response(
     # 新增检查：确保响应包含预期的工具调用部分
     if len(normalized_response) != 3:
         # 如果长度不为3，说明LLM响应不包含工具调用部分，这在期望工具调用的上下文中是错误的
-        error_msg = f"LLM响应未包含预期的工具调用部分: 元素数量{len(normalized_response)}，响应内容：{normalized_response}"
+        error_msg = (
+            f"LLM响应未包含预期的工具调用部分: 元素数量{len(normalized_response)}，响应内容：{normalized_response}"
+        )
         logger.warning(f"{log_prefix}{error_msg}")
         return False, {}, error_msg
 

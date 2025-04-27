@@ -705,12 +705,14 @@ class HeartFChatting:
                 await observation.observe()
 
             # 获取上一个循环的信息
-            last_cycle = self._cycle_history[-1] if self._cycle_history else None
+            # last_cycle = self._cycle_history[-1] if self._cycle_history else None
 
             with Timer("思考", cycle_timers):
                 # 获取上一个循环的动作
                 # 传递上一个循环的信息给 do_thinking_before_reply
-                current_mind, _past_mind = await self.sub_mind.do_thinking_before_reply(last_cycle=last_cycle)
+                current_mind, _past_mind = await self.sub_mind.do_thinking_before_reply(
+                    history_cycle=self._cycle_history
+                )
                 return current_mind
         except Exception as e:
             logger.error(f"{self.log_prefix}[SubMind] 思考失败: {e}")
@@ -787,7 +789,7 @@ class HeartFChatting:
                 # 使用辅助函数处理工具调用响应
                 print(1111122222222222)
                 print(response)
-                
+
                 success, arguments, error_msg = process_llm_tool_response(
                     response, expected_tool_name="decide_reply_action", log_prefix=f"{self.log_prefix}[Planner] "
                 )
@@ -998,7 +1000,7 @@ class HeartFChatting:
                 current_mind_block = f"{current_mind}"
             else:
                 current_mind_block = "[没有特别的想法]"
-                
+
             # 准备循环信息块 (分析最近的活动循环)
             recent_active_cycles = []
             for cycle in reversed(self._cycle_history):
@@ -1028,19 +1030,19 @@ class HeartFChatting:
 
             # 根据连续文本回复的数量构建提示信息
             # 注意: responses_for_prompt 列表是从最近到最远排序的
-            if consecutive_text_replies >= 3: # 如果最近的三个活动都是文本回复
+            if consecutive_text_replies >= 3:  # 如果最近的三个活动都是文本回复
                 cycle_info_block = f'你已经连续回复了三条消息（最近: "{responses_for_prompt[0]}"，第二近: "{responses_for_prompt[1]}"，第三近: "{responses_for_prompt[2]}"）。你回复的有点多了，请注意'
-            elif consecutive_text_replies == 2: # 如果最近的两个活动是文本回复
+            elif consecutive_text_replies == 2:  # 如果最近的两个活动是文本回复
                 cycle_info_block = f'你已经连续回复了两条消息（最近: "{responses_for_prompt[0]}"，第二近: "{responses_for_prompt[1]}"），请注意'
-            elif consecutive_text_replies == 1: # 如果最近的一个活动是文本回复
+            elif consecutive_text_replies == 1:  # 如果最近的一个活动是文本回复
                 cycle_info_block = f'你刚刚已经回复一条消息（内容: "{responses_for_prompt[0]}"）'
 
             # 包装提示块，增加可读性，即使没有连续回复也给个标记
             if cycle_info_block:
-                cycle_info_block = f'\n【近期回复历史】\n{cycle_info_block}\n'
+                cycle_info_block = f"\n【近期回复历史】\n{cycle_info_block}\n"
             else:
                 # 如果最近的活动循环不是文本回复，或者没有活动循环
-                cycle_info_block = '\n【近期回复历史】\n(最近没有连续文本回复)\n'
+                cycle_info_block = "\n【近期回复历史】\n(最近没有连续文本回复)\n"
 
             # 获取提示词模板并填充数据
             prompt = (await global_prompt_manager.get_prompt_async("planner_prompt")).format(
