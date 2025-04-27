@@ -165,7 +165,7 @@ class Conversation:
                 else:
                     logger.warning("ObservationInfo missing 'new_messages_count' after planning.")
 
-                if current_new_message_count > initial_new_message_count:
+                if current_new_message_count > initial_new_message_count + 2:
                     logger.info(
                         f"规划期间发现新增消息 ({initial_new_message_count} -> {current_new_message_count})，跳过本次行动，重新规划"
                     )
