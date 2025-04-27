@@ -287,7 +287,7 @@ class ChatObserver:
 
         self._running = True
         self._task = asyncio.create_task(self._update_loop())
-        logger.info(f"ChatObserver for {self.stream_id} started")
+        logger.debug(f"ChatObserver for {self.stream_id} started")
 
     def stop(self):
         """停止观察器"""
@@ -296,7 +296,7 @@ class ChatObserver:
         self._update_complete.set()  # 设置完成事件以解除等待
         if self._task:
             self._task.cancel()
-        logger.info(f"ChatObserver for {self.stream_id} stopped")
+        logger.debug(f"ChatObserver for {self.stream_id} stopped")
 
     async def process_chat_history(self, messages: list):
         """处理聊天历史
