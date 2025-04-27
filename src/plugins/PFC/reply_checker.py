@@ -1,11 +1,10 @@
 import json
-import datetime
 from typing import Tuple, List, Dict, Any
 from src.common.logger import get_module_logger
 from ..models.utils_model import LLMRequest
 from ...config.config import global_config
 from .chat_observer import ChatObserver
-from ..message.message_base import UserInfo
+from maim_message import UserInfo
 
 logger = get_module_logger("reply_checker")
 
@@ -22,7 +21,7 @@ class ReplyChecker:
         self.max_retries = 3  # 最大重试次数
 
     async def check(
-        self, reply: str, goal: str, chat_history: List[Dict[str, Any]], retry_count: int = 0
+        self, reply: str, goal: str, chat_history: List[Dict[str, Any]], chat_history_text: str, retry_count: int = 0
     ) -> Tuple[bool, str, bool]:
         """检查生成的回复是否合适
 
@@ -36,7 +35,6 @@ class ReplyChecker:
         """
         # 不再从 observer 获取，直接使用传入的 chat_history
         # messages = self.chat_observer.get_cached_messages(limit=20)
-        chat_history_text = ""
         try:
             # 筛选出最近由 Bot 自己发送的消息
             bot_messages = []
@@ -78,16 +76,9 @@ class ReplyChecker:
 
         except Exception as e:
             import traceback
-            logger.error(f"检查回复时出错: 类型={type(e)}, 值={e}")
-            logger.error(traceback.format_exc()) # 打印详细的回溯信息
 
-        for msg in chat_history[-20:]:
-            time_str = datetime.datetime.fromtimestamp(msg["time"]).strftime("%H:%M:%S")
-            user_info = UserInfo.from_dict(msg.get("user_info", {}))
-            sender = user_info.user_nickname or f"用户{user_info.user_id}"
-            if sender == self.name:
-                sender = "你说"
-            chat_history_text += f"{time_str},{sender}:{msg.get('processed_plain_text', '')}\n"
+            logger.error(f"检查回复时出错: 类型={type(e)}, 值={e}")
+            logger.error(traceback.format_exc())  # 打印详细的回溯信息
 
         prompt = f"""请检查以下回复或消息是否合适：
 

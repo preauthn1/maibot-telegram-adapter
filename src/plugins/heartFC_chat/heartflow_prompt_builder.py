@@ -21,42 +21,80 @@ logger = get_module_logger("prompt")
 def init_prompt():
     Prompt(
         """
-你有以下信息可供参考：
-{structured_info}
+{info_from_tools}
 {chat_target}
 {chat_talking_prompt}
 现在你想要在群里发言或者回复。\n
 你需要扮演一位网名叫{bot_name}的人进行回复，这个人的特点是："{prompt_personality} {prompt_identity}"。
-你正在{chat_target_2},现在请你读读之前的聊天记录，然后给出日常且口语化的回复，平淡一些，你可以参考贴吧，小红书或者微博的回复风格。
-你刚刚脑子里在想：
+你正在{chat_target_2},现在请你读读之前的聊天记录，然后给出日常且口语化的回复，平淡一些，你可以参考贴吧，知乎或者微博的回复风格。
+看到以上聊天记录，你刚刚在想：
+
 {current_mind_info}
-{reason}
+因为上述想法，你决定发言，原因是：{reason}
+
 回复尽量简短一些。请注意把握聊天内容，不要回复的太有条理，可以有个性。请一次只回复一个话题，不要同时回复多个人，不用指出你回复的是谁。{prompt_ger}
 请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，不要说你说过的话题 ，注意只输出回复内容。
-{moderation_prompt}。注意：不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
+{moderation_prompt}。注意：回复不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
         "heart_flow_prompt",
     )
-    
-    # Planner提示词
+
     Prompt(
-        """你的名字是 {bot_name}。是一个女大二学生，正在QQ聊天，正在决定是否以及如何回应当前的聊天。
+        """
+你有以下信息可供参考：
+{structured_info}
+以上的消息是你获取到的消息，或许可以帮助你更好地回复。
+""",
+        "info_from_tools",
+    )
+
+    # Planner提示词 - 优化版
+    Prompt(
+        """你的名字是{bot_name}，一名大二女生，正在QQ群聊中。需要基于以下信息决定如何参与对话：
 {structured_info_block}
 {chat_content_block}
-看了以上内容，你产生的内心想法是：
+你的内心想法：
 {current_mind_block}
-请结合你的内心想法和观察到的聊天内容，分析情况并使用 'decide_reply_action' 工具来决定你的最终行动。
-决策依据：
-1. 如果聊天内容无聊、与你无关、或者你的内心想法认为不适合回复（例如在讨论你不懂或不感兴趣的话题），选择 'no_reply'。
-2. 如果聊天内容值得回应，且适合用文字表达（参考你的内心想法），选择 'text_reply'。如果你有情绪想表达，想在文字后追加一个表达情绪的表情，请同时提供 'emoji_query' (例如：'开心的'、'惊讶的')。
-3. 如果聊天内容或你的内心想法适合用一个表情来回应（例如表示赞同、惊讶、无语等），选择 'emoji_reply' 并提供表情主题 'emoji_query'。
-4. 如果最后一条消息是你自己发的，观察到的内容只有你自己的发言，并且之后没有人回复你，通常选择 'no_reply'，除非有特殊原因需要追问。
-5. 如果聊天记录中最新的消息是你自己发送的，并且你还想继续回复，你应该紧紧衔接你发送的消息，进行话题的深入，补充，或追问等等；。
-6. 表情包是用来表达情绪的，不要直接回复或评价别人的表情包，而是根据对话内容和情绪选择是否用表情回应。
-7. 不要回复你自己的话，不要把自己的话当做别人说的。
-必须调用 'decide_reply_action' 工具并提供 'action' 和 'reasoning'。如果选择了 'emoji_reply' 或者选择了 'text_reply' 并想追加表情，则必须提供 'emoji_query'。""",
+{replan}
+
+请综合分析聊天内容和你看到的新消息，参考内心想法，使用'decide_reply_action'工具做出决策。决策时请注意：
+
+【回复原则】
+1. 不回复(no_reply)适用：
+- 话题无关/无聊/不感兴趣
+- 最后一条消息是你自己发的且无人回应你
+- 讨论你不懂的专业话题
+- 你发送了太多消息，且无人回复
+
+2. 文字回复(text_reply)适用：
+- 有实质性内容需要表达
+- 有人提到你，但你还没有回应他
+- 可以追加emoji_query表达情绪(格式：情绪描述,如"俏皮的调侃")
+- 不要追加太多表情
+
+3. 纯表情回复(emoji_reply)适用：
+- 适合用表情回应的场景
+- 需提供明确的emoji_query
+
+4. 自我对话处理：
+- 如果是自己发的消息想继续，需自然衔接
+- 避免重复或评价自己的发言
+- 不要和自己聊天
+
+【必须遵守】
+- 遵守回复原则
+- 必须调用工具并包含action和reasoning
+- 你可以选择文字回复(text_reply)，纯表情回复(emoji_reply)，不回复(no_reply)
+- 选择text_reply或emoji_reply时必须提供emoji_query
+- 保持回复自然，符合日常聊天习惯""",
         "planner_prompt",
     )
-    
+
+    Prompt(
+        """你原本打算{action}，因为：{reasoning}
+但是你看到了新的消息，你决定重新决定行动。""",
+        "replan_prompt",
+    )
+
     Prompt("你正在qq群里聊天，下面是群里在聊的内容：", "chat_target_group1")
     Prompt("和群里聊天", "chat_target_group2")
     Prompt("你正在和{sender_name}聊天，这是你们之前聊的内容：", "chat_target_private1")
@@ -79,9 +117,9 @@ def init_prompt():
 你的网名叫{bot_name}，有人也叫你{bot_other_names}，{prompt_personality}。
 你正在{chat_target_2},现在请你读读之前的聊天记录，{mood_prompt}，然后给出日常且口语化的回复，平淡一些，
 尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。{prompt_ger}
-请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，尽量不要说你说过的话 
+请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，不要浮夸，平淡一些 ，不要重复自己说过的话。
 请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只输出回复内容。
-{moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
+{moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号()，表情包，at或 @等 )。，只输出回复内容""",
         "reasoning_prompt_main",
     )
     Prompt(
@@ -116,13 +154,14 @@ class PromptBuilder:
 
         elif build_mode == "focus":
             return await self._build_prompt_focus(
-                reason, current_mind_info, structured_info, chat_stream,
+                reason,
+                current_mind_info,
+                structured_info,
+                chat_stream,
             )
         return None
 
-    async def _build_prompt_focus(
-        self, reason, current_mind_info, structured_info, chat_stream
-    ) -> tuple[str, str]:
+    async def _build_prompt_focus(self, reason, current_mind_info, structured_info, chat_stream) -> tuple[str, str]:
         individuality = Individuality.get_instance()
         prompt_personality = individuality.get_prompt(type="personality", x_person=2, level=1)
         prompt_identity = individuality.get_prompt(type="identity", x_person=2, level=1)
@@ -145,7 +184,7 @@ class PromptBuilder:
             message_list_before_now,
             replace_bot_name=True,
             merge_messages=False,
-            timestamp_mode="relative",
+            timestamp_mode="normal",
             read_mark=0.0,
         )
 
@@ -156,11 +195,18 @@ class PromptBuilder:
         if random.random() < 0.02:
             prompt_ger += "你喜欢用反问句"
 
+        if structured_info:
+            structured_info_prompt = await global_prompt_manager.format_prompt(
+                "info_from_tools", structured_info=structured_info
+            )
+        else:
+            structured_info_prompt = ""
+
         logger.debug("开始构建prompt")
 
         prompt = await global_prompt_manager.format_prompt(
             "heart_flow_prompt",
-            structured_info=structured_info,
+            info_from_tools=structured_info_prompt,
             chat_target=await global_prompt_manager.get_prompt_async("chat_target_group1")
             if chat_in_group
             else await global_prompt_manager.get_prompt_async("chat_target_private1"),
@@ -490,23 +536,36 @@ class PromptBuilder:
 
         logger.debug(f"获取知识库内容，元消息：{message[:30]}...，消息长度: {len(message)}")
         # 从LPMM知识库获取知识
-        found_knowledge_from_lpmm = qa_manager.get_knowledge(message)
+        try:
+            found_knowledge_from_lpmm = qa_manager.get_knowledge(message)
 
-        end_time = time.time()
-        if found_knowledge_from_lpmm is not None:
-            logger.debug(
-                f"从LPMM知识库获取知识，相关信息：{found_knowledge_from_lpmm[:100]}...，信息长度: {len(found_knowledge_from_lpmm)}"
-            )
-            related_info += found_knowledge_from_lpmm
-            logger.debug(f"获取知识库内容耗时: {(end_time - start_time):.3f}秒")
-            logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
-            return related_info
-        else:
-            logger.debug("从LPMM知识库获取知识失败，使用旧版数据库进行检索")
-            knowledge_from_old = await self.get_prompt_info_old(message, threshold=0.38)
-            related_info += knowledge_from_old
-            logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
-            return related_info
+            end_time = time.time()
+            if found_knowledge_from_lpmm is not None:
+                logger.debug(
+                    f"从LPMM知识库获取知识，相关信息：{found_knowledge_from_lpmm[:100]}...，信息长度: {len(found_knowledge_from_lpmm)}"
+                )
+                related_info += found_knowledge_from_lpmm
+                logger.debug(f"获取知识库内容耗时: {(end_time - start_time):.3f}秒")
+                logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
+                return related_info
+            else:
+                logger.debug("从LPMM知识库获取知识失败，使用旧版数据库进行检索")
+                knowledge_from_old = await self.get_prompt_info_old(message, threshold=0.38)
+                related_info += knowledge_from_old
+                logger.debug(f"获取知识库内容，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}")
+                return related_info
+        except Exception as e:
+            logger.error(f"获取知识库内容时发生异常: {str(e)}")
+            try:
+                knowledge_from_old = await self.get_prompt_info_old(message, threshold=0.38)
+                related_info += knowledge_from_old
+                logger.debug(
+                    f"异常后使用旧版数据库获取知识，相关信息：{related_info[:100]}...，信息长度: {len(related_info)}"
+                )
+                return related_info
+            except Exception as e2:
+                logger.error(f"使用旧版数据库获取知识时也发生异常: {str(e2)}")
+                return ""
 
     @staticmethod
     def get_info_from_db(

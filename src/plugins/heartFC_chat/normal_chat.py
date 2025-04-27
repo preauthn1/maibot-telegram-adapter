@@ -1,23 +1,24 @@
 import time
 import asyncio
 import traceback
+import statistics  # 导入 statistics 模块
 from random import random
 from typing import List, Optional  # 导入 Optional
 
 from ..moods.moods import MoodManager
 from ...config.config import global_config
-from ..chat.emoji_manager import emoji_manager
+from ..emoji_system.emoji_manager import emoji_manager
 from .normal_chat_generator import NormalChatGenerator
 from ..chat.message import MessageSending, MessageRecv, MessageThinking, MessageSet
 from ..chat.message_sender import message_manager
 from ..chat.utils_image import image_path_to_base64
 from ..willing.willing_manager import willing_manager
-from ..message import UserInfo, Seg
+from maim_message import UserInfo, Seg
 from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
 from src.plugins.chat.chat_stream import ChatStream, chat_manager
 from src.plugins.person_info.relationship_manager import relationship_manager
 from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
-from src.plugins.utils.timer_calculater import Timer
+from src.plugins.utils.timer_calculator import Timer
 
 # 定义日志配置
 chat_config = LogConfig(
@@ -46,6 +47,8 @@ class NormalChat:
         self.gpt = NormalChatGenerator()
         self.mood_manager = MoodManager.get_instance()  # MoodManager 保持单例
         # 存储此实例的兴趣监控任务
+        self.start_time = time.time()
+
         self._chat_task: Optional[asyncio.Task] = None
         logger.info(f"[{self.stream_name}] NormalChat 实例初始化完成。")
 
@@ -164,14 +167,13 @@ class NormalChat:
         )
         self.mood_manager.update_mood_from_emotion(emotion, global_config.mood_intensity_factor)
 
-    async def _find_interested_message(self) -> None:
+    async def _reply_interested_message(self) -> None:
         """
         后台任务方法，轮询当前实例关联chat的兴趣消息
         通常由start_monitoring_interest()启动
         """
         while True:
-            await asyncio.sleep(1)  # 每秒检查一次
-
+            await asyncio.sleep(0.5)  # 每秒检查一次
             # 检查任务是否已被取消
             if self._chat_task is None or self._chat_task.cancelled():
                 logger.info(f"[{self.stream_name}] 兴趣监控任务被取消或置空，退出")
@@ -318,6 +320,68 @@ class NormalChat:
         # 意愿管理器：注销当前message信息 (无论是否回复，只要处理过就删除)
         willing_manager.delete(message.message_info.message_id)
 
+    # --- 新增：处理初始高兴趣消息的私有方法 ---
+    async def _process_initial_interest_messages(self):
+        """处理启动时存在于 interest_dict 中的高兴趣消息。"""
+        items_to_process = list(self.interest_dict.items())
+        if not items_to_process:
+            return  # 没有初始消息，直接返回
+
+        logger.info(f"[{self.stream_name}] 发现 {len(items_to_process)} 条初始兴趣消息，开始处理高兴趣部分...")
+        interest_values = [item[1][1] for item in items_to_process]  # 提取兴趣值列表
+
+        messages_to_reply = []  # 需要立即回复的消息
+
+        if len(interest_values) == 1:
+            # 如果只有一个消息，直接处理
+            messages_to_reply.append(items_to_process[0])
+            logger.info(f"[{self.stream_name}] 只有一条初始消息，直接处理。")
+        elif len(interest_values) > 1:
+            # 计算均值和标准差
+            try:
+                mean_interest = statistics.mean(interest_values)
+                stdev_interest = statistics.stdev(interest_values)
+                threshold = mean_interest + stdev_interest
+                logger.info(
+                    f"[{self.stream_name}] 初始兴趣值 均值: {mean_interest:.2f}, 标准差: {stdev_interest:.2f}, 阈值: {threshold:.2f}"
+                )
+
+                # 找出高于阈值的消息
+                for item in items_to_process:
+                    msg_id, (message, interest_value, is_mentioned) = item
+                    if interest_value > threshold:
+                        messages_to_reply.append(item)
+                logger.info(f"[{self.stream_name}] 找到 {len(messages_to_reply)} 条高于阈值的初始消息进行处理。")
+            except statistics.StatisticsError as e:
+                logger.error(f"[{self.stream_name}] 计算初始兴趣统计值时出错: {e}，跳过初始处理。")
+
+        # 处理需要回复的消息
+        processed_count = 0
+        # --- 修改：迭代前创建要处理的ID列表副本，防止迭代时修改 ---
+        messages_to_process_initially = list(messages_to_reply)  # 创建副本
+        # --- 修改结束 ---
+        for item in messages_to_process_initially:  # 使用副本迭代
+            msg_id, (message, interest_value, is_mentioned) = item
+            # --- 修改：在处理前尝试 pop，防止竞争 ---
+            popped_item = self.interest_dict.pop(msg_id, None)
+            if popped_item is None:
+                logger.warning(f"[{self.stream_name}] 初始兴趣消息 {msg_id} 在处理前已被移除，跳过。")
+                continue  # 如果消息已被其他任务处理（pop），则跳过
+            # --- 修改结束 ---
+
+            try:
+                logger.info(f"[{self.stream_name}] 处理初始高兴趣消息 {msg_id} (兴趣值: {interest_value:.2f})")
+                await self.normal_response(message=message, is_mentioned=is_mentioned, interested_rate=interest_value)
+                processed_count += 1
+            except Exception as e:
+                logger.error(f"[{self.stream_name}] 处理初始兴趣消息 {msg_id} 时出错: {e}\\n{traceback.format_exc()}")
+
+        logger.info(
+            f"[{self.stream_name}] 初始高兴趣消息处理完毕，共处理 {processed_count} 条。剩余 {len(self.interest_dict)} 条待轮询。"
+        )
+
+    # --- 新增结束 ---
+
     # 保持 staticmethod, 因为不依赖实例状态, 但需要 chat 对象来获取日志上下文
     @staticmethod
     def _check_ban_words(text: str, chat: ChatStream, userinfo: UserInfo) -> bool:
@@ -351,38 +415,42 @@ class NormalChat:
     # 改为实例方法, 移除 chat 参数
 
     async def start_chat(self):
-        """为此 NormalChat 实例关联的 ChatStream 启动聊天任务（如果尚未运行）。"""
+        """为此 NormalChat 实例关联的 ChatStream 启动聊天任务（如果尚未运行），
+        并在后台处理一次初始的高兴趣消息。"""  # 文言文注释示例：启聊之始，若有遗珠，当于暗处拂拭，勿碍正途。
         if self._chat_task is None or self._chat_task.done():
-            logger.info(f"[{self.stream_name}] 启动聊天任务...")
-            task = asyncio.create_task(self._find_interested_message())
-            task.add_done_callback(lambda t: self._handle_task_completion(t))  # 回调现在是实例方法
-            self._chat_task = task
+            # --- 修改：使用 create_task 启动初始消息处理 ---
+            logger.info(f"[{self.stream_name}] 开始后台处理初始兴趣消息...")
+            # 创建一个任务来处理初始消息，不阻塞当前流程
+            _initial_process_task = asyncio.create_task(self._process_initial_interest_messages())
+            # 可以考虑给这个任务也添加完成回调来记录日志或处理错误
+            # initial_process_task.add_done_callback(...)
+            # --- 修改结束 ---
 
-    # 改为实例方法, 移除 stream_id 参数
+            # 启动后台轮询任务 (这部分不变)
+            logger.info(f"[{self.stream_name}] 启动后台兴趣消息轮询任务...")
+            polling_task = asyncio.create_task(self._reply_interested_message())  # 注意变量名区分
+            polling_task.add_done_callback(lambda t: self._handle_task_completion(t))
+            self._chat_task = polling_task  # self._chat_task 仍然指向主要的轮询任务
+        else:
+            logger.info(f"[{self.stream_name}] 聊天轮询任务已在运行中。")
+
     def _handle_task_completion(self, task: asyncio.Task):
-        """兴趣监控任务完成时的回调函数。"""
-        # 检查完成的任务是否是当前实例的任务
+        """任务完成回调处理"""
         if task is not self._chat_task:
-            logger.warning(f"[{self.stream_name}] 收到一个未知或过时任务的完成回调。")
+            logger.warning(f"[{self.stream_name}] 收到未知任务回调")
             return
-
         try:
-            # 检查任务是否因异常而结束
-            exception = task.exception()
-            if exception:
-                logger.error(f"[{self.stream_name}] 兴趣监控任务因异常结束: {exception}")
-                logger.error(traceback.format_exc())  # 记录完整的 traceback
-            # else: # 减少日志
-            # logger.info(f"[{self.stream_name}] 兴趣监控任务正常结束。")
+            if exc := task.exception():
+                logger.error(f"[{self.stream_name}] 任务异常: {exc}")
+                logger.error(traceback.format_exc())
         except asyncio.CancelledError:
-            logger.info(f"[{self.stream_name}] 兴趣监控任务被取消。")
+            logger.info(f"[{self.stream_name}] 任务已取消")
         except Exception as e:
-            logger.error(f"[{self.stream_name}] 处理任务完成回调时出错: {e}")
+            logger.error(f"[{self.stream_name}] 回调处理错误: {e}")
         finally:
-            # 标记任务已完成/移除
-            if self._chat_task is task:  # 再次确认是当前任务
+            if self._chat_task is task:
                 self._chat_task = None
-                logger.debug(f"[{self.stream_name}] 聊天任务已被标记为完成/移除。")
+                logger.debug(f"[{self.stream_name}] 任务清理完成")
 
     # 改为实例方法, 移除 stream_id 参数
     async def stop_chat(self):
@@ -402,7 +470,7 @@ class NormalChat:
                 # 确保任务状态更新，即使等待出错 (回调函数也会尝试更新)
                 if self._chat_task is task:
                     self._chat_task = None
-        
+
         # 清理所有未处理的思考消息
         try:
             container = await message_manager.get_container(self.stream_id)

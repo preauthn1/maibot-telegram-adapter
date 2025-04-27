@@ -2,7 +2,7 @@ import time
 import asyncio
 import datetime
 # from .message_storage import MongoDBMessageStorage
-from src.plugins.utils.chat_message_builder import get_raw_msg_before_timestamp_with_chat
+from src.plugins.utils.chat_message_builder import build_readable_messages, get_raw_msg_before_timestamp_with_ch
 from ...config.config import global_config
 from typing import Dict, Any, Optional
 from ..chat.message import Message
@@ -14,7 +14,7 @@ from .observation_info import ObservationInfo
 from .conversation_info import ConversationInfo
 from .reply_generator import ReplyGenerator
 from ..chat.chat_stream import ChatStream
-from ..message.message_base import UserInfo
+from maim_message import UserInfo
 from src.plugins.chat.chat_stream import chat_manager
 from .pfc_KnowledgeFetcher import KnowledgeFetcher
 from .waiter import Waiter
@@ -77,14 +77,22 @@ class Conversation:
             raise
         try:
             logger.info(f"为 {self.stream_id} 加载初始聊天记录...")
-            initial_messages = await get_raw_msg_before_timestamp_with_chat( #
+            initial_messages = get_raw_msg_before_timestamp_with_chat(  #
                 chat_id=self.stream_id,
                 timestamp=time.time(),
                 limit=30,  # 加载最近30条作为初始上下文，可以调整
             )
+            chat_talking_prompt = await build_readable_messages(
+                initial_messages,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="relative",
+                read_mark=0.0,
+            )
             if initial_messages:
                 # 将加载的消息填充到 ObservationInfo 的 chat_history
                 self.observation_info.chat_history = initial_messages
+                self.observation_info.chat_history_str = chat_talking_prompt + "\n"
                 self.observation_info.chat_history_count = len(initial_messages)
 
                 # 更新 ObservationInfo 中的时间戳等信息
@@ -174,7 +182,7 @@ class Conversation:
                     if hasattr(self.observation_info, "clear_unprocessed_messages"):
                         # 确保 clear_unprocessed_messages 方法存在
                         logger.debug(f"准备执行 direct_reply，清理 {initial_new_message_count} 条规划时已知的新消息。")
-                        self.observation_info.clear_unprocessed_messages()
+                        await self.observation_info.clear_unprocessed_messages()
                         # 手动重置计数器，确保状态一致性（理想情况下 clear 方法会做这个）
                         if hasattr(self.observation_info, "new_messages_count"):
                             self.observation_info.new_messages_count = 0
@@ -259,7 +267,7 @@ class Conversation:
 
         # --- 根据不同的 action 执行 ---
         if action == "direct_reply":
-            max_reply_attempts = 3 # 设置最大尝试次数（与 reply_checker.py 中的 max_retries 保持一致或稍大）
+            max_reply_attempts = 3  # 设置最大尝试次数（与 reply_checker.py 中的 max_retries 保持一致或稍大）
             reply_attempt_count = 0
             is_suitable = False
             need_replan = False
@@ -284,17 +292,20 @@ class Conversation:
                         reply=self.generated_reply,
                         goal=current_goal_str,
                         chat_history=observation_info.chat_history,
-                        retry_count=reply_attempt_count - 1, # 传递当前尝试次数（从0开始计数）
+                        chat_history_str=observation_info.chat_history_str,
+                        retry_count=reply_attempt_count - 1,  # 传递当前尝试次数（从0开始计数）
                     )
-                    logger.info(f"第 {reply_attempt_count} 次检查结果: 合适={is_suitable}, 原因='{check_reason}', 需重新规划={need_replan}")
+                    logger.info(
+                        f"第 {reply_attempt_count} 次检查结果: 合适={is_suitable}, 原因='{check_reason}', 需重新规划={need_replan}"
+                    )
 
                     if is_suitable:
-                        final_reply_to_send = self.generated_reply # 保存合适的回复
-                        break # 回复合适，跳出循环
+                        final_reply_to_send = self.generated_reply  # 保存合适的回复
+                        break  # 回复合适，跳出循环
 
                     elif need_replan:
-                         logger.warning(f"第 {reply_attempt_count} 次检查建议重新规划，停止尝试。原因: {check_reason}")
-                         break # 如果检查器建议重新规划，也停止尝试
+                        logger.warning(f"第 {reply_attempt_count} 次检查建议重新规划，停止尝试。原因: {check_reason}")
+                        break  # 如果检查器建议重新规划，也停止尝试
 
                     # 如果不合适但不需要重新规划，循环会继续进行下一次尝试
                 except Exception as check_err:
@@ -321,7 +332,7 @@ class Conversation:
                     return
 
                 # 发送合适的回复
-                self.generated_reply = final_reply_to_send # 确保 self.generated_reply 是最终要发送的内容
+                self.generated_reply = final_reply_to_send  # 确保 self.generated_reply 是最终要发送的内容
                 await self._send_reply()
 
                 # 更新 action 历史状态为 done
@@ -337,7 +348,7 @@ class Conversation:
                 logger.warning(f"经过 {reply_attempt_count} 次尝试，未能生成合适的回复。最终原因: {check_reason}")
                 conversation_info.done_action[action_index].update(
                     {
-                        "status": "recall", # 标记为 recall 因为没有成功发送
+                        "status": "recall",  # 标记为 recall 因为没有成功发送
                         "final_reason": f"尝试{reply_attempt_count}次后失败: {check_reason}",
                         "time": datetime.datetime.now().strftime("%H:%M:%S"),
                     }
@@ -352,7 +363,7 @@ class Conversation:
                 wait_action_record = {
                     "action": "wait",
                     "plan_reason": "因 direct_reply 多次尝试失败而执行的后备等待",
-                    "status": "done", # wait 完成后可以认为是 done
+                    "status": "done",  # wait 完成后可以认为是 done
                     "time": datetime.datetime.now().strftime("%H:%M:%S"),
                     "final_reason": None,
                 }
@@ -461,42 +472,11 @@ class Conversation:
 
         try:
             # 外层 try: 捕获发送消息和后续处理中的主要错误
-            current_time = time.time()  # 获取当前时间戳
+            _current_time = time.time()  # 获取当前时间戳
             reply_content = self.generated_reply  # 获取要发送的内容
 
             # 发送消息
             await self.direct_sender.send_message(chat_stream=self.chat_stream, content=reply_content)
-            logger.info(f"消息已发送: {reply_content}")  # 可以在发送后加个日志确认
-
-            # --- 添加的立即更新状态逻辑开始 ---
-            try:
-                # 内层 try: 专门捕获手动更新状态时可能出现的错误
-                # 创建一个代表刚刚发送的消息的字典
-                bot_message_info = {
-                    "message_id": f"bot_sent_{current_time}",  # 创建一个简单的唯一ID
-                    "time": current_time,
-                    "user_info": UserInfo(  # 使用 UserInfo 类构建用户信息
-                        user_id=str(global_config.BOT_QQ),
-                        user_nickname=global_config.BOT_NICKNAME,
-                        platform=self.chat_stream.platform,  # 从 chat_stream 获取平台信息
-                    ).to_dict(),  # 转换为字典格式存储
-                    "processed_plain_text": reply_content,  # 使用发送的内容
-                    "detailed_plain_text": f"{int(current_time)},{global_config.BOT_NICKNAME}:{reply_content}",  # 构造一个简单的详细文本, 时间戳取整
-                    # 可以根据需要添加其他字段，保持与 observation_info.chat_history 中其他消息结构一致
-                }
-
-                # 直接更新 ObservationInfo 实例
-                if self.observation_info:
-                    self.observation_info.chat_history.append(bot_message_info)  # 将消息添加到历史记录末尾
-                    self.observation_info.last_bot_speak_time = current_time  # 更新 Bot 最后发言时间
-                    self.observation_info.last_message_time = current_time  # 更新最后消息时间
-                    logger.debug("已手动将Bot发送的消息添加到 ObservationInfo")
-                else:
-                    logger.warning("无法手动更新 ObservationInfo：实例不存在")
-
-            except Exception as update_err:
-                logger.error(f"手动更新 ObservationInfo 时出错: {update_err}")
-            # --- 添加的立即更新状态逻辑结束 ---
 
             # 原有的触发更新和等待代码
             self.chat_observer.trigger_update()

@@ -12,7 +12,7 @@ from ..models.utils_model import LLMRequest
 from ..utils.typo_generator import ChineseTypoGenerator
 from ...config.config import global_config
 from .message import MessageRecv, Message
-from ..message.message_base import UserInfo
+from maim_message import UserInfo
 from .chat_stream import ChatStream
 from ..moods.moods import MoodManager
 from ...common.database import db
@@ -234,6 +234,13 @@ def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
     Returns:
         List[str]: 分割和合并后的句子列表
     """
+    # 预处理：处理多余的换行符
+    # 1. 将连续的换行符替换为单个换行符
+    text = re.sub(r"\n\s*\n+", "\n", text)
+    # 2. 处理换行符和其他分隔符的组合
+    text = re.sub(r"\n\s*([，,。;\s])", r"\1", text)
+    text = re.sub(r"([，,。;\s])\s*\n", r"\1", text)
+
     # 处理两个汉字中间的换行符
     text = re.sub(r"([\u4e00-\u9fff])\n([\u4e00-\u9fff])", r"\1。\2", text)
 
@@ -365,12 +372,16 @@ def random_remove_punctuation(text: str) -> str:
 
 def process_llm_response(text: str) -> List[str]:
     # 先保护颜文字
-    protected_text, kaomoji_mapping = protect_kaomoji(text)
-    logger.trace(f"保护颜文字后的文本: {protected_text}")
+    if global_config.enable_kaomoji_protection:
+        protected_text, kaomoji_mapping = protect_kaomoji(text)
+        logger.trace(f"保护颜文字后的文本: {protected_text}")
+    else:
+        protected_text = text
+        kaomoji_mapping = {}
     # 提取被 () 或 [] 包裹且包含中文的内容
     pattern = re.compile(r"[\(\[\（](?=.*[\u4e00-\u9fff]).*?[\)\]\）]")
     # _extracted_contents = pattern.findall(text)
-    extracted_contents = pattern.findall(protected_text)  # 在保护后的文本上查找
+    _extracted_contents = pattern.findall(protected_text)  # 在保护后的文本上查找
     # 去除 () 和 [] 及其包裹的内容
     cleaned_text = pattern.sub("", protected_text)
 
@@ -413,13 +424,14 @@ def process_llm_response(text: str) -> List[str]:
     if len(sentences) > max_sentence_num:
         logger.warning(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
         return [f"{global_config.BOT_NICKNAME}不知道哦"]
-    if extracted_contents:
-        for content in extracted_contents:
-            sentences.append(content)
-    # 在所有句子处理完毕后，对包含占位符的列表进行恢复
-    sentences = recover_kaomoji(sentences, kaomoji_mapping)
 
-    print(sentences)
+    # if extracted_contents:
+    #     for content in extracted_contents:
+    #         sentences.append(content)
+
+    # 在所有句子处理完毕后，对包含占位符的列表进行恢复
+    if global_config.enable_kaomoji_protection:
+        sentences = recover_kaomoji(sentences, kaomoji_mapping)
 
     return sentences
 

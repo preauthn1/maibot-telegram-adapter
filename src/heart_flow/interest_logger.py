@@ -54,11 +54,11 @@ class InterestLogger:
         results = {}
 
         if not all_flows:
-            logger.debug("未找到任何子心流状态")
+            # logger.debug("未找到任何子心流状态")
             return results
 
         for subheartflow in all_flows:
-            if self.subheartflow_manager.get_subheartflow(subheartflow.subheartflow_id):
+            if await self.subheartflow_manager.get_or_create_subheartflow(subheartflow.subheartflow_id):
                 tasks.append(
                     asyncio.create_task(subheartflow.get_full_state(), name=f"get_state_{subheartflow.subheartflow_id}")
                 )
@@ -109,7 +109,7 @@ class InterestLogger:
             }
 
             if not all_subflow_states:
-                logger.debug("没有获取到任何子心流状态，仅记录主心流状态")
+                # logger.debug("没有获取到任何子心流状态，仅记录主心流状态")
                 with open(self._history_log_file_path, "a", encoding="utf-8") as f:
                     f.write(json.dumps(log_entry_base, ensure_ascii=False) + "\n")
                 return

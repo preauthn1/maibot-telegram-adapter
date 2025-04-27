@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/MaiM-with-u/MaiBot/">
-    <img src="depends-data/maimai.png" alt="Logo" style="max-width: 200px">
+    <img src="depends-data/maimai.png" alt="Logo" style="width: 200px">
   </a>
   <br />
   <a href="https://space.bilibili.com/123456783">
@@ -179,6 +179,10 @@ MaiCore是一个开源项目，我们非常欢迎你的参与。你的贡献，�
 ## 致谢
 
 - [NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现  
+
+## 麦麦仓库状态
+
+![Alt](https://repobeats.axiom.co/api/embed/9faca9fccfc467931b87dd357b60c6362b5cfae0.svg "Repobeats analytics image")
 
 ### 贡献者
 

@@ -5,7 +5,57 @@ import os
 from types import ModuleType
 from pathlib import Path
 from dotenv import load_dotenv
-# from ..plugins.chat.config import global_config
+
+"""
+日志颜色说明:
+
+1. 主程序(Main)
+浅黄色标题 | 浅黄色消息
+
+2. 海马体(Memory)  
+浅黄色标题 | 浅黄色消息
+
+3. PFC(前额叶皮质)
+浅绿色标题 | 浅绿色消息
+
+4. 心情(Mood)
+品红色标题 | 品红色消息
+
+5. 工具使用(Tool)
+品红色标题 | 品红色消息
+
+6. 关系(Relation)
+浅品红色标题 | 浅品红色消息
+
+7. 配置(Config)
+浅青色标题 | 浅青色消息
+
+8. 麦麦大脑袋
+浅绿色标题 | 浅绿色消息
+
+9. 在干嘛
+青色标题 | 青色消息
+
+10. 麦麦组织语言
+浅绿色标题 | 浅绿色消息
+
+11. 见闻(Chat)
+浅蓝色标题 | 绿色消息
+
+12. 表情包(Emoji)
+橙色标题 | 橙色消息 fg #FFD700
+
+13. 子心流
+
+13. 其他模块
+模块名标题 | 对应颜色消息
+
+
+注意:
+1. 级别颜色遵循loguru默认配置
+2. 可通过环境变量修改日志级别
+"""
+
 
 # 加载 .env 文件
 env_path = Path(__file__).resolve().parent.parent.parent / ".env"
@@ -88,25 +138,6 @@ MAIN_STYLE_CONFIG = {
     },
 }
 
-# 海马体日志样式配置
-MEMORY_STYLE_CONFIG = {
-    "advanced": {
-        "console_format": (
-            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
-            "<level>{level: <8}</level> | "
-            "<light-yellow>海马体</light-yellow> | "
-            "<level>{message}</level>"
-        ),
-        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 海马体 | {message}",
-    },
-    "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <light-yellow>海马体</light-yellow> | <light-yellow>{message}</light-yellow>"
-        ),
-        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 海马体 | {message}",
-    },
-}
-
 # pfc配置
 PFC_STYLE_CONFIG = {
     "advanced": {
@@ -132,13 +163,13 @@ MOOD_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-            "<light-green>心情</light-green> | "
+            "<magenta>心情</magenta> | "
             "<level>{message}</level>"
         ),
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 心情 | {message}",
     },
     "simple": {
-        "console_format": "<level>{time:MM-DD HH:mm}</level> | <magenta>心情</magenta> | {message}",
+        "console_format": "<level>{time:MM-DD HH:mm}</level> | <magenta>心情 | {message} </magenta>",
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 心情 | {message}",
     },
 }
@@ -284,15 +315,13 @@ CHAT_STYLE_CONFIG = {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-            "<light-blue>见闻</light-blue> | "
+            "<green>见闻</green> | "
             "<level>{message}</level>"
         ),
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 见闻 | {message}",
     },
     "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <light-blue>见闻</light-blue> | <green>{message}</green>"
-        ),  # noqa: E501
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <green>见闻</green> | <green>{message}</green>"),  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 见闻 | {message}",
     },
 }
@@ -308,12 +337,28 @@ REMOTE_STYLE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 远程 | {message}",
     },
     "simple": {
-        "console_format": "<level>{time:MM-DD HH:mm}</level> | <light-yellow>远程</light-yellow> | {message}",
+        "console_format": "<level>{time:MM-DD HH:mm}</level> | <fg #00788A>远程| {message}</fg #00788A>",
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 远程 | {message}",
     },
 }
 
 SUB_HEARTFLOW_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<light-blue>麦麦水群</light-blue> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦小脑袋 | {message}",
+    },
+    "simple": {
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <fg #3399FF>麦麦水群 | {message}</fg #3399FF>"),  # noqa: E501
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦水群 | {message}",
+    },
+}
+
+SUB_HEARTFLOW_MIND_STYLE_CONFIG = {
     "advanced": {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
@@ -324,10 +369,24 @@ SUB_HEARTFLOW_STYLE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦小脑袋 | {message}",
     },
     "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <light-blue>麦麦小脑袋</light-blue> | <light-blue>{message}</light-blue>"
-        ),  # noqa: E501
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <fg #66CCFF>麦麦小脑袋 | {message}</fg #66CCFF>"),  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦小脑袋 | {message}",
+    },
+}
+
+SUBHEARTFLOW_MANAGER_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<light-blue>麦麦水群[管理]</light-blue> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦水群[管理] | {message}",
+    },
+    "simple": {
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <fg #005BA2>麦麦水群[管理] | {message}</fg #005BA2>"),  # noqa: E501
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦水群[管理] | {message}",
     },
 }
 
@@ -403,24 +462,6 @@ BACKGROUND_TASKS_STYLE_CONFIG = {
     },
 }
 
-SUBHEARTFLOW_MANAGER_STYLE_CONFIG = {
-    "advanced": {
-        "console_format": (
-            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
-            "<level>{level: <8}</level> | "
-            "<light-blue>小脑袋管理</light-blue> | "
-            "<level>{message}</level>"
-        ),
-        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 小脑袋管理 | {message}",
-    },
-    "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <light-blue>小脑袋管理</light-blue> | <light-blue>{message}</light-blue>"
-        ),  # noqa: E501
-        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 小脑袋管理 | {message}",
-    },
-}
-
 WILLING_STYLE_CONFIG = {
     "advanced": {
         "console_format": (
@@ -453,19 +494,20 @@ PFC_ACTION_PLANNER_STYLE_CONFIG = {
     },
 }
 
+# EMOJI，橙色，全着色
 EMOJI_STYLE_CONFIG = {
     "advanced": {
         "console_format": (
             "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
             "<level>{level: <8}</level> | "
-            "<light-blue>表情</light-blue> | "
+            "<fg #FFD700>表情包</fg #FFD700> | "
             "<level>{message}</level>"
         ),
-        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 表情 | {message}",
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 表情包 | {message}",
     },
     "simple": {
-        "console_format": "<level>{time:MM-DD HH:mm}</level> | <light-blue>表情 | {message} </light-blue>",  # noqa: E501
-        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 表情 | {message}",
+        "console_format": "<level>{time:MM-DD HH:mm}</level> | <fg #FFD700>表情包 | {message} </fg #FFD700>",  # noqa: E501
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 表情包 | {message}",
     },
 }
 
@@ -480,10 +522,31 @@ MAI_STATE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦状态 | {message}",
     },
     "simple": {
-        "console_format": "<level>{time:MM-DD HH:mm}</level> | <light-blue>麦麦状态 | {message} </light-blue>",  # noqa: E501
+        "console_format": "<level>{time:MM-DD HH:mm}</level> | <fg #66CCFF>麦麦状态 | {message} </fg #66CCFF>",  # noqa: E501
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 麦麦状态 | {message}",
     },
 }
+
+
+# 海马体日志样式配置
+MEMORY_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<light-yellow>海马体</light-yellow> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 海马体 | {message}",
+    },
+    "simple": {
+        "console_format": (
+            "<level>{time:MM-DD HH:mm}</level> | <fg #7CFFE6>海马体</fg #7CFFE6> | <fg #7CFFE6>{message}</fg #7CFFE6>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 海马体 | {message}",
+    },
+}
+
 
 # LPMM配置
 LPMM_STYLE_CONFIG = {
@@ -498,7 +561,7 @@ LPMM_STYLE_CONFIG = {
     },
     "simple": {
         "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <light-green>LPMM</light-green> | <light-green>{message}</light-green>"
+            "<level>{time:MM-DD HH:mm}</level> | <fg #37FFB4>LPMM</fg #37FFB4> | <fg #37FFB4>{message}</fg #37FFB4>"
         ),
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | LPMM | {message}",
     },
@@ -526,6 +589,25 @@ INTEREST_STYLE_CONFIG = {
 CONFIRM_STYLE_CONFIG = {
     "console_format": "<RED>{message}</RED>",  # noqa: E501
     "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | EULA与PRIVACY确认 | {message}",
+}
+
+# 天依蓝配置
+TIANYI_STYLE_CONFIG = {
+    "advanced": {
+        "console_format": (
+            "<white>{time:YYYY-MM-DD HH:mm:ss}</white> | "
+            "<level>{level: <8}</level> | "
+            "<fg #66CCFF>天依</fg #66CCFF> | "
+            "<level>{message}</level>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 天依 | {message}",
+    },
+    "simple": {
+        "console_format": (
+            "<level>{time:MM-DD HH:mm}</level> | <fg #66CCFF>天依</fg #66CCFF> | <fg #66CCFF>{message}</fg #66CCFF>"
+        ),
+        "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 天依 | {message}",
+    },
 }
 
 # 根据SIMPLE_OUTPUT选择配置
@@ -556,6 +638,9 @@ HEARTFLOW_STYLE_CONFIG = HEARTFLOW_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else 
 SUB_HEARTFLOW_STYLE_CONFIG = (
     SUB_HEARTFLOW_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else SUB_HEARTFLOW_STYLE_CONFIG["advanced"]
 )  # noqa: E501
+SUB_HEARTFLOW_MIND_STYLE_CONFIG = (
+    SUB_HEARTFLOW_MIND_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else SUB_HEARTFLOW_MIND_STYLE_CONFIG["advanced"]
+)
 WILLING_STYLE_CONFIG = WILLING_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else WILLING_STYLE_CONFIG["advanced"]
 MAI_STATE_CONFIG = MAI_STATE_CONFIG["simple"] if SIMPLE_OUTPUT else MAI_STATE_CONFIG["advanced"]
 CONFIG_STYLE_CONFIG = CONFIG_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else CONFIG_STYLE_CONFIG["advanced"]
@@ -563,6 +648,7 @@ TOOL_USE_STYLE_CONFIG = TOOL_USE_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else TO
 PFC_STYLE_CONFIG = PFC_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else PFC_STYLE_CONFIG["advanced"]
 LPMM_STYLE_CONFIG = LPMM_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else LPMM_STYLE_CONFIG["advanced"]
 INTEREST_STYLE_CONFIG = INTEREST_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else INTEREST_STYLE_CONFIG["advanced"]
+TIANYI_STYLE_CONFIG = TIANYI_STYLE_CONFIG["simple"] if SIMPLE_OUTPUT else TIANYI_STYLE_CONFIG["advanced"]
 
 
 def is_registered_module(record: dict) -> bool:

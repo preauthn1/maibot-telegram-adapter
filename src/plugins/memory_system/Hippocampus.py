@@ -404,7 +404,7 @@ class Hippocampus:
             # logger.info("没有找到有效的关键词节点")
             return []
 
-        logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
+        logger.debug(f"有效的关键词: {', '.join(valid_keywords)}")
 
         # 从每个关键词获取记忆
         all_memories = []
@@ -576,7 +576,7 @@ class Hippocampus:
             # logger.info("没有找到有效的关键词节点")
             return []
 
-        logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
+        logger.debug(f"有效的关键词: {', '.join(valid_keywords)}")
 
         # 从每个关键词获取记忆
         all_memories = []
@@ -761,7 +761,7 @@ class Hippocampus:
             # logger.info("没有找到有效的关键词节点")
             return 0
 
-        logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
+        logger.debug(f"有效的关键词: {', '.join(valid_keywords)}")
 
         # 从每个关键词获取记忆
         activate_map = {}  # 存储每个词的累计激活值

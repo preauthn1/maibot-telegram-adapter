@@ -121,7 +121,7 @@ class ImageManager:
                 prompt = "这是一个动态图表情包，每一张图代表了动态图的某一帧，黑色背景代表透明，使用1-2个词描述一下表情包表达的情感和内容，简短一些"
                 description, _ = await self._llm.generate_response_for_image(prompt, image_base64, "jpg")
             else:
-                prompt = "这是一个表情包，请用使用1-2个词描述一下表情包所表达的情感和内容，简短一些"
+                prompt = "这是一个表情包，请用使用几个词描述一下表情包所表达的情感和内容，简短一些"
                 description, _ = await self._llm.generate_response_for_image(prompt, image_base64, image_format)
 
             cached_description = self._get_description_from_db(image_hash, "emoji")
@@ -130,7 +130,7 @@ class ImageManager:
                 return f"[表达了：{cached_description}]"
 
             # 根据配置决定是否保存图片
-            if global_config.EMOJI_SAVE:
+            if global_config.save_emoji:
                 # 生成文件名和路径
                 timestamp = int(time.time())
                 filename = f"{timestamp}_{image_hash[:8]}.{image_format}"
@@ -152,7 +152,7 @@ class ImageManager:
                         "timestamp": timestamp,
                     }
                     db.images.update_one({"hash": image_hash}, {"$set": image_doc}, upsert=True)
-                    logger.success(f"保存表情包: {file_path}")
+                    logger.trace(f"保存表情包: {file_path}")
                 except Exception as e:
                     logger.error(f"保存表情包文件失败: {str(e)}")
 
@@ -196,7 +196,7 @@ class ImageManager:
                 return "[图片]"
 
             # 根据配置决定是否保存图片
-            if global_config.EMOJI_SAVE:
+            if global_config.save_pic:
                 # 生成文件名和路径
                 timestamp = int(time.time())
                 filename = f"{timestamp}_{image_hash[:8]}.{image_format}"
@@ -309,11 +309,15 @@ def image_path_to_base64(image_path: str) -> str:
         image_path: 图片文件路径
     Returns:
         str: base64编码的图片数据
+    Raises:
+        FileNotFoundError: 当图片文件不存在时
+        IOError: 当读取图片文件失败时
     """
-    try:
-        with open(image_path, "rb") as f:
-            image_data = f.read()
-            return base64.b64encode(image_data).decode("utf-8")
-    except Exception as e:
-        logger.error(f"读取图片失败: {image_path}, 错误: {str(e)}")
-        return None
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"图片文件不存在: {image_path}")
+
+    with open(image_path, "rb") as f:
+        image_data = f.read()
+        if not image_data:
+            raise IOError(f"读取图片文件失败: {image_path}")
+        return base64.b64encode(image_data).decode("utf-8")

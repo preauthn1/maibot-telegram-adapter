@@ -6,7 +6,7 @@ import datetime
 from typing import List, Optional, Tuple, TYPE_CHECKING
 from src.common.logger import get_module_logger
 from ..chat.chat_stream import ChatStream
-from ..message.message_base import UserInfo, Seg
+from maim_message import UserInfo, Seg
 from ..chat.message import Message
 from ..models.utils_model import LLMRequest
 from ...config.config import global_config
@@ -19,6 +19,7 @@ from src.individuality.individuality import Individuality
 from .conversation_info import ConversationInfo
 from .observation_info import ObservationInfo
 import time
+from src.plugins.utils.chat_message_builder import build_readable_messages
 
 if TYPE_CHECKING:
     pass
@@ -80,19 +81,20 @@ class GoalAnalyzer:
             goals_str = f"目标：{goal}，产生该对话目标的原因：{reasoning}\n"
 
         # 获取聊天历史记录
-        chat_history_list = observation_info.chat_history
-        chat_history_text = ""
-        for msg in chat_history_list:
-            chat_history_text += f"{msg}\n"
+        chat_history_text = observation_info.chat_history
 
         if observation_info.new_messages_count > 0:
             new_messages_list = observation_info.unprocessed_messages
+            new_messages_str = await build_readable_messages(
+                new_messages_list,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="relative",
+                read_mark=0.0,
+            )
+            chat_history_text += f"\n--- 以下是 {observation_info.new_messages_count} 条新消息 ---\n{new_messages_str}"
 
-            chat_history_text += f"有{observation_info.new_messages_count}条新消息：\n"
-            for msg in new_messages_list:
-                chat_history_text += f"{msg}\n"
-
-            observation_info.clear_unprocessed_messages()
+            # await observation_info.clear_unprocessed_messages()
 
         identity_details_only = self.identity_detail_info
         identity_addon = ""
@@ -371,22 +373,12 @@ class DirectMessageSender:
         # 处理消息
         await message.process()
 
-        message_json = message.to_dict()
+        _message_json = message.to_dict()
 
         # 发送消息
         try:
-            end_point = global_config.api_urls.get(message.message_info.platform, None)
-            if end_point:
-                # logger.info(f"发送消息到{end_point}")
-                # logger.info(message_json)
-                try:
-                    await global_api.send_message_REST(end_point, message_json)
-                except Exception as e:
-                    logger.error(f"REST方式发送失败，出现错误: {str(e)}")
-                    logger.info("尝试使用ws发送")
-                    await self.send_via_ws(message)
-            else:
-                await self.send_via_ws(message)
+            await self.send_via_ws(message)
+            await self.storage.store_message(message, chat_stream)
             logger.success(f"PFC消息已发送: {content}")
         except Exception as e:
             logger.error(f"PFC消息发送失败: {str(e)}")

@@ -7,6 +7,7 @@ from .reply_checker import ReplyChecker
 from src.individuality.individuality import Individuality
 from .observation_info import ObservationInfo
 from .conversation_info import ConversationInfo
+from src.plugins.utils.chat_message_builder import build_readable_messages
 
 logger = get_module_logger("reply_generator")
 
@@ -68,23 +69,19 @@ class ReplyGenerator:
             goals_str = f"目标：{goal}，产生该对话目标的原因：{reasoning}\n"
 
         # 获取聊天历史记录
-        chat_history_list = (
-            observation_info.chat_history[-20:]
-            if len(observation_info.chat_history) >= 20
-            else observation_info.chat_history
-        )
-        chat_history_text = ""
-        for msg in chat_history_list:
-            chat_history_text += f"{msg.get('detailed_plain_text', '')}\n"
+        chat_history_text = observation_info.chat_history_str
 
         if observation_info.new_messages_count > 0:
             new_messages_list = observation_info.unprocessed_messages
-
-            chat_history_text += f"有{observation_info.new_messages_count}条新消息：\n"
-            for msg in new_messages_list:
-                chat_history_text += f"{msg.get('detailed_plain_text', '')}\n"
-
-            observation_info.clear_unprocessed_messages()
+            new_messages_str = await build_readable_messages(
+                new_messages_list,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="relative",
+                read_mark=0.0,
+            )
+            chat_history_text += f"\n--- 以下是 {observation_info.new_messages_count} 条新消息 ---\n{new_messages_str}"
+            # await observation_info.clear_unprocessed_messages()
 
         identity_details_only = self.identity_detail_info
         identity_addon = ""
@@ -173,7 +170,7 @@ class ReplyGenerator:
             return "抱歉，我现在有点混乱，让我重新思考一下..."
 
     async def check_reply(
-        self, reply: str, goal: str, chat_history: List[Dict[str, Any]], retry_count: int = 0
+        self, reply: str, goal: str, chat_history: List[Dict[str, Any]], chat_history_str: str, retry_count: int = 0
     ) -> Tuple[bool, str, bool]:
         """检查回复是否合适
 
@@ -185,4 +182,4 @@ class ReplyGenerator:
         Returns:
             Tuple[bool, str, bool]: (是否合适, 原因, 是否需要重新规划)
         """
-        return await self.reply_checker.check(reply, goal, chat_history, retry_count)
+        return await self.reply_checker.check(reply, goal, chat_history, chat_history_str, retry_count)
