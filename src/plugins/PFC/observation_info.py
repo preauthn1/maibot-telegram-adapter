@@ -15,13 +15,14 @@ logger = get_module_logger("observation_info")
 class ObservationInfoHandler(NotificationHandler):
     """ObservationInfo的通知处理器"""
 
-    def __init__(self, observation_info: "ObservationInfo"):
+    def __init__(self, observation_info: "ObservationInfo", private_name: str):
         """初始化处理器
 
         Args:
             observation_info: 要更新的ObservationInfo实例
         """
         self.observation_info = observation_info
+        self.private_name = private_name
 
     async def handle_notification(self, notification):
         # 获取通知类型和数据
@@ -30,7 +31,7 @@ class ObservationInfoHandler(NotificationHandler):
 
         if notification_type == NotificationType.NEW_MESSAGE:
             # 处理新消息通知
-            logger.debug(f"收到新消息通知data: {data}")
+            logger.debug(f"[私聊][{self.private_name}]收到新消息通知data: {data}")
             message_id = data.get("message_id")
             processed_plain_text = data.get("processed_plain_text")
             detailed_plain_text = data.get("detailed_plain_text")
@@ -89,7 +90,7 @@ class ObservationInfoHandler(NotificationHandler):
         elif notification_type == NotificationType.ERROR:
             # 处理错误通知
             error_msg = data.get("error", "")
-            logger.error(f"收到错误通知: {error_msg}")
+            logger.error(f"[私聊][{self.private_name}]收到错误通知: {error_msg}")
 
 
 @dataclass
@@ -122,12 +123,13 @@ class ObservationInfo:
     # #spec
     # meta_plan_trigger: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self, private_name: str = None):
         """初始化后创建handler"""
         self.chat_observer = None
-        self.handler = ObservationInfoHandler(self)
+        self.handler = ObservationInfoHandler(self, private_name)
+        self.private_name = private_name
 
-    def bind_to_chat_observer(self, chat_observer: ChatObserver):
+    def bind_to_chat_observer(self, chat_observer: ChatObserver, private_name: str):
         """绑定到指定的chat_observer
 
         Args:
@@ -158,7 +160,7 @@ class ObservationInfo:
         Args:
             message: 消息数据
         """
-        # logger.debug(f"更新信息from_message: {message}")
+        # logger.debug(f"[私聊][{self.private_name}]更新信息from_message: {message}")
         self.last_message_time = message["time"]
         self.last_message_id = message["message_id"]
 

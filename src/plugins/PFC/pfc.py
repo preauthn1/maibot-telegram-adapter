@@ -40,7 +40,7 @@ class GoalAnalyzer:
         self.name = global_config.BOT_NICKNAME
         self.nick_name = global_config.BOT_ALIAS_NAMES
         self.private_name = private_name
-        self.chat_observer = ChatObserver.get_instance(stream_id)
+        self.chat_observer = ChatObserver.get_instance(stream_id, private_name)
 
         # 多目标存储结构
         self.goals = []  # 存储多个目标
@@ -135,27 +135,27 @@ class GoalAnalyzer:
 
 输出格式示例：
 [
-  {{
+{{
     "goal": "回答用户关于Python编程的具体问题",
     "reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
-  }},
-  {{
+}},
+{{
     "goal": "回答用户关于python安装的具体问题",
     "reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
-  }}
+}}
 ]"""
 
-        logger.debug(f"发送到LLM的提示词: {prompt}")
+        logger.debug(f"[私聊][{self.private_name}]发送到LLM的提示词: {prompt}")
         try:
             content, _ = await self.llm.generate_response_async(prompt)
-            logger.debug(f"LLM原始返回内容: {content}")
+            logger.debug(f"[私聊][{self.private_name}]LLM原始返回内容: {content}")
         except Exception as e:
-            logger.error(f"分析对话目标时出错: {str(e)}")
+            logger.error(f"[私聊][{self.private_name}]分析对话目标时出错: {str(e)}")
             content = ""
 
         # 使用改进后的get_items_from_json函数处理JSON数组
         success, result = get_items_from_json(
-            content, "goal", "reasoning", required_types={"goal": str, "reasoning": str}, allow_array=True
+            content, self.private_name, "goal", "reasoning", required_types={"goal": str, "reasoning": str}, allow_array=True
         )
 
         if success:
@@ -287,11 +287,12 @@ class GoalAnalyzer:
 
         try:
             content, _ = await self.llm.generate_response_async(prompt)
-            logger.debug(f"LLM原始返回内容: {content}")
+            logger.debug(f"[私聊][{self.private_name}]LLM原始返回内容: {content}")
 
             # 尝试解析JSON
             success, result = get_items_from_json(
                 content,
+                self.private_name,
                 "goal_achieved",
                 "stop_conversation",
                 "reason",
@@ -299,7 +300,7 @@ class GoalAnalyzer:
             )
 
             if not success:
-                logger.error("无法解析对话分析结果JSON")
+                logger.error(f"[私聊][{self.private_name}]无法解析对话分析结果JSON")
                 return False, False, "解析结果失败"
 
             goal_achieved = result["goal_achieved"]
@@ -309,16 +310,17 @@ class GoalAnalyzer:
             return goal_achieved, stop_conversation, reason
 
         except Exception as e:
-            logger.error(f"分析对话状态时出错: {str(e)}")
+            logger.error(f"[私聊][{self.private_name}]分析对话状态时出错: {str(e)}")
             return False, False, f"分析出错: {str(e)}"
 
 
 class DirectMessageSender:
     """直接发送消息到平台的发送器"""
 
-    def __init__(self):
+    def __init__(self, private_name: str):
         self.logger = get_module_logger("direct_sender")
         self.storage = MessageStorage()
+        self.private_name = private_name
 
     async def send_via_ws(self, message: MessageSending) -> None:
         try:
@@ -368,6 +370,6 @@ class DirectMessageSender:
         try:
             await self.send_via_ws(message)
             await self.storage.store_message(message, chat_stream)
-            logger.success(f"PFC消息已发送: {content}")
+            logger.success(f"[私聊][{self.private_name}]PFC消息已发送: {content}")
         except Exception as e:
-            logger.error(f"PFC消息发送失败: {str(e)}")
+            logger.error(f"[私聊][{self.private_name}]PFC消息发送失败: {str(e)}")
