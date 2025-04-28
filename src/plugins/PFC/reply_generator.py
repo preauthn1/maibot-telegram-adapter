@@ -104,13 +104,12 @@ class ReplyGenerator:
                 else:
                     goal = str(goal_reason)
                     reasoning = "没有明确原因"
-                
+
                 goal = str(goal) if goal is not None else "目标内容缺失"
                 reasoning = str(reasoning) if reasoning is not None else "没有明确原因"
                 goals_str += f"- 目标：{goal}\n  原因：{reasoning}\n"
         else:
             goals_str = "- 目前没有明确对话目标\n"  # 简化无目标情况
-
 
         # 获取聊天历史记录 (chat_history_text)
         chat_history_text = observation_info.chat_history_str
