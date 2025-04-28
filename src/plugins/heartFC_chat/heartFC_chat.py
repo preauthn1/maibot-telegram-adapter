@@ -17,7 +17,7 @@ from src.plugins.utils.timer_calculator import Timer  # <--- Import Timer
 from src.plugins.heartFC_chat.heartFC_generator import HeartFCGenerator
 from src.do_tool.tool_use import ToolUser
 from src.plugins.emoji_system.emoji_manager import emoji_manager
-from src.plugins.utils.json_utils import process_llm_tool_response  # 导入新的JSON工具
+from src.plugins.utils.json_utils import process_llm_tool_calls, extract_tool_call_arguments
 from src.heart_flow.sub_mind import SubMind
 from src.heart_flow.observation import Observation
 from src.plugins.heartFC_chat.heartflow_prompt_builder import global_prompt_manager
@@ -401,20 +401,24 @@ class HeartFChatting:
             with Timer("决策", cycle_timers):
                 planner_result = await self._planner(current_mind, cycle_timers)
 
-            action = planner_result.get("action", "error")
-            reasoning = planner_result.get("reasoning", "未提供理由")
+            
+            # 效果不太好，还没处理replan导致观察时间点改变的问题
+            
+            # action = planner_result.get("action", "error")
+            # reasoning = planner_result.get("reasoning", "未提供理由")
 
-            self._current_cycle.set_action_info(action, reasoning, False)
+            # self._current_cycle.set_action_info(action, reasoning, False)
 
             # 在获取规划结果后检查新消息
-            if await self._check_new_messages(planner_start_db_time):
-                if random.random() < 0.2:
-                    logger.info(f"{self.log_prefix} 看到了新消息，麦麦决定重新观察和规划...")
-                    # 重新规划
-                    with Timer("重新决策", cycle_timers):
-                        self._current_cycle.replanned = True
-                        planner_result = await self._planner(current_mind, cycle_timers, is_re_planned=True)
-                    logger.info(f"{self.log_prefix} 重新规划完成.")
+            
+            # if await self._check_new_messages(planner_start_db_time):
+            #     if random.random() < 0.2:
+            #         logger.info(f"{self.log_prefix} 看到了新消息，麦麦决定重新观察和规划...")
+            #         # 重新规划
+            #         with Timer("重新决策", cycle_timers):
+            #             self._current_cycle.replanned = True
+            #             planner_result = await self._planner(current_mind, cycle_timers, is_re_planned=True)
+            #         logger.info(f"{self.log_prefix} 重新规划完成.")
 
             # 解析规划结果
             action = planner_result.get("action", "error")
@@ -736,94 +740,104 @@ class HeartFChatting:
         observed_messages_str = observation.talking_message_str
 
         # --- 使用 LLM 进行决策 --- #
-        action = "no_reply"  # 默认动作
-        emoji_query = ""  # 默认表情查询
         reasoning = "默认决策或获取决策失败"
         llm_error = False  # LLM错误标志
+        arguments = None # 初始化参数变量
+        emoji_query = "" # <--- 在这里初始化 emoji_query
 
         try:
-            # 构建提示词
-
+            # --- 构建提示词 ---
+            replan_prompt_str = ""
             if is_re_planned:
-                replan_prompt = await self._build_replan_prompt(
+                replan_prompt_str = await self._build_replan_prompt(
                     self._current_cycle.action_type, self._current_cycle.reasoning
                 )
-                prompt = replan_prompt
-            else:
-                replan_prompt = ""
             prompt = await self._build_planner_prompt(
-                observed_messages_str, current_mind, self.sub_mind.structured_info, replan_prompt
+                observed_messages_str, current_mind, self.sub_mind.structured_info, replan_prompt_str
             )
-            payload = {
-                "model": global_config.llm_plan["name"],
-                "messages": [{"role": "user", "content": prompt}],
-                "tools": self.action_manager.get_planner_tool_definition(),
-                "tool_choice": {"type": "function", "function": {"name": "decide_reply_action"}},
-            }
 
-            # 执行LLM请求
-
+            # --- 调用 LLM --- 
             try:
-                print("prompt")
-                print("prompt")
-                print("prompt")
-                print(payload)
-                print(prompt)
-                response = await self.planner_llm._execute_request(
-                    endpoint="/chat/completions", payload=payload, prompt=prompt
+                planner_tools = self.action_manager.get_planner_tool_definition()
+                _response_text, _reasoning_content, tool_calls = await self.planner_llm.generate_response_tool_async(
+                    prompt=prompt,
+                    tools=planner_tools,
                 )
-                print(response)
+                logger.debug(f"{self.log_prefix}[Planner] 原始人 LLM响应: {_response_text}")
             except Exception as req_e:
                 logger.error(f"{self.log_prefix}[Planner] LLM请求执行失败: {req_e}")
+                action = "error"
+                reasoning = f"LLM请求失败: {req_e}"
+                llm_error = True
+                # 直接返回错误结果
                 return {
-                    "action": "error",
-                    "reasoning": f"LLM请求执行失败: {req_e}",
+                    "action": action,
+                    "reasoning": reasoning,
                     "emoji_query": "",
                     "current_mind": current_mind,
                     "observed_messages": observed_messages,
-                    "llm_error": True,
+                    "llm_error": llm_error,
                 }
 
-            # 处理LLM响应
-            with Timer("使用工具", cycle_timers):
-                # 使用辅助函数处理工具调用响应
-                print(1111122222222222)
-                print(response)
+            # 默认错误状态
+            action = "error"
+            reasoning = "处理工具调用时出错"
+            llm_error = True
 
-                success, arguments, error_msg = process_llm_tool_response(
-                    response, expected_tool_name="decide_reply_action", log_prefix=f"{self.log_prefix}[Planner] "
-                )
+            # 1. 验证工具调用
+            success, valid_tool_calls, error_msg = process_llm_tool_calls(
+                tool_calls, log_prefix=f"{self.log_prefix}[Planner] "
+            )
 
-                if success:
-                    # 提取决策参数
-                    action = arguments.get("action", "no_reply")
-                    # 验证动作是否在可用动作集中
-                    if action not in self.action_manager.get_available_actions():
+            if success and valid_tool_calls:
+                # 2. 提取第一个调用并获取参数
+                first_tool_call = valid_tool_calls[0]
+                tool_name = first_tool_call.get("function", {}).get("name")
+                arguments = extract_tool_call_arguments(first_tool_call, None)
+                
+                # 3. 检查名称和参数
+                expected_tool_name = "decide_reply_action"
+                if tool_name == expected_tool_name and arguments is not None:
+                    # 4. 成功，提取决策
+                    extracted_action = arguments.get("action", "no_reply")
+                    # 验证动作
+                    if extracted_action not in self.action_manager.get_available_actions():
                         logger.warning(
-                            f"{self.log_prefix}[Planner] LLM返回了未授权的动作: {action}，使用默认动作no_reply"
+                            f"{self.log_prefix}[Planner] LLM返回了未授权的动作: {extracted_action}，使用默认动作no_reply"
                         )
                         action = "no_reply"
-                        reasoning = f"LLM返回了未授权的动作: {action}"
+                        reasoning = f"LLM返回了未授权的动作: {extracted_action}"
+                        emoji_query = ""
+                        llm_error = False # 视为非LLM错误，只是逻辑修正
                     else:
+                        # 动作有效，使用提取的值
+                        action = extracted_action
                         reasoning = arguments.get("reasoning", "未提供理由")
                         emoji_query = arguments.get("emoji_query", "")
-
-                    # 记录决策结果
-                    logger.debug(
-                        f"{self.log_prefix}[要做什么]\nPrompt:\n{prompt}\n\n决策结果: {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'"
-                    )
-                else:
-                    # 处理工具调用失败
-                    logger.warning(f"{self.log_prefix}[Planner] {error_msg}")
-                    action = "error"
-                    reasoning = error_msg
-                    llm_error = True
+                        llm_error = False # 成功处理
+                        # 记录决策结果
+                        logger.debug(
+                            f"{self.log_prefix}[要做什么]\nPrompt:\n{prompt}\n\n决策结果: {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'"
+                        )
+                elif tool_name != expected_tool_name:
+                    reasoning = f"LLM返回了非预期的工具: {tool_name}"
+                    logger.warning(f"{self.log_prefix}[Planner] {reasoning}")
+                else: # arguments is None
+                    reasoning = f"无法提取工具 {tool_name} 的参数"
+                    logger.warning(f"{self.log_prefix}[Planner] {reasoning}")
+            elif not success:
+                reasoning = f"验证工具调用失败: {error_msg}"
+                logger.warning(f"{self.log_prefix}[Planner] {reasoning}")
+            else: # not valid_tool_calls
+                reasoning = "LLM未返回有效的工具调用"
+                logger.warning(f"{self.log_prefix}[Planner] {reasoning}")
+            # 如果 llm_error 仍然是 True，说明在处理过程中有错误发生
 
         except Exception as llm_e:
-            logger.error(f"{self.log_prefix}[Planner] Planner LLM处理过程中出错: {llm_e}")
-            logger.error(traceback.format_exc())  # 记录完整堆栈以便调试
+            logger.error(f"{self.log_prefix}[Planner] Planner LLM处理过程中发生意外错误: {llm_e}")
+            logger.error(traceback.format_exc())
             action = "error"
-            reasoning = f"LLM处理失败: {llm_e}"
+            reasoning = f"Planner内部处理错误: {llm_e}"
             llm_error = True
         # --- 结束 LLM 决策 --- #
 

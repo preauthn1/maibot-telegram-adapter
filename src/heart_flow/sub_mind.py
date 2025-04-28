@@ -66,6 +66,9 @@ class SubMind:
         self.current_mind = ""
         self.past_mind = []
         self.structured_info = {}
+        
+        name = chat_manager.get_stream_name(self.subheartflow_id)
+        self.log_prefix = f"[{name}] "
 
     async def do_thinking_before_reply(self, history_cycle: list[CycleInfo] = None):
         """
@@ -77,6 +80,8 @@ class SubMind:
         # 更新活跃时间
         self.last_active_time = time.time()
 
+        
+        
         # ---------- 1. 准备基础数据 ----------
         # 获取现有想法和情绪状态
         current_thinking_info = self.current_mind
@@ -85,7 +90,7 @@ class SubMind:
         # 获取观察对象
         observation = self.observations[0]
         if not observation:
-            logger.error(f"[{self.subheartflow_id}] 无法获取观察对象")
+            logger.error(f"{self.log_prefix} 无法获取观察对象")
             self.update_current_mind("(我没看到任何聊天内容...)")
             return self.current_mind, self.past_mind
 
@@ -223,57 +228,48 @@ class SubMind:
 
         try:
             # 调用LLM生成响应
-            response = await self.llm_model.generate_response_tool_async(prompt=prompt, tools=tools)
+            response, _reasoning_content, tool_calls = await self.llm_model.generate_response_tool_async(prompt=prompt, tools=tools)
 
-            # 标准化响应格式
-            success, normalized_response, error_msg = normalize_llm_response(
-                response, log_prefix=f"[{self.subheartflow_id}] "
-            )
+            logger.debug(f"{self.log_prefix} 子心流输出的原始LLM响应: {response}")
+            
+            # 直接使用LLM返回的文本响应作为 content
+            content = response if response else ""
 
-            if not success:
-                # 处理标准化失败情况
-                logger.warning(f"[{self.subheartflow_id}] {error_msg}")
-                content = "LLM响应格式无法处理"
-            else:
-                # 从标准化响应中提取内容
-                if len(normalized_response) >= 2:
-                    content = normalized_response[0]
-                    _reasoning_content = normalized_response[1] if len(normalized_response) > 1 else ""
-
-                # 处理可能的工具调用
-                if len(normalized_response) == 3:
-                    # 提取并验证工具调用
-                    success, valid_tool_calls, error_msg = process_llm_tool_calls(
-                        normalized_response, log_prefix=f"[{self.subheartflow_id}] "
+            if tool_calls:
+                # 直接将 tool_calls 传递给处理函数
+                success, valid_tool_calls, error_msg = process_llm_tool_calls(
+                        tool_calls, log_prefix=f"{self.log_prefix} "
+                )
+                
+                if success and valid_tool_calls:
+                    # 记录工具调用信息
+                    tool_calls_str = ", ".join(
+                        [call.get("function", {}).get("name", "未知工具") for call in valid_tool_calls]
+                    )
+                    logger.info(
+                        f"{self.log_prefix} 模型请求调用{len(valid_tool_calls)}个工具: {tool_calls_str}"
                     )
 
-                    if success and valid_tool_calls:
-                        # 记录工具调用信息
-                        tool_calls_str = ", ".join(
-                            [call.get("function", {}).get("name", "未知工具") for call in valid_tool_calls]
-                        )
-                        logger.info(
-                            f"[{self.subheartflow_id}] 模型请求调用{len(valid_tool_calls)}个工具: {tool_calls_str}"
-                        )
+                    # 收集工具执行结果
+                    await self._execute_tool_calls(valid_tool_calls, tool_instance)
+                elif not success:
+                    logger.warning(f"{self.log_prefix} 处理工具调用时出错: {error_msg}")
+            else:
+                logger.info(f"{self.log_prefix} 心流未使用工具") # 修改日志信息，明确是未使用工具而不是未处理
 
-                        # 收集工具执行结果
-                        await self._execute_tool_calls(valid_tool_calls, tool_instance)
-                    elif not success:
-                        logger.warning(f"[{self.subheartflow_id}] {error_msg}")
         except Exception as e:
             # 处理总体异常
-            logger.error(f"[{self.subheartflow_id}] 执行LLM请求或处理响应时出错: {e}")
+            logger.error(f"{self.log_prefix} 执行LLM请求或处理响应时出错: {e}")
             logger.error(traceback.format_exc())
             content = "思考过程中出现错误"
 
         # 记录最终思考结果
-        name = chat_manager.get_stream_name(self.subheartflow_id)
-        logger.debug(f"[{name}] \nPrompt:\n{prompt}\n\n心流思考结果:\n{content}\n")
+        logger.debug(f"{self.log_prefix} \nPrompt:\n{prompt}\n\n心流思考结果:\n{content}\n")
 
         # 处理空响应情况
         if not content:
             content = "(不知道该想些什么...)"
-            logger.warning(f"[{self.subheartflow_id}] LLM返回空结果，思考失败。")
+            logger.warning(f"{self.log_prefix} LLM返回空结果，思考失败。")
 
         # ---------- 6. 更新思考状态并返回结果 ----------
         # 更新当前思考内容
