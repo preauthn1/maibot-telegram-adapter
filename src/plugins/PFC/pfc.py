@@ -30,7 +30,7 @@ logger = get_module_logger("pfc")
 class GoalAnalyzer:
     """对话目标分析器"""
 
-    def __init__(self, stream_id: str):
+    def __init__(self, stream_id: str, private_name: str):
         self.llm = LLMRequest(
             model=global_config.llm_normal, temperature=0.7, max_tokens=1000, request_type="conversation_goal"
         )
@@ -39,6 +39,7 @@ class GoalAnalyzer:
         self.identity_detail_info = Individuality.get_instance().get_prompt(type="identity", x_person=2, level=2)
         self.name = global_config.BOT_NICKNAME
         self.nick_name = global_config.BOT_ALIAS_NAMES
+        self.private_name = private_name
         self.chat_observer = ChatObserver.get_instance(stream_id)
 
         # 多目标存储结构

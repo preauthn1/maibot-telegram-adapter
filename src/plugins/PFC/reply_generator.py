@@ -61,7 +61,7 @@ PROMPT_SEND_NEW_MESSAGE = """{persona_text}。现在你在参与一场QQ私聊�
 class ReplyGenerator:
     """回复生成器"""
 
-    def __init__(self, stream_id: str):
+    def __init__(self, stream_id: str, private_name: str):
         self.llm = LLMRequest(
             model=global_config.llm_PFC_chat,
             temperature=global_config.llm_PFC_chat["temp"],
@@ -71,6 +71,7 @@ class ReplyGenerator:
         self.personality_info = Individuality.get_instance().get_prompt(type="personality", x_person=2, level=3)
         self.identity_detail_info = Individuality.get_instance().get_prompt(type="identity", x_person=2, level=2)
         self.name = global_config.BOT_NICKNAME
+        self.private_name = private_name
         self.chat_observer = ChatObserver.get_instance(stream_id)
         self.reply_checker = ReplyChecker(stream_id)
 

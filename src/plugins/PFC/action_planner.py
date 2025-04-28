@@ -86,7 +86,7 @@ block_and_ignore: 更加极端的结束对话方式，直接结束对话并在�
 class ActionPlanner:
     """行动规划器"""
 
-    def __init__(self, stream_id: str):
+    def __init__(self, stream_id: str, private_name: str):
         self.llm = LLMRequest(
             model=global_config.llm_PFC_action_planner,
             temperature=global_config.llm_PFC_action_planner["temp"],
@@ -96,6 +96,7 @@ class ActionPlanner:
         self.personality_info = Individuality.get_instance().get_prompt(type="personality", x_person=2, level=3)
         self.identity_detail_info = Individuality.get_instance().get_prompt(type="identity", x_person=2, level=2)
         self.name = global_config.BOT_NICKNAME
+        self.private_name = private_name
         self.chat_observer = ChatObserver.get_instance(stream_id)
         # self.action_planner_info = ActionPlannerInfo() # 移除未使用的变量
 

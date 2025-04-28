@@ -17,9 +17,10 @@ DESIRED_TIMEOUT_SECONDS = 300
 class Waiter:
     """等待处理类"""
 
-    def __init__(self, stream_id: str):
+    def __init__(self, stream_id: str, private_name: str):
         self.chat_observer = ChatObserver.get_instance(stream_id)
         self.name = global_config.BOT_NICKNAME
+        self.private_name = private_name
         # self.wait_accumulated_time = 0 # 不再需要累加计时
 
     async def wait(self, conversation_info: ConversationInfo) -> bool:

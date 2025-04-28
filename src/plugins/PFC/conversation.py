@@ -29,13 +29,14 @@ logger = get_logger("pfc")
 class Conversation:
     """对话类，负责管理单个对话的状态和行为"""
 
-    def __init__(self, stream_id: str):
+    def __init__(self, stream_id: str, private_name: str):
         """初始化对话实例
 
         Args:
             stream_id: 聊天流ID
         """
         self.stream_id = stream_id
+        self.private_name = private_name
         self.state = ConversationState.INIT
         self.should_continue = False
         self.ignore_until_timestamp: Optional[float] = None
@@ -47,11 +48,11 @@ class Conversation:
         """初始化实例，注册所有组件"""
 
         try:
-            self.action_planner = ActionPlanner(self.stream_id)
-            self.goal_analyzer = GoalAnalyzer(self.stream_id)
-            self.reply_generator = ReplyGenerator(self.stream_id)
+            self.action_planner = ActionPlanner(self.stream_id, self.private_name)
+            self.goal_analyzer = GoalAnalyzer(self.stream_id, self.private_name)
+            self.reply_generator = ReplyGenerator(self.stream_id, self.private_name)
             self.knowledge_fetcher = KnowledgeFetcher()
-            self.waiter = Waiter(self.stream_id)
+            self.waiter = Waiter(self.stream_id, self.private_name)
             self.direct_sender = DirectMessageSender()
 
             # 获取聊天流信息
