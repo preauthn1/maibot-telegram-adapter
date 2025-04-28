@@ -76,17 +76,17 @@ class ChatBot:
             groupinfo = message.message_info.group_info
             userinfo = message.message_info.user_info
 
-            #用户黑名单拦截
+            # 用户黑名单拦截
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
                 return
 
-            #群聊黑名单拦截
+            # 群聊黑名单拦截
             if groupinfo != None and groupinfo.group_id not in global_config.talk_allowed_groups:
                 logger.trace(f"群{groupinfo.group_id}被禁止回复")
                 return
-            
-            #确认从接口发来的message是否有自定义的prompt模板信息
+
+            # 确认从接口发来的message是否有自定义的prompt模板信息
             if message.message_info.template_info and not message.message_info.template_info.template_default:
                 template_group_name = message.message_info.template_info.template_name
                 template_items = message.message_info.template_info.template_items
@@ -99,11 +99,11 @@ class ChatBot:
                 template_group_name = None
 
             async def preprocess():
-                #如果在私聊中
+                # 如果在私聊中
                 if groupinfo is None:
-                    #是否在配置信息中开启私聊模式
+                    # 是否在配置信息中开启私聊模式
                     if global_config.enable_friend_chat:
-                        #是否进入PFC
+                        # 是否进入PFC
                         if global_config.enable_pfc_chatting:
                             userinfo = message.message_info.user_info
                             messageinfo = message.message_info
@@ -116,10 +116,10 @@ class ChatBot:
                             message.update_chat_stream(chat)
                             await self.only_process_chat.process_message(message)
                             await self._create_pfc_chat(message)
-                        #禁止PFC，进入普通的心流消息处理逻辑
+                        # 禁止PFC，进入普通的心流消息处理逻辑
                         else:
                             await self.heartflow_processor.process_message(message_data)
-                #群聊默认进入心流消息处理逻辑
+                # 群聊默认进入心流消息处理逻辑
                 else:
                     await self.heartflow_processor.process_message(message_data)
 
