@@ -1,7 +1,6 @@
 import asyncio
 import time
 import traceback
-import random  # <-- 添加导入
 from typing import List, Optional, Dict, Any, Deque, Callable, Coroutine
 from collections import deque
 from src.plugins.chat.message import MessageRecv, BaseMessageInfo, MessageThinking, MessageSending
@@ -14,17 +13,20 @@ from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
 from src.plugins.utils.timer_calculator import Timer  # <--- Import Timer
-from src.plugins.heartFC_chat.heartFC_generator import HeartFCGenerator
 from src.do_tool.tool_use import ToolUser
 from src.plugins.emoji_system.emoji_manager import emoji_manager
 from src.plugins.utils.json_utils import process_llm_tool_calls, extract_tool_call_arguments
 from src.heart_flow.sub_mind import SubMind
 from src.heart_flow.observation import Observation
-from src.plugins.heartFC_chat.heartflow_prompt_builder import global_prompt_manager
+from src.plugins.heartFC_chat.heartflow_prompt_builder import global_prompt_manager, prompt_builder
 import contextlib
 from src.plugins.utils.chat_message_builder import num_new_messages_since
 from src.plugins.heartFC_chat.heartFC_Cycleinfo import CycleInfo
 from .heartFC_sender import HeartFCSender
+from src.plugins.chat.utils import process_llm_response
+from src.plugins.respon_info_catcher.info_catcher import info_catcher_manager
+from src.plugins.moods.moods import MoodManager
+from src.individuality.individuality import Individuality
 
 
 INITIAL_DURATION = 60.0
@@ -181,12 +183,18 @@ class HeartFChatting:
         self.action_manager = ActionManager()
 
         # 初始化状态控制
-        self._initialized = False  # 是否已初始化标志
-        self._processing_lock = asyncio.Lock()  # 处理锁(确保单次Plan-Replier-Sender周期)
+        self._initialized = False
+        self._processing_lock = asyncio.Lock()
 
-        # 依赖注入存储
-        self.gpt_instance = HeartFCGenerator()  # 文本回复生成器
-        self.tool_user = ToolUser()  # 工具使用实例
+        # --- 移除 gpt_instance, 直接初始化 LLM 模型 ---
+        # self.gpt_instance = HeartFCGenerator() # <-- 移除
+        self.model_normal = LLMRequest(  # <-- 新增 LLM 初始化
+            model=global_config.llm_normal,
+            temperature=global_config.llm_normal["temp"],
+            max_tokens=256,
+            request_type="response_heartflow",
+        )
+        self.tool_user = ToolUser()
         self.heart_fc_sender = HeartFCSender()
 
         # LLM规划器配置
@@ -401,16 +409,15 @@ class HeartFChatting:
             with Timer("决策", cycle_timers):
                 planner_result = await self._planner(current_mind, cycle_timers)
 
-            
             # 效果不太好，还没处理replan导致观察时间点改变的问题
-            
+
             # action = planner_result.get("action", "error")
             # reasoning = planner_result.get("reasoning", "未提供理由")
 
             # self._current_cycle.set_action_info(action, reasoning, False)
 
             # 在获取规划结果后检查新消息
-            
+
             # if await self._check_new_messages(planner_start_db_time):
             #     if random.random() < 0.2:
             #         logger.info(f"{self.log_prefix} 看到了新消息，麦麦决定重新观察和规划...")
@@ -742,8 +749,8 @@ class HeartFChatting:
         # --- 使用 LLM 进行决策 --- #
         reasoning = "默认决策或获取决策失败"
         llm_error = False  # LLM错误标志
-        arguments = None # 初始化参数变量
-        emoji_query = "" # <--- 在这里初始化 emoji_query
+        arguments = None  # 初始化参数变量
+        emoji_query = ""  # <--- 在这里初始化 emoji_query
 
         try:
             # --- 构建提示词 ---
@@ -756,7 +763,7 @@ class HeartFChatting:
                 observed_messages_str, current_mind, self.sub_mind.structured_info, replan_prompt_str
             )
 
-            # --- 调用 LLM --- 
+            # --- 调用 LLM ---
             try:
                 planner_tools = self.action_manager.get_planner_tool_definition()
                 _response_text, _reasoning_content, tool_calls = await self.planner_llm.generate_response_tool_async(
@@ -794,7 +801,7 @@ class HeartFChatting:
                 first_tool_call = valid_tool_calls[0]
                 tool_name = first_tool_call.get("function", {}).get("name")
                 arguments = extract_tool_call_arguments(first_tool_call, None)
-                
+
                 # 3. 检查名称和参数
                 expected_tool_name = "decide_reply_action"
                 if tool_name == expected_tool_name and arguments is not None:
@@ -808,13 +815,13 @@ class HeartFChatting:
                         action = "no_reply"
                         reasoning = f"LLM返回了未授权的动作: {extracted_action}"
                         emoji_query = ""
-                        llm_error = False # 视为非LLM错误，只是逻辑修正
+                        llm_error = False  # 视为非LLM错误，只是逻辑修正
                     else:
                         # 动作有效，使用提取的值
                         action = extracted_action
                         reasoning = arguments.get("reasoning", "未提供理由")
                         emoji_query = arguments.get("emoji_query", "")
-                        llm_error = False # 成功处理
+                        llm_error = False  # 成功处理
                         # 记录决策结果
                         logger.debug(
                             f"{self.log_prefix}[要做什么]\nPrompt:\n{prompt}\n\n决策结果: {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'"
@@ -822,13 +829,13 @@ class HeartFChatting:
                 elif tool_name != expected_tool_name:
                     reasoning = f"LLM返回了非预期的工具: {tool_name}"
                     logger.warning(f"{self.log_prefix}[Planner] {reasoning}")
-                else: # arguments is None
+                else:  # arguments is None
                     reasoning = f"无法提取工具 {tool_name} 的参数"
                     logger.warning(f"{self.log_prefix}[Planner] {reasoning}")
             elif not success:
                 reasoning = f"验证工具调用失败: {error_msg}"
                 logger.warning(f"{self.log_prefix}[Planner] {reasoning}")
-            else: # not valid_tool_calls
+            else:  # not valid_tool_calls
                 reasoning = "LLM未返回有效的工具调用"
                 logger.warning(f"{self.log_prefix}[Planner] {reasoning}")
             # 如果 llm_error 仍然是 True，说明在处理过程中有错误发生
@@ -1058,9 +1065,13 @@ class HeartFChatting:
                 # 如果最近的活动循环不是文本回复，或者没有活动循环
                 cycle_info_block = "\n【近期回复历史】\n(最近没有连续文本回复)\n"
 
+            individuality = Individuality.get_instance()
+            prompt_personality = individuality.get_prompt(x_person=2, level=2)
+
             # 获取提示词模板并填充数据
             prompt = (await global_prompt_manager.get_prompt_async("planner_prompt")).format(
                 bot_name=global_config.BOT_NICKNAME,
+                prompt_personality=prompt_personality,
                 structured_info_block=structured_info_block,
                 chat_content_block=chat_content_block,
                 current_mind_block=current_mind_block,
@@ -1083,27 +1094,66 @@ class HeartFChatting:
         thinking_id: str,
     ) -> Optional[List[str]]:
         """
-        回复器 (Replier): 核心逻辑用于生成回复。
+        回复器 (Replier): 核心逻辑，负责生成回复文本。
+        (已整合原 HeartFCGenerator 的功能)
         """
-        response_set: Optional[List[str]] = None
         try:
-            response_set = await self.gpt_instance.generate_response(
-                structured_info=self.sub_mind.structured_info,
-                current_mind_info=self.sub_mind.current_mind,
-                reason=reason,
-                message=anchor_message,  # Pass anchor_message positionally (matches 'message' parameter)
-                thinking_id=thinking_id,  # Pass thinking_id positionally
-            )
+            # 1. 获取情绪影响因子并调整模型温度
+            arousal_multiplier = MoodManager.get_instance().get_arousal_multiplier()
+            current_temp = global_config.llm_normal["temp"] * arousal_multiplier
+            self.model_normal.temperature = current_temp  # 动态调整温度
 
-            if not response_set:
-                logger.warning(f"{self.log_prefix}[Replier-{thinking_id}] LLM生成了一个空回复集。")
+            # 2. 获取信息捕捉器
+            info_catcher = info_catcher_manager.get_info_catcher(thinking_id)
+
+            # 3. 构建 Prompt
+            with Timer("构建Prompt", {}):  # 内部计时器，可选保留
+                prompt = await prompt_builder.build_prompt(
+                    build_mode="focus",
+                    reason=reason,
+                    current_mind_info=self.sub_mind.current_mind,
+                    structured_info=self.sub_mind.structured_info,
+                    message_txt="",  # 似乎是固定的空字符串
+                    sender_name="",  # 似乎是固定的空字符串
+                    chat_stream=anchor_message.chat_stream,
+                )
+
+            # 4. 调用 LLM 生成回复
+            content = None
+            reasoning_content = None
+            model_name = "unknown_model"
+            try:
+                with Timer("LLM生成", {}):  # 内部计时器，可选保留
+                    content, reasoning_content, model_name = await self.model_normal.generate_response(prompt)
+                logger.info(f"{self.log_prefix}[Replier-{thinking_id}]\\nPrompt:\\n{prompt}\\n生成回复: {content}\\n")
+                # 捕捉 LLM 输出信息
+                info_catcher.catch_after_llm_generated(
+                    prompt=prompt, response=content, reasoning_content=reasoning_content, model_name=model_name
+                )
+
+            except Exception as llm_e:
+                # 精简报错信息
+                logger.error(f"{self.log_prefix}[Replier-{thinking_id}] LLM 生成失败: {llm_e}")
+                return None  # LLM 调用失败则无法生成回复
+
+            # 5. 处理 LLM 响应
+            if not content:
+                logger.warning(f"{self.log_prefix}[Replier-{thinking_id}] LLM 生成了空内容。")
                 return None
 
-            return response_set
+            with Timer("处理响应", {}):  # 内部计时器，可选保留
+                processed_response = process_llm_response(content)
+
+            if not processed_response:
+                logger.warning(f"{self.log_prefix}[Replier-{thinking_id}] 处理后的回复为空。")
+                return None
+
+            return processed_response
 
         except Exception as e:
-            logger.error(f"{self.log_prefix}[Replier-{thinking_id}] Unexpected error in replier_work: {e}")
-            logger.error(traceback.format_exc())
+            # 更通用的错误处理，精简信息
+            logger.error(f"{self.log_prefix}[Replier-{thinking_id}] 回复生成意外失败: {e}")
+            # logger.error(traceback.format_exc()) # 可以取消注释这行以在调试时查看完整堆栈
             return None
 
     # --- Methods moved from HeartFCController start ---

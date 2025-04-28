@@ -14,49 +14,12 @@ from ...common.database import db
 from ...plugins.models.utils_model import LLMRequest
 from src.common.logger_manager import get_logger
 from src.plugins.memory_system.sample_distribution import MemoryBuildScheduler  # 分布生成器
+from ..utils.chat_message_builder import (
+    get_raw_msg_by_timestamp,
+    build_readable_messages,
+)  # 导入 build_readable_messages
+from ..chat.utils import translate_timestamp_to_human_readable
 from .memory_config import MemoryConfig
-
-
-def get_closest_chat_from_db(length: int, timestamp: str):
-    # print(f"获取最接近指定时间戳的聊天记录，长度: {length}, 时间戳: {timestamp}")
-    # print(f"当前时间: {timestamp},转换后时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))}")
-    chat_records = []
-    closest_record = db.messages.find_one({"time": {"$lte": timestamp}}, sort=[("time", -1)])
-    # print(f"最接近的记录: {closest_record}")
-    if closest_record:
-        closest_time = closest_record["time"]
-        chat_id = closest_record["chat_id"]  # 获取chat_id
-        # 获取该时间戳之后的length条消息，保持相同的chat_id
-        chat_records = list(
-            db.messages.find(
-                {
-                    "time": {"$gt": closest_time},
-                    "chat_id": chat_id,  # 添加chat_id过滤
-                }
-            )
-            .sort("time", 1)
-            .limit(length)
-        )
-        # print(f"获取到的记录: {chat_records}")
-        length = len(chat_records)
-        # print(f"获取到的记录长度: {length}")
-        # 转换记录格式
-        formatted_records = []
-        for record in chat_records:
-            # 兼容行为，前向兼容老数据
-            formatted_records.append(
-                {
-                    "_id": record["_id"],
-                    "time": record["time"],
-                    "chat_id": record["chat_id"],
-                    "detailed_plain_text": record.get("detailed_plain_text", ""),  # 添加文本内容
-                    "memorized_times": record.get("memorized_times", 0),  # 添加记忆次数
-                }
-            )
-
-        return formatted_records
-
-    return []
 
 
 def calculate_information_content(text):
@@ -263,16 +226,17 @@ class Hippocampus:
     @staticmethod
     def find_topic_llm(text, topic_num):
         prompt = (
-            f"这是一段文字：{text}。请你从这段话中总结出最多{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
+            f"这是一段文字：\n{text}\n\n请你从这段话中总结出最多{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
             f"将主题用逗号隔开，并加上<>,例如<主题1>,<主题2>......尽可能精简。只需要列举最多{topic_num}个话题就好，不要有序号，不要告诉我其他内容。"
             f"如果确定找不出主题或者没有明显主题，返回<none>。"
         )
         return prompt
 
     @staticmethod
-    def topic_what(text, topic, time_info):
+    def topic_what(text, topic):
+        # 不再需要 time_info 参数
         prompt = (
-            f'这是一段文字，{time_info}：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，'
+            f'这是一段文字：\n{text}\n\n我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，'
             f"可以包含时间和人物，以及具体的观点。只输出这句话就好"
         )
         return prompt
@@ -845,9 +809,12 @@ class EntorhinalCortex:
         )
 
         timestamps = sample_scheduler.get_timestamp_array()
-        logger.info(f"回忆往事: {[time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts)) for ts in timestamps]}")
+        # 使用 translate_timestamp_to_human_readable 并指定 mode="normal"
+        readable_timestamps = [translate_timestamp_to_human_readable(ts, mode="normal") for ts in timestamps]
+        logger.info(f"回忆往事: {readable_timestamps}")
         chat_samples = []
         for timestamp in timestamps:
+            # 调用修改后的 random_get_msg_snippet
             messages = self.random_get_msg_snippet(
                 timestamp, self.config.build_memory_sample_length, max_memorized_time_per_msg
             )
@@ -862,22 +829,45 @@ class EntorhinalCortex:
 
     @staticmethod
     def random_get_msg_snippet(target_timestamp: float, chat_size: int, max_memorized_time_per_msg: int) -> list:
-        """从数据库中随机获取指定时间戳附近的消息片段"""
+        """从数据库中随机获取指定时间戳附近的消息片段 (使用 chat_message_builder)"""
         try_count = 0
+        time_window_seconds = random.randint(300, 1800)  # 随机时间窗口，5到30分钟
+
         while try_count < 3:
-            messages = get_closest_chat_from_db(length=chat_size, timestamp=target_timestamp)
+            # 定义时间范围：从目标时间戳开始，向后推移 time_window_seconds
+            timestamp_start = target_timestamp
+            timestamp_end = target_timestamp + time_window_seconds
+
+            # 使用 chat_message_builder 的函数获取消息
+            # limit_mode='earliest' 获取这个时间窗口内最早的 chat_size 条消息
+            messages = get_raw_msg_by_timestamp(
+                timestamp_start=timestamp_start, timestamp_end=timestamp_end, limit=chat_size, limit_mode="earliest"
+            )
+
             if messages:
+                # 检查获取到的所有消息是否都未达到最大记忆次数
+                all_valid = True
                 for message in messages:
-                    if message["memorized_times"] >= max_memorized_time_per_msg:
-                        messages = None
+                    if message.get("memorized_times", 0) >= max_memorized_time_per_msg:
+                        all_valid = False
                         break
-                if messages:
+
+                # 如果所有消息都有效
+                if all_valid:
+                    # 更新数据库中的记忆次数
                     for message in messages:
+                        # 确保在更新前获取最新的 memorized_times，以防万一
+                        current_memorized_times = message.get("memorized_times", 0)
                         db.messages.update_one(
-                            {"_id": message["_id"]}, {"$set": {"memorized_times": message["memorized_times"] + 1}}
+                            {"_id": message["_id"]}, {"$set": {"memorized_times": current_memorized_times + 1}}
                         )
-                    return messages
+                    return messages  # 直接返回原始的消息列表
+
+            # 如果获取失败或消息无效，增加尝试次数
             try_count += 1
+            target_timestamp -= 120  # 如果第一次尝试失败，稍微向前调整时间戳再试
+
+        # 三次尝试都失败，返回 None
         return None
 
     async def sync_memory_to_db(self):
@@ -1113,86 +1103,70 @@ class ParahippocampalGyrus:
         """压缩和总结消息内容，生成记忆主题和摘要。
 
         Args:
-            messages (list): 消息列表，每个消息是一个字典，包含以下字段：
-                - time: float, 消息的时间戳
-                - detailed_plain_text: str, 消息的详细文本内容
+            messages (list): 消息列表，每个消息是一个字典，包含数据库消息结构。
             compress_rate (float, optional): 压缩率，用于控制生成的主题数量。默认为0.1。
 
         Returns:
             tuple: (compressed_memory, similar_topics_dict)
                 - compressed_memory: set, 压缩后的记忆集合，每个元素是一个元组 (topic, summary)
-                    - topic: str, 记忆主题
-                    - summary: str, 主题的摘要描述
-                - similar_topics_dict: dict, 相似主题字典，key为主题，value为相似主题列表
-                    每个相似主题是一个元组 (similar_topic, similarity)
-                    - similar_topic: str, 相似的主题
-                    - similarity: float, 相似度分数（0-1之间）
+                - similar_topics_dict: dict, 相似主题字典
 
         Process:
-            1. 合并消息文本并生成时间信息
-            2. 使用LLM提取关键主题
-            3. 过滤掉包含禁用关键词的主题
-            4. 为每个主题生成摘要
-            5. 查找与现有记忆中的相似主题
+            1. 使用 build_readable_messages 生成包含时间、人物信息的格式化文本。
+            2. 使用LLM提取关键主题。
+            3. 过滤掉包含禁用关键词的主题。
+            4. 为每个主题生成摘要。
+            5. 查找与现有记忆中的相似主题。
         """
         if not messages:
             return set(), {}
 
-        # 合并消息文本，同时保留时间信息
-        input_text = ""
-        time_info = ""
-        # 计算最早和最晚时间
-        earliest_time = min(msg["time"] for msg in messages)
-        latest_time = max(msg["time"] for msg in messages)
+        # 1. 使用 build_readable_messages 生成格式化文本
+        # build_readable_messages 只返回一个字符串，不需要解包
+        input_text = await build_readable_messages(
+            messages,
+            merge_messages=True,  # 合并连续消息
+            timestamp_mode="normal",  # 使用 'YYYY-MM-DD HH:MM:SS' 格式
+            replace_bot_name=False,  # 保留原始用户名
+        )
 
-        earliest_dt = datetime.datetime.fromtimestamp(earliest_time)
-        latest_dt = datetime.datetime.fromtimestamp(latest_time)
+        # 如果生成的可读文本为空（例如所有消息都无效），则直接返回
+        if not input_text:
+            logger.warning("无法从提供的消息生成可读文本，跳过记忆压缩。")
+            return set(), {}
 
-        # 如果是同一年
-        if earliest_dt.year == latest_dt.year:
-            earliest_str = earliest_dt.strftime("%m-%d %H:%M:%S")
-            latest_str = latest_dt.strftime("%m-%d %H:%M:%S")
-            time_info += f"是在{earliest_dt.year}年，{earliest_str} 到 {latest_str} 的对话:\n"
-        else:
-            earliest_str = earliest_dt.strftime("%Y-%m-%d %H:%M:%S")
-            latest_str = latest_dt.strftime("%Y-%m-%d %H:%M:%S")
-            time_info += f"是从 {earliest_str} 到 {latest_str} 的对话:\n"
+        logger.debug(f"用于压缩的格式化文本:\n{input_text}")
 
-        for msg in messages:
-            input_text += f"{msg['detailed_plain_text']}\n"
-
-        logger.debug(input_text)
-
+        # 2. 使用LLM提取关键主题
         topic_num = self.hippocampus.calculate_topic_num(input_text, compress_rate)
         topics_response = await self.hippocampus.llm_topic_judge.generate_response(
             self.hippocampus.find_topic_llm(input_text, topic_num)
         )
 
-        # 使用正则表达式提取<>中的内容
+        # 提取<>中的内容
         topics = re.findall(r"<([^>]+)>", topics_response[0])
 
-        # 如果没有找到<>包裹的内容，返回['none']
         if not topics:
             topics = ["none"]
         else:
-            # 处理提取出的话题
             topics = [
                 topic.strip()
                 for topic in ",".join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
                 if topic.strip()
             ]
 
-        # 过滤掉包含禁用关键词的topic
+        # 3. 过滤掉包含禁用关键词的topic
         filtered_topics = [
             topic for topic in topics if not any(keyword in topic for keyword in self.config.memory_ban_words)
         ]
 
         logger.debug(f"过滤后话题: {filtered_topics}")
 
-        # 创建所有话题的请求任务
+        # 4. 创建所有话题的摘要生成任务
         tasks = []
         for topic in filtered_topics:
-            topic_what_prompt = self.hippocampus.topic_what(input_text, topic, time_info)
+            # 调用修改后的 topic_what，不再需要 time_info
+            topic_what_prompt = self.hippocampus.topic_what(input_text, topic)
             try:
                 task = self.hippocampus.llm_summary_by_topic.generate_response_async(topic_what_prompt)
                 tasks.append((topic.strip(), task))

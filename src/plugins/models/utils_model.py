@@ -750,7 +750,6 @@ class LLMRequest:
             "tools": tools,
         }
 
-        
         response = await self._execute_request(endpoint="/chat/completions", payload=data, prompt=prompt)
         logger.debug(f"向模型 {self.model_name} 发送工具调用请求，包含 {len(tools)} 个工具，返回结果: {response}")
         # 检查响应是否包含工具调用

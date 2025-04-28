@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, TypeVar, List, Union, Callable, Tuple
+from typing import Any, Dict, TypeVar, List, Union, Tuple
 
 # 定义类型变量用于泛型类型提示
 T = TypeVar("T")
@@ -70,7 +70,6 @@ def extract_tool_call_arguments(tool_call: Dict[str, Any], default_value: Dict[s
         return default_result
 
 
-
 def safe_json_dumps(obj: Any, default_value: str = "{}", ensure_ascii: bool = False, pretty: bool = False) -> str:
     """
     安全地将Python对象序列化为JSON字符串
@@ -95,8 +94,6 @@ def safe_json_dumps(obj: Any, default_value: str = "{}", ensure_ascii: bool = Fa
         return default_value
 
 
-
-
 def normalize_llm_response(response: Any, log_prefix: str = "") -> Tuple[bool, List[Any], str]:
     """
     标准化LLM响应格式，将各种格式（如元组）转换为统一的列表格式
@@ -108,9 +105,9 @@ def normalize_llm_response(response: Any, log_prefix: str = "") -> Tuple[bool, L
     返回:
         元组 (成功标志, 标准化后的响应列表, 错误消息)
     """
-    
+
     logger.debug(f"{log_prefix}原始人 LLM响应: {response}")
-    
+
     # 检查是否为None
     if response is None:
         return False, [], "LLM响应为None"
@@ -140,7 +137,9 @@ def normalize_llm_response(response: Any, log_prefix: str = "") -> Tuple[bool, L
     return True, response, ""
 
 
-def process_llm_tool_calls(tool_calls: List[Dict[str, Any]], log_prefix: str = "") -> Tuple[bool, List[Dict[str, Any]], str]:
+def process_llm_tool_calls(
+    tool_calls: List[Dict[str, Any]], log_prefix: str = ""
+) -> Tuple[bool, List[Dict[str, Any]], str]:
     """
     处理并验证LLM响应中的工具调用列表
 
@@ -165,7 +164,9 @@ def process_llm_tool_calls(tool_calls: List[Dict[str, Any]], log_prefix: str = "
 
         # 检查基本结构
         if tool_call.get("type") != "function":
-            logger.warning(f"{log_prefix}工具调用[{i}]不是function类型: type={tool_call.get('type', '未定义')}, 内容: {tool_call}")
+            logger.warning(
+                f"{log_prefix}工具调用[{i}]不是function类型: type={tool_call.get('type', '未定义')}, 内容: {tool_call}"
+            )
             continue
 
         if "function" not in tool_call or not isinstance(tool_call.get("function"), dict):
@@ -176,16 +177,20 @@ def process_llm_tool_calls(tool_calls: List[Dict[str, Any]], log_prefix: str = "
         if "name" not in func_details or not isinstance(func_details.get("name"), str):
             logger.warning(f"{log_prefix}工具调用[{i}]的'function'字段缺少'name'或类型不正确: {func_details}")
             continue
-        if "arguments" not in func_details or not isinstance(func_details.get("arguments"), str): # 参数是字符串形式的JSON
+        if "arguments" not in func_details or not isinstance(
+            func_details.get("arguments"), str
+        ):  # 参数是字符串形式的JSON
             logger.warning(f"{log_prefix}工具调用[{i}]的'function'字段缺少'arguments'或类型不正确: {func_details}")
             continue
 
         # 可选：尝试解析参数JSON，确保其有效
         args_str = func_details["arguments"]
         try:
-            json.loads(args_str) # 尝试解析，但不存储结果
+            json.loads(args_str)  # 尝试解析，但不存储结果
         except json.JSONDecodeError as e:
-            logger.warning(f"{log_prefix}工具调用[{i}]的'arguments'不是有效的JSON字符串: {e}, 内容: {args_str[:100]}...")
+            logger.warning(
+                f"{log_prefix}工具调用[{i}]的'arguments'不是有效的JSON字符串: {e}, 内容: {args_str[:100]}..."
+            )
             continue
         except Exception as e:
             logger.warning(f"{log_prefix}解析工具调用[{i}]的'arguments'时发生意外错误: {e}, 内容: {args_str[:100]}...")
@@ -193,7 +198,7 @@ def process_llm_tool_calls(tool_calls: List[Dict[str, Any]], log_prefix: str = "
 
         valid_tool_calls.append(tool_call)
 
-    if not valid_tool_calls and tool_calls: # 如果原始列表不为空，但验证后为空
+    if not valid_tool_calls and tool_calls:  # 如果原始列表不为空，但验证后为空
         return False, [], "所有工具调用格式均无效"
 
     return True, valid_tool_calls, ""
