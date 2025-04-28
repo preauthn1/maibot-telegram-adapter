@@ -352,7 +352,7 @@ class ObservationInfo:
 
 
         # 清空未处理消息列表和计数
-        cleared_count = len(self.unprocessed_messages)
+        # cleared_count = len(self.unprocessed_messages)
         self.unprocessed_messages.clear()
         self.new_messages_count = 0
         # self.has_unread_messages = False # 这个状态可以通过 new_messages_count 判断
