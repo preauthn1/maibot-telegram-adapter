@@ -83,7 +83,7 @@ class MainSystem:
         )
         asyncio.create_task(bot_schedule.mai_schedule_start())
 
-        # 启动FastAPI服务器
+        # 将bot.py中的chat_bot.message_process消息处理函数注册到api.py的消息处理基类中
         self.app.register_message_handler(chat_bot.message_process)
 
         # 初始化个体特征
