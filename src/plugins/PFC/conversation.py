@@ -70,7 +70,7 @@ class Conversation:
             self.chat_observer = ChatObserver.get_instance(self.stream_id, self.private_name)
             self.chat_observer.start()
             self.observation_info = ObservationInfo(self.private_name)
-            self.observation_info.bind_to_chat_observer(self.chat_observer, self.private_name)
+            self.observation_info.bind_to_chat_observer(self.chat_observer)
             # print(self.chat_observer.get_cached_messages(limit=)
 
             self.conversation_info = ConversationInfo()
