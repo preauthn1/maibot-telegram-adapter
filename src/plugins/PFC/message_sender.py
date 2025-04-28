@@ -36,14 +36,18 @@ class DirectMessageSender:
         try:
             # 创建消息内容
             segments = Seg(type="seglist", data=[Seg(type="text", data=content)])
+
+            # 获取麦麦的信息
             bot_user_info = UserInfo(
                 user_id=global_config.BOT_QQ,
                 user_nickname=global_config.BOT_NICKNAME,
                 platform=chat_stream.platform,
             )
 
+            # 用当前时间作为message_id，和之前那套sender一样
             message_id=f"dm{round(time.time(), 2)}"
 
+            # 构建消息对象
             message = MessageSending(
                 message_id=message_id,
                 chat_stream=chat_stream,
@@ -59,6 +63,7 @@ class DirectMessageSender:
             # 处理消息
             await message.process()
 
+            # 不知道有什么用，先留下来了，和之前那套sender一样
             _message_json = message.to_dict()
 
             # 发送消息
