@@ -55,6 +55,7 @@ def init_prompt():
 你的内心想法：
 {current_mind_block}
 {replan}
+{cycle_info_block}
 
 请综合分析聊天内容和你看到的新消息，参考内心想法，使用'decide_reply_action'工具做出决策。决策时请注意：
 
