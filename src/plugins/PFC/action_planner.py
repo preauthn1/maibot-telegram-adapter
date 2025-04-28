@@ -148,9 +148,9 @@ class ActionPlanner:
         timeout_context = ""
         try:
             if hasattr(conversation_info, "goal_list") and conversation_info.goal_list:
-                last_goal_tuple = conversation_info.goal_list[-1]
-                if isinstance(last_goal_tuple, tuple) and len(last_goal_tuple) > 0:
-                    last_goal_text = last_goal_tuple[0]
+                last_goal_dict = conversation_info.goal_list[-1]
+                if isinstance(last_goal_dict, dict) and "goal" in last_goal_dict:
+                    last_goal_text = last_goal_dict["goal"]
                     if isinstance(last_goal_text, str) and "分钟，思考接下来要做什么" in last_goal_text:
                         try:
                             timeout_minutes_text = last_goal_text.split("，")[0].replace("你等待了", "")
@@ -172,19 +172,20 @@ class ActionPlanner:
         try:
             if hasattr(conversation_info, "goal_list") and conversation_info.goal_list:
                 for goal_reason in conversation_info.goal_list:
-                    if isinstance(goal_reason, tuple) and len(goal_reason) > 0:
-                        goal = goal_reason[0]
-                        reasoning = goal_reason[1] if len(goal_reason) > 1 else "没有明确原因"
-                    elif isinstance(goal_reason, dict):
+                    if isinstance(goal_reason, dict):
                         goal = goal_reason.get("goal", "目标内容缺失")
                         reasoning = goal_reason.get("reasoning", "没有明确原因")
                     else:
                         goal = str(goal_reason)
                         reasoning = "没有明确原因"
+                    
                     goal = str(goal) if goal is not None else "目标内容缺失"
                     reasoning = str(reasoning) if reasoning is not None else "没有明确原因"
                     goals_str += f"- 目标：{goal}\n  原因：{reasoning}\n"
-            if not goals_str:
+                
+                if not goals_str:
+                    goals_str = "- 目前没有明确对话目标，请考虑设定一个。\n"
+            else:
                 goals_str = "- 目前没有明确对话目标，请考虑设定一个。\n"
         except AttributeError:
             logger.warning("ConversationInfo object might not have goal_list attribute yet.")
