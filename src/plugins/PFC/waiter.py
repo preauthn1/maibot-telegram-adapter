@@ -46,7 +46,7 @@ class Waiter:
                 return True  # 返回 True 表示超时
 
             await asyncio.sleep(5)  # 每 5 秒检查一次
-            logger.info("等待中...")  # 可以考虑把这个频繁日志注释掉，只在超时或收到消息时输出
+            logger.debug("等待中...")  # 可以考虑把这个频繁日志注释掉，只在超时或收到消息时输出
 
     async def wait_listening(self, conversation_info: ConversationInfo) -> bool:
         """倾听用户发言或超时"""
@@ -65,7 +65,7 @@ class Waiter:
                 logger.info(f"倾听等待超过 {DESIRED_TIMEOUT_SECONDS} 秒...添加思考目标。")
                 wait_goal = {
                     # 保持 goal 文本一致
-                    "goal": f"你等待了{elapsed_time / 60:.1f}分钟，注意可能在对方看来聊天已经结束，思考接下来要做什么",
+                    "goal": f"你等待了{elapsed_time / 60:.1f}分钟，对方似乎话说一半突然消失了，可能忙去了？也可能忘记了回复？要问问吗？还是结束对话？或继续等待？思考接下来要做什么",
                     "reason": "对方话说一半消失了，很久没有回复",
                 }
                 conversation_info.goal_list.append(wait_goal)
@@ -73,4 +73,4 @@ class Waiter:
                 return True  # 返回 True 表示超时
 
             await asyncio.sleep(5)  # 每 5 秒检查一次
-            logger.info("倾听等待中...")  # 同上，可以考虑注释掉
+            logger.debug("倾听等待中...")  # 同上，可以考虑注释掉
