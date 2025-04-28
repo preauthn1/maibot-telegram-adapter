@@ -178,11 +178,11 @@ class ActionPlanner:
                     else:
                         goal = str(goal_reason)
                         reasoning = "没有明确原因"
-                    
+
                     goal = str(goal) if goal is not None else "目标内容缺失"
                     reasoning = str(reasoning) if reasoning is not None else "没有明确原因"
                     goals_str += f"- 目标：{goal}\n  原因：{reasoning}\n"
-                
+
                 if not goals_str:
                     goals_str = "- 目前没有明确对话目标，请考虑设定一个。\n"
             else:
