@@ -124,7 +124,6 @@ def init_prompt():
         "reasoning_prompt_main",
     )
 
-
     Prompt(
         "你回忆起：{related_memory_info}。\n以上是你的回忆，不一定是目前聊天里的人说的，也不一定是现在发生的事情，请记住。\n",
         "memory_prompt",
@@ -197,24 +196,20 @@ class PromptBuilder:
             ("给出日常且口语化的回复，平淡一些", 0.4),  # 40%概率
             ("给出非常简短的回复", 0.4),  # 40%概率
             ("给出缺失主语的回复，简短", 0.15),  # 15%概率
-            ("给出带有语病的回复，朴实平淡", 0.05)   # 5%概率
+            ("给出带有语病的回复，朴实平淡", 0.05),  # 5%概率
         ]
         reply_style1_chosen = random.choices(
-            [style[0] for style in reply_styles1],
-            weights=[style[1] for style in reply_styles1],
-            k=1
+            [style[0] for style in reply_styles1], weights=[style[1] for style in reply_styles1], k=1
         )[0]
-            
+
         reply_styles2 = [
             ("不要回复的太有条理，可以有个性", 0.6),  # 60%概率
             ("不要回复的太有条理，可以复读", 0.15),  # 15%概率
             ("回复的认真一些", 0.2),  # 20%概率
-            ("可以回复单个表情符号", 0.05)   # 5%概率
+            ("可以回复单个表情符号", 0.05),  # 5%概率
         ]
         reply_style2_chosen = random.choices(
-            [style[0] for style in reply_styles2],
-            weights=[style[1] for style in reply_styles2],
-            k=1
+            [style[0] for style in reply_styles2], weights=[style[1] for style in reply_styles2], k=1
         )[0]
 
         if structured_info:
@@ -271,29 +266,25 @@ class PromptBuilder:
         mood_prompt = mood_manager.get_prompt()
 
         # logger.info(f"心情prompt: {mood_prompt}")
-        
+
         reply_styles1 = [
             ("然后给出日常且口语化的回复，平淡一些", 0.4),  # 40%概率
             ("给出非常简短的回复", 0.4),  # 40%概率
             ("给出缺失主语的回复", 0.15),  # 15%概率
-            ("给出带有语病的回复", 0.05)   # 5%概率
+            ("给出带有语病的回复", 0.05),  # 5%概率
         ]
         reply_style1_chosen = random.choices(
-            [style[0] for style in reply_styles1],
-            weights=[style[1] for style in reply_styles1],
-            k=1
+            [style[0] for style in reply_styles1], weights=[style[1] for style in reply_styles1], k=1
         )[0]
-        
+
         reply_styles2 = [
             ("不要回复的太有条理，可以有个性", 0.6),  # 60%概率
             ("不要回复的太有条理，可以复读", 0.15),  # 15%概率
             ("回复的认真一些", 0.2),  # 20%概率
-            ("可以回复单个表情符号", 0.05)   # 5%概率
+            ("可以回复单个表情符号", 0.05),  # 5%概率
         ]
         reply_style2_chosen = random.choices(
-            [style[0] for style in reply_styles2],
-            weights=[style[1] for style in reply_styles2],
-            k=1
+            [style[0] for style in reply_styles2], weights=[style[1] for style in reply_styles2], k=1
         )[0]
 
         # 调取记忆

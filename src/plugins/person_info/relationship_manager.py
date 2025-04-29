@@ -292,10 +292,7 @@ class RelationshipManager:
             "友善和包容的回复",
         ]
 
-        return (
-            f"你{relationship_level[level_num]}{person_name}，"
-            f"打算{relation_prompt2_list[level_num]}。\n"
-        )
+        return f"你{relationship_level[level_num]}{person_name}，打算{relation_prompt2_list[level_num]}。\n"
 
     @staticmethod
     def calculate_level_num(relationship_value) -> int:

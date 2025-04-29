@@ -284,7 +284,7 @@ async def _build_readable_messages_internal(
                 if not stripped_line.endswith("（内容太长）"):
                     output_lines.append(f"{stripped_line};")
                 else:
-                    output_lines.append(stripped_line) # 直接添加截断后的内容
+                    output_lines.append(stripped_line)  # 直接添加截断后的内容
         output_lines.append("\n")  # 在每个消息块后添加换行，保持可读性
 
     # 移除可能的多余换行，然后合并
