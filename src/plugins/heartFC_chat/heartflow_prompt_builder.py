@@ -221,9 +221,6 @@ class PromptBuilder:
             moderation_prompt=await global_prompt_manager.get_prompt_async("moderation_prompt"),
         )
 
-        prompt = await relationship_manager.convert_all_person_sign_to_person_name(prompt)
-        prompt = parse_text_timestamps(prompt, mode="lite")
-
         return prompt
 
     async def _build_prompt_normal(self, chat_stream, message_txt: str, sender_name: str = "某人") -> tuple[str, str]:

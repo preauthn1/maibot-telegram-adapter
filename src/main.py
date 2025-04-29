@@ -121,6 +121,7 @@ class MainSystem:
             tasks = [
                 self.build_memory_task(),
                 self.forget_memory_task(),
+                self.consolidate_memory_task(),
                 self.print_mood_task(),
                 self.remove_recalled_message_task(),
                 emoji_manager.start_periodic_check_register(),
@@ -145,6 +146,15 @@ class MainSystem:
             print("\033[1;32m[记忆遗忘]\033[0m 开始遗忘记忆...")
             await HippocampusManager.get_instance().forget_memory(percentage=global_config.memory_forget_percentage)
             print("\033[1;32m[记忆遗忘]\033[0m 记忆遗忘完成")
+            
+    @staticmethod
+    async def consolidate_memory_task():
+        """记忆整合任务"""
+        while True:
+            await asyncio.sleep(global_config.consolidate_memory_interval)
+            print("\033[1;32m[记忆整合]\033[0m 开始整合记忆...")
+            await HippocampusManager.get_instance().consolidate_memory()
+            print("\033[1;32m[记忆整合]\033[0m 记忆整合完成")
 
     async def print_mood_task(self):
         """打印情绪状态"""
