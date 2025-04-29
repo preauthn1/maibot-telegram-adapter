@@ -611,8 +611,6 @@ class EmojiManager:
                     selected_emojis.append(emoji)
                     if len(selected_emojis) == 20:
                         break
-            # 从排序列表中移除已选择的表情包
-            emoji_objects = [emoji for emoji in emoji_objects if emoji not in selected_emojis]
 
         emoji_info_list = []
         for i, emoji in enumerate(selected_emojis):
@@ -673,7 +671,7 @@ class EmojiManager:
                 # 检查索引是否有效
                 if 0 <= emoji_index < len(sorted_emojis):
                     emoji_to_delete = sorted_emojis[emoji_index]
-                    print(emoji_to_delete.hash)
+
                     # 删除选定的表情包
                     logger.info(f"[决策] 决定删除表情包: {emoji_to_delete.description}")
                     delete_success = await self.delete_emoji(emoji_to_delete.hash)
