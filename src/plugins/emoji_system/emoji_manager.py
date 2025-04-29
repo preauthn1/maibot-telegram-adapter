@@ -22,6 +22,7 @@ logger = get_logger("emoji")
 BASE_DIR = os.path.join("data")
 EMOJI_DIR = os.path.join(BASE_DIR, "emoji")  # 表情包存储目录
 EMOJI_REGISTED_DIR = os.path.join(BASE_DIR, "emoji_registed")  # 已注册的表情包注册目录
+MAX_EMOJI_FOR_PROMPT = 20  # 最大允许的表情包描述数量于图片替换的 prompt 中
 
 
 """
@@ -634,7 +635,7 @@ class EmojiManager:
 
             # 使用概率分布选择最多20个表情包
             selected_emojis = random.choices(
-                emoji_objects, weights=normalized_probabilities, k=min(20, len(emoji_objects))
+                emoji_objects, weights=normalized_probabilities, k=min(MAX_EMOJI_FOR_PROMPT, len(emoji_objects))
             )
 
             # 将表情包信息转换为可读的字符串
