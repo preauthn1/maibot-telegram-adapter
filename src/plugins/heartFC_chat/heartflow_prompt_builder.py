@@ -85,6 +85,7 @@ def init_prompt():
 - 遵守回复原则
 - 必须调用工具并包含action和reasoning
 - 你可以选择文字回复(text_reply)，纯表情回复(emoji_reply)，不回复(no_reply)
+- 并不是所有选择都可用
 - 选择text_reply或emoji_reply时必须提供emoji_query
 - 保持回复自然，符合日常聊天习惯""",
         "planner_prompt",
