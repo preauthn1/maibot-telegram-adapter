@@ -2,6 +2,7 @@ import difflib
 import random
 
 
+
 def ji_suan_xiang_si_du(wen_ben_yi: str, wen_ben_er: str) -> float:
     """
     计算两个文本字符串的相似度。
@@ -17,6 +18,7 @@ def ji_suan_xiang_si_du(wen_ben_yi: str, wen_ben_er: str) -> float:
     # 获取相似度比率
     xiang_si_bi_lv = xu_lie_pi_pei_qi.ratio()
     return xiang_si_bi_lv
+
 
 
 def ji_suan_ti_huan_gai_lv(xiang_si_du: float) -> float:
@@ -71,6 +73,7 @@ if random.random() < ti_huan_gai_lv:
         last_match_end_in_b = j + n
 
     jie_guo = "".join(qu_chong_hou_de_er).strip()  # 去除首尾空白
+    jie_guo = "".join(qu_chong_hou_de_er).strip()  # 去除首尾空白
 
     if jie_guo:
         # 定义词语列表
@@ -82,7 +85,9 @@ if random.random() < ti_huan_gai_lv:
         # 根据概率决定是否添加词语
         qian_zhui_str = ""
         if random.random() < 0.3:  # 30% 概率添加语气词
+        if random.random() < 0.3:  # 30% 概率添加语气词
             qian_zhui_str += random.choice(yu_qi_ci_liebiao)
+        if random.random() < 0.7:  # 70% 概率添加转折/承接词
         if random.random() < 0.7:  # 70% 概率添加转折/承接词
             qian_zhui_str += random.choice(zhuan_jie_ci_liebiao)
 
