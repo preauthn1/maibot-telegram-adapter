@@ -565,7 +565,7 @@ class Conversation:
                 self.conversation_info.last_successful_reply_action = None  # 重置状态
 
         elif action == "say_goodbye":
-            self.state = ConversationState.GENERATING # 也可以定义一个新的状态，如 ENDING
+            self.state = ConversationState.GENERATING  # 也可以定义一个新的状态，如 ENDING
             logger.info(f"[私聊][{self.private_name}]执行行动: 生成并发送告别语...")
             try:
                 # 1. 生成告别语 (使用 'say_goodbye' action_type)
@@ -575,14 +575,14 @@ class Conversation:
                 logger.info(f"[私聊][{self.private_name}]生成的告别语: {self.generated_reply}")
 
                 # 2. 直接发送告别语 (不经过检查)
-                if self.generated_reply: # 确保生成了内容
-                    await self._send_reply() # 调用发送方法
+                if self.generated_reply:  # 确保生成了内容
+                    await self._send_reply()  # 调用发送方法
                     # 发送成功后，标记动作成功
                     action_successful = True
                     logger.info(f"[私聊][{self.private_name}]告别语已发送。")
                 else:
                     logger.warning(f"[私聊][{self.private_name}]未能生成告别语内容，无法发送。")
-                    action_successful = False # 标记动作失败
+                    action_successful = False  # 标记动作失败
                     conversation_info.done_action[action_index].update(
                         {"status": "recall", "final_reason": "未能生成告别语内容"}
                     )
@@ -596,7 +596,7 @@ class Conversation:
                 logger.error(f"[私聊][{self.private_name}]{traceback.format_exc()}")
                 # 即使出错，也结束对话
                 self.should_continue = False
-                action_successful = False # 标记动作失败
+                action_successful = False  # 标记动作失败
                 conversation_info.done_action[action_index].update(
                     {"status": "recall", "final_reason": f"生成或发送告别语时出错: {goodbye_err}"}
                 )

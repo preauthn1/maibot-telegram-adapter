@@ -75,6 +75,7 @@ PROMPT_FAREWELL = """{persona_text}。你在参与一场 QQ 私聊，现在对�
 
 请直接输出最终的告别消息内容，不需要任何额外格式。"""
 
+
 class ReplyGenerator:
     """回复生成器"""
 
@@ -152,13 +153,12 @@ class ReplyGenerator:
         if action_type == "send_new_message":
             prompt_template = PROMPT_SEND_NEW_MESSAGE
             logger.info(f"[私聊][{self.private_name}]使用 PROMPT_SEND_NEW_MESSAGE (追问生成)")
-        elif action_type == "say_goodbye": # 处理告别动作
+        elif action_type == "say_goodbye":  # 处理告别动作
             prompt_template = PROMPT_FAREWELL
             logger.info(f"[私聊][{self.private_name}]使用 PROMPT_FAREWELL (告别语生成)")
         else:  # 默认使用 direct_reply 的 prompt (包括 'direct_reply' 或其他未明确处理的类型)
             prompt_template = PROMPT_DIRECT_REPLY
             logger.info(f"[私聊][{self.private_name}]使用 PROMPT_DIRECT_REPLY (首次/非连续回复生成)")
-
 
         # --- 格式化最终的 Prompt ---
         prompt = prompt_template.format(

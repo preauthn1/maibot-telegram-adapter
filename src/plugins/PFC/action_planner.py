@@ -374,13 +374,15 @@ class ActionPlanner:
 
                 # 使用新的 PROMPT_END_DECISION
                 end_decision_prompt = PROMPT_END_DECISION.format(
-                    persona_text=persona_text, # 复用之前的 persona_text
-                    chat_history_text=chat_history_text # 复用之前的 chat_history_text
+                    persona_text=persona_text,  # 复用之前的 persona_text
+                    chat_history_text=chat_history_text,  # 复用之前的 chat_history_text
                 )
 
-                logger.debug(f"[私聊][{self.private_name}]发送到LLM的结束决策提示词:\n------\n{end_decision_prompt}\n------")
+                logger.debug(
+                    f"[私聊][{self.private_name}]发送到LLM的结束决策提示词:\n------\n{end_decision_prompt}\n------"
+                )
                 try:
-                    end_content, _ = await self.llm.generate_response_async(end_decision_prompt) # 再次调用LLM
+                    end_content, _ = await self.llm.generate_response_async(end_decision_prompt)  # 再次调用LLM
                     logger.debug(f"[私聊][{self.private_name}]LLM (结束决策) 原始返回内容: {end_content}")
 
                     # 解析结束决策的JSON
@@ -390,32 +392,36 @@ class ActionPlanner:
                         "say_bye",
                         "reason",
                         default_values={"say_bye": "no", "reason": "结束决策LLM返回格式错误，默认不告别"},
-                        required_types={"say_bye": str, "reason": str} # 明确类型
+                        required_types={"say_bye": str, "reason": str},  # 明确类型
                     )
 
-                    say_bye_decision = end_result.get("say_bye", "no").lower() # 转小写方便比较
+                    say_bye_decision = end_result.get("say_bye", "no").lower()  # 转小写方便比较
                     end_decision_reason = end_result.get("reason", "未提供原因")
 
                     if end_success and say_bye_decision == "yes":
                         # 决定要告别，返回新的 'say_goodbye' 动作
-                        logger.info(f"[私聊][{self.private_name}]结束决策: yes, 准备生成告别语. 原因: {end_decision_reason}")
+                        logger.info(
+                            f"[私聊][{self.private_name}]结束决策: yes, 准备生成告别语. 原因: {end_decision_reason}"
+                        )
                         # 注意：这里的 reason 可以考虑拼接初始原因和结束决策原因，或者只用结束决策原因
                         final_action = "say_goodbye"
                         final_reason = f"决定发送告别语。决策原因: {end_decision_reason} (原结束理由: {initial_reason})"
                         return final_action, final_reason
                     else:
                         # 决定不告别 (包括解析失败或明确说no)
-                        logger.info(f"[私聊][{self.private_name}]结束决策: no, 直接结束对话. 原因: {end_decision_reason}")
+                        logger.info(
+                            f"[私聊][{self.private_name}]结束决策: no, 直接结束对话. 原因: {end_decision_reason}"
+                        )
                         # 返回原始的 'end_conversation' 动作
                         final_action = "end_conversation"
-                        final_reason = initial_reason # 保持原始的结束理由
+                        final_reason = initial_reason  # 保持原始的结束理由
                         return final_action, final_reason
 
                 except Exception as end_e:
                     logger.error(f"[私聊][{self.private_name}]调用结束决策LLM或处理结果时出错: {str(end_e)}")
                     # 出错时，默认执行原始的结束对话
                     logger.warning(f"[私聊][{self.private_name}]结束决策出错，将按原计划执行 end_conversation")
-                    return "end_conversation", initial_reason # 返回原始动作和原因
+                    return "end_conversation", initial_reason  # 返回原始动作和原因
 
             else:
                 action = initial_action
@@ -429,9 +435,9 @@ class ActionPlanner:
                     "wait",
                     "listening",
                     "rethink_goal",
-                    "end_conversation", # 仍然需要验证，因为可能从上面决策后返回
+                    "end_conversation",  # 仍然需要验证，因为可能从上面决策后返回
                     "block_and_ignore",
-                    "say_goodbye" # 也要验证这个新动作
+                    "say_goodbye",  # 也要验证这个新动作
                 ]
                 if action not in valid_actions:
                     logger.warning(f"[私聊][{self.private_name}]LLM返回了未知的行动类型: '{action}'，强制改为 wait")
