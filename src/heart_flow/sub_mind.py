@@ -16,7 +16,6 @@ import difflib
 from src.plugins.person_info.relationship_manager import relationship_manager
 
 
-
 logger = get_logger("sub_heartflow")
 
 
@@ -59,6 +58,7 @@ def calculate_similarity(text_a: str, text_b: str) -> float:
         return 0.0
     matcher = difflib.SequenceMatcher(None, text_a, text_b)
     return matcher.ratio()
+
 
 def calculate_replacement_probability(similarity: float) -> float:
     """
@@ -138,13 +138,12 @@ class SubMind:
 
         # 获取个性化信息
         individuality = Individuality.get_instance()
-        
 
         relation_prompt = ""
         print(f"person_list: {person_list}")
         for person in person_list:
             relation_prompt += await relationship_manager.build_relationship_info(person, is_id=True)
-            
+
         print(f"relat22222ion_prompt: {relation_prompt}")
 
         # 构建个性部分
@@ -302,7 +301,7 @@ class SubMind:
             logger.warning(f"{self.log_prefix} LLM返回空结果，思考失败。")
 
         # ---------- 6. 应用概率性去重和修饰 ----------
-        new_content = content # 保存 LLM 直接输出的结果
+        new_content = content  # 保存 LLM 直接输出的结果
         try:
             similarity = calculate_similarity(previous_mind, new_content)
             replacement_prob = calculate_replacement_probability(similarity)
@@ -319,11 +318,13 @@ class SubMind:
                 if similarity == 1.0:
                     logger.debug(f"{self.log_prefix} 想法完全重复 (相似度 1.0)，执行特殊处理...")
                     # 随机截取大约一半内容
-                    if len(new_content) > 1: # 避免内容过短无法截取
-                        split_point = max(1, len(new_content) // 2 + random.randint(-len(new_content)//4, len(new_content)//4))
+                    if len(new_content) > 1:  # 避免内容过短无法截取
+                        split_point = max(
+                            1, len(new_content) // 2 + random.randint(-len(new_content) // 4, len(new_content) // 4)
+                        )
                         truncated_content = new_content[:split_point]
                     else:
-                        truncated_content = new_content # 如果只有一个字符或者为空，就不截取了
+                        truncated_content = new_content  # 如果只有一个字符或者为空，就不截取了
 
                     # 添加语气词和转折/承接词
                     yu_qi_ci = random.choice(yu_qi_ci_liebiao)
@@ -347,21 +348,21 @@ class SubMind:
                     if deduplicated_content:
                         # 根据概率决定是否添加词语
                         prefix_str = ""
-                        if random.random() < 0.3: # 30% 概率添加语气词
+                        if random.random() < 0.3:  # 30% 概率添加语气词
                             prefix_str += random.choice(yu_qi_ci_liebiao)
-                        if random.random() < 0.7: # 70% 概率添加转折/承接词
+                        if random.random() < 0.7:  # 70% 概率添加转折/承接词
                             prefix_str += random.choice(zhuan_jie_ci_liebiao)
 
                         # 组合最终结果
                         if prefix_str:
-                            content = f"{prefix_str}，{deduplicated_content}" # 更新 content
+                            content = f"{prefix_str}，{deduplicated_content}"  # 更新 content
                             logger.debug(f"{self.log_prefix} 去重并添加引导词后: {content}")
                         else:
-                            content = deduplicated_content # 更新 content
+                            content = deduplicated_content  # 更新 content
                             logger.debug(f"{self.log_prefix} 去重后 (未添加引导词): {content}")
                     else:
                         logger.warning(f"{self.log_prefix} 去重后内容为空，保留原始LLM输出: {new_content}")
-                        content = new_content # 保留原始 content
+                        content = new_content  # 保留原始 content
             else:
                 logger.debug(f"{self.log_prefix} 未执行概率性去重 (概率: {replacement_prob:.2f})")
                 # content 保持 new_content 不变

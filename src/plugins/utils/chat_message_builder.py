@@ -348,7 +348,10 @@ async def build_readable_messages(
             messages_before_mark, replace_bot_name, merge_messages, timestamp_mode, truncate
         )
         formatted_after, _ = await _build_readable_messages_internal(
-            messages_after_mark, replace_bot_name, merge_messages, timestamp_mode,
+            messages_after_mark,
+            replace_bot_name,
+            merge_messages,
+            timestamp_mode,
         )
 
         readable_read_mark = translate_timestamp_to_human_readable(read_mark, mode=timestamp_mode)

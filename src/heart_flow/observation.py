@@ -46,7 +46,7 @@ class ChattingObservation(Observation):
         self.mid_memorys = []
         self.max_mid_memory_len = global_config.compress_length_limit
         self.mid_memory_info = ""
-        
+
         self.person_list = []
 
         self.llm_summary = LLMRequest(
@@ -157,11 +157,9 @@ class ChattingObservation(Observation):
         )
 
         self.person_list = await get_person_id_list(self.talking_message)
-        
-        # print(f"self.11111person_list: {self.person_list}")
-        
 
-        
+        # print(f"self.11111person_list: {self.person_list}")
+
         logger.trace(
             f"Chat {self.chat_id} - 压缩早期记忆：{self.mid_memory_info}\n现在聊天内容：{self.talking_message_str}"
         )

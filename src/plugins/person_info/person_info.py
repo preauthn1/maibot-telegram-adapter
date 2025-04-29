@@ -143,9 +143,9 @@ class PersonInfoManager:
             parsed_json = json.loads(text)
             # 如果解析结果是列表，尝试取第一个元素
             if isinstance(parsed_json, list):
-                if parsed_json: # 检查列表是否为空
+                if parsed_json:  # 检查列表是否为空
                     parsed_json = parsed_json[0]
-                else: # 如果列表为空，重置为 None，走后续逻辑
+                else:  # 如果列表为空，重置为 None，走后续逻辑
                     parsed_json = None
             # 确保解析结果是字典
             if isinstance(parsed_json, dict):
@@ -156,7 +156,7 @@ class PersonInfoManager:
             pass
         except Exception as e:
             logger.warning(f"尝试直接解析JSON时发生意外错误: {e}")
-            pass # 继续尝试其他方法
+            pass  # 继续尝试其他方法
 
         # 如果直接解析失败或结果不是字典
         try:
@@ -165,7 +165,7 @@ class PersonInfoManager:
             matches = re.findall(json_pattern, text)
             if matches:
                 parsed_obj = json.loads(matches[0])
-                if isinstance(parsed_obj, dict): # 确保是字典
+                if isinstance(parsed_obj, dict):  # 确保是字典
                     return parsed_obj
 
             # 如果上面都失败了，尝试提取键值对

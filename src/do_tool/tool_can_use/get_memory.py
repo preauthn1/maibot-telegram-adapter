@@ -46,11 +46,11 @@ class GetMemoryTool(BaseTool):
             if related_memory:
                 for memory in related_memory:
                     memory_info += memory[1] + "\n"
-    
+
             if memory_info:
                 content = f"你记得这些事情: {memory_info}\n"
                 content += "以上是你的回忆，不一定是目前聊天里的人说的，也不一定是现在发生的事情，请记住。\n"
-                
+
             else:
                 content = f"{topic}的记忆，你记不太清"
 
