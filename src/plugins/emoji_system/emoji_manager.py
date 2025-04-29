@@ -601,8 +601,24 @@ class EmojiManager:
         返回:
             list[str]: 可读的表情包信息字符串列表
         """
+        # 按使用次数升序排序表情包对象
+        sorted_emojis = sorted(emoji_objects, key=lambda emoji: emoji.usage_count)
+        
+        # 使用概率分布选择20个表情包
+        selected_emojis = []
+        while len(selected_emojis) < 20 and sorted_emojis:
+            for emoji in sorted_emojis:
+                # 计算选择该表情包的概率，使用次数越少概率越大
+                probability = 1 / (emoji.usage_count + 1)
+                if random.random() < probability:
+                    selected_emojis.append(emoji)
+                    if len(selected_emojis) == 20:
+                        break
+            # 从排序列表中移除已选择的表情包
+            sorted_emojis = [emoji for emoji in sorted_emojis if emoji not in selected_emojis]
+        
         emoji_info_list = []
-        for i, emoji in enumerate(emoji_objects):
+        for i, emoji in enumerate(selected_emojis):
             # 转换时间戳为可读时间
             time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(emoji.register_time))
             # 构建每个表情包的信息字符串
@@ -779,6 +795,7 @@ class EmojiManager:
                 if not replaced:
                     logger.error("[错误] 替换表情包失败，无法完成注册")
                     return False
+                return True
             else:
                 # 修复：等待异步注册完成
                 register_success = await new_emoji.register_to_db()
