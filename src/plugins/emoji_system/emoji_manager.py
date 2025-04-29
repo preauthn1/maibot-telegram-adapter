@@ -633,7 +633,9 @@ class EmojiManager:
             normalized_probabilities = [p / total_probability for p in probabilities]
 
             # 使用概率分布选择最多20个表情包
-            selected_emojis = random.choices(emoji_objects, weights=normalized_probabilities, k=min(20, len(emoji_objects)))
+            selected_emojis = random.choices(
+                emoji_objects, weights=normalized_probabilities, k=min(20, len(emoji_objects))
+            )
 
             # 将表情包信息转换为可读的字符串
             emoji_info_list = self._emoji_objects_to_readable_list(selected_emojis)
