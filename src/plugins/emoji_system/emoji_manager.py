@@ -603,7 +603,7 @@ class EmojiManager:
         """
         # 按使用次数升序排序表情包对象
         sorted_emojis = sorted(emoji_objects, key=lambda emoji: emoji.usage_count)
-        
+
         # 使用概率分布选择20个表情包
         selected_emojis = []
         while len(selected_emojis) < 20 and sorted_emojis:
@@ -616,7 +616,7 @@ class EmojiManager:
                         break
             # 从排序列表中移除已选择的表情包
             sorted_emojis = [emoji for emoji in sorted_emojis if emoji not in selected_emojis]
-        
+
         emoji_info_list = []
         for i, emoji in enumerate(selected_emojis):
             # 转换时间戳为可读时间
