@@ -4,8 +4,8 @@ import math
 from bson.decimal128 import Decimal128
 from .person_info import person_info_manager
 import time
-import re
-import traceback
+# import re
+# import traceback
 
 
 logger = get_logger("relation")
