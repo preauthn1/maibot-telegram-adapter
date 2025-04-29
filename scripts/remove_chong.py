@@ -59,7 +59,7 @@ if random.random() < ti_huan_gai_lv:
     last_match_end_in_b = 0
     # 获取匹配块 (i, j, n) 其中 a[i:i+n] == b[j:j+n]
     # 注意：get_matching_blocks 最后会有一个 (len(a), len(b), 0) 的虚拟块
-    for i, j, n in pi_pei_qi.get_matching_blocks():
+    for _i, j, n in pi_pei_qi.get_matching_blocks():
         # 添加上一个匹配块结束到当前匹配块开始之间的非匹配部分 (来自文本二)
         if last_match_end_in_b < j:
             qu_chong_hou_de_er.append(shu_ru_er[last_match_end_in_b:j])
