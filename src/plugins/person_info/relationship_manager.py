@@ -278,11 +278,18 @@ class RelationshipManager:
 
         return chat_stream.user_info.user_nickname, value, relationship_level[level_num]
 
-    async def build_relationship_info(self, person) -> str:
-        person_id = person_info_manager.get_person_id(person[0], person[1])
+    async def build_relationship_info(self, person, is_id: bool = False) -> str:
+        if is_id:
+            person_id = person
+        else:
+            print(f"person: {person}")
+            person_id = person_info_manager.get_person_id(person[0], person[1])
         person_name = await person_info_manager.get_value(person_id, "person_name")
+        print(f"person_name: {person_name}")
         relationship_value = await person_info_manager.get_value(person_id, "relationship_value")
         level_num = self.calculate_level_num(relationship_value)
+        
+        print(f"person_name: {person_name}, relationship_value: {relationship_value}, level_num: {level_num}")
         
         if level_num == 0 or level_num == 5:
             relationship_level = ["厌恶", "冷漠以对", "认识", "友好对待", "喜欢", "暧昧"]
@@ -298,7 +305,7 @@ class RelationshipManager:
         elif level_num == 2:
             return ""
         else:
-            if random.random() < 0.5:
+            if random.random() < 0.6:
                 relationship_level = ["厌恶", "冷漠以对", "认识", "友好对待", "喜欢", "暧昧"]
                 relation_prompt2_list = [
                     "忽视的回应",

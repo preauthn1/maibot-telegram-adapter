@@ -364,3 +364,33 @@ async def build_readable_messages(
         else:
             # 理论上不应该发生，但作为保险
             return read_mark_line.strip()  # 如果前后都无消息，只返回标记行
+
+
+async def get_person_id_list(messages: List[Dict[str, Any]]) -> List[str]:
+    """
+    从消息列表中提取不重复的 person_id 列表 (忽略机器人自身)。
+
+    Args:
+        messages: 消息字典列表。
+
+    Returns:
+        一个包含唯一 person_id 的列表。
+    """
+    person_ids_set = set()  # 使用集合来自动去重
+
+    for msg in messages:
+        user_info = msg.get("user_info", {})
+        platform = user_info.get("platform")
+        user_id = user_info.get("user_id")
+
+        # 检查必要信息是否存在 且 不是机器人自己
+        if not all([platform, user_id]) or user_id == global_config.BOT_QQ:
+            continue
+
+        person_id = person_info_manager.get_person_id(platform, user_id)
+
+        # 只有当获取到有效 person_id 时才添加
+        if person_id:
+            person_ids_set.add(person_id)
+
+    return list(person_ids_set)  # 将集合转换为列表返回
