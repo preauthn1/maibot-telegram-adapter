@@ -613,7 +613,7 @@ class EmojiManager:
                         break
             # 从排序列表中移除已选择的表情包
             emoji_objects = [emoji for emoji in emoji_objects if emoji not in selected_emojis]
-        
+
         emoji_info_list = []
         for i, emoji in enumerate(selected_emojis):
             # 转换时间戳为可读时间
