@@ -213,17 +213,22 @@ async def _build_readable_messages_internal(
             original_len = len(content)
             limit = -1  # 默认不截断
 
-            if percentile < 0.6:  # 60% 之前的消息 (即最旧的 60%)
-                limit = 170
-            elif percentile < 0.8:  # 60% 到 80% 之前的消息 (即中间的 20%)
-                limit = 250
+            if percentile < 0.2:  # 60% 之前的消息 (即最旧的 60%)
+                limit = 50
+                replace_content = "......（记不清了）"
+            elif percentile < 0.5:  # 60% 之前的消息 (即最旧的 60%)
+                limit = 100
+                replace_content = "......（有点记不清了）"
+            elif percentile < 0.7:  # 60% 到 80% 之前的消息 (即中间的 20%)
+                limit = 200
+                replace_content = "......（内容太长了）"
             elif percentile < 1.0:  # 80% 到 100% 之前的消息 (即较新的 20%)
-                limit = 500
-            # 最新的 20% (理论上 percentile 会趋近 1，但这里不需要显式处理，因为 limit 默认为 -1)
+                limit = 300
+                replace_content = "......（太长了）"
 
             truncated_content = content
             if limit > 0 and original_len > limit:
-                truncated_content = f"{content[:limit]}......（内容太长）"
+                truncated_content = f"{content[:limit]}{replace_content}"
 
             message_details.append((timestamp, name, truncated_content))
     else:
@@ -343,7 +348,7 @@ async def build_readable_messages(
             messages_before_mark, replace_bot_name, merge_messages, timestamp_mode, truncate
         )
         formatted_after, _ = await _build_readable_messages_internal(
-            messages_after_mark, replace_bot_name, merge_messages, timestamp_mode, truncate
+            messages_after_mark, replace_bot_name, merge_messages, timestamp_mode,
         )
 
         readable_read_mark = translate_timestamp_to_human_readable(read_mark, mode=timestamp_mode)
