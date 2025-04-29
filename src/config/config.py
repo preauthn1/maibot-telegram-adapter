@@ -185,7 +185,7 @@ class BotConfig:
     reply_trigger_threshold: float = 3.0  # 心流聊天触发阈值，越低越容易触发
     probability_decay_factor_per_second: float = 0.2  # 概率衰减因子，越大衰减越快
     default_decay_rate_per_second: float = 0.98  # 默认衰减率，越大衰减越慢
-    allow_focus_mode: bool = True # 是否允许子心流进入 FOCUSED 状态
+    allow_focus_mode: bool = True  # 是否允许子心流进入 FOCUSED 状态
 
     # sub_heart_flow_update_interval: int = 60  # 子心流更新频率，间隔 单位秒
     # sub_heart_flow_freeze_time: int = 120  # 子心流冻结时间，超过这个时间没有回复，子心流会冻结，间隔 单位秒
@@ -417,6 +417,7 @@ class BotConfig:
             config.model_normal_probability = response_config.get(
                 "model_normal_probability", config.model_normal_probability
             )
+
         def heartflow(parent: dict):
             heartflow_config = parent["heartflow"]
             config.sub_heart_flow_stop_time = heartflow_config.get(

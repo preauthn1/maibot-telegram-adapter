@@ -1,6 +1,7 @@
 import difflib
 import random
 
+
 def ji_suan_xiang_si_du(wen_ben_yi: str, wen_ben_er: str) -> float:
     """
     计算两个文本字符串的相似度。
@@ -16,6 +17,7 @@ def ji_suan_xiang_si_du(wen_ben_yi: str, wen_ben_er: str) -> float:
     # 获取相似度比率
     xiang_si_bi_lv = xu_lie_pi_pei_qi.ratio()
     return xiang_si_bi_lv
+
 
 def ji_suan_ti_huan_gai_lv(xiang_si_du: float) -> float:
     """
@@ -33,11 +35,12 @@ def ji_suan_ti_huan_gai_lv(xiang_si_du: float) -> float:
     elif 0.4 < xiang_si_du <= 0.6:
         # p = 2.5 * s - 1.0 (线性方程 y - 0 = (0.5-0)/(0.6-0.4) * (x - 0.4))
         gai_lv = 2.5 * xiang_si_du - 1.0
-        return max(0.0, gai_lv) # 确保概率不小于0
+        return max(0.0, gai_lv)  # 确保概率不小于0
     elif 0.6 < xiang_si_du < 0.9:
         # p = (5/3) * s - 0.5 (线性方程 y - 0.5 = (1-0.5)/(0.9-0.6) * (x - 0.6))
         gai_lv = (5 / 3) * xiang_si_du - 0.5
-        return min(1.0, max(0.0, gai_lv)) # 确保概率在 0 和 1 之间
+        return min(1.0, max(0.0, gai_lv))  # 确保概率在 0 和 1 之间
+
 
 # 获取用户输入
 shu_ru_yi = "豆豆刚刚回复了我的问候 现在可以等待对方的回应 不需要再主动发言 目前情绪满足 不需要使用工具"
@@ -66,7 +69,7 @@ if random.random() < ti_huan_gai_lv:
         # 更新下一个非匹配部分的起始位置
         last_match_end_in_b = j + n
 
-    jie_guo = "".join(qu_chong_hou_de_er).strip() # 去除首尾空白
+    jie_guo = "".join(qu_chong_hou_de_er).strip()  # 去除首尾空白
 
     if jie_guo:
         # 定义词语列表
@@ -77,9 +80,9 @@ if random.random() < ti_huan_gai_lv:
 
         # 根据概率决定是否添加词语
         qian_zhui_str = ""
-        if random.random() < 0.3: # 30% 概率添加语气词
+        if random.random() < 0.3:  # 30% 概率添加语气词
             qian_zhui_str += random.choice(yu_qi_ci_liebiao)
-        if random.random() < 0.7: # 70% 概率添加转折/承接词
+        if random.random() < 0.7:  # 70% 概率添加转折/承接词
             qian_zhui_str += random.choice(zhuan_jie_ci_liebiao)
 
         # 组合最终结果

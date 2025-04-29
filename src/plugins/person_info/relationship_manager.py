@@ -283,7 +283,7 @@ class RelationshipManager:
         person_name = await person_info_manager.get_value(person_id, "person_name")
         relationship_value = await person_info_manager.get_value(person_id, "relationship_value")
         level_num = self.calculate_level_num(relationship_value)
-        
+
         if level_num == 0 or level_num == 5:
             relationship_level = ["厌恶", "冷漠以对", "认识", "友好对待", "喜欢", "暧昧"]
             relation_prompt2_list = [
