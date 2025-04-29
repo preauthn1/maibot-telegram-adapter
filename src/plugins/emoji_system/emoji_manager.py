@@ -601,17 +601,8 @@ class EmojiManager:
         返回:
             list[str]: 可读的表情包信息字符串列表
         """
-        # 计算每个表情包的选择概率
-        probabilities = [1 / (emoji.usage_count + 1) for emoji in emoji_objects]
-        # 归一化概率，确保总和为1
-        total_probability = sum(probabilities)
-        normalized_probabilities = [p / total_probability for p in probabilities]
-
-        # 使用概率分布选择最多20个表情包
-        selected_emojis = random.choices(emoji_objects, weights=normalized_probabilities, k=min(20, len(emoji_objects)))
-
         emoji_info_list = []
-        for i, emoji in enumerate(selected_emojis):
+        for i, emoji in enumerate(emoji_objects):
             # 转换时间戳为可读时间
             time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(emoji.register_time))
             # 构建每个表情包的信息字符串
@@ -634,9 +625,18 @@ class EmojiManager:
             self._ensure_db()
 
             # 获取所有表情包对象
-            sorted_emojis = sorted(self.emoji_objects, key=lambda emoji: emoji.usage_count)
+            emoji_objects = self.emoji_objects
+            # 计算每个表情包的选择概率
+            probabilities = [1 / (emoji.usage_count + 1) for emoji in emoji_objects]
+            # 归一化概率，确保总和为1
+            total_probability = sum(probabilities)
+            normalized_probabilities = [p / total_probability for p in probabilities]
+
+            # 使用概率分布选择最多20个表情包
+            selected_emojis = random.choices(emoji_objects, weights=normalized_probabilities, k=min(20, len(emoji_objects)))
+
             # 将表情包信息转换为可读的字符串
-            emoji_info_list = self._emoji_objects_to_readable_list(sorted_emojis)
+            emoji_info_list = self._emoji_objects_to_readable_list(selected_emojis)
 
             # 构建提示词
             prompt = (
@@ -666,8 +666,8 @@ class EmojiManager:
                 emoji_index = int(match.group(1)) - 1  # 转换为0-based索引
 
                 # 检查索引是否有效
-                if 0 <= emoji_index < len(sorted_emojis):
-                    emoji_to_delete = sorted_emojis[emoji_index]
+                if 0 <= emoji_index < len(selected_emojis):
+                    emoji_to_delete = selected_emojis[emoji_index]
 
                     # 删除选定的表情包
                     logger.info(f"[决策] 决定删除表情包: {emoji_to_delete.description}")
