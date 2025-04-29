@@ -601,16 +601,14 @@ class EmojiManager:
         返回:
             list[str]: 可读的表情包信息字符串列表
         """
-        # 使用概率分布选择20个表情包
-        selected_emojis = []
-        while len(selected_emojis) < 20 and emoji_objects:
-            for emoji in emoji_objects:
-                # 计算选择该表情包的概率，使用次数越少概率越大
-                probability = 1 / (emoji.usage_count + 1)
-                if random.random() < probability:
-                    selected_emojis.append(emoji)
-                    if len(selected_emojis) == 20:
-                        break
+        # 计算每个表情包的选择概率
+        probabilities = [1 / (emoji.usage_count + 1) for emoji in emoji_objects]
+        # 归一化概率，确保总和为1
+        total_probability = sum(probabilities)
+        normalized_probabilities = [p / total_probability for p in probabilities]
+
+        # 使用概率分布选择最多20个表情包
+        selected_emojis = random.choices(emoji_objects, weights=normalized_probabilities, k=min(20, len(emoji_objects)))
 
         emoji_info_list = []
         for i, emoji in enumerate(selected_emojis):
@@ -636,8 +634,7 @@ class EmojiManager:
             self._ensure_db()
 
             # 获取所有表情包对象
-            all_emojis = self.emoji_objects
-            sorted_emojis = sorted(all_emojis, key=lambda emoji: emoji.usage_count)
+            sorted_emojis = sorted(self.emoji_objects, key=lambda emoji: emoji.usage_count)
             # 将表情包信息转换为可读的字符串
             emoji_info_list = self._emoji_objects_to_readable_list(sorted_emojis)
 
