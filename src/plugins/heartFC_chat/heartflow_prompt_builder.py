@@ -5,7 +5,7 @@ from ...individuality.individuality import Individuality
 from src.plugins.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugins.utils.chat_message_builder import build_readable_messages, get_raw_msg_before_timestamp_with_chat
 from src.plugins.person_info.relationship_manager import relationship_manager
-from src.plugins.chat.utils import get_embedding, parse_text_timestamps
+from src.plugins.chat.utils import get_embedding
 import time
 from typing import Union, Optional
 from ...common.database import db
