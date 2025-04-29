@@ -32,8 +32,8 @@ def init_prompt():
 {current_mind_info}
 因为上述想法，你决定发言，原因是：{reason}
 
-回复尽量简短一些。请注意把握聊天内容，不要回复的太有条理，可以有个性。请一次只回复一个话题，不要同时回复多个人，不用指出你回复的是谁。{prompt_ger}
-请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景，不要说你说过的话题 ，注意只输出回复内容。
+回复尽量简短一些。请注意把握聊天内容，{reply_style2}。请一次只回复一个话题，不要同时回复多个人。{prompt_ger}
+{reply_style1}，说中文，不要刻意突出自身学科背景，注意只输出回复内容。
 {moderation_prompt}。注意：回复不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
         "heart_flow_prompt",
     )
@@ -183,6 +183,7 @@ class PromptBuilder:
             merge_messages=False,
             timestamp_mode="normal",
             read_mark=0.0,
+            truncate=True,
         )
 
         # 中文高手(新加的好玩功能)
@@ -191,6 +192,30 @@ class PromptBuilder:
             prompt_ger += "你喜欢用倒装句"
         if random.random() < 0.02:
             prompt_ger += "你喜欢用反问句"
+
+        reply_styles1 = [
+            ("给出日常且口语化的回复，平淡一些", 0.4),  # 40%概率
+            ("给出非常简短的回复", 0.4),  # 40%概率
+            ("给出缺失主语的回复，简短", 0.15),  # 15%概率
+            ("给出带有语病的回复，朴实平淡", 0.05)   # 5%概率
+        ]
+        reply_style1_chosen = random.choices(
+            [style[0] for style in reply_styles1],
+            weights=[style[1] for style in reply_styles1],
+            k=1
+        )[0]
+            
+        reply_styles2 = [
+            ("不要回复的太有条理，可以有个性", 0.6),  # 60%概率
+            ("不要回复的太有条理，可以复读", 0.15),  # 15%概率
+            ("回复的认真一些", 0.2),  # 20%概率
+            ("可以回复单个表情符号", 0.05)   # 5%概率
+        ]
+        reply_style2_chosen = random.choices(
+            [style[0] for style in reply_styles2],
+            weights=[style[1] for style in reply_styles2],
+            k=1
+        )[0]
 
         if structured_info:
             structured_info_prompt = await global_prompt_manager.format_prompt(
@@ -214,6 +239,8 @@ class PromptBuilder:
             if chat_in_group
             else await global_prompt_manager.get_prompt_async("chat_target_private2"),
             current_mind_info=current_mind_info,
+            reply_style2=reply_style2_chosen,
+            reply_style1=reply_style1_chosen,
             reason=reason,
             prompt_ger=prompt_ger,
             moderation_prompt=await global_prompt_manager.get_prompt_async("moderation_prompt"),

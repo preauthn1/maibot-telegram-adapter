@@ -745,7 +745,7 @@ class HeartFChatting:
         if is_re_planned:
             await observation.observe()
         observed_messages = observation.talking_message
-        observed_messages_str = observation.talking_message_str
+        observed_messages_str = observation.talking_message_str_truncate
 
         # --- 使用 LLM 进行决策 --- #
         reasoning = "默认决策或获取决策失败"
