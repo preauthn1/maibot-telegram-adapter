@@ -234,7 +234,7 @@ class BotConfig:
     forget_memory_interval: int = 600  # 记忆遗忘间隔（秒）
     memory_forget_time: int = 24  # 记忆遗忘时间（小时）
     memory_forget_percentage: float = 0.01  # 记忆遗忘比例
-    
+
     consolidate_memory_interval: int = 1000  # 记忆整合间隔（秒）
     consolidation_similarity_threshold: float = 0.7  # 相似度阈值
     consolidate_memory_percentage: float = 0.01  # 检查节点比例

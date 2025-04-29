@@ -146,7 +146,7 @@ class MainSystem:
             print("\033[1;32m[记忆遗忘]\033[0m 开始遗忘记忆...")
             await HippocampusManager.get_instance().forget_memory(percentage=global_config.memory_forget_percentage)
             print("\033[1;32m[记忆遗忘]\033[0m 记忆遗忘完成")
-            
+
     @staticmethod
     async def consolidate_memory_task():
         """记忆整合任务"""

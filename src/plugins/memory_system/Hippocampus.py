@@ -1353,11 +1353,11 @@ class ParahippocampalGyrus:
             if not memory_items:
                 try:
                     self.memory_graph.G.remove_node(node)
-                    node_changes["removed"].append(f"{node}(空节点)") # 标记为空节点移除
+                    node_changes["removed"].append(f"{node}(空节点)")  # 标记为空节点移除
                     logger.debug(f"[遗忘] 移除了空的节点: {node}")
                 except nx.NetworkXError as e:
                     logger.warning(f"[遗忘] 移除空节点 {node} 时发生错误（可能已被移除）: {e}")
-                continue # 处理下一个节点
+                continue  # 处理下一个节点
 
             # --- 如果节点不为空，则执行原来的不活跃检查和随机移除逻辑 ---
             last_modified = node_data.get("last_modified", current_time)
@@ -1373,15 +1373,15 @@ class ParahippocampalGyrus:
                             memory_items.remove(removed_item)
 
                             # 条件3：检查移除后 memory_items 是否变空
-                            if memory_items: # 如果移除后列表不为空
+                            if memory_items:  # 如果移除后列表不为空
                                 # self.memory_graph.G.nodes[node]["memory_items"] = memory_items # 直接修改列表即可
-                                self.memory_graph.G.nodes[node]["last_modified"] = current_time # 更新修改时间
+                                self.memory_graph.G.nodes[node]["last_modified"] = current_time  # 更新修改时间
                                 node_changes["reduced"].append(f"{node} (数量: {current_count} -> {len(memory_items)})")
-                            else: # 如果移除后列表为空
+                            else:  # 如果移除后列表为空
                                 # 尝试移除节点，处理可能的错误
                                 try:
                                     self.memory_graph.G.remove_node(node)
-                                    node_changes["removed"].append(f"{node}(遗忘清空)") # 标记为遗忘清空
+                                    node_changes["removed"].append(f"{node}(遗忘清空)")  # 标记为遗忘清空
                                     logger.debug(f"[遗忘] 节点 {node} 因移除最后一项而被清空。")
                                 except nx.NetworkXError as e:
                                     logger.warning(f"[遗忘] 尝试移除节点 {node} 时发生错误（可能已被移除）：{e}")
@@ -1464,9 +1464,9 @@ class ParahippocampalGyrus:
             node_data = self.memory_graph.G.nodes[node]
             memory_items = node_data.get("memory_items", [])
             if not isinstance(memory_items, list) or len(memory_items) < 2:
-                continue # 双重检查，理论上不会进入
+                continue  # 双重检查，理论上不会进入
 
-            items_copy = list(memory_items) # 创建副本以安全迭代和修改
+            items_copy = list(memory_items)  # 创建副本以安全迭代和修改
 
             # 遍历所有记忆项组合
             for item1, item2 in combinations(items_copy, 2):
@@ -1495,20 +1495,23 @@ class ParahippocampalGyrus:
                     # 从原始列表中移除信息量较低的项
                     try:
                         memory_items.remove(item_to_remove)
-                        logger.info(f"[整合] 已合并节点 '{node}' 中的记忆，保留: '{item_to_keep[:60]}...', 移除: '{item_to_remove[:60]}...'" )
+                        logger.info(
+                            f"[整合] 已合并节点 '{node}' 中的记忆，保留: '{item_to_keep[:60]}...', 移除: '{item_to_remove[:60]}...'"
+                        )
                         merged_count += 1
                         nodes_modified.add(node)
-                        node_data['last_modified'] = current_timestamp # 更新修改时间
+                        node_data["last_modified"] = current_timestamp  # 更新修改时间
                         _merged_in_this_node = True
-                        break # 每个节点每次检查只合并一对
+                        break  # 每个节点每次检查只合并一对
                     except ValueError:
                         # 如果项已经被移除（例如，在之前的迭代中作为 item_to_keep），则跳过
-                        logger.warning(f"[整合] 尝试移除节点 '{node}' 中不存在的项 '{item_to_remove[:30]}...'，可能已被合并。")
+                        logger.warning(
+                            f"[整合] 尝试移除节点 '{node}' 中不存在的项 '{item_to_remove[:30]}...'，可能已被合并。"
+                        )
                         continue
-            # # 如果节点内发生了合并，更新节点数据 (这种方式不安全，会丢失其他属性)        
+            # # 如果节点内发生了合并，更新节点数据 (这种方式不安全，会丢失其他属性)
             # if merged_in_this_node:
             #      self.memory_graph.G.nodes[node]["memory_items"] = memory_items
-
 
         if merged_count > 0:
             logger.info(f"[整合] 共合并了 {merged_count} 对相似记忆项，分布在 {len(nodes_modified)} 个节点中。")
@@ -1594,7 +1597,7 @@ class HippocampusManager:
         if not self._initialized:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         return await self._hippocampus.parahippocampal_gyrus.operation_forget_topic(percentage)
-    
+
     async def consolidate_memory(self):
         """整合记忆的公共接口"""
         if not self._initialized:
