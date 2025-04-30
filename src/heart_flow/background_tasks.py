@@ -24,6 +24,7 @@ CLEANUP_INTERVAL_SECONDS = 1200
 STATE_UPDATE_INTERVAL_SECONDS = 60
 LOG_INTERVAL_SECONDS = 3
 
+
 class BackgroundTaskManager:
     """管理 Heartflow 的后台周期性任务。"""
 
@@ -32,13 +33,12 @@ class BackgroundTaskManager:
         mai_state_info: MaiStateInfo,  # Needs current state info
         mai_state_manager: MaiStateManager,
         subheartflow_manager: SubHeartflowManager,
-        interest_logger: InterestLogger
+        interest_logger: InterestLogger,
     ):
         self.mai_state_info = mai_state_info
         self.mai_state_manager = mai_state_manager
         self.subheartflow_manager = subheartflow_manager
         self.interest_logger = interest_logger
-
 
         # Task references
         self._state_update_task: Optional[asyncio.Task] = None
@@ -100,7 +100,7 @@ class BackgroundTaskManager:
         ]
 
         # 统一启动所有任务
-        for task_func,log_level, log_msg, task_attr_name in task_configs:
+        for task_func, log_level, log_msg, task_attr_name in task_configs:
             # 检查任务变量是否存在且未完成
             current_task_var = getattr(self, task_attr_name)
             if current_task_var is None or current_task_var.done():
@@ -202,7 +202,7 @@ class BackgroundTaskManager:
         """调用llm检测是否转换ABSENT-CHAT状态"""
         logger.info("[状态评估任务] 开始基于LLM评估子心流状态...")
         await self.subheartflow_manager.sbhf_absent_into_chat()
-        
+
     async def _normal_chat_timeout_check_work(self):
         """检查处于CHAT状态的子心流是否因长时间未发言而超时，并将其转为ABSENT"""
         logger.info("[聊天超时检查] 开始检查处于CHAT状态的子心流...")
@@ -257,7 +257,7 @@ class BackgroundTaskManager:
         await self._run_periodic_loop(
             task_name="Into Chat", interval=interval, task_func=self._perform_absent_into_chat
         )
-        
+
     async def _run_normal_chat_timeout_check_cycle(self, interval: int):
         await self._run_periodic_loop(
             task_name="Normal Chat Timeout Check", interval=interval, task_func=self._normal_chat_timeout_check_work

@@ -29,7 +29,8 @@ logger = get_logger("subheartflow_manager")
 
 # 子心流管理相关常量
 INACTIVE_THRESHOLD_SECONDS = 3600  # 子心流不活跃超时时间(秒)
-NORMAL_CHAT_TIMEOUT_SECONDS = 30 * 60 # 30分钟
+NORMAL_CHAT_TIMEOUT_SECONDS = 30 * 60  # 30分钟
+
 
 class SubHeartflowManager:
     """管理所有活跃的 SubHeartflow 实例。"""
@@ -341,13 +342,12 @@ class SubHeartflowManager:
         async with self._lock:
             # 1. 筛选出所有 ABSENT 状态的子心流
             absent_subflows = [
-                hf for hf in self.subheartflows.values()
-                if hf.chat_state.chat_status == ChatState.ABSENT
+                hf for hf in self.subheartflows.values() if hf.chat_state.chat_status == ChatState.ABSENT
             ]
 
             if not absent_subflows:
-                logger.debug("没有摸鱼的子心流可以评估。") # 日志太频繁，注释掉
-                return # 没有目标，直接返回
+                logger.debug("没有摸鱼的子心流可以评估。")  # 日志太频繁，注释掉
+                return  # 没有目标，直接返回
 
             # 2. 随机选一个幸运儿
             sub_hf_to_evaluate = random.choice(absent_subflows)
@@ -358,8 +358,10 @@ class SubHeartflowManager:
             # 3. 检查 CHAT 上限
             current_chat_count = self.count_subflows_by_state_nolock(ChatState.CHAT)
             if current_chat_count >= chat_limit:
-                logger.debug(f"{log_prefix} 想看看能不能聊，但是聊天太多了， ({current_chat_count}/{chat_limit}) 满了。")
-                return # 满了，这次就算了
+                logger.debug(
+                    f"{log_prefix} 想看看能不能聊，但是聊天太多了， ({current_chat_count}/{chat_limit}) 满了。"
+                )
+                return  # 满了，这次就算了
 
             # --- 获取 FOCUSED 计数 ---
             current_focused_count = self.count_subflows_by_state_nolock(ChatState.FOCUSED)
@@ -369,7 +371,7 @@ class SubHeartflowManager:
             chatting_group_names = []
             focused_group_names = []
             for flow_id, hf in self.subheartflows.items():
-                stream_name = chat_manager.get_stream_name(flow_id) or str(flow_id) # 保证有名字
+                stream_name = chat_manager.get_stream_name(flow_id) or str(flow_id)  # 保证有名字
                 if hf.chat_state.chat_status == ChatState.CHAT:
                     chatting_group_names.append(stream_name)
                 elif hf.chat_state.chat_status == ChatState.FOCUSED:
@@ -384,30 +386,34 @@ class SubHeartflowManager:
 
             mai_state_description = f"你当前状态: {current_mai_state.value}。"
             individuality = Individuality.get_instance()
-            personality_prompt = individuality.get_prompt(x_person=2, level = 2)
+            personality_prompt = individuality.get_prompt(x_person=2, level=2)
             prompt_personality = f"你正在扮演名为{individuality.name}的人类，{personality_prompt}"
 
             # --- 修改：在 prompt 中加入当前聊天计数和群名信息 (条件显示) ---
             chat_status_lines = []
             if chatting_group_names:
-                chat_status_lines.append(f"正在闲聊 ({current_chat_count}/{chat_limit}): {', '.join(chatting_group_names)}")
+                chat_status_lines.append(
+                    f"正在闲聊 ({current_chat_count}/{chat_limit}): {', '.join(chatting_group_names)}"
+                )
             if focused_group_names:
-                chat_status_lines.append(f"正在专注 ({current_focused_count}/{focused_limit}): {', '.join(focused_group_names)}")
+                chat_status_lines.append(
+                    f"正在专注 ({current_focused_count}/{focused_limit}): {', '.join(focused_group_names)}"
+                )
 
-            chat_status_prompt = "当前没有在任何群聊中。" # 默认消息喵~
+            chat_status_prompt = "当前没有在任何群聊中。"  # 默认消息喵~
             if chat_status_lines:
-                chat_status_prompt = "当前聊天情况：\n" + "\n".join(chat_status_lines) # 拼接状态信息
+                chat_status_prompt = "当前聊天情况：\n" + "\n".join(chat_status_lines)  # 拼接状态信息
 
             prompt = (
                 f"{prompt_personality}\\n"
                 f"你当前没在 [{stream_name}] 群聊天。\\n"
                 f"{mai_state_description}\\n"
-                f"{chat_status_prompt}\\n" # <-- 喵！用了新的状态信息~
+                f"{chat_status_prompt}\\n"  # <-- 喵！用了新的状态信息~
                 f"{_observation_summary}\\n---\\n"
                 f"基于以上信息，你想不想开始在这个群闲聊？\\n"
                 f"请说明理由，并以 JSON 格式回答，包含 'decision' (布尔值) 和 'reason' (字符串)。\\n"
-                f'例如：{{\"decision\": true, \"reason\": \"看起来挺热闹的，插个话\"}}\\n'
-                f'例如：{{\"decision\": false, \"reason\": \"已经聊了好多，休息一下\"}}\\n'
+                f'例如：{{"decision": true, "reason": "看起来挺热闹的，插个话"}}\\n'
+                f'例如：{{"decision": false, "reason": "已经聊了好多，休息一下"}}\\n'
                 f"请只输出有效的 JSON 对象。"
             )
             # --- 结束修改 ---
@@ -417,11 +423,11 @@ class SubHeartflowManager:
 
             if yao_kai_shi_liao_ma is None:
                 logger.debug(f"{log_prefix} 问AI想不想聊失败了，这次算了。")
-                return # 评估失败，结束
+                return  # 评估失败，结束
 
             if not yao_kai_shi_liao_ma:
                 logger.info(f"{log_prefix} 现在不想聊这个群。")
-                return # 不想聊，结束
+                return  # 不想聊，结束
 
             # --- 5. AI想聊，再次检查额度并尝试转换 ---
             # 再次检查以防万一
@@ -435,7 +441,9 @@ class SubHeartflowManager:
                 if sub_hf_to_evaluate.chat_state.chat_status == ChatState.CHAT:
                     logger.debug(f"{log_prefix} 成功进入聊天状态！本次评估圆满结束。")
                 else:
-                    logger.warning(f"{log_prefix} 奇怪，尝试进入聊天状态失败了。当前状态: {sub_hf_to_evaluate.chat_state.chat_status.value}")
+                    logger.warning(
+                        f"{log_prefix} 奇怪，尝试进入聊天状态失败了。当前状态: {sub_hf_to_evaluate.chat_state.chat_status.value}"
+                    )
             else:
                 logger.warning(
                     f"{log_prefix} AI说想聊，但是刚问完就没空位了 ({current_chat_count_before_change}/{chat_limit})。真不巧，下次再说吧。"
@@ -483,15 +491,19 @@ class SubHeartflowManager:
                         if time_since_last_bb > NORMAL_CHAT_TIMEOUT_SECONDS:
                             should_deactivate = True
                             reason = f"超过 {NORMAL_CHAT_TIMEOUT_SECONDS / 60:.0f} 分钟没 BB"
-                            logger.info(f"{log_prefix} 检测到超时 ({reason})，准备转为 ABSENT。上次活动时间: {last_bot_dong_zuo_time:.0f}")
+                            logger.info(
+                                f"{log_prefix} 检测到超时 ({reason})，准备转为 ABSENT。上次活动时间: {last_bot_dong_zuo_time:.0f}"
+                            )
                         # else:
                         #     logger.debug(f"{log_prefix} Bot活动时间未超时 ({time_since_last_bb:.0f}s < {NORMAL_CHAT_TIMEOUT_SECONDS}s)，保持 CHAT 状态。")
                     # else:
-                        # 如果没有记录到Bot的活动时间，暂时不因为超时而转换状态
-                        # logger.debug(f"{log_prefix} 未找到有效的 Bot 最后活动时间记录，不执行超时检查。")
+                    # 如果没有记录到Bot的活动时间，暂时不因为超时而转换状态
+                    # logger.debug(f"{log_prefix} 未找到有效的 Bot 最后活动时间记录，不执行超时检查。")
 
                 except AttributeError:
-                    logger.error(f"{log_prefix} 无法获取 Bot 最后 BB 时间，请确保 SubHeartflow 相关实现正确。跳过超时检查。")
+                    logger.error(
+                        f"{log_prefix} 无法获取 Bot 最后 BB 时间，请确保 SubHeartflow 相关实现正确。跳过超时检查。"
+                    )
                 except Exception as e:
                     logger.error(f"{log_prefix} 检查 Bot 超时状态时出错: {e}", exc_info=True)
 
@@ -507,9 +519,12 @@ class SubHeartflowManager:
                         logger.warning(f"{log_prefix} 尝试因超时转换为 ABSENT 失败。")
 
         if transitioned_to_absent > 0:
-            logger.info(f"{log_prefix_task} 完成，共检查 {checked_count} 个子心流，{transitioned_to_absent} 个因超时转为 ABSENT。")
+            logger.info(
+                f"{log_prefix_task} 完成，共检查 {checked_count} 个子心流，{transitioned_to_absent} 个因超时转为 ABSENT。"
+            )
         # else:
         #     logger.debug(f"{log_prefix_task} 完成，共检查 {checked_count} 个子心流，无超时转换。")
+
     # --- 结束新增 ---
 
     async def _llm_evaluate_state_transition(self, prompt: str) -> Optional[bool]:
@@ -653,7 +668,7 @@ class SubHeartflowManager:
             # 仅当子心流处于 FOCUSED 状态时才进行转换
             # 因为 HeartFChatting 只在 FOCUSED 状态下运行
             if current_state == ChatState.FOCUSED:
-                target_state = ChatState.ABSENT # 默认目标状态
+                target_state = ChatState.ABSENT  # 默认目标状态
                 log_reason = "默认转换"
 
                 # 决定是去 ABSENT 还是 CHAT
@@ -671,14 +686,20 @@ class SubHeartflowManager:
                     if current_chat_count < chat_limit:
                         target_state = ChatState.CHAT
                         log_reason = f"随机选择 CHAT (当前 {current_chat_count}/{chat_limit})"
-                        logger.debug(f"[状态转换请求] {stream_name} ({current_state.value}) 随机决定进入 CHAT，未达上限 ({current_chat_count}/{chat_limit})")
+                        logger.debug(
+                            f"[状态转换请求] {stream_name} ({current_state.value}) 随机决定进入 CHAT，未达上限 ({current_chat_count}/{chat_limit})"
+                        )
                     else:
                         target_state = ChatState.ABSENT
                         log_reason = f"随机选择 CHAT 但已达上限 ({current_chat_count}/{chat_limit})，转为 ABSENT"
-                        logger.debug(f"[状态转换请求] {stream_name} ({current_state.value}) 随机决定进入 CHAT，但已达上限 ({current_chat_count}/{chat_limit})，改为进入 ABSENT")
+                        logger.debug(
+                            f"[状态转换请求] {stream_name} ({current_state.value}) 随机决定进入 CHAT，但已达上限 ({current_chat_count}/{chat_limit})，改为进入 ABSENT"
+                        )
 
-                #开始转换
-                logger.info(f"[状态转换请求] 接收到请求，将 {stream_name} (当前: {current_state.value}) 尝试转换为 {target_state.value} ({log_reason})")
+                # 开始转换
+                logger.info(
+                    f"[状态转换请求] 接收到请求，将 {stream_name} (当前: {current_state.value}) 尝试转换为 {target_state.value} ({log_reason})"
+                )
                 try:
                     await subflow.change_chat_state(target_state)
                     # 检查最终状态
@@ -686,9 +707,13 @@ class SubHeartflowManager:
                     if final_state == target_state:
                         logger.debug(f"[状态转换请求] {stream_name} 状态已成功转换为 {final_state.value}")
                     else:
-                        logger.warning(f"[状态转换请求] 尝试将 {stream_name} 转换为 {target_state.value} 后，状态实际为 {final_state.value}")
+                        logger.warning(
+                            f"[状态转换请求] 尝试将 {stream_name} 转换为 {target_state.value} 后，状态实际为 {final_state.value}"
+                        )
                 except Exception as e:
-                    logger.error(f"[状态转换请求] 转换 {stream_name} 到 {target_state.value} 时出错: {e}", exc_info=True)
+                    logger.error(
+                        f"[状态转换请求] 转换 {stream_name} 到 {target_state.value} 时出错: {e}", exc_info=True
+                    )
             elif current_state == ChatState.ABSENT:
                 logger.debug(f"[状态转换请求] {stream_name} 已处于 ABSENT 状态，无需转换")
             else:

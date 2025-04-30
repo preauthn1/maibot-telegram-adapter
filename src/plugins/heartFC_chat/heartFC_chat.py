@@ -32,7 +32,7 @@ from src.individuality.individuality import Individuality
 
 WAITING_TIME_THRESHOLD = 300  # 等待新消息时间阈值，单位秒
 
-EMOJI_SEND_PRO = 0.3 # 设置一个概率，比如 30% 才真的发
+EMOJI_SEND_PRO = 0.3  # 设置一个概率，比如 30% 才真的发
 
 CONSECUTIVE_NO_REPLY_THRESHOLD = 3  # 连续不回复的阈值
 
@@ -982,13 +982,14 @@ class HeartFChatting:
 
         # --- 新增：概率性忽略文本回复附带的表情（正确的位置）---
 
-
         if action == "text_reply" and emoji_query:
             logger.debug(f"{self.log_prefix}[Planner] 大模型想让麦麦发文字时带表情: '{emoji_query}'")
             # 掷骰子看看要不要听它的
             if random.random() > EMOJI_SEND_PRO:
-                logger.info(f"{self.log_prefix}[Planner] 但是麦麦这次不想加表情 ({1-EMOJI_SEND_PRO:.0%})，忽略表情 '{emoji_query}'")
-                emoji_query = "" # 把表情请求清空，就不发了
+                logger.info(
+                    f"{self.log_prefix}[Planner] 但是麦麦这次不想加表情 ({1 - EMOJI_SEND_PRO:.0%})，忽略表情 '{emoji_query}'"
+                )
+                emoji_query = ""  # 把表情请求清空，就不发了
             else:
                 logger.info(f"{self.log_prefix}[Planner] 好吧，加上表情 '{emoji_query}'")
         # --- 结束：概率性忽略 ---

@@ -257,11 +257,11 @@ class ImageManager:
                     frame = gif.convert("RGB")
                     all_frames.append(frame.copy())
             except EOFError:
-                pass # 读完啦
+                pass  # 读完啦
 
             if not all_frames:
                 logger.warning("GIF中没有找到任何帧")
-                return None # 空的GIF直接返回None
+                return None  # 空的GIF直接返回None
 
             # --- 新的帧选择逻辑 ---
             selected_frames = []
@@ -295,8 +295,8 @@ class ImageManager:
 
             # 如果选择后连一帧都没有（比如GIF只有一帧且后续处理失败？）或者原始GIF就没帧，也返回None
             if not selected_frames:
-                 logger.warning("处理后没有选中任何帧")
-                 return None
+                logger.warning("处理后没有选中任何帧")
+                return None
 
             # logger.debug(f"总帧数: {len(all_frames)}, 选中帧数: {len(selected_frames)}")
 
@@ -307,14 +307,13 @@ class ImageManager:
             target_height = 200  # 固定高度
             # 防止除以零
             if frame_height == 0:
-                 logger.error("帧高度为0，无法计算缩放尺寸")
-                 return None
+                logger.error("帧高度为0，无法计算缩放尺寸")
+                return None
             target_width = int((target_height / frame_height) * frame_width)
             # 宽度也不能是0
             if target_width == 0:
-                 logger.warning(f"计算出的目标宽度为0 (原始尺寸 {frame_width}x{frame_height})，调整为1")
-                 target_width = 1
-
+                logger.warning(f"计算出的目标宽度为0 (原始尺寸 {frame_width}x{frame_height})，调整为1")
+                target_width = 1
 
             # 调整所有选中帧的大小
             resized_frames = [
@@ -325,13 +324,12 @@ class ImageManager:
             total_width = target_width * len(resized_frames)
             # 防止总宽度为0
             if total_width == 0 and len(resized_frames) > 0:
-                 logger.warning("计算出的总宽度为0，但有选中帧，可能目标宽度太小")
-                 # 至少给点宽度吧
-                 total_width = len(resized_frames)
+                logger.warning("计算出的总宽度为0，但有选中帧，可能目标宽度太小")
+                # 至少给点宽度吧
+                total_width = len(resized_frames)
             elif total_width == 0:
-                 logger.error("计算出的总宽度为0且无选中帧")
-                 return None
-
+                logger.error("计算出的总宽度为0且无选中帧")
+                return None
 
             combined_image = Image.new("RGB", (total_width, target_height))
 
@@ -341,17 +339,17 @@ class ImageManager:
 
             # 转换为base64
             buffer = io.BytesIO()
-            combined_image.save(buffer, format="JPEG", quality=85) # 保存为JPEG
+            combined_image.save(buffer, format="JPEG", quality=85)  # 保存为JPEG
             result_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
             return result_base64
 
         except MemoryError:
             logger.error("GIF转换失败: 内存不足，可能是GIF太大或帧数太多")
-            return None # 内存不够啦
+            return None  # 内存不够啦
         except Exception as e:
-            logger.error(f"GIF转换失败: {str(e)}", exc_info=True) # 记录详细错误信息
-            return None # 其他错误也返回None
+            logger.error(f"GIF转换失败: {str(e)}", exc_info=True)  # 记录详细错误信息
+            return None  # 其他错误也返回None
 
 
 # 创建全局单例

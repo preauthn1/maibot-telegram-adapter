@@ -5,13 +5,14 @@ from typing import List, Tuple, Optional
 from src.common.logger_manager import get_logger
 from src.plugins.moods.moods import MoodManager
 from src.config.config import global_config
+
 logger = get_logger("mai_state")
 
 
 # -- 状态相关的可配置参数 (可以从 glocal_config 加载) --
 # enable_unlimited_hfc_chat = True  # 调试用：无限专注聊天
 enable_unlimited_hfc_chat = False
-prevent_offline_state = True  
+prevent_offline_state = True
 # 目前默认不启用OFFLINE状态
 
 # 不同状态下普通聊天的最大消息数
@@ -19,13 +20,12 @@ base_normal_chat_num = global_config.base_normal_chat_num
 base_focused_chat_num = global_config.base_focused_chat_num
 
 
-
-MAX_NORMAL_CHAT_NUM_PEEKING = int(base_normal_chat_num/2)
+MAX_NORMAL_CHAT_NUM_PEEKING = int(base_normal_chat_num / 2)
 MAX_NORMAL_CHAT_NUM_NORMAL = base_normal_chat_num
 MAX_NORMAL_CHAT_NUM_FOCUSED = base_normal_chat_num + 1
 
 # 不同状态下专注聊天的最大消息数
-MAX_FOCUSED_CHAT_NUM_PEEKING = int(base_focused_chat_num/2)
+MAX_FOCUSED_CHAT_NUM_PEEKING = int(base_focused_chat_num / 2)
 MAX_FOCUSED_CHAT_NUM_NORMAL = base_focused_chat_num
 MAX_FOCUSED_CHAT_NUM_FOCUSED = base_focused_chat_num + 2
 

@@ -170,38 +170,34 @@ class BotConfig:
     SCHEDULE_TEMPERATURE: float = 0.5  # 日程表温度，建议0.5-1.0
     TIME_ZONE: str = "Asia/Shanghai"  # 时区
 
-
     # chat
-    allow_focus_mode: bool = True # 是否允许专注聊天状态
+    allow_focus_mode: bool = True  # 是否允许专注聊天状态
 
-    base_normal_chat_num: int = 3 # 最多允许多少个群进行普通聊天
-    base_focused_chat_num: int = 2 # 最多允许多少个群进行专注聊天
-    
+    base_normal_chat_num: int = 3  # 最多允许多少个群进行普通聊天
+    base_focused_chat_num: int = 2  # 最多允许多少个群进行专注聊天
+
     observation_context_size: int = 12  # 心流观察到的最长上下文大小，超过这个值的上下文会被压缩
-    
+
     message_buffer: bool = True  # 消息缓冲器
 
-    
     ban_words = set()
     ban_msgs_regex = set()
 
     # focus_chat
     reply_trigger_threshold: float = 3.0  # 心流聊天触发阈值，越低越容易触发
     default_decay_rate_per_second: float = 0.98  # 默认衰减率，越大衰减越慢
-    consecutive_no_reply_threshold = 3 
-    
-    
+    consecutive_no_reply_threshold = 3
+
     compressed_length: int = 5  # 不能大于observation_context_size,心流上下文压缩的最短压缩长度，超过心流观察到的上下文长度，会压缩，最短压缩长度为5
     compress_length_limit: int = 5  # 最多压缩份数，超过该数值的压缩上下文会被删除
-
 
     # normal_chat
     model_reasoning_probability: float = 0.7  # 麦麦回答时选择推理模型(主要)模型概率
     model_normal_probability: float = 0.3  # 麦麦回答时选择一般模型(次要)模型概率
-    
+
     emoji_chance: float = 0.2  # 发送表情包的基础概率
     thinking_timeout: int = 120  # 思考时间
-    
+
     willing_mode: str = "classical"  # 意愿模式
     response_willing_amplifier: float = 1.0  # 回复意愿放大系数
     response_interested_rate_amplifier: float = 1.0  # 回复兴趣度放大系数
@@ -263,7 +259,7 @@ class BotConfig:
     enable_response_splitter = True  # 是否启用回复分割器
     response_max_length = 100  # 回复允许的最大长度
     response_max_sentence_num = 3  # 回复允许的最大句子数
-    
+
     model_max_output_length: int = 800  # 最大回复长度
 
     # remote
@@ -409,7 +405,7 @@ class BotConfig:
             config.BOT_QQ = str(bot_qq)
             config.BOT_NICKNAME = bot_config.get("nickname", config.BOT_NICKNAME)
             config.BOT_ALIAS_NAMES = bot_config.get("alias_names", config.BOT_ALIAS_NAMES)
-            
+
         def chat(parent: dict):
             chat_config = parent["chat"]
             config.allow_focus_mode = chat_config.get("allow_focus_mode", config.allow_focus_mode)
@@ -433,7 +429,6 @@ class BotConfig:
             )
             config.emoji_chance = normal_chat_config.get("emoji_chance", config.emoji_chance)
             config.thinking_timeout = normal_chat_config.get("thinking_timeout", config.thinking_timeout)
-            
 
             config.willing_mode = normal_chat_config.get("willing_mode", config.willing_mode)
             config.response_willing_amplifier = normal_chat_config.get(
@@ -457,9 +452,7 @@ class BotConfig:
         def focus_chat(parent: dict):
             focus_chat_config = parent["focus_chat"]
             config.compressed_length = focus_chat_config.get("compressed_length", config.compressed_length)
-            config.compress_length_limit = focus_chat_config.get(
-                "compress_length_limit", config.compress_length_limit
-            )
+            config.compress_length_limit = focus_chat_config.get("compress_length_limit", config.compress_length_limit)
             config.reply_trigger_threshold = focus_chat_config.get(
                 "reply_trigger_threshold", config.reply_trigger_threshold
             )
@@ -469,7 +462,6 @@ class BotConfig:
             config.consecutive_no_reply_threshold = focus_chat_config.get(
                 "consecutive_no_reply_threshold", config.consecutive_no_reply_threshold
             )
-            
 
         def model(parent: dict):
             # 加载模型配置
@@ -634,7 +626,9 @@ class BotConfig:
                     "enable_kaomoji_protection", config.enable_kaomoji_protection
                 )
             if config.INNER_VERSION in SpecifierSet(">=1.6.0"):
-                config.model_max_output_length = response_splitter_config.get("model_max_output_length", config.model_max_output_length)
+                config.model_max_output_length = response_splitter_config.get(
+                    "model_max_output_length", config.model_max_output_length
+                )
 
         def groups(parent: dict):
             groups_config = parent["groups"]

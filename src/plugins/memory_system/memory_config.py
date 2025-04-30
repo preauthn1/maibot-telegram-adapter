@@ -44,7 +44,5 @@ class MemoryConfig:
             consolidate_memory_percentage=getattr(global_config, "consolidate_memory_percentage", 0.01),
             consolidate_memory_interval=getattr(global_config, "consolidate_memory_interval", 1000),
             llm_topic_judge=getattr(global_config, "llm_topic_judge", "default_judge_model"),  # 添加默认模型名
-            llm_summary=getattr(
-                global_config, "llm_summary", "default_summary_model"
-            ),  # 添加默认模型名
+            llm_summary=getattr(global_config, "llm_summary", "default_summary_model"),  # 添加默认模型名
         )

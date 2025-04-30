@@ -14,6 +14,7 @@ from src.heart_flow.background_tasks import BackgroundTaskManager  # Import Back
 
 logger = get_logger("heartflow")
 
+
 class Heartflow:
     """主心流协调器，负责初始化并协调各个子系统:
     - 状态管理 (MaiState)

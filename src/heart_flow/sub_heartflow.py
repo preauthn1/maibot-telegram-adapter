@@ -5,7 +5,6 @@ import time
 from typing import Optional, List, Dict, Tuple, Callable, Coroutine
 import traceback
 from src.common.logger_manager import get_logger
-import random
 from src.plugins.chat.message import MessageRecv
 from src.plugins.chat.chat_stream import chat_manager
 import math
@@ -152,8 +151,6 @@ class InterestChatting:
             "start_hfc_probability": round(self.start_hfc_probability, 4),
             "above_threshold": self.above_threshold,
         }
-
-
 
     # --- 新增后台更新任务相关方法 ---
     async def _run_update_loop(self, update_interval: float = 1.0):
@@ -472,7 +469,7 @@ class SubHeartflow:
 
     async def get_interest_state(self) -> dict:
         return await self.interest_chatting.get_state()
-    
+
     def get_normal_chat_last_speak_time(self) -> float:
         if self.normal_chat_instance:
             return self.normal_chat_instance.last_speak_time

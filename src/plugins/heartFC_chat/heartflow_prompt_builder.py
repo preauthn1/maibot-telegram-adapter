@@ -241,7 +241,7 @@ class PromptBuilder:
             prompt_ger=prompt_ger,
             moderation_prompt=await global_prompt_manager.get_prompt_async("moderation_prompt"),
         )
-        
+
         logger.debug(f"focus_chat_prompt: \n{prompt}")
 
         return prompt
