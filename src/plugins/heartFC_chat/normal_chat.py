@@ -358,7 +358,9 @@ class NormalChat:
         processed_count = 0
         # --- 修改：迭代前创建要处理的ID列表副本，防止迭代时修改 ---
         messages_to_process_initially = list(messages_to_reply)  # 创建副本
-        # --- 修改结束 ---
+        # --- 新增：限制最多处理两条消息 ---
+        messages_to_process_initially = messages_to_process_initially[:2]
+        # --- 新增结束 ---
         for item in messages_to_process_initially:  # 使用副本迭代
             msg_id, (message, interest_value, is_mentioned) = item
             # --- 修改：在处理前尝试 pop，防止竞争 ---
