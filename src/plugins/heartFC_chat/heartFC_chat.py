@@ -37,7 +37,7 @@ EMOJI_SEND_PRO = 0.3  # 设置一个概率，比如 30% 才真的发
 CONSECUTIVE_NO_REPLY_THRESHOLD = 3  # 连续不回复的阈值
 
 
-logger = get_logger("interest")  # Logger Name Changed
+logger = get_logger("HFC")  # Logger Name Changed
 
 
 # 默认动作定义

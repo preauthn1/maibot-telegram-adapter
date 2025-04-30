@@ -299,7 +299,7 @@ class SubHeartflow:
             chat_stream = chat_manager.get_stream(self.chat_id)
             self.normal_chat_instance = NormalChat(chat_stream=chat_stream, interest_dict=self.get_interest_dict())
 
-            logger.info(f"{log_prefix} 启动 NormalChat 随便水群...")
+            logger.info(f"{log_prefix} 开始普通聊天，随便水群...")
             await self.normal_chat_instance.start_chat()  # <--- 修正：调用 start_chat
             return True
         except Exception as e:
@@ -311,7 +311,7 @@ class SubHeartflow:
     async def _stop_heart_fc_chat(self):
         """停止并清理 HeartFChatting 实例"""
         if self.heart_fc_instance:
-            logger.info(f"{self.log_prefix} 关闭 HeartFChatting 实例...")
+            logger.debug(f"{self.log_prefix} 结束专注聊天...")
             try:
                 await self.heart_fc_instance.shutdown()
             except Exception as e:
@@ -386,7 +386,7 @@ class SubHeartflow:
             # 移除限额检查逻辑
             logger.debug(f"{log_prefix} 准备进入或保持 聊天 状态")
             if await self._start_normal_chat():
-                logger.info(f"{log_prefix} 成功进入或保持 NormalChat 状态。")
+                # logger.info(f"{log_prefix} 成功进入或保持 NormalChat 状态。")
                 state_changed = True
             else:
                 logger.error(f"{log_prefix} 启动 NormalChat 失败，无法进入 CHAT 状态。")
@@ -416,7 +416,7 @@ class SubHeartflow:
             self.history_chat_state.append((current_state, self.chat_state_last_time))
 
             logger.info(
-                f"{log_prefix} 麦麦的聊天状态从 {current_state.value} （持续了 {self.chat_state_last_time} 秒） 变更为 {new_state.value}"
+                f"{log_prefix} 麦麦的聊天状态从 {current_state.value} （持续了 {int(self.chat_state_last_time)} 秒） 变更为 {new_state.value}"
             )
 
             self.chat_state.chat_status = new_state

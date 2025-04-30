@@ -200,12 +200,12 @@ class BackgroundTaskManager:
 
     async def _perform_absent_into_chat(self):
         """调用llm检测是否转换ABSENT-CHAT状态"""
-        logger.info("[状态评估任务] 开始基于LLM评估子心流状态...")
+        logger.debug("[状态评估任务] 开始基于LLM评估子心流状态...")
         await self.subheartflow_manager.sbhf_absent_into_chat()
 
     async def _normal_chat_timeout_check_work(self):
         """检查处于CHAT状态的子心流是否因长时间未发言而超时，并将其转为ABSENT"""
-        logger.info("[聊天超时检查] 开始检查处于CHAT状态的子心流...")
+        logger.debug("[聊天超时检查] 开始检查处于CHAT状态的子心流...")
         await self.subheartflow_manager.sbhf_chat_into_absent()
 
     async def _perform_cleanup_work(self):

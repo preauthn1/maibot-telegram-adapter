@@ -1,7 +1,7 @@
 import asyncio
 import time
 import random
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import json  # 导入 json 模块
 import functools  # <-- 新增导入
 
@@ -21,6 +21,7 @@ from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.individuality.individuality import Individuality
 import traceback
+
 
 
 # 初始化日志记录器
@@ -358,7 +359,7 @@ class SubHeartflowManager:
             # 3. 检查 CHAT 上限
             current_chat_count = self.count_subflows_by_state_nolock(ChatState.CHAT)
             if current_chat_count >= chat_limit:
-                logger.debug(
+                logger.info(
                     f"{log_prefix} 想看看能不能聊，但是聊天太多了， ({current_chat_count}/{chat_limit}) 满了。"
                 )
                 return  # 满了，这次就算了
@@ -419,14 +420,22 @@ class SubHeartflowManager:
             # --- 结束修改 ---
 
             # --- 4. LLM 评估是否想聊 ---
-            yao_kai_shi_liao_ma = await self._llm_evaluate_state_transition(prompt)
+            yao_kai_shi_liao_ma, reason = await self._llm_evaluate_state_transition(prompt)
+            
+            if reason:
+                if yao_kai_shi_liao_ma:
+                    logger.info(f"{log_prefix} 打算开始聊，原因是: {reason}")
+                else:
+                    logger.info(f"{log_prefix} 不打算聊，原因是: {reason}")
+            else:
+                logger.info(f"{log_prefix} 结果: {yao_kai_shi_liao_ma}")
 
             if yao_kai_shi_liao_ma is None:
                 logger.debug(f"{log_prefix} 问AI想不想聊失败了，这次算了。")
                 return  # 评估失败，结束
 
             if not yao_kai_shi_liao_ma:
-                logger.info(f"{log_prefix} 现在不想聊这个群。")
+                # logger.info(f"{log_prefix} 现在不想聊这个群。")
                 return  # 不想聊，结束
 
             # --- 5. AI想聊，再次检查额度并尝试转换 ---
@@ -434,7 +443,7 @@ class SubHeartflowManager:
             current_chat_count_before_change = self.count_subflows_by_state_nolock(ChatState.CHAT)
             if current_chat_count_before_change < chat_limit:
                 logger.info(
-                    f"{log_prefix} 想聊，而且还有空位 ({current_chat_count_before_change}/{chat_limit})，这就去聊！"
+                    f"{log_prefix} 想聊，而且还有精力 ({current_chat_count_before_change}/{chat_limit})，这就去聊！"
                 )
                 await sub_hf_to_evaluate.change_chat_state(ChatState.CHAT)
                 # 确认转换成功
@@ -492,7 +501,7 @@ class SubHeartflowManager:
                             should_deactivate = True
                             reason = f"超过 {NORMAL_CHAT_TIMEOUT_SECONDS / 60:.0f} 分钟没 BB"
                             logger.info(
-                                f"{log_prefix} 检测到超时 ({reason})，准备转为 ABSENT。上次活动时间: {last_bot_dong_zuo_time:.0f}"
+                                f"{log_prefix} 太久没有发言 ({reason})，不看了。上次活动时间: {last_bot_dong_zuo_time:.0f}"
                             )
                         # else:
                         #     logger.debug(f"{log_prefix} Bot活动时间未超时 ({time_since_last_bb:.0f}s < {NORMAL_CHAT_TIMEOUT_SECONDS}s)，保持 CHAT 状态。")
@@ -509,25 +518,24 @@ class SubHeartflowManager:
 
                 # --- 执行状态转换（如果超时） ---
                 if should_deactivate:
-                    logger.info(f"{log_prefix} 因超时 ({reason})，尝试转换为 ABSENT 状态。")
+                    logger.debug(f"{log_prefix} 因超时 ({reason})，尝试转换为 ABSENT 状态。")
                     await sub_hf.change_chat_state(ChatState.ABSENT)
                     # 再次检查确保状态已改变
                     if sub_hf.chat_state.chat_status == ChatState.ABSENT:
                         transitioned_to_absent += 1
-                        logger.info(f"{log_prefix} 已成功转换为 ABSENT 状态。")
+                        logger.info(f"{log_prefix} 不看了。")
                     else:
                         logger.warning(f"{log_prefix} 尝试因超时转换为 ABSENT 失败。")
 
         if transitioned_to_absent > 0:
-            logger.info(
+            logger.debug(
                 f"{log_prefix_task} 完成，共检查 {checked_count} 个子心流，{transitioned_to_absent} 个因超时转为 ABSENT。"
             )
-        # else:
-        #     logger.debug(f"{log_prefix_task} 完成，共检查 {checked_count} 个子心流，无超时转换。")
+
 
     # --- 结束新增 ---
 
-    async def _llm_evaluate_state_transition(self, prompt: str) -> Optional[bool]:
+    async def _llm_evaluate_state_transition(self, prompt: str) -> Tuple[Optional[bool], Optional[str]]:
         """
         使用 LLM 评估是否应进行状态转换，期望 LLM 返回 JSON 格式。
 
@@ -544,7 +552,7 @@ class SubHeartflowManager:
             response_text, _ = await self.llm_state_evaluator.generate_response_async(prompt)
             # logger.debug(f"{log_prefix} 使用模型 {self.llm_state_evaluator.model_name} 评估")
             logger.debug(f"{log_prefix} 原始输入: {prompt}")
-            logger.debug(f"{log_prefix} 原始响应: {response_text}")
+            logger.debug(f"{log_prefix} 原始评估结果: {response_text}")
 
             # --- 解析 JSON 响应 ---
             try:
@@ -555,34 +563,36 @@ class SubHeartflowManager:
 
                 data = json.loads(cleaned_response)
                 decision = data.get("decision")  # 使用 .get() 避免 KeyError
+                reason = data.get("reason")
 
                 if isinstance(decision, bool):
                     logger.debug(f"{log_prefix} LLM评估结果 (来自JSON): {'建议转换' if decision else '建议不转换'}")
-                    return decision
+                    
+                    return decision , reason
                 else:
                     logger.warning(
                         f"{log_prefix} LLM 返回的 JSON 中 'decision' 键的值不是布尔型: {decision}。响应: {response_text}"
                     )
-                    return None  # 值类型不正确
+                    return None, None  # 值类型不正确
 
             except json.JSONDecodeError as json_err:
                 logger.warning(f"{log_prefix} LLM 返回的响应不是有效的 JSON: {json_err}。响应: {response_text}")
                 # 尝试在非JSON响应中查找关键词作为后备方案 (可选)
                 if "true" in response_text.lower():
                     logger.debug(f"{log_prefix} 在非JSON响应中找到 'true'，解释为建议转换")
-                    return True
+                    return True, None
                 if "false" in response_text.lower():
                     logger.debug(f"{log_prefix} 在非JSON响应中找到 'false'，解释为建议不转换")
-                    return False
-                return None  # JSON 解析失败，也未找到关键词
+                    return False, None
+                return None, None  # JSON 解析失败，也未找到关键词
             except Exception as parse_err:  # 捕获其他可能的解析错误
                 logger.warning(f"{log_prefix} 解析 LLM JSON 响应时发生意外错误: {parse_err}。响应: {response_text}")
-                return None
+                return None, None
 
         except Exception as e:
             logger.error(f"{log_prefix} 调用 LLM 或处理其响应时出错: {e}", exc_info=True)
             traceback.print_exc()
-            return None  # LLM 调用或处理失败
+            return None, None  # LLM 调用或处理失败
 
     def count_subflows_by_state(self, state: ChatState) -> int:
         """统计指定状态的子心流数量"""
