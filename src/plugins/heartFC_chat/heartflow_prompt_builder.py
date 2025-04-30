@@ -69,7 +69,7 @@ def init_prompt():
 2. 文字回复(text_reply)适用：
 - 有实质性内容需要表达
 - 有人提到你，但你还没有回应他
-- 可以追加emoji_query表达情绪(格式：情绪描述,如"俏皮的调侃")
+- 可以追加emoji_query表达情绪(emoji_query填写表情包的适用场合，也就是当前场合)
 - 不要追加太多表情
 
 3. 纯表情回复(emoji_reply)适用：
