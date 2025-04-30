@@ -174,7 +174,7 @@ class PromptBuilder:
         message_list_before_now = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_stream.stream_id,
             timestamp=time.time(),
-            limit=global_config.MAX_CONTEXT_SIZE,
+            limit=global_config.observation_context_size,
         )
 
         chat_talking_prompt = await build_readable_messages(
@@ -241,6 +241,8 @@ class PromptBuilder:
             prompt_ger=prompt_ger,
             moderation_prompt=await global_prompt_manager.get_prompt_async("moderation_prompt"),
         )
+        
+        logger.debug(f"focus_chat_prompt: \n{prompt}")
 
         return prompt
 
@@ -255,7 +257,7 @@ class PromptBuilder:
         who_chat_in_group += get_recent_group_speaker(
             chat_stream.stream_id,
             (chat_stream.user_info.platform, chat_stream.user_info.user_id),
-            limit=global_config.MAX_CONTEXT_SIZE,
+            limit=global_config.observation_context_size,
         )
 
         relation_prompt = ""
@@ -314,7 +316,7 @@ class PromptBuilder:
         message_list_before_now = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_stream.stream_id,
             timestamp=time.time(),
-            limit=global_config.MAX_CONTEXT_SIZE,
+            limit=global_config.observation_context_size,
         )
 
         chat_talking_prompt = await build_readable_messages(

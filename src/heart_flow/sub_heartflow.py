@@ -15,20 +15,15 @@ from src.heart_flow.mai_state_manager import MaiStateInfo
 from src.heart_flow.chat_state_info import ChatState, ChatStateInfo
 from src.heart_flow.sub_mind import SubMind
 
-# # --- REMOVE: Conditional import --- #
-# if TYPE_CHECKING:
-#     from src.heart_flow.subheartflow_manager import SubHeartflowManager
-# # --- END REMOVE --- #
-
 
 # 定义常量 (从 interest.py 移动过来)
 MAX_INTEREST = 15.0
 
 logger = get_logger("subheartflow")
 
-base_reply_probability = 0.05
-probability_increase_rate_per_second = 0.08
-max_reply_probability = 1
+PROBABILITY_INCREASE_RATE_PER_SECOND = 0.1
+PROBABILITY_DECREASE_RATE_PER_SECOND = 0.1
+MAX_REPLY_PROBABILITY = 1
 
 
 class InterestChatting:
@@ -37,24 +32,15 @@ class InterestChatting:
         decay_rate=global_config.default_decay_rate_per_second,
         max_interest=MAX_INTEREST,
         trigger_threshold=global_config.reply_trigger_threshold,
-        base_reply_probability=base_reply_probability,
-        increase_rate=probability_increase_rate_per_second,
-        decay_factor=global_config.probability_decay_factor_per_second,
-        max_probability=max_reply_probability,
+        max_probability=MAX_REPLY_PROBABILITY,
     ):
         # 基础属性初始化
         self.interest_level: float = 0.0
-        self.last_update_time: float = time.time()
         self.decay_rate_per_second: float = decay_rate
         self.max_interest: float = max_interest
-        self.last_interaction_time: float = self.last_update_time
 
         self.trigger_threshold: float = trigger_threshold
-        self.base_reply_probability: float = base_reply_probability
-        self.probability_increase_rate: float = increase_rate
-        self.probability_decay_factor: float = decay_factor
         self.max_reply_probability: float = max_probability
-        self.current_reply_probability: float = 0.0
         self.is_above_threshold: bool = False
 
         # 任务相关属性初始化
@@ -100,7 +86,6 @@ class InterestChatting:
         """
         # 添加新消息
         self.interest_dict[message.message_info.message_id] = (message, interest_value, is_mentioned)
-        self.last_interaction_time = time.time()
 
         # 如果字典长度超过10，删除最旧的消息
         if len(self.interest_dict) > 10:
@@ -144,10 +129,10 @@ class InterestChatting:
     async def _update_reply_probability(self):
         self.above_threshold = self.interest_level >= self.trigger_threshold
         if self.above_threshold:
-            self.start_hfc_probability += 0.1
+            self.start_hfc_probability += PROBABILITY_INCREASE_RATE_PER_SECOND
         else:
             if self.start_hfc_probability > 0:
-                self.start_hfc_probability = max(0, self.start_hfc_probability - 0.1)
+                self.start_hfc_probability = max(0, self.start_hfc_probability - PROBABILITY_DECREASE_RATE_PER_SECOND)
 
     async def increase_interest(self, value: float):
         self.interest_level += value
@@ -168,12 +153,7 @@ class InterestChatting:
             "above_threshold": self.above_threshold,
         }
 
-    async def should_evaluate_reply(self) -> bool:
-        if self.current_reply_probability > 0:
-            trigger = random.random() < self.current_reply_probability
-            return trigger
-        else:
-            return False
+
 
     # --- 新增后台更新任务相关方法 ---
     async def _run_update_loop(self, update_interval: float = 1.0):
@@ -492,12 +472,11 @@ class SubHeartflow:
 
     async def get_interest_state(self) -> dict:
         return await self.interest_chatting.get_state()
-
-    async def get_interest_level(self) -> float:
-        return await self.interest_chatting.get_interest()
-
-    async def should_evaluate_reply(self) -> bool:
-        return await self.interest_chatting.should_evaluate_reply()
+    
+    def get_normal_chat_last_speak_time(self) -> float:
+        if self.normal_chat_instance:
+            return self.normal_chat_instance.last_speak_time
+        return 0
 
     def get_interest_dict(self) -> Dict[str, tuple[MessageRecv, float, bool]]:
         return self.interest_chatting.interest_dict

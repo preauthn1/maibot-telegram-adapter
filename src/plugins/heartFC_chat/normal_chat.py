@@ -43,6 +43,8 @@ class NormalChat:
         self.mood_manager = MoodManager.get_instance()  # MoodManager 保持单例
         # 存储此实例的兴趣监控任务
         self.start_time = time.time()
+        
+        self.last_speak_time = 0
 
         self._chat_task: Optional[asyncio.Task] = None
         logger.info(f"[{self.stream_name}] NormalChat 实例初始化完成。")
@@ -119,6 +121,8 @@ class NormalChat:
 
         await message_manager.add_message(message_set)
 
+        self.last_speak_time = time.time()
+        
         return first_bot_msg
 
     # 改为实例方法

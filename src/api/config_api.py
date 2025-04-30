@@ -47,7 +47,7 @@ class BotConfig:
     MAX_CONTEXT_SIZE: int  # 上下文最大消息数
     emoji_chance: float  # 发送表情包的基础概率
     thinking_timeout: int  # 思考时间
-    max_response_length: int  # 最大回复长度
+    model_max_output_length: int  # 最大回复长度
     message_buffer: bool  # 消息缓冲器
 
     ban_words: set
