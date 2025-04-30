@@ -69,8 +69,9 @@ class KnowledgeFetcher:
             fast_retrieval=False,
         )
         knowledge_text = ""
-        sources = []
+        sources_text = "无记忆匹配"  # 默认值
         if related_memory:
+            sources = []
             for memory in related_memory:
                 knowledge_text += memory[1] + "\n"
                 sources.append(f"记忆片段{memory[0]}")
