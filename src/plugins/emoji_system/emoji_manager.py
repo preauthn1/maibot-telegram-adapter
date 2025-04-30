@@ -750,6 +750,12 @@ class EmojiManager:
 
             # 处理情感列表
             emotions = [e.strip() for e in emotions_text.split(",") if e.strip()]
+            
+            # 根据情感标签数量随机选择喵~超过5个选3个，超过2个选2个
+            if len(emotions) > 5:
+                emotions = random.sample(emotions, 3)
+            elif len(emotions) > 2:
+                emotions = random.sample(emotions, 2)
 
             return f"[表情包：{description}]", emotions
 
