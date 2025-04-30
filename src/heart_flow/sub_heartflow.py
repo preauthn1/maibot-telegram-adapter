@@ -346,7 +346,7 @@ class SubHeartflow:
                 return True  # 已经在运行
 
         # 如果实例不存在，则创建并启动
-        logger.info(f"{log_prefix} 麦麦准备开始专注聊天 (创建新实例)...")
+        logger.info(f"{log_prefix} 麦麦准备开始专注聊天...")
         try:
             # 创建 HeartFChatting 实例，并传递 从构造函数传入的 回调函数
             self.heart_fc_instance = HeartFChatting(
@@ -359,7 +359,7 @@ class SubHeartflow:
             # 初始化并启动 HeartFChatting
             if await self.heart_fc_instance._initialize():
                 await self.heart_fc_instance.start()
-                logger.info(f"{log_prefix} 麦麦已成功进入专注聊天模式 (新实例已启动)。")
+                logger.debug(f"{log_prefix} 麦麦已成功进入专注聊天模式 (新实例已启动)。")
                 return True
             else:
                 logger.error(f"{log_prefix} HeartFChatting 初始化失败，无法进入专注模式。")
@@ -397,7 +397,7 @@ class SubHeartflow:
             # 移除限额检查逻辑
             logger.debug(f"{log_prefix} 准备进入或保持 专注聊天 状态")
             if await self._start_heart_fc_chat():
-                logger.info(f"{log_prefix} 成功进入或保持 HeartFChatting 状态。")
+                logger.debug(f"{log_prefix} 成功进入或保持 HeartFChatting 状态。")
                 state_changed = True
             else:
                 logger.error(f"{log_prefix} 启动 HeartFChatting 失败，无法进入 FOCUSED 状态。")

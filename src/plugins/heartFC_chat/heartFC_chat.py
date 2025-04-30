@@ -230,7 +230,7 @@ class HeartFChatting:
         self.log_prefix = f"[{chat_manager.get_stream_name(self.stream_id) or self.stream_id}]"
 
         self._initialized = True
-        logger.info(f"麦麦感觉到了，可以开始认真水群{self.log_prefix} ")
+        logger.debug(f"{self.log_prefix}麦麦感觉到了，可以开始认真水群 ")
         return True
 
     async def start(self):
@@ -261,7 +261,7 @@ class HeartFChatting:
                 pass  # 忽略取消或超时错误
             self._loop_task = None  # 清理旧任务引用
 
-        logger.info(f"{self.log_prefix} 启动认真水群(HFC)主循环...")
+        logger.debug(f"{self.log_prefix} 启动认真水群(HFC)主循环...")
         # 创建新的循环任务
         self._loop_task = asyncio.create_task(self._hfc_loop())
         # 添加完成回调
@@ -438,6 +438,16 @@ class HeartFChatting:
                 return False, ""
 
             # execute:执行
+
+            # 在此处添加日志记录
+            if action == "text_reply":
+                action_str = "回复"
+            elif action == "emoji_reply":
+                action_str = "回复表情"
+            else:
+                action_str = "不回复"
+                
+            logger.info(f"{self.log_prefix} 麦麦决定'{action_str}', 原因'{reasoning}'")
 
             return await self._handle_action(
                 action, reasoning, planner_result.get("emoji_query", ""), cycle_timers, planner_start_db_time
@@ -760,7 +770,7 @@ class HeartFChatting:
             cycle_timers: 计时器字典
             is_re_planned: 是否为重新规划 (此重构中暂时简化，不处理 is_re_planned 的特殊逻辑)
         """
-        logger.info(f"{self.log_prefix}[Planner] 开始执行规划器 (JSON解析模式)")
+        logger.info(f"{self.log_prefix}开始想要做什么")
 
         actions_to_remove_temporarily = []
         # --- 检查历史动作并决定临时移除动作 (逻辑保持不变) ---
@@ -948,11 +958,11 @@ class HeartFChatting:
             logger.debug(f"{self.log_prefix}[Planner] 大模型建议文字回复带表情: '{emoji_query}'")
             if random.random() > EMOJI_SEND_PRO:
                 logger.info(
-                    f"{self.log_prefix}[Planner] 但是麦麦这次不想加表情 ({1 - EMOJI_SEND_PRO:.0%})，忽略表情 '{emoji_query}'"
+                    f"{self.log_prefix}但是麦麦这次不想加表情 ({1 - EMOJI_SEND_PRO:.0%})，忽略表情 '{emoji_query}'"
                 )
                 emoji_query = ""  # 清空表情请求
             else:
-                logger.info(f"{self.log_prefix}[Planner] 好吧，加上表情 '{emoji_query}'")
+                logger.info(f"{self.log_prefix}好吧，加上表情 '{emoji_query}'")
         # --- 结束概率性忽略 ---
 
         # 返回结果字典

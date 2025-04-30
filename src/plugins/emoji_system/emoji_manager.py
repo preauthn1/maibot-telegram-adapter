@@ -1052,9 +1052,9 @@ class EmojiManager:
                         logger.error(f"[错误] 删除文件时出错 ({file_full_path}): {str(e)}")
 
             if cleaned_count > 0:
-                logger.success(f"[清理] 在目录 {emoji_dir} 中清理了 {cleaned_count} 个未追踪的文件。")
+                logger.success(f"[清理] 在目录 {emoji_dir} 中清理了 {cleaned_count} 个破损表情包。")
             else:
-                logger.info(f"[清理] 目录 {emoji_dir} 中没有发现未追踪的文件。")
+                logger.info(f"[清理] 目录 {emoji_dir} 中没有需要清理的。")
 
         except Exception as e:
             logger.error(f"[错误] 清理未使用表情包文件时出错 ({emoji_dir}): {str(e)}")
