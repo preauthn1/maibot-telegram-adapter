@@ -195,7 +195,7 @@ class EmojiManager:
         self._scan_task = None
         self.vlm = LLMRequest(model=global_config.vlm, temperature=0.3, max_tokens=1000, request_type="emoji")
         self.llm_emotion_judge = LLMRequest(
-            model=global_config.llm_emotion_judge, max_tokens=600, temperature=0.8, request_type="emoji"
+            model=global_config.llm_summary, max_tokens=600, temperature=0.8, request_type="emoji"
         )  # 更高的温度，更少的token（后续可以根据情绪来调整温度）
 
         self.emoji_num = 0
@@ -719,10 +719,10 @@ class EmojiManager:
             # 调用AI获取描述
             if image_format == "gif" or image_format == "GIF":
                 image_base64 = image_manager.transform_gif(image_base64)
-                prompt = "这是一个动态图表情包，每一张图代表了动态图的某一帧，黑色背景代表透明，详细描述一下表情包表达的情感和内容，请关注其幽默和讽刺意味"
+                prompt = "这是一个动态图表情包，每一张图代表了动态图的某一帧，黑色背景代表透明，描述一下表情包表达的情感和内容，你可以关注其幽默和讽刺意味，必须从互联网梗,meme的角度去分析"
                 description, _ = await self.vlm.generate_response_for_image(prompt, image_base64, "jpg")
             else:
-                prompt = "这是一个表情包，请详细描述一下表情包所表达的情感和内容，请关注其幽默和讽刺意味"
+                prompt = "这是一个表情包，请详细描述一下表情包所表达的情感和内容，你可以关注其幽默和讽刺意味，必须从互联网梗,meme的角度去分析"
                 description, _ = await self.vlm.generate_response_for_image(prompt, image_base64, image_format)
 
             # 审核表情包
@@ -742,10 +742,10 @@ class EmojiManager:
             # 分析情感含义
             emotion_prompt = f"""
             基于这个表情包的描述：'{description}'，请列出1-2个可能的情感标签，每个标签用一个词组表示，格式如下：
-            幽默的讽刺
-            悲伤的无奈
-            愤怒的抗议
-            愤怒的讽刺
+            幽默的讽刺，适用于调侃或吐槽场景
+            悲伤的无奈，适用于表达无力感或失望
+            愤怒的抗议，适用于表达不满或反对
+            愤怒的讽刺，适用于尖锐批评或反讽
             直接输出词组，词组检用逗号分隔。"""
             emotions_text, _ = await self.llm_emotion_judge.generate_response_async(emotion_prompt, temperature=0.7)
 
