@@ -151,7 +151,9 @@ class ReplyGenerator:
                         source = knowledge_item.get("source", "未知来源")
                         # 只取知识内容的前 2000 个字
                         knowledge_snippet = knowledge[:2000] + "..." if len(knowledge) > 2000 else knowledge
-                        knowledge_info_str += f"{i+1}. 关于 '{query}' (来源: {source}): {knowledge_snippet}\n" # 格式微调，更简洁
+                        knowledge_info_str += (
+                            f"{i + 1}. 关于 '{query}' (来源: {source}): {knowledge_snippet}\n"  # 格式微调，更简洁
+                        )
                     else:
                         knowledge_info_str += f"{i + 1}. 发现一条格式不正确的知识记录。\n"
 
