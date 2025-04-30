@@ -243,10 +243,10 @@ class ActionPlanner:
                         knowledge_info_str += f"{i+1}. 关于 '{query}' 的知识 (来源: {source}):\n   {knowledge_snippet}\n"
                     else:
                         # 处理列表里不是字典的异常情况
-                        knowledge_info_str += f"{i+1}. 发现一条格式不正确的知识记录。\n"
+                        knowledge_info_str += f"{i + 1}. 发现一条格式不正确的知识记录。\n"
 
-                if not recent_knowledge: # 如果 knowledge_list 存在但为空
-                     knowledge_info_str += "- 暂无相关知识和记忆。\n"
+                if not recent_knowledge:  # 如果 knowledge_list 存在但为空
+                    knowledge_info_str += "- 暂无相关知识和记忆。\n"
 
             else:
                 # 如果 conversation_info 没有 knowledge_list 属性，或者列表为空
@@ -258,7 +258,6 @@ class ActionPlanner:
             logger.error(f"[私聊][{self.private_name}]构建知识信息字符串时出错: {e}")
             knowledge_info_str += "- 处理知识列表时出错。\n"
         # --- 知识信息字符串构建结束 ---
-
 
         # 获取聊天历史记录 (chat_history_text)
         chat_history_text = ""
@@ -385,7 +384,7 @@ class ActionPlanner:
             time_since_last_bot_message_info=time_since_last_bot_message_info,
             timeout_context=timeout_context,
             chat_history_text=chat_history_text if chat_history_text.strip() else "还没有聊天记录。",
-            knowledge_info_str=knowledge_info_str
+            knowledge_info_str=knowledge_info_str,
         )
 
         logger.debug(f"[私聊][{self.private_name}]发送到LLM的最终提示词:\n------\n{prompt}\n------")
