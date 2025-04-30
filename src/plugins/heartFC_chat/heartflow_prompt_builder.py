@@ -88,7 +88,7 @@ JSON 结构如下，包含三个字段 "action", "reasoning", "emoji_query":
 {{
   "action": "string", // 必须是上面提供的可用行动之一 (例如: '{example_action}')
   "reasoning": "string", // 做出此决定的详细理由和思考过程，说明你如何应用了回复原则
-  "emoji_query": "string" // 可选。如果行动是 'emoji_reply'，必须提供表情主题；如果行动是 'text_reply' 且你想附带表情，也在此提供表情主题，否则留空字符串 ""。遵循回复原则，不要滥用。
+  "emoji_query": "string" // 可选。如果行动是 'emoji_reply'，必须提供表情主题(填写表情包的适用场合)；如果行动是 'text_reply' 且你想附带表情，也在此提供表情主题，否则留空字符串 ""。遵循回复原则，不要滥用。
 }}
 
 例如:

@@ -443,7 +443,7 @@ class NormalChat:
                 logger.error(f"[{self.stream_name}] 任务异常: {exc}")
                 logger.error(traceback.format_exc())
         except asyncio.CancelledError:
-            logger.info(f"[{self.stream_name}] 任务已取消")
+            logger.debug(f"[{self.stream_name}] 任务已取消")
         except Exception as e:
             logger.error(f"[{self.stream_name}] 回调处理错误: {e}")
         finally:
@@ -456,12 +456,12 @@ class NormalChat:
         """停止当前实例的兴趣监控任务。"""
         if self._chat_task and not self._chat_task.done():
             task = self._chat_task
-            logger.info(f"[{self.stream_name}] 尝试取消聊天任务。")
+            logger.debug(f"[{self.stream_name}] 尝试取消normal聊天任务。")
             task.cancel()
             try:
                 await task  # 等待任务响应取消
             except asyncio.CancelledError:
-                logger.info(f"[{self.stream_name}] 聊天任务已成功取消。")
+                logger.info(f"[{self.stream_name}] 结束一般聊天模式。")
             except Exception as e:
                 # 回调函数 _handle_task_completion 会处理异常日志
                 logger.warning(f"[{self.stream_name}] 等待监控任务取消时捕获到异常 (可能已在回调中记录): {e}")

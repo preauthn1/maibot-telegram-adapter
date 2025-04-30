@@ -511,12 +511,12 @@ class SubHeartflow:
 
         # 取消可能存在的旧后台任务 (self.task)
         if self.task and not self.task.done():
-            logger.info(f"{self.log_prefix} 取消子心流主任务 (Shutdown)...")
+            logger.debug(f"{self.log_prefix} 取消子心流主任务 (Shutdown)...")
             self.task.cancel()
             try:
                 await asyncio.wait_for(self.task, timeout=1.0)  # 给点时间响应取消
             except asyncio.CancelledError:
-                logger.info(f"{self.log_prefix} 子心流主任务已取消 (Shutdown)。")
+                logger.debug(f"{self.log_prefix} 子心流主任务已取消 (Shutdown)。")
             except asyncio.TimeoutError:
                 logger.warning(f"{self.log_prefix} 等待子心流主任务取消超时 (Shutdown)。")
             except Exception as e:

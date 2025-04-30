@@ -1001,8 +1001,8 @@ class HeartFChatting:
             }
             anchor_message = MessageRecv(placeholder_msg_dict)
             anchor_message.update_chat_stream(self.chat_stream)
-            logger.info(
-                f"{self.log_prefix} Created placeholder anchor message: ID={anchor_message.message_info.message_id}"
+            logger.debug(
+                f"{self.log_prefix} 创建占位符锚点消息: ID={anchor_message.message_info.message_id}"
             )
             return anchor_message
 
