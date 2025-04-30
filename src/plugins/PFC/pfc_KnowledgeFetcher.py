@@ -82,5 +82,3 @@ class KnowledgeFetcher:
         knowledge_text += "请记住这些**知识**，并根据**知识**回答问题。\n"
 
         return knowledge_text or "未找到相关知识", sources_text or "无记忆匹配"
-
-
