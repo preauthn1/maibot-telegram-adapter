@@ -137,8 +137,8 @@ class ReplyGenerator:
         else:
             goals_str = "- 目前没有明确对话目标\n"  # 简化无目标情况
 
-           # --- 新增：构建知识信息字符串 ---
-        knowledge_info_str = "【供参考的相关知识和记忆】\n" # 稍微改下标题，表明是供参考
+        # --- 新增：构建知识信息字符串 ---
+        knowledge_info_str = "【供参考的相关知识和记忆】\n"  # 稍微改下标题，表明是供参考
         try:
             # 检查 conversation_info 是否有 knowledge_list 并且不为空
             if hasattr(conversation_info, "knowledge_list") and conversation_info.knowledge_list:
@@ -146,17 +146,19 @@ class ReplyGenerator:
                 recent_knowledge = conversation_info.knowledge_list[-3:]
                 for i, knowledge_item in enumerate(recent_knowledge):
                     if isinstance(knowledge_item, dict):
-                        query = knowledge_item.get('query', '未知查询')
-                        knowledge = knowledge_item.get('knowledge', '无知识内容')
-                        source = knowledge_item.get('source', '未知来源')
+                        query = knowledge_item.get("query", "未知查询")
+                        knowledge = knowledge_item.get("knowledge", "无知识内容")
+                        source = knowledge_item.get("source", "未知来源")
                         # 只取知识内容的前 150 个字
                         knowledge_snippet = knowledge[:150] + "..." if len(knowledge) > 150 else knowledge
-                        knowledge_info_str += f"{i+1}. 关于 '{query}' (来源: {source}): {knowledge_snippet}\n" # 格式微调，更简洁
+                        knowledge_info_str += (
+                            f"{i + 1}. 关于 '{query}' (来源: {source}): {knowledge_snippet}\n"  # 格式微调，更简洁
+                        )
                     else:
-                        knowledge_info_str += f"{i+1}. 发现一条格式不正确的知识记录。\n"
+                        knowledge_info_str += f"{i + 1}. 发现一条格式不正确的知识记录。\n"
 
                 if not recent_knowledge:
-                     knowledge_info_str += "- 暂无。\n" # 更简洁的提示
+                    knowledge_info_str += "- 暂无。\n"  # 更简洁的提示
 
             else:
                 knowledge_info_str += "- 暂无。\n"
@@ -165,7 +167,7 @@ class ReplyGenerator:
             knowledge_info_str += "- 获取知识列表时出错。\n"
         except Exception as e:
             logger.error(f"[私聊][{self.private_name}]构建知识信息字符串时出错: {e}")
-            knowledge_info_str += "- 处理知识列表时出错。\n" 
+            knowledge_info_str += "- 处理知识列表时出错。\n"
 
         # 获取聊天历史记录 (chat_history_text)
         chat_history_text = observation_info.chat_history_str
@@ -199,9 +201,9 @@ class ReplyGenerator:
         # --- 格式化最终的 Prompt ---
         prompt = prompt_template.format(
             persona_text=persona_text,
-            goals_str=goals_str, 
+            goals_str=goals_str,
             chat_history_text=chat_history_text,
-            knowledge_info_str=knowledge_info_str
+            knowledge_info_str=knowledge_info_str,
         )
 
         # --- 调用 LLM 生成 ---
