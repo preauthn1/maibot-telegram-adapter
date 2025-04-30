@@ -446,7 +446,7 @@ class HeartFChatting:
                 action_str = "回复表情"
             else:
                 action_str = "不回复"
-                
+
             logger.info(f"{self.log_prefix} 麦麦决定'{action_str}', 原因'{reasoning}'")
 
             return await self._handle_action(
@@ -1001,9 +1001,7 @@ class HeartFChatting:
             }
             anchor_message = MessageRecv(placeholder_msg_dict)
             anchor_message.update_chat_stream(self.chat_stream)
-            logger.debug(
-                f"{self.log_prefix} 创建占位符锚点消息: ID={anchor_message.message_info.message_id}"
-            )
+            logger.debug(f"{self.log_prefix} 创建占位符锚点消息: ID={anchor_message.message_info.message_id}")
             return anchor_message
 
         except Exception as e:
