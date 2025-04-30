@@ -15,9 +15,7 @@ from src.plugins.models.utils_model import LLMRequest
 from src.config.config import global_config
 from src.plugins.chat.utils_image import image_path_to_base64  # Local import needed after move
 from src.plugins.utils.timer_calculator import Timer  # <--- Import Timer
-from src.do_tool.tool_use import ToolUser
 from src.plugins.emoji_system.emoji_manager import emoji_manager
-from src.plugins.utils.json_utils import process_llm_tool_calls, extract_tool_call_arguments
 from src.heart_flow.sub_mind import SubMind
 from src.heart_flow.observation import Observation
 from src.plugins.heartFC_chat.heartflow_prompt_builder import global_prompt_manager, prompt_builder
@@ -788,7 +786,9 @@ class HeartFChatting:
                 logger.info(f"{self.log_prefix}[Planner] 连续回复 2 次，80% 概率移除 text_reply 和 emoji_reply (触发)")
                 actions_to_remove_temporarily.extend(["text_reply", "emoji_reply"])
             else:
-                logger.info(f"{self.log_prefix}[Planner] 连续回复 2 次，80% 概率移除 text_reply 和 emoji_reply (未触发)")
+                logger.info(
+                    f"{self.log_prefix}[Planner] 连续回复 2 次，80% 概率移除 text_reply 和 emoji_reply (未触发)"
+                )
         elif lian_xu_wen_ben_hui_fu == 1:
             if probability_roll < 0.4:
                 logger.info(f"{self.log_prefix}[Planner] 连续回复 1 次，40% 概率移除 text_reply (触发)")
@@ -805,10 +805,10 @@ class HeartFChatting:
         observed_messages_str = observation.talking_message_str_truncate
 
         # --- 使用 LLM 进行决策 (JSON 输出模式) --- #
-        action = "no_reply" # 默认动作
+        action = "no_reply"  # 默认动作
         reasoning = "规划器初始化默认"
         emoji_query = ""
-        llm_error = False # LLM 请求或解析错误标志
+        llm_error = False  # LLM 请求或解析错误标志
 
         # 获取我们将传递给 prompt 构建器和用于验证的当前可用动作
         current_available_actions = self.action_manager.get_available_actions()
@@ -833,8 +833,8 @@ class HeartFChatting:
                 observed_messages_str,
                 current_mind,
                 self.sub_mind.structured_info,
-                "", # replan_prompt_str,
-                current_available_actions # <--- 传入当前可用动作
+                "",  # replan_prompt_str,
+                current_available_actions,  # <--- 传入当前可用动作
             )
 
             # --- 调用 LLM (普通文本生成) ---
@@ -851,8 +851,8 @@ class HeartFChatting:
                 reasoning = f"LLM 请求失败: {req_e}"
                 llm_error = True
                 # 直接使用默认动作返回错误结果
-                action = "no_reply" # 明确设置为默认值
-                emoji_query = "" # 明确设置为空
+                action = "no_reply"  # 明确设置为默认值
+                emoji_query = ""  # 明确设置为空
                 # 不再立即返回，而是继续执行 finally 块以恢复动作
                 # return { ... }
 
@@ -860,9 +860,11 @@ class HeartFChatting:
             if not llm_error and llm_content:
                 try:
                     # 尝试去除可能的 markdown 代码块标记
-                    cleaned_content = llm_content.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                    cleaned_content = (
+                        llm_content.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+                    )
                     if not cleaned_content:
-                         raise json.JSONDecodeError("Cleaned content is empty", cleaned_content, 0)
+                        raise json.JSONDecodeError("Cleaned content is empty", cleaned_content, 0)
                     parsed_json = json.loads(cleaned_content)
 
                     # 提取决策，提供默认值
@@ -881,28 +883,32 @@ class HeartFChatting:
                         emoji_query = ""
                         # 检查 no_reply 是否也恰好被移除了 (极端情况)
                         if "no_reply" not in current_available_actions:
-                             logger.error(f"{self.log_prefix}[Planner] 严重错误：'no_reply' 动作也不可用！无法执行任何动作。")
-                             action = "error" # 回退到错误状态
-                             reasoning = "无法执行任何有效动作，包括 no_reply"
-                             llm_error = True # 标记为严重错误
+                            logger.error(
+                                f"{self.log_prefix}[Planner] 严重错误：'no_reply' 动作也不可用！无法执行任何动作。"
+                            )
+                            action = "error"  # 回退到错误状态
+                            reasoning = "无法执行任何有效动作，包括 no_reply"
+                            llm_error = True  # 标记为严重错误
                         else:
-                             llm_error = False # 视为逻辑修正而非 LLM 错误
+                            llm_error = False  # 视为逻辑修正而非 LLM 错误
                     else:
                         # 动作有效且可用
                         action = extracted_action
                         reasoning = extracted_reasoning
                         emoji_query = extracted_emoji_query
-                        llm_error = False # 解析成功
+                        llm_error = False  # 解析成功
                         logger.debug(
-                             f"{self.log_prefix}[要做什么]\nPrompt:\n{prompt}\n\n决策结果 (来自JSON): {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'"
+                            f"{self.log_prefix}[要做什么]\nPrompt:\n{prompt}\n\n决策结果 (来自JSON): {action}, 理由: {reasoning}, 表情查询: '{emoji_query}'"
                         )
 
                 except json.JSONDecodeError as json_e:
-                    logger.warning(f"{self.log_prefix}[Planner] 解析LLM响应JSON失败: {json_e}. LLM原始输出: '{llm_content}'")
+                    logger.warning(
+                        f"{self.log_prefix}[Planner] 解析LLM响应JSON失败: {json_e}. LLM原始输出: '{llm_content}'"
+                    )
                     reasoning = f"解析LLM响应JSON失败: {json_e}. 将使用默认动作 'no_reply'."
-                    action = "no_reply" # 解析失败则默认不回复
+                    action = "no_reply"  # 解析失败则默认不回复
                     emoji_query = ""
-                    llm_error = True # 标记解析错误
+                    llm_error = True  # 标记解析错误
                 except Exception as parse_e:
                     logger.error(f"{self.log_prefix}[Planner] 处理LLM响应时发生意外错误: {parse_e}")
                     reasoning = f"处理LLM响应时发生意外错误: {parse_e}. 将使用默认动作 'no_reply'."
@@ -910,12 +916,12 @@ class HeartFChatting:
                     emoji_query = ""
                     llm_error = True
             elif not llm_error and not llm_content:
-                 # LLM 请求成功但返回空内容
+                # LLM 请求成功但返回空内容
                 logger.warning(f"{self.log_prefix}[Planner] LLM 返回了空内容。")
                 reasoning = "LLM 返回了空内容，使用默认动作 'no_reply'."
                 action = "no_reply"
                 emoji_query = ""
-                llm_error = True # 标记为空响应错误
+                llm_error = True  # 标记为空响应错误
 
             # 如果 llm_error 在此阶段为 True，意味着请求成功但解析失败或返回空
             # 如果 llm_error 在请求阶段就为 True，则跳过了此解析块
@@ -923,7 +929,7 @@ class HeartFChatting:
         except Exception as outer_e:
             logger.error(f"{self.log_prefix}[Planner] Planner 处理过程中发生意外错误: {outer_e}")
             logger.error(traceback.format_exc())
-            action = "error" # 发生未知错误，标记为 error 动作
+            action = "error"  # 发生未知错误，标记为 error 动作
             reasoning = f"Planner 内部处理错误: {outer_e}"
             emoji_query = ""
             llm_error = True
@@ -944,7 +950,7 @@ class HeartFChatting:
                 logger.info(
                     f"{self.log_prefix}[Planner] 但是麦麦这次不想加表情 ({1 - EMOJI_SEND_PRO:.0%})，忽略表情 '{emoji_query}'"
                 )
-                emoji_query = "" # 清空表情请求
+                emoji_query = ""  # 清空表情请求
             else:
                 logger.info(f"{self.log_prefix}[Planner] 好吧，加上表情 '{emoji_query}'")
         # --- 结束概率性忽略 ---
@@ -956,7 +962,7 @@ class HeartFChatting:
             "emoji_query": emoji_query,
             "current_mind": current_mind,
             "observed_messages": observed_messages,
-            "llm_error": llm_error, # 返回错误状态
+            "llm_error": llm_error,  # 返回错误状态
         }
 
     async def _get_anchor_message(self) -> Optional[MessageRecv]:
@@ -1178,26 +1184,26 @@ class HeartFChatting:
             action_options_text = "当前你可以选择的行动有：\n"
             action_keys = list(current_available_actions.keys())
             for name in action_keys:
-                 desc = current_available_actions[name]
-                 action_options_text += f"- '{name}': {desc}\n"
+                desc = current_available_actions[name]
+                action_options_text += f"- '{name}': {desc}\n"
 
             # --- 选择一个示例动作键 (用于填充模板中的 {example_action}) ---
             example_action_key = action_keys[0] if action_keys else "no_reply"
 
-            # --- 获取提示词模板 --- 
+            # --- 获取提示词模板 ---
             planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")
 
-            # --- 填充模板 --- 
+            # --- 填充模板 ---
             prompt = planner_prompt_template.format(
                 bot_name=global_config.BOT_NICKNAME,
                 prompt_personality=prompt_personality,
                 structured_info_block=structured_info_block,
                 chat_content_block=chat_content_block,
-                current_mind_block=current_mind_block, 
-                replan="", # 暂时留空 replan 信息
+                current_mind_block=current_mind_block,
+                replan="",  # 暂时留空 replan 信息
                 cycle_info_block=cycle_info_block,
-                action_options_text=action_options_text, # 传入可用动作描述
-                example_action=example_action_key # 传入示例动作键
+                action_options_text=action_options_text,  # 传入可用动作描述
+                example_action=example_action_key,  # 传入示例动作键
             )
 
             return prompt
@@ -1205,7 +1211,7 @@ class HeartFChatting:
         except Exception as e:
             logger.error(f"{self.log_prefix}[Planner] 构建提示词时出错: {e}")
             logger.error(traceback.format_exc())
-            return "[构建 Planner Prompt 时出错]" # 返回错误提示，避免空字符串
+            return "[构建 Planner Prompt 时出错]"  # 返回错误提示，避免空字符串
 
     # --- 回复器 (Replier) 的定义 --- #
     async def _replier_work(

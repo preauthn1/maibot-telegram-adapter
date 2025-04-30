@@ -633,13 +633,10 @@ HFC_STYLE_CONFIG = {
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 专注聊天 | {message}",
     },
     "simple": {
-        "console_format": (
-            "<level>{time:MM-DD HH:mm}</level> | <light-green>专注聊天 | {message}</light-green>"
-        ),
+        "console_format": ("<level>{time:MM-DD HH:mm}</level> | <light-green>专注聊天 | {message}</light-green>"),
         "file_format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[module]: <15} | 专注聊天 | {message}",
     },
 }
-
 
 
 CONFIRM_STYLE_CONFIG = {

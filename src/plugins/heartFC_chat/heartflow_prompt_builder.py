@@ -7,14 +7,13 @@ from src.plugins.utils.chat_message_builder import build_readable_messages, get_
 from src.plugins.person_info.relationship_manager import relationship_manager
 from src.plugins.chat.utils import get_embedding
 import time
-from typing import Union, Optional, Dict, Any
+from typing import Union, Optional
 from ...common.database import db
 from ..chat.utils import get_recent_group_speaker
 from ..moods.moods import MoodManager
 from ..memory_system.Hippocampus import HippocampusManager
 from ..schedule.schedule_generator import bot_schedule
 from ..knowledge.knowledge_lib import qa_manager
-import traceback
 
 logger = get_logger("prompt")
 
@@ -50,7 +49,7 @@ def init_prompt():
 
     # Planner提示词 - 修改为要求 JSON 输出
     Prompt(
-        '''你的名字是{bot_name},{prompt_personality}，你现在正在一个群聊中。需要基于以下信息决定如何参与对话：
+        """你的名字是{bot_name},{prompt_personality}，你现在正在一个群聊中。需要基于以下信息决定如何参与对话：
 {structured_info_block}
 {chat_content_block}
 {current_mind_block}
@@ -106,7 +105,7 @@ JSON 结构如下，包含三个字段 "action", "reasoning", "emoji_query":
 }}
 
 请输出你的决策 JSON：
-''',  # 使用三引号避免内部引号问题
+""",  # 使用三引号避免内部引号问题
         "planner_prompt",  # 保持名称不变，替换内容
     )
 
