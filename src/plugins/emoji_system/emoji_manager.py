@@ -656,11 +656,11 @@ class EmojiManager:
 
             # 调用大模型进行决策
             decision, _ = await self.llm_emotion_judge.generate_response_async(prompt, temperature=0.8)
-            logger.info(f"[决策] 大模型决策结果: {decision}")
+            logger.info(f"[决策] 结果: {decision}")
 
             # 解析决策结果
             if "不删除" in decision:
-                logger.info("[决策] 决定不删除任何表情包")
+                logger.info("[决策] 不删除任何表情包")
                 return False
 
             # 尝试从决策中提取表情包编号
@@ -673,7 +673,7 @@ class EmojiManager:
                     emoji_to_delete = selected_emojis[emoji_index]
 
                     # 删除选定的表情包
-                    logger.info(f"[决策] 决定删除表情包: {emoji_to_delete.description}")
+                    logger.info(f"[决策] 删除表情包: {emoji_to_delete.description}")
                     delete_success = await self.delete_emoji(emoji_to_delete.hash)
 
                     if delete_success:
@@ -719,10 +719,10 @@ class EmojiManager:
             # 调用AI获取描述
             if image_format == "gif" or image_format == "GIF":
                 image_base64 = image_manager.transform_gif(image_base64)
-                prompt = "这是一个动态图表情包，每一张图代表了动态图的某一帧，黑色背景代表透明，描述一下表情包表达的情感和内容，你可以关注其幽默和讽刺意味，动用贴吧，微博，小红书的知识，必须从互联网梗,meme的角度去分析"
+                prompt = "这是一个动态图表情包，每一张图代表了动态图的某一帧，黑色背景代表透明，描述一下表情包表达的情感和内容，描述细节，从互联网梗,meme的角度去分析"
                 description, _ = await self.vlm.generate_response_for_image(prompt, image_base64, "jpg")
             else:
-                prompt = "这是一个表情包，请详细描述一下表情包所表达的情感和内容，你可以关注其幽默和讽刺意味，动用贴吧，微博，小红书的知识，必须从互联网梗,meme的角度去分析"
+                prompt = "这是一个表情包，请详细描述一下表情包所表达的情感和内容，描述细节，从互联网梗,meme的角度去分析"
                 description, _ = await self.vlm.generate_response_for_image(prompt, image_base64, image_format)
 
             # 审核表情包
@@ -741,12 +741,11 @@ class EmojiManager:
 
             # 分析情感含义
             emotion_prompt = f"""
-            基于这个表情包的描述：'{description}'，请列出1-2个可能的情感标签，每个标签用一个词组表示，格式如下：
-            幽默的讽刺，适用于调侃或吐槽场景
-            悲伤的无奈，适用于表达无力感或失望
-            愤怒的抗议，适用于表达不满或反对
-            愤怒的讽刺，适用于尖锐批评或反讽
-            直接输出词组，词组检用逗号分隔。"""
+            请你识别这个表情包的含义和适用场景，给我简短的描述，每个描述不要超过15个字
+            这是一个基于这个表情包的描述：'{description}'
+            你可以关注其幽默和讽刺意味，动用贴吧，微博，小红书的知识，必须从互联网梗,meme的角度去分析
+            请直接输出描述，不要出现任何其他内容，如果有多个描述，可以用逗号分隔
+            """
             emotions_text, _ = await self.llm_emotion_judge.generate_response_async(emotion_prompt, temperature=0.7)
 
             # 处理情感列表
