@@ -88,7 +88,7 @@ class NormalChatGenerator:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
 
             logger.debug(f"prompt:{prompt}\n生成回复：{content}")
-            
+
             logger.info(f"对  {message.processed_plain_text}  的回复：{content}")
 
             info_catcher.catch_after_llm_generated(
