@@ -2,23 +2,28 @@ import random
 import time
 import re
 from collections import Counter
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import jieba
 import numpy as np
 from src.common.logger import get_module_logger
 
-from ..models.utils_model import LLM_request
+from ..models.utils_model import LLMRequest
 from ..utils.typo_generator import ChineseTypoGenerator
-from ..config.config import global_config
+from ...config.config import global_config
 from .message import MessageRecv, Message
-from ..message.message_base import UserInfo
+from maim_message import UserInfo
 from .chat_stream import ChatStream
 from ..moods.moods import MoodManager
 from ...common.database import db
 
 
 logger = get_module_logger("chat_utils")
+
+
+def is_english_letter(char: str) -> bool:
+    """检查字符是否为英文字母（忽略大小写）"""
+    return "a" <= char.lower() <= "z"
 
 
 def db_message_to_str(message_dict: Dict) -> str:
@@ -38,13 +43,27 @@ def db_message_to_str(message_dict: Dict) -> str:
     return result
 
 
-def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
+def is_mentioned_bot_in_message(message: MessageRecv) -> tuple[bool, float]:
     """检查消息是否提到了机器人"""
     keywords = [global_config.BOT_NICKNAME]
     nicknames = global_config.BOT_ALIAS_NAMES
-    reply_probability = 0
+    reply_probability = 0.0
     is_at = False
     is_mentioned = False
+
+    if (
+        message.message_info.additional_config is not None
+        and message.message_info.additional_config.get("is_mentioned") is not None
+    ):
+        try:
+            reply_probability = float(message.message_info.additional_config.get("is_mentioned"))
+            is_mentioned = True
+            return is_mentioned, reply_probability
+        except Exception as e:
+            logger.warning(e)
+            logger.warning(
+                f"消息中包含不合理的设置 is_mentioned: {message.message_info.additional_config.get('is_mentioned')}"
+            )
 
     # 判断是否被@
     if re.search(f"@[\s\S]*?（id:{global_config.BOT_QQ}）", message.processed_plain_text):
@@ -52,32 +71,34 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> bool:
         is_mentioned = True
 
     if is_at and global_config.at_bot_inevitable_reply:
-        reply_probability = 1
+        reply_probability = 1.0
         logger.info("被@，回复概率设置为100%")
     else:
         if not is_mentioned:
             # 判断是否被回复
-            if re.match(f"回复[\s\S]*?\({global_config.BOT_QQ}\)的消息，说：", message.processed_plain_text):
+            if re.match(
+                f"\[回复 [\s\S]*?\({str(global_config.BOT_QQ)}\)：[\s\S]*?\]，说：", message.processed_plain_text
+            ):
                 is_mentioned = True
-
-            # 判断内容中是否被提及
-            message_content = re.sub(r"\@[\s\S]*?（(\d+)）", "", message.processed_plain_text)
-            message_content = re.sub(r"回复[\s\S]*?\((\d+)\)的消息，说： ", "", message_content)
-            for keyword in keywords:
-                if keyword in message_content:
-                    is_mentioned = True
-            for nickname in nicknames:
-                if nickname in message_content:
-                    is_mentioned = True
+            else:
+                # 判断内容中是否被提及
+                message_content = re.sub(r"@[\s\S]*?（(\d+)）", "", message.processed_plain_text)
+                message_content = re.sub(r"\[回复 [\s\S]*?\(((\d+)|未知id)\)：[\s\S]*?\]，说：", "", message_content)
+                for keyword in keywords:
+                    if keyword in message_content:
+                        is_mentioned = True
+                for nickname in nicknames:
+                    if nickname in message_content:
+                        is_mentioned = True
         if is_mentioned and global_config.mentioned_bot_inevitable_reply:
-            reply_probability = 1
+            reply_probability = 1.0
             logger.info("被提及，回复概率设置为100%")
     return is_mentioned, reply_probability
 
 
 async def get_embedding(text, request_type="embedding"):
     """获取文本的embedding向量"""
-    llm = LLM_request(model=global_config.embedding, request_type=request_type)
+    llm = LLMRequest(model=global_config.embedding, request_type=request_type)
     # return llm.get_embedding_sync(text)
     try:
         embedding = await llm.get_embedding(text)
@@ -91,7 +112,7 @@ async def get_recent_group_messages(chat_id: str, limit: int = 12) -> list:
     """从数据库获取群组最近的消息记录
 
     Args:
-        group_id: 群组ID
+        chat_id: 群组ID
         limit: 获取消息数量，默认12条
 
     Returns:
@@ -121,7 +142,7 @@ async def get_recent_group_messages(chat_id: str, limit: int = 12) -> list:
             msg = Message(
                 message_id=msg_data["message_id"],
                 chat_stream=chat_stream,
-                time=msg_data["time"],
+                timestamp=msg_data["time"],
                 user_info=user_info,
                 processed_plain_text=msg_data.get("processed_text", ""),
                 detailed_plain_text=msg_data.get("detailed_plain_text", ""),
@@ -203,97 +224,123 @@ def get_recent_group_speaker(chat_stream_id: int, sender, limit: int = 12) -> li
 
 
 def split_into_sentences_w_remove_punctuation(text: str) -> List[str]:
-    """将文本分割成句子，但保持书名号中的内容完整
+    """将文本分割成句子，并根据概率合并
+    1. 识别分割点（, ， 。 ; 空格），但如果分割点左右都是英文字母则不分割。
+    2. 将文本分割成 (内容, 分隔符) 的元组。
+    3. 根据原始文本长度计算合并概率，概率性地合并相邻段落。
+    注意：此函数假定颜文字已在上层被保护。
     Args:
-        text: 要分割的文本字符串
+        text: 要分割的文本字符串 (假定颜文字已被保护)
     Returns:
-        List[str]: 分割后的句子列表
+        List[str]: 分割和合并后的句子列表
     """
+    # 预处理：处理多余的换行符
+    # 1. 将连续的换行符替换为单个换行符
+    text = re.sub(r"\n\s*\n+", "\n", text)
+    # 2. 处理换行符和其他分隔符的组合
+    text = re.sub(r"\n\s*([，,。;\s])", r"\1", text)
+    text = re.sub(r"([，,。;\s])\s*\n", r"\1", text)
+
+    # 处理两个汉字中间的换行符
+    text = re.sub(r"([\u4e00-\u9fff])\n([\u4e00-\u9fff])", r"\1。\2", text)
+
     len_text = len(text)
-    if len_text < 4:
+    if len_text < 3:
         if random.random() < 0.01:
             return list(text)  # 如果文本很短且触发随机条件,直接按字符分割
         else:
             return [text]
+
+    # 定义分隔符
+    separators = {"，", ",", " ", "。", ";"}
+    segments = []
+    current_segment = ""
+
+    # 1. 分割成 (内容, 分隔符) 元组
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char in separators:
+            # 检查分割条件：如果分隔符左右都是英文字母，则不分割
+            can_split = True
+            if i > 0 and i < len(text) - 1:
+                prev_char = text[i - 1]
+                next_char = text[i + 1]
+                # if is_english_letter(prev_char) and is_english_letter(next_char) and char == ' ': # 原计划只对空格应用此规则，现应用于所有分隔符
+                if is_english_letter(prev_char) and is_english_letter(next_char):
+                    can_split = False
+
+            if can_split:
+                # 只有当当前段不为空时才添加
+                if current_segment:
+                    segments.append((current_segment, char))
+                # 如果当前段为空，但分隔符是空格，则也添加一个空段（保留空格）
+                elif char == " ":
+                    segments.append(("", char))
+                current_segment = ""
+            else:
+                # 不分割，将分隔符加入当前段
+                current_segment += char
+        else:
+            current_segment += char
+        i += 1
+
+    # 添加最后一个段（没有后续分隔符）
+    if current_segment:
+        segments.append((current_segment, ""))
+
+    # 过滤掉完全空的段（内容和分隔符都为空）
+    segments = [(content, sep) for content, sep in segments if content or sep]
+
+    # 如果分割后为空（例如，输入全是分隔符且不满足保留条件），恢复颜文字并返回
+    if not segments:
+        # recovered_text = recover_kaomoji([text], mapping) # 恢复原文本中的颜文字 - 已移至上层处理
+        # return [s for s in recovered_text if s] # 返回非空结果
+        return [text] if text else []  # 如果原始文本非空，则返回原始文本（可能只包含未被分割的字符或颜文字占位符）
+
+    # 2. 概率合并
     if len_text < 12:
         split_strength = 0.2
     elif len_text < 32:
         split_strength = 0.6
     else:
         split_strength = 0.7
+    # 合并概率与分割强度相反
+    merge_probability = 1.0 - split_strength
 
-    # 检查是否为西文字符段落
-    if not is_western_paragraph(text):
-        # 当语言为中文时，统一将英文逗号转换为中文逗号
-        text = text.replace(",", "，")
-        text = text.replace("\n", " ")
-    else:
-        # 用"|seg|"作为分割符分开
-        text = re.sub(r"([.!?]) +", r"\1\|seg\|", text)
-        text = text.replace("\n", "|seg|")
-    text, mapping = protect_kaomoji(text)
-    # print(f"处理前的文本: {text}")
+    merged_segments = []
+    idx = 0
+    while idx < len(segments):
+        current_content, current_sep = segments[idx]
 
-    text_no_1 = ""
-    for letter in text:
-        # print(f"当前字符: {letter}")
-        if letter in ["!", "！", "?", "？"]:
-            # print(f"当前字符: {letter}, 随机数: {random.random()}")
-            if random.random() < split_strength:
-                letter = ""
-        if letter in ["。", "…"]:
-            # print(f"当前字符: {letter}, 随机数: {random.random()}")
-            if random.random() < 1 - split_strength:
-                letter = ""
-        text_no_1 += letter
+        # 检查是否可以与下一段合并
+        # 条件：不是最后一段，且随机数小于合并概率，且当前段有内容（避免合并空段）
+        if idx + 1 < len(segments) and random.random() < merge_probability and current_content:
+            next_content, next_sep = segments[idx + 1]
+            # 合并: (内容1 + 分隔符1 + 内容2, 分隔符2)
+            # 只有当下一段也有内容时才合并文本，否则只传递分隔符
+            if next_content:
+                merged_content = current_content + current_sep + next_content
+                merged_segments.append((merged_content, next_sep))
+            else:  # 下一段内容为空，只保留当前内容和下一段的分隔符
+                merged_segments.append((current_content, next_sep))
 
-    # 对每个逗号单独判断是否分割
-    sentences = [text_no_1]
-    new_sentences = []
-    for sentence in sentences:
-        parts = sentence.split("，")
-        current_sentence = parts[0]
-        if not is_western_paragraph(current_sentence):
-            for part in parts[1:]:
-                if random.random() < split_strength:
-                    new_sentences.append(current_sentence.strip())
-                    current_sentence = part
-                else:
-                    current_sentence += "，" + part
-            # 处理空格分割
-            space_parts = current_sentence.split(" ")
-            current_sentence = space_parts[0]
-            for part in space_parts[1:]:
-                if random.random() < split_strength:
-                    new_sentences.append(current_sentence.strip())
-                    current_sentence = part
-                else:
-                    current_sentence += " " + part
+            idx += 2  # 跳过下一段，因为它已被合并
         else:
-            # 处理分割符
-            space_parts = current_sentence.split("|seg|")
-            current_sentence = space_parts[0]
-            for part in space_parts[1:]:
-                new_sentences.append(current_sentence.strip())
-                current_sentence = part
-        new_sentences.append(current_sentence.strip())
-    sentences = [s for s in new_sentences if s]  # 移除空字符串
-    sentences = recover_kaomoji(sentences, mapping)
+            # 不合并，直接添加当前段
+            merged_segments.append((current_content, current_sep))
+            idx += 1
 
-    # print(f"分割后的句子: {sentences}")
-    sentences_done = []
-    for sentence in sentences:
-        sentence = sentence.rstrip("，,")
-        # 西文字符句子不进行随机合并
-        if not is_western_paragraph(current_sentence):
-            if random.random() < split_strength * 0.5:
-                sentence = sentence.replace("，", "").replace(",", "")
-            elif random.random() < split_strength:
-                sentence = sentence.replace("，", " ").replace(",", " ")
-        sentences_done.append(sentence)
+    # 提取最终的句子内容
+    final_sentences = [content for content, sep in merged_segments if content]  # 只保留有内容的段
 
-    logger.debug(f"处理后的句子: {sentences_done}")
-    return sentences_done
+    # 清理可能引入的空字符串和仅包含空白的字符串
+    final_sentences = [
+        s for s in final_sentences if s.strip()
+    ]  # 过滤掉空字符串以及仅包含空白（如换行符、空格）的字符串
+
+    logger.debug(f"分割并合并后的句子: {final_sentences}")
+    return final_sentences
 
 
 def random_remove_punctuation(text: str) -> str:
@@ -324,22 +371,33 @@ def random_remove_punctuation(text: str) -> str:
 
 
 def process_llm_response(text: str) -> List[str]:
-    # 提取被 () 或 [] 包裹的内容
-    pattern = re.compile(r"[\(\[].*?[\)\]]")
-    _extracted_contents = pattern.findall(text)
+    # 先保护颜文字
+    if global_config.enable_kaomoji_protection:
+        protected_text, kaomoji_mapping = protect_kaomoji(text)
+        logger.trace(f"保护颜文字后的文本: {protected_text}")
+    else:
+        protected_text = text
+        kaomoji_mapping = {}
+    # 提取被 () 或 [] 包裹且包含中文的内容
+    pattern = re.compile(r"[\(\[\（](?=.*[\u4e00-\u9fff]).*?[\)\]\）]")
+    # _extracted_contents = pattern.findall(text)
+    _extracted_contents = pattern.findall(protected_text)  # 在保护后的文本上查找
     # 去除 () 和 [] 及其包裹的内容
-    cleaned_text = pattern.sub("", text)
+    cleaned_text = pattern.sub("", protected_text)
+
+    if cleaned_text == "":
+        return ["呃呃"]
+
     logger.debug(f"{text}去除括号处理后的文本: {cleaned_text}")
 
     # 对清理后的文本进行进一步处理
     max_length = global_config.response_max_length * 2
     max_sentence_num = global_config.response_max_sentence_num
-    if len(cleaned_text) > max_length and not is_western_paragraph(cleaned_text):
-        logger.warning(f"回复过长 ({len(cleaned_text)} 字符)，返回默认回复")
-        return ["懒得说"]
-    elif len(cleaned_text) > 200:
-        logger.warning(f"回复过长 ({len(cleaned_text)} 字符)，返回默认回复")
-        return ["懒得说"]
+    # 如果基本上是中文，则进行长度过滤
+    if get_western_ratio(cleaned_text) < 0.1:
+        if len(cleaned_text) > max_length:
+            logger.warning(f"回复过长 ({len(cleaned_text)} 字符)，返回默认回复")
+            return ["懒得说"]
 
     typo_generator = ChineseTypoGenerator(
         error_rate=global_config.chinese_typo_error_rate,
@@ -367,7 +425,13 @@ def process_llm_response(text: str) -> List[str]:
         logger.warning(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
         return [f"{global_config.BOT_NICKNAME}不知道哦"]
 
-    # sentences.extend(extracted_contents)
+    # if extracted_contents:
+    #     for content in extracted_contents:
+    #         sentences.append(content)
+
+    # 在所有句子处理完毕后，对包含占位符的列表进行恢复
+    if global_config.enable_kaomoji_protection:
+        sentences = recover_kaomoji(sentences, kaomoji_mapping)
 
     return sentences
 
@@ -486,16 +550,15 @@ def protect_kaomoji(sentence):
     """
     kaomoji_pattern = re.compile(
         r"("
-        r"[\(\[（【]"  # 左括号
+        r"[(\[（【]"  # 左括号
         r"[^()\[\]（）【】]*?"  # 非括号字符（惰性匹配）
-        r"[^\u4e00-\u9fa5a-zA-Z0-9\s]"  # 非中文、非英文、非数字、非空格字符（必须包含至少一个）
+        r"[^一-龥a-zA-Z0-9\s]"  # 非中文、非英文、非数字、非空格字符（必须包含至少一个）
         r"[^()\[\]（）【】]*?"  # 非括号字符（惰性匹配）
-        r"[\)\]）】]"  # 右括号
+        r"[\)\]）】"  # 右括号
+        r"]"
         r")"
         r"|"
-        r"("
-        r"[▼▽・ᴥω･﹏^><≧≦￣｀´∀ヮДд︿﹀へ｡ﾟ╥╯╰︶︹•⁄]{2,15}"
-        r")"
+        r"([▼▽・ᴥω･﹏^><≧≦￣｀´∀ヮДд︿﹀へ｡ﾟ╥╯╰︶︹•⁄]{2,15})"
     )
 
     kaomoji_matches = kaomoji_pattern.findall(sentence)
@@ -527,14 +590,24 @@ def recover_kaomoji(sentences, placeholder_to_kaomoji):
     return recovered_sentences
 
 
-def is_western_char(char):
-    """检测是否为西文字符"""
-    return len(char.encode("utf-8")) <= 2
+def get_western_ratio(paragraph):
+    """计算段落中字母数字字符的西文比例
+    原理：检查段落中字母数字字符的西文比例
+    通过is_english_letter函数判断每个字符是否为西文
+    只检查字母数字字符，忽略标点符号和空格等非字母数字字符
 
+    Args:
+        paragraph: 要检查的文本段落
 
-def is_western_paragraph(paragraph):
-    """检测是否为西文字符段落"""
-    return all(is_western_char(char) for char in paragraph if char.isalnum())
+    Returns:
+        float: 西文字符比例(0.0-1.0)，如果没有字母数字字符则返回0.0
+    """
+    alnum_chars = [char for char in paragraph if char.isalnum()]
+    if not alnum_chars:
+        return 0.0
+
+    western_count = sum(1 for char in alnum_chars if is_english_letter(char))
+    return western_count / len(alnum_chars)
 
 
 def count_messages_between(start_time: float, end_time: float, stream_id: str) -> tuple[int, int]:
@@ -629,3 +702,144 @@ def count_messages_between(start_time: float, end_time: float, stream_id: str) -
     except Exception as e:
         logger.error(f"计算消息数量时出错: {str(e)}")
         return 0, 0
+
+
+def translate_timestamp_to_human_readable(timestamp: float, mode: str = "normal") -> Optional[str]:
+    """将时间戳转换为人类可读的时间格式
+
+    Args:
+        timestamp: 时间戳
+        mode: 转换模式，"normal"为标准格式，"relative"为相对时间格式
+
+    Returns:
+        str: 格式化后的时间字符串
+    """
+    if mode == "normal":
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
+    elif mode == "relative":
+        now = time.time()
+        diff = now - timestamp
+
+        if diff < 20:
+            return "刚刚:\n"
+        elif diff < 60:
+            return f"{int(diff)}秒前:\n"
+        elif diff < 3600:
+            return f"{int(diff / 60)}分钟前:\n"
+        elif diff < 86400:
+            return f"{int(diff / 3600)}小时前:\n"
+        elif diff < 86400 * 2:
+            return f"{int(diff / 86400)}天前:\n"
+        else:
+            return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp)) + ":\n"
+    elif mode == "lite":
+        # 只返回时分秒格式，喵~
+        return time.strftime("%H:%M:%S", time.localtime(timestamp))
+    return None
+
+
+def parse_text_timestamps(text: str, mode: str = "normal") -> str:
+    """解析文本中的时间戳并转换为可读时间格式
+
+    Args:
+        text: 包含时间戳的文本，时间戳应以[]包裹
+        mode: 转换模式，传递给translate_timestamp_to_human_readable，"normal"或"relative"
+
+    Returns:
+        str: 替换后的文本
+
+    转换规则:
+    - normal模式: 将文本中所有时间戳转换为可读格式
+    - lite模式:
+        - 第一个和最后一个时间戳必须转换
+        - 以5秒为间隔划分时间段，每段最多转换一个时间戳
+        - 不转换的时间戳替换为空字符串
+    """
+    # 匹配[数字]或[数字.数字]格式的时间戳
+    pattern = r"\[(\d+(?:\.\d+)?)\]"
+
+    # 找出所有匹配的时间戳
+    matches = list(re.finditer(pattern, text))
+
+    if not matches:
+        return text
+
+    # normal模式: 直接转换所有时间戳
+    if mode == "normal":
+        result_text = text
+        for match in matches:
+            timestamp = float(match.group(1))
+            readable_time = translate_timestamp_to_human_readable(timestamp, "normal")
+            # 由于替换会改变文本长度，需要使用正则替换而非直接替换
+            pattern_instance = re.escape(match.group(0))
+            result_text = re.sub(pattern_instance, readable_time, result_text, count=1)
+        return result_text
+    else:
+        # lite模式: 按5秒间隔划分并选择性转换
+        result_text = text
+
+        # 提取所有时间戳及其位置
+        timestamps = [(float(m.group(1)), m) for m in matches]
+        timestamps.sort(key=lambda x: x[0])  # 按时间戳升序排序
+
+        if not timestamps:
+            return text
+
+        # 获取第一个和最后一个时间戳
+        first_timestamp, first_match = timestamps[0]
+        last_timestamp, last_match = timestamps[-1]
+
+        # 将时间范围划分成5秒间隔的时间段
+        time_segments = {}
+
+        # 对所有时间戳按15秒间隔分组
+        for ts, match in timestamps:
+            segment_key = int(ts // 15)  # 将时间戳除以15取整，作为时间段的键
+            if segment_key not in time_segments:
+                time_segments[segment_key] = []
+            time_segments[segment_key].append((ts, match))
+
+        # 记录需要转换的时间戳
+        to_convert = []
+
+        # 从每个时间段中选择一个时间戳进行转换
+        for _, segment_timestamps in time_segments.items():
+            # 选择这个时间段中的第一个时间戳
+            to_convert.append(segment_timestamps[0])
+
+        # 确保第一个和最后一个时间戳在转换列表中
+        first_in_list = False
+        last_in_list = False
+
+        for ts, _ in to_convert:
+            if ts == first_timestamp:
+                first_in_list = True
+            if ts == last_timestamp:
+                last_in_list = True
+
+        if not first_in_list:
+            to_convert.append((first_timestamp, first_match))
+        if not last_in_list:
+            to_convert.append((last_timestamp, last_match))
+
+        # 创建需要转换的时间戳集合，用于快速查找
+        to_convert_set = {match.group(0) for _, match in to_convert}
+
+        # 首先替换所有不需要转换的时间戳为空字符串
+        for _, match in timestamps:
+            if match.group(0) not in to_convert_set:
+                pattern_instance = re.escape(match.group(0))
+                result_text = re.sub(pattern_instance, "", result_text, count=1)
+
+        # 按照时间戳原始顺序排序，避免替换时位置错误
+        to_convert.sort(key=lambda x: x[1].start())
+
+        # 执行替换
+        # 由于替换会改变文本长度，从后向前替换
+        to_convert.reverse()
+        for ts, match in to_convert:
+            readable_time = translate_timestamp_to_human_readable(ts, "relative")
+            pattern_instance = re.escape(match.group(0))
+            result_text = re.sub(pattern_instance, readable_time, result_text, count=1)
+
+        return result_text

@@ -1,10 +1,10 @@
 from src.do_tool.tool_can_use.base_tool import BaseTool
 from src.plugins.chat.utils import get_embedding
 from src.common.database import db
-from src.common.logger import get_module_logger
+from src.common.logger_manager import get_logger
 from typing import Dict, Any, Union
 
-logger = get_module_logger("get_knowledge_tool")
+logger = get_logger("get_knowledge_tool")
 
 
 class SearchKnowledgeTool(BaseTool):
@@ -21,7 +21,7 @@ class SearchKnowledgeTool(BaseTool):
         "required": ["query"],
     }
 
-    async def execute(self, function_args: Dict[str, Any], message_txt: str = "") -> Dict[str, Any]:
+    async def execute(self, function_args: Dict[str, Any]) -> Dict[str, Any]:
         """执行知识库搜索
 
         Args:
@@ -32,7 +32,7 @@ class SearchKnowledgeTool(BaseTool):
             Dict: 工具执行结果
         """
         try:
-            query = function_args.get("query", message_txt)
+            query = function_args.get("query")
             threshold = function_args.get("threshold", 0.4)
 
             # 调用知识库搜索
@@ -49,8 +49,9 @@ class SearchKnowledgeTool(BaseTool):
             logger.error(f"知识库搜索工具执行失败: {str(e)}")
             return {"name": "search_knowledge", "content": f"知识库搜索失败: {str(e)}"}
 
+    @staticmethod
     def get_info_from_db(
-        self, query_embedding: list, limit: int = 1, threshold: float = 0.5, return_raw: bool = False
+        query_embedding: list, limit: int = 1, threshold: float = 0.5, return_raw: bool = False
     ) -> Union[str, list]:
         """从数据库中获取相关信息
 

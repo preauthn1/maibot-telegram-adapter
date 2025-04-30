@@ -4,64 +4,30 @@ import math
 import random
 import time
 import re
+from itertools import combinations
+
 import jieba
 import networkx as nx
 import numpy as np
 from collections import Counter
 from ...common.database import db
-from ...plugins.models.utils_model import LLM_request
-from src.common.logger import get_module_logger, LogConfig, MEMORY_STYLE_CONFIG
+from ...plugins.models.utils_model import LLMRequest
+from src.common.logger_manager import get_logger
 from src.plugins.memory_system.sample_distribution import MemoryBuildScheduler  # 分布生成器
+from ..utils.chat_message_builder import (
+    get_raw_msg_by_timestamp,
+    build_readable_messages,
+)  # 导入 build_readable_messages
+from ..chat.utils import translate_timestamp_to_human_readable
 from .memory_config import MemoryConfig
-
-
-def get_closest_chat_from_db(length: int, timestamp: str):
-    # print(f"获取最接近指定时间戳的聊天记录，长度: {length}, 时间戳: {timestamp}")
-    # print(f"当前时间: {timestamp},转换后时间: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))}")
-    chat_records = []
-    closest_record = db.messages.find_one({"time": {"$lte": timestamp}}, sort=[("time", -1)])
-    # print(f"最接近的记录: {closest_record}")
-    if closest_record:
-        closest_time = closest_record["time"]
-        chat_id = closest_record["chat_id"]  # 获取chat_id
-        # 获取该时间戳之后的length条消息，保持相同的chat_id
-        chat_records = list(
-            db.messages.find(
-                {
-                    "time": {"$gt": closest_time},
-                    "chat_id": chat_id,  # 添加chat_id过滤
-                }
-            )
-            .sort("time", 1)
-            .limit(length)
-        )
-        # print(f"获取到的记录: {chat_records}")
-        length = len(chat_records)
-        # print(f"获取到的记录长度: {length}")
-        # 转换记录格式
-        formatted_records = []
-        for record in chat_records:
-            # 兼容行为，前向兼容老数据
-            formatted_records.append(
-                {
-                    "_id": record["_id"],
-                    "time": record["time"],
-                    "chat_id": record["chat_id"],
-                    "detailed_plain_text": record.get("detailed_plain_text", ""),  # 添加文本内容
-                    "memorized_times": record.get("memorized_times", 0),  # 添加记忆次数
-                }
-            )
-
-        return formatted_records
-
-    return []
 
 
 def calculate_information_content(text):
     """计算文本的信息量（熵）"""
     char_count = Counter(text)
     total_chars = len(text)
-
+    if total_chars == 0:
+        return 0
     entropy = 0
     for count in char_count.values():
         probability = count / total_chars
@@ -80,18 +46,10 @@ def cosine_similarity(v1, v2):
     return dot_product / (norm1 * norm2)
 
 
-# 定义日志配置
-memory_config = LogConfig(
-    # 使用海马体专用样式
-    console_format=MEMORY_STYLE_CONFIG["console_format"],
-    file_format=MEMORY_STYLE_CONFIG["file_format"],
-)
+logger = get_logger("memory")
 
 
-logger = get_module_logger("memory_system", config=memory_config)
-
-
-class Memory_graph:
+class MemoryGraph:
     def __init__(self):
         self.G = nx.Graph()  # 使用 networkx 的图结构
 
@@ -229,28 +187,30 @@ class Memory_graph:
 # 海马体
 class Hippocampus:
     def __init__(self):
-        self.memory_graph = Memory_graph()
+        self.memory_graph = MemoryGraph()
         self.llm_topic_judge = None
-        self.llm_summary_by_topic = None
+        self.llm_summary = None
         self.entorhinal_cortex = None
         self.parahippocampal_gyrus = None
         self.config = None
 
     def initialize(self, global_config):
+        # 使用导入的 MemoryConfig dataclass 和其 from_global_config 方法
         self.config = MemoryConfig.from_global_config(global_config)
         # 初始化子组件
         self.entorhinal_cortex = EntorhinalCortex(self)
         self.parahippocampal_gyrus = ParahippocampalGyrus(self)
         # 从数据库加载记忆图
         self.entorhinal_cortex.sync_memory_from_db()
-        self.llm_topic_judge = LLM_request(self.config.llm_topic_judge, request_type="memory")
-        self.llm_summary_by_topic = LLM_request(self.config.llm_summary_by_topic, request_type="memory")
+        self.llm_topic_judge = LLMRequest(self.config.llm_topic_judge, request_type="memory")
+        self.llm_summary = LLMRequest(self.config.llm_summary, request_type="memory")
 
     def get_all_node_names(self) -> list:
         """获取记忆图中所有节点的名字列表"""
         return list(self.memory_graph.G.nodes())
 
-    def calculate_node_hash(self, concept, memory_items) -> int:
+    @staticmethod
+    def calculate_node_hash(concept, memory_items) -> int:
         """计算节点的特征值"""
         if not isinstance(memory_items, list):
             memory_items = [memory_items] if memory_items else []
@@ -258,27 +218,32 @@ class Hippocampus:
         content = f"{concept}:{'|'.join(sorted_items)}"
         return hash(content)
 
-    def calculate_edge_hash(self, source, target) -> int:
+    @staticmethod
+    def calculate_edge_hash(source, target) -> int:
         """计算边的特征值"""
         nodes = sorted([source, target])
         return hash(f"{nodes[0]}:{nodes[1]}")
 
-    def find_topic_llm(self, text, topic_num):
+    @staticmethod
+    def find_topic_llm(text, topic_num):
         prompt = (
-            f"这是一段文字：{text}。请你从这段话中总结出最多{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
+            f"这是一段文字：\n{text}\n\n请你从这段话中总结出最多{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
             f"将主题用逗号隔开，并加上<>,例如<主题1>,<主题2>......尽可能精简。只需要列举最多{topic_num}个话题就好，不要有序号，不要告诉我其他内容。"
             f"如果确定找不出主题或者没有明显主题，返回<none>。"
         )
         return prompt
 
-    def topic_what(self, text, topic, time_info):
+    @staticmethod
+    def topic_what(text, topic):
+        # 不再需要 time_info 参数
         prompt = (
-            f'这是一段文字，{time_info}：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，'
-            f"可以包含时间和人物，以及具体的观点。只输出这句话就好"
+            f'这是一段文字：\n{text}\n\n我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，'
+            f"要求包含对这个概念的定义，内容，知识，可以包含时间和人物。只输出这句话就好"
         )
         return prompt
 
-    def calculate_topic_num(self, text, compress_rate):
+    @staticmethod
+    def calculate_topic_num(text, compress_rate):
         """计算文本的话题数量"""
         information_content = calculate_information_content(text)
         topic_by_length = text.count("\n") * compress_rate
@@ -346,8 +311,9 @@ class Hippocampus:
 
         Args:
             text (str): 输入文本
-            num (int, optional): 需要返回的记忆数量。默认为5。
-            max_depth (int, optional): 记忆检索深度。默认为2。
+            max_memory_num (int, optional): 返回的记忆条目数量上限。默认为3，表示最多返回3条与输入文本相关度最高的记忆。
+            max_memory_length (int, optional): 每个主题最多返回的记忆条目数量。默认为2，表示每个主题最多返回2条相似度最高的记忆。
+            max_depth (int, optional): 记忆检索深度。默认为3。值越大，检索范围越广，可以获取更多间接相关的记忆，但速度会变慢。
             fast_retrieval (bool, optional): 是否使用快速检索。默认为False。
                 如果为True，使用jieba分词和TF-IDF提取关键词，速度更快但可能不够准确。
                 如果为False，使用LLM提取关键词，速度较慢但更准确。
@@ -392,10 +358,10 @@ class Hippocampus:
         # 过滤掉不存在于记忆图中的关键词
         valid_keywords = [keyword for keyword in keywords if keyword in self.memory_graph.G]
         if not valid_keywords:
-            logger.info("没有找到有效的关键词节点")
+            # logger.info("没有找到有效的关键词节点")
             return []
 
-        logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
+        logger.debug(f"有效的关键词: {', '.join(valid_keywords)}")
 
         # 从每个关键词获取记忆
         all_memories = []
@@ -535,12 +501,178 @@ class Hippocampus:
 
         return result
 
+    async def get_memory_from_topic(
+        self,
+        keywords: list[str],
+        max_memory_num: int = 3,
+        max_memory_length: int = 2,
+        max_depth: int = 3,
+    ) -> list:
+        """从文本中提取关键词并获取相关记忆。
+
+        Args:
+            topic (str): 记忆主题
+            max_memory_num (int, optional): 返回的记忆条目数量上限。默认为3，表示最多返回3条与输入文本相关度最高的记忆。
+            max_memory_length (int, optional): 每个主题最多返回的记忆条目数量。默认为2，表示每个主题最多返回2条相似度最高的记忆。
+            max_depth (int, optional): 记忆检索深度。默认为3。值越大，检索范围越广，可以获取更多间接相关的记忆，但速度会变慢。
+
+        Returns:
+            list: 记忆列表，每个元素是一个元组 (topic, memory_items, similarity)
+                - topic: str, 记忆主题
+                - memory_items: list, 该主题下的记忆项列表
+                - similarity: float, 与文本的相似度
+        """
+        if not keywords:
+            return []
+
+        # logger.info(f"提取的关键词: {', '.join(keywords)}")
+
+        # 过滤掉不存在于记忆图中的关键词
+        valid_keywords = [keyword for keyword in keywords if keyword in self.memory_graph.G]
+        if not valid_keywords:
+            # logger.info("没有找到有效的关键词节点")
+            return []
+
+        logger.debug(f"有效的关键词: {', '.join(valid_keywords)}")
+
+        # 从每个关键词获取记忆
+        all_memories = []
+        activate_map = {}  # 存储每个词的累计激活值
+
+        # 对每个关键词进行扩散式检索
+        for keyword in valid_keywords:
+            logger.debug(f"开始以关键词 '{keyword}' 为中心进行扩散检索 (最大深度: {max_depth}):")
+            # 初始化激活值
+            activation_values = {keyword: 1.0}
+            # 记录已访问的节点
+            visited_nodes = {keyword}
+            # 待处理的节点队列，每个元素是(节点, 激活值, 当前深度)
+            nodes_to_process = [(keyword, 1.0, 0)]
+
+            while nodes_to_process:
+                current_node, current_activation, current_depth = nodes_to_process.pop(0)
+
+                # 如果激活值小于0或超过最大深度，停止扩散
+                if current_activation <= 0 or current_depth >= max_depth:
+                    continue
+
+                # 获取当前节点的所有邻居
+                neighbors = list(self.memory_graph.G.neighbors(current_node))
+
+                for neighbor in neighbors:
+                    if neighbor in visited_nodes:
+                        continue
+
+                    # 获取连接强度
+                    edge_data = self.memory_graph.G[current_node][neighbor]
+                    strength = edge_data.get("strength", 1)
+
+                    # 计算新的激活值
+                    new_activation = current_activation - (1 / strength)
+
+                    if new_activation > 0:
+                        activation_values[neighbor] = new_activation
+                        visited_nodes.add(neighbor)
+                        nodes_to_process.append((neighbor, new_activation, current_depth + 1))
+                        logger.trace(
+                            f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})"
+                        )  # noqa: E501
+
+            # 更新激活映射
+            for node, activation_value in activation_values.items():
+                if activation_value > 0:
+                    if node in activate_map:
+                        activate_map[node] += activation_value
+                    else:
+                        activate_map[node] = activation_value
+
+        # 基于激活值平方的独立概率选择
+        remember_map = {}
+        # logger.info("基于激活值平方的归一化选择:")
+
+        # 计算所有激活值的平方和
+        total_squared_activation = sum(activation**2 for activation in activate_map.values())
+        if total_squared_activation > 0:
+            # 计算归一化的激活值
+            normalized_activations = {
+                node: (activation**2) / total_squared_activation for node, activation in activate_map.items()
+            }
+
+            # 按归一化激活值排序并选择前max_memory_num个
+            sorted_nodes = sorted(normalized_activations.items(), key=lambda x: x[1], reverse=True)[:max_memory_num]
+
+            # 将选中的节点添加到remember_map
+            for node, normalized_activation in sorted_nodes:
+                remember_map[node] = activate_map[node]  # 使用原始激活值
+                logger.debug(
+                    f"节点 '{node}' (归一化激活值: {normalized_activation:.2f}, 激活值: {activate_map[node]:.2f})"
+                )
+        else:
+            logger.info("没有有效的激活值")
+
+        # 从选中的节点中提取记忆
+        all_memories = []
+        # logger.info("开始从选中的节点中提取记忆:")
+        for node, activation in remember_map.items():
+            logger.debug(f"处理节点 '{node}' (激活值: {activation:.2f}):")
+            node_data = self.memory_graph.G.nodes[node]
+            memory_items = node_data.get("memory_items", [])
+            if not isinstance(memory_items, list):
+                memory_items = [memory_items] if memory_items else []
+
+            if memory_items:
+                logger.debug(f"节点包含 {len(memory_items)} 条记忆")
+                # 计算每条记忆与输入文本的相似度
+                memory_similarities = []
+                for memory in memory_items:
+                    # 计算与输入文本的相似度
+                    memory_words = set(jieba.cut(memory))
+                    text_words = set(keywords)
+                    all_words = memory_words | text_words
+                    v1 = [1 if word in memory_words else 0 for word in all_words]
+                    v2 = [1 if word in text_words else 0 for word in all_words]
+                    similarity = cosine_similarity(v1, v2)
+                    memory_similarities.append((memory, similarity))
+
+                # 按相似度排序
+                memory_similarities.sort(key=lambda x: x[1], reverse=True)
+                # 获取最匹配的记忆
+                top_memories = memory_similarities[:max_memory_length]
+
+                # 添加到结果中
+                for memory, similarity in top_memories:
+                    all_memories.append((node, [memory], similarity))
+                    # logger.info(f"选中记忆: {memory} (相似度: {similarity:.2f})")
+            else:
+                logger.info("节点没有记忆")
+
+        # 去重（基于记忆内容）
+        logger.debug("开始记忆去重:")
+        seen_memories = set()
+        unique_memories = []
+        for topic, memory_items, activation_value in all_memories:
+            memory = memory_items[0]  # 因为每个topic只有一条记忆
+            if memory not in seen_memories:
+                seen_memories.add(memory)
+                unique_memories.append((topic, memory_items, activation_value))
+                logger.debug(f"保留记忆: {memory} (来自节点: {topic}, 激活值: {activation_value:.2f})")
+            else:
+                logger.debug(f"跳过重复记忆: {memory} (来自节点: {topic})")
+
+        # 转换为(关键词, 记忆)格式
+        result = []
+        for topic, memory_items, _ in unique_memories:
+            memory = memory_items[0]  # 因为每个topic只有一条记忆
+            result.append((topic, memory))
+            logger.info(f"选中记忆: {memory} (来自节点: {topic})")
+
+        return result
+
     async def get_activate_from_text(self, text: str, max_depth: int = 3, fast_retrieval: bool = False) -> float:
         """从文本中提取关键词并获取相关记忆。
 
         Args:
             text (str): 输入文本
-            num (int, optional): 需要返回的记忆数量。默认为5。
             max_depth (int, optional): 记忆检索深度。默认为2。
             fast_retrieval (bool, optional): 是否使用快速检索。默认为False。
                 如果为True，使用jieba分词和TF-IDF提取关键词，速度更快但可能不够准确。
@@ -583,17 +715,17 @@ class Hippocampus:
         # 过滤掉不存在于记忆图中的关键词
         valid_keywords = [keyword for keyword in keywords if keyword in self.memory_graph.G]
         if not valid_keywords:
-            logger.info("没有找到有效的关键词节点")
+            # logger.info("没有找到有效的关键词节点")
             return 0
 
-        logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
+        logger.debug(f"有效的关键词: {', '.join(valid_keywords)}")
 
         # 从每个关键词获取记忆
         activate_map = {}  # 存储每个词的累计激活值
 
         # 对每个关键词进行扩散式检索
         for keyword in valid_keywords:
-            logger.debug(f"开始以关键词 '{keyword}' 为中心进行扩散检索 (最大深度: {max_depth}):")
+            logger.trace(f"开始以关键词 '{keyword}' 为中心进行扩散检索 (最大深度: {max_depth}):")
             # 初始化激活值
             activation_values = {keyword: 1.0}
             # 记录已访问的节点
@@ -644,7 +776,7 @@ class Hippocampus:
 
         # 计算激活节点数与总节点数的比值
         total_activation = sum(activate_map.values())
-        logger.info(f"总激活值: {total_activation:.2f}")
+        logger.trace(f"总激活值: {total_activation:.2f}")
         total_nodes = len(self.memory_graph.G.nodes())
         # activated_nodes = len(activate_map)
         activation_ratio = total_activation / total_nodes if total_nodes > 0 else 0
@@ -664,7 +796,7 @@ class EntorhinalCortex:
     def get_memory_sample(self):
         """从数据库获取记忆样本"""
         # 硬编码：每条消息最大记忆次数
-        max_memorized_time_per_msg = 3
+        max_memorized_time_per_msg = 2
 
         # 创建双峰分布的记忆调度器
         sample_scheduler = MemoryBuildScheduler(
@@ -678,9 +810,12 @@ class EntorhinalCortex:
         )
 
         timestamps = sample_scheduler.get_timestamp_array()
-        logger.info(f"回忆往事: {[time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts)) for ts in timestamps]}")
+        # 使用 translate_timestamp_to_human_readable 并指定 mode="normal"
+        readable_timestamps = [translate_timestamp_to_human_readable(ts, mode="normal") for ts in timestamps]
+        logger.info(f"回忆往事: {readable_timestamps}")
         chat_samples = []
         for timestamp in timestamps:
+            # 调用修改后的 random_get_msg_snippet
             messages = self.random_get_msg_snippet(
                 timestamp, self.config.build_memory_sample_length, max_memorized_time_per_msg
             )
@@ -693,23 +828,47 @@ class EntorhinalCortex:
 
         return chat_samples
 
-    def random_get_msg_snippet(self, target_timestamp: float, chat_size: int, max_memorized_time_per_msg: int) -> list:
-        """从数据库中随机获取指定时间戳附近的消息片段"""
+    @staticmethod
+    def random_get_msg_snippet(target_timestamp: float, chat_size: int, max_memorized_time_per_msg: int) -> list:
+        """从数据库中随机获取指定时间戳附近的消息片段 (使用 chat_message_builder)"""
         try_count = 0
+        time_window_seconds = random.randint(300, 1800)  # 随机时间窗口，5到30分钟
+
         while try_count < 3:
-            messages = get_closest_chat_from_db(length=chat_size, timestamp=target_timestamp)
+            # 定义时间范围：从目标时间戳开始，向后推移 time_window_seconds
+            timestamp_start = target_timestamp
+            timestamp_end = target_timestamp + time_window_seconds
+
+            # 使用 chat_message_builder 的函数获取消息
+            # limit_mode='earliest' 获取这个时间窗口内最早的 chat_size 条消息
+            messages = get_raw_msg_by_timestamp(
+                timestamp_start=timestamp_start, timestamp_end=timestamp_end, limit=chat_size, limit_mode="earliest"
+            )
+
             if messages:
+                # 检查获取到的所有消息是否都未达到最大记忆次数
+                all_valid = True
                 for message in messages:
-                    if message["memorized_times"] >= max_memorized_time_per_msg:
-                        messages = None
+                    if message.get("memorized_times", 0) >= max_memorized_time_per_msg:
+                        all_valid = False
                         break
-                if messages:
+
+                # 如果所有消息都有效
+                if all_valid:
+                    # 更新数据库中的记忆次数
                     for message in messages:
+                        # 确保在更新前获取最新的 memorized_times，以防万一
+                        current_memorized_times = message.get("memorized_times", 0)
                         db.messages.update_one(
-                            {"_id": message["_id"]}, {"$set": {"memorized_times": message["memorized_times"] + 1}}
+                            {"_id": message["_id"]}, {"$set": {"memorized_times": current_memorized_times + 1}}
                         )
-                    return messages
+                    return messages  # 直接返回原始的消息列表
+
+            # 如果获取失败或消息无效，增加尝试次数
             try_count += 1
+            target_timestamp -= 120  # 如果第一次尝试失败，稍微向前调整时间戳再试
+
+        # 三次尝试都失败，返回 None
         return None
 
     async def sync_memory_to_db(self):
@@ -934,434 +1093,6 @@ class EntorhinalCortex:
         logger.success(f"[数据库] 同步了 {len(memory_nodes)} 个节点和 {len(memory_edges)} 条边")
 
 
-# 海马体
-class Hippocampus:
-    def __init__(self):
-        self.memory_graph = Memory_graph()
-        self.llm_topic_judge = None
-        self.llm_summary_by_topic = None
-        self.entorhinal_cortex = None
-        self.parahippocampal_gyrus = None
-        self.config = None
-
-    def initialize(self, global_config):
-        self.config = MemoryConfig.from_global_config(global_config)
-        # 初始化子组件
-        self.entorhinal_cortex = EntorhinalCortex(self)
-        self.parahippocampal_gyrus = ParahippocampalGyrus(self)
-        # 从数据库加载记忆图
-        self.entorhinal_cortex.sync_memory_from_db()
-        self.llm_topic_judge = LLM_request(self.config.llm_topic_judge, request_type="memory")
-        self.llm_summary_by_topic = LLM_request(self.config.llm_summary_by_topic, request_type="memory")
-
-    def get_all_node_names(self) -> list:
-        """获取记忆图中所有节点的名字列表"""
-        return list(self.memory_graph.G.nodes())
-
-    def calculate_node_hash(self, concept, memory_items) -> int:
-        """计算节点的特征值"""
-        if not isinstance(memory_items, list):
-            memory_items = [memory_items] if memory_items else []
-        sorted_items = sorted(memory_items)
-        content = f"{concept}:{'|'.join(sorted_items)}"
-        return hash(content)
-
-    def calculate_edge_hash(self, source, target) -> int:
-        """计算边的特征值"""
-        nodes = sorted([source, target])
-        return hash(f"{nodes[0]}:{nodes[1]}")
-
-    def find_topic_llm(self, text, topic_num):
-        prompt = (
-            f"这是一段文字：{text}。请你从这段话中总结出最多{topic_num}个关键的概念，可以是名词，动词，或者特定人物，帮我列出来，"
-            f"将主题用逗号隔开，并加上<>,例如<主题1>,<主题2>......尽可能精简。只需要列举最多{topic_num}个话题就好，不要有序号，不要告诉我其他内容。"
-            f"如果确定找不出主题或者没有明显主题，返回<none>。"
-        )
-        return prompt
-
-    def topic_what(self, text, topic, time_info):
-        prompt = (
-            f'这是一段文字，{time_info}：{text}。我想让你基于这段文字来概括"{topic}"这个概念，帮我总结成一句自然的话，'
-            f"可以包含时间和人物，以及具体的观点。只输出这句话就好"
-        )
-        return prompt
-
-    def calculate_topic_num(self, text, compress_rate):
-        """计算文本的话题数量"""
-        information_content = calculate_information_content(text)
-        topic_by_length = text.count("\n") * compress_rate
-        topic_by_information_content = max(1, min(5, int((information_content - 3) * 2)))
-        topic_num = int((topic_by_length + topic_by_information_content) / 2)
-        logger.debug(
-            f"topic_by_length: {topic_by_length}, topic_by_information_content: {topic_by_information_content}, "
-            f"topic_num: {topic_num}"
-        )
-        return topic_num
-
-    def get_memory_from_keyword(self, keyword: str, max_depth: int = 2) -> list:
-        """从关键词获取相关记忆。
-
-        Args:
-            keyword (str): 关键词
-            max_depth (int, optional): 记忆检索深度，默认为2。1表示只获取直接相关的记忆，2表示获取间接相关的记忆。
-
-        Returns:
-            list: 记忆列表，每个元素是一个元组 (topic, memory_items, similarity)
-                - topic: str, 记忆主题
-                - memory_items: list, 该主题下的记忆项列表
-                - similarity: float, 与关键词的相似度
-        """
-        if not keyword:
-            return []
-
-        # 获取所有节点
-        all_nodes = list(self.memory_graph.G.nodes())
-        memories = []
-
-        # 计算关键词的词集合
-        keyword_words = set(jieba.cut(keyword))
-
-        # 遍历所有节点，计算相似度
-        for node in all_nodes:
-            node_words = set(jieba.cut(node))
-            all_words = keyword_words | node_words
-            v1 = [1 if word in keyword_words else 0 for word in all_words]
-            v2 = [1 if word in node_words else 0 for word in all_words]
-            similarity = cosine_similarity(v1, v2)
-
-            # 如果相似度超过阈值，获取该节点的记忆
-            if similarity >= 0.3:  # 可以调整这个阈值
-                node_data = self.memory_graph.G.nodes[node]
-                memory_items = node_data.get("memory_items", [])
-                if not isinstance(memory_items, list):
-                    memory_items = [memory_items] if memory_items else []
-
-                memories.append((node, memory_items, similarity))
-
-        # 按相似度降序排序
-        memories.sort(key=lambda x: x[2], reverse=True)
-        return memories
-
-    async def get_memory_from_text(
-        self,
-        text: str,
-        max_memory_num: int = 3,
-        max_memory_length: int = 2,
-        max_depth: int = 3,
-        fast_retrieval: bool = False,
-    ) -> list:
-        """从文本中提取关键词并获取相关记忆。
-
-        Args:
-            text (str): 输入文本
-            num (int, optional): 需要返回的记忆数量。默认为5。
-            max_depth (int, optional): 记忆检索深度。默认为2。
-            fast_retrieval (bool, optional): 是否使用快速检索。默认为False。
-                如果为True，使用jieba分词和TF-IDF提取关键词，速度更快但可能不够准确。
-                如果为False，使用LLM提取关键词，速度较慢但更准确。
-
-        Returns:
-            list: 记忆列表，每个元素是一个元组 (topic, memory_items, similarity)
-                - topic: str, 记忆主题
-                - memory_items: list, 该主题下的记忆项列表
-                - similarity: float, 与文本的相似度
-        """
-        if not text:
-            return []
-
-        if fast_retrieval:
-            # 使用jieba分词提取关键词
-            words = jieba.cut(text)
-            # 过滤掉停用词和单字词
-            keywords = [word for word in words if len(word) > 1]
-            # 去重
-            keywords = list(set(keywords))
-            # 限制关键词数量
-            keywords = keywords[:5]
-        else:
-            # 使用LLM提取关键词
-            topic_num = min(5, max(1, int(len(text) * 0.1)))  # 根据文本长度动态调整关键词数量
-            # logger.info(f"提取关键词数量: {topic_num}")
-            topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, topic_num))
-
-            # 提取关键词
-            keywords = re.findall(r"<([^>]+)>", topics_response[0])
-            if not keywords:
-                keywords = []
-            else:
-                keywords = [
-                    keyword.strip()
-                    for keyword in ",".join(keywords).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
-                    if keyword.strip()
-                ]
-
-        # logger.info(f"提取的关键词: {', '.join(keywords)}")
-
-        # 过滤掉不存在于记忆图中的关键词
-        valid_keywords = [keyword for keyword in keywords if keyword in self.memory_graph.G]
-        if not valid_keywords:
-            logger.info("没有找到有效的关键词节点")
-            return []
-
-        logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
-
-        # 从每个关键词获取记忆
-        all_memories = []
-        activate_map = {}  # 存储每个词的累计激活值
-
-        # 对每个关键词进行扩散式检索
-        for keyword in valid_keywords:
-            logger.debug(f"开始以关键词 '{keyword}' 为中心进行扩散检索 (最大深度: {max_depth}):")
-            # 初始化激活值
-            activation_values = {keyword: 1.0}
-            # 记录已访问的节点
-            visited_nodes = {keyword}
-            # 待处理的节点队列，每个元素是(节点, 激活值, 当前深度)
-            nodes_to_process = [(keyword, 1.0, 0)]
-
-            while nodes_to_process:
-                current_node, current_activation, current_depth = nodes_to_process.pop(0)
-
-                # 如果激活值小于0或超过最大深度，停止扩散
-                if current_activation <= 0 or current_depth >= max_depth:
-                    continue
-
-                # 获取当前节点的所有邻居
-                neighbors = list(self.memory_graph.G.neighbors(current_node))
-
-                for neighbor in neighbors:
-                    if neighbor in visited_nodes:
-                        continue
-
-                    # 获取连接强度
-                    edge_data = self.memory_graph.G[current_node][neighbor]
-                    strength = edge_data.get("strength", 1)
-
-                    # 计算新的激活值
-                    new_activation = current_activation - (1 / strength)
-
-                    if new_activation > 0:
-                        activation_values[neighbor] = new_activation
-                        visited_nodes.add(neighbor)
-                        nodes_to_process.append((neighbor, new_activation, current_depth + 1))
-                        logger.trace(
-                            f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})"
-                        )  # noqa: E501
-
-            # 更新激活映射
-            for node, activation_value in activation_values.items():
-                if activation_value > 0:
-                    if node in activate_map:
-                        activate_map[node] += activation_value
-                    else:
-                        activate_map[node] = activation_value
-
-        # 输出激活映射
-        # logger.info("激活映射统计:")
-        # for node, total_activation in sorted(activate_map.items(), key=lambda x: x[1], reverse=True):
-        #     logger.info(f"节点 '{node}': 累计激活值 = {total_activation:.2f}")
-
-        # 基于激活值平方的独立概率选择
-        remember_map = {}
-        # logger.info("基于激活值平方的归一化选择:")
-
-        # 计算所有激活值的平方和
-        total_squared_activation = sum(activation**2 for activation in activate_map.values())
-        if total_squared_activation > 0:
-            # 计算归一化的激活值
-            normalized_activations = {
-                node: (activation**2) / total_squared_activation for node, activation in activate_map.items()
-            }
-
-            # 按归一化激活值排序并选择前max_memory_num个
-            sorted_nodes = sorted(normalized_activations.items(), key=lambda x: x[1], reverse=True)[:max_memory_num]
-
-            # 将选中的节点添加到remember_map
-            for node, normalized_activation in sorted_nodes:
-                remember_map[node] = activate_map[node]  # 使用原始激活值
-                logger.debug(
-                    f"节点 '{node}' (归一化激活值: {normalized_activation:.2f}, 激活值: {activate_map[node]:.2f})"
-                )
-        else:
-            logger.info("没有有效的激活值")
-
-        # 从选中的节点中提取记忆
-        all_memories = []
-        # logger.info("开始从选中的节点中提取记忆:")
-        for node, activation in remember_map.items():
-            logger.debug(f"处理节点 '{node}' (激活值: {activation:.2f}):")
-            node_data = self.memory_graph.G.nodes[node]
-            memory_items = node_data.get("memory_items", [])
-            if not isinstance(memory_items, list):
-                memory_items = [memory_items] if memory_items else []
-
-            if memory_items:
-                logger.debug(f"节点包含 {len(memory_items)} 条记忆")
-                # 计算每条记忆与输入文本的相似度
-                memory_similarities = []
-                for memory in memory_items:
-                    # 计算与输入文本的相似度
-                    memory_words = set(jieba.cut(memory))
-                    text_words = set(jieba.cut(text))
-                    all_words = memory_words | text_words
-                    v1 = [1 if word in memory_words else 0 for word in all_words]
-                    v2 = [1 if word in text_words else 0 for word in all_words]
-                    similarity = cosine_similarity(v1, v2)
-                    memory_similarities.append((memory, similarity))
-
-                # 按相似度排序
-                memory_similarities.sort(key=lambda x: x[1], reverse=True)
-                # 获取最匹配的记忆
-                top_memories = memory_similarities[:max_memory_length]
-
-                # 添加到结果中
-                for memory, similarity in top_memories:
-                    all_memories.append((node, [memory], similarity))
-                    # logger.info(f"选中记忆: {memory} (相似度: {similarity:.2f})")
-            else:
-                logger.info("节点没有记忆")
-
-        # 去重（基于记忆内容）
-        logger.debug("开始记忆去重:")
-        seen_memories = set()
-        unique_memories = []
-        for topic, memory_items, activation_value in all_memories:
-            memory = memory_items[0]  # 因为每个topic只有一条记忆
-            if memory not in seen_memories:
-                seen_memories.add(memory)
-                unique_memories.append((topic, memory_items, activation_value))
-                logger.debug(f"保留记忆: {memory} (来自节点: {topic}, 激活值: {activation_value:.2f})")
-            else:
-                logger.debug(f"跳过重复记忆: {memory} (来自节点: {topic})")
-
-        # 转换为(关键词, 记忆)格式
-        result = []
-        for topic, memory_items, _ in unique_memories:
-            memory = memory_items[0]  # 因为每个topic只有一条记忆
-            result.append((topic, memory))
-            logger.info(f"选中记忆: {memory} (来自节点: {topic})")
-
-        return result
-
-    async def get_activate_from_text(self, text: str, max_depth: int = 3, fast_retrieval: bool = False) -> float:
-        """从文本中提取关键词并获取相关记忆。
-
-        Args:
-            text (str): 输入文本
-            num (int, optional): 需要返回的记忆数量。默认为5。
-            max_depth (int, optional): 记忆检索深度。默认为2。
-            fast_retrieval (bool, optional): 是否使用快速检索。默认为False。
-                如果为True，使用jieba分词和TF-IDF提取关键词，速度更快但可能不够准确。
-                如果为False，使用LLM提取关键词，速度较慢但更准确。
-
-        Returns:
-            float: 激活节点数与总节点数的比值
-        """
-        if not text:
-            return 0
-
-        if fast_retrieval:
-            # 使用jieba分词提取关键词
-            words = jieba.cut(text)
-            # 过滤掉停用词和单字词
-            keywords = [word for word in words if len(word) > 1]
-            # 去重
-            keywords = list(set(keywords))
-            # 限制关键词数量
-            keywords = keywords[:5]
-        else:
-            # 使用LLM提取关键词
-            topic_num = min(5, max(1, int(len(text) * 0.1)))  # 根据文本长度动态调整关键词数量
-            # logger.info(f"提取关键词数量: {topic_num}")
-            topics_response = await self.llm_topic_judge.generate_response(self.find_topic_llm(text, topic_num))
-
-            # 提取关键词
-            keywords = re.findall(r"<([^>]+)>", topics_response[0])
-            if not keywords:
-                keywords = []
-            else:
-                keywords = [
-                    keyword.strip()
-                    for keyword in ",".join(keywords).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
-                    if keyword.strip()
-                ]
-
-        # logger.info(f"提取的关键词: {', '.join(keywords)}")
-
-        # 过滤掉不存在于记忆图中的关键词
-        valid_keywords = [keyword for keyword in keywords if keyword in self.memory_graph.G]
-        if not valid_keywords:
-            logger.info("没有找到有效的关键词节点")
-            return 0
-
-        logger.info(f"有效的关键词: {', '.join(valid_keywords)}")
-
-        # 从每个关键词获取记忆
-        activate_map = {}  # 存储每个词的累计激活值
-
-        # 对每个关键词进行扩散式检索
-        for keyword in valid_keywords:
-            logger.trace(f"开始以关键词 '{keyword}' 为中心进行扩散检索 (最大深度: {max_depth}):")
-            # 初始化激活值
-            activation_values = {keyword: 1.0}
-            # 记录已访问的节点
-            visited_nodes = {keyword}
-            # 待处理的节点队列，每个元素是(节点, 激活值, 当前深度)
-            nodes_to_process = [(keyword, 1.0, 0)]
-
-            while nodes_to_process:
-                current_node, current_activation, current_depth = nodes_to_process.pop(0)
-
-                # 如果激活值小于0或超过最大深度，停止扩散
-                if current_activation <= 0 or current_depth >= max_depth:
-                    continue
-
-                # 获取当前节点的所有邻居
-                neighbors = list(self.memory_graph.G.neighbors(current_node))
-
-                for neighbor in neighbors:
-                    if neighbor in visited_nodes:
-                        continue
-
-                    # 获取连接强度
-                    edge_data = self.memory_graph.G[current_node][neighbor]
-                    strength = edge_data.get("strength", 1)
-
-                    # 计算新的激活值
-                    new_activation = current_activation - (1 / strength)
-
-                    if new_activation > 0:
-                        activation_values[neighbor] = new_activation
-                        visited_nodes.add(neighbor)
-                        nodes_to_process.append((neighbor, new_activation, current_depth + 1))
-                        # logger.debug(
-                        # f"节点 '{neighbor}' 被激活，激活值: {new_activation:.2f} (通过 '{current_node}' 连接，强度: {strength}, 深度: {current_depth + 1})")  # noqa: E501
-
-            # 更新激活映射
-            for node, activation_value in activation_values.items():
-                if activation_value > 0:
-                    if node in activate_map:
-                        activate_map[node] += activation_value
-                    else:
-                        activate_map[node] = activation_value
-
-        # 输出激活映射
-        # logger.info("激活映射统计:")
-        # for node, total_activation in sorted(activate_map.items(), key=lambda x: x[1], reverse=True):
-        #     logger.info(f"节点 '{node}': 累计激活值 = {total_activation:.2f}")
-
-        # 计算激活节点数与总节点数的比值
-        total_activation = sum(activate_map.values())
-        logger.trace(f"总激活值: {total_activation:.2f}")
-        total_nodes = len(self.memory_graph.G.nodes())
-        # activated_nodes = len(activate_map)
-        activation_ratio = total_activation / total_nodes if total_nodes > 0 else 0
-        activation_ratio = activation_ratio * 60
-        logger.info(f"总激活值: {total_activation:.2f}, 总节点数: {total_nodes}, 激活: {activation_ratio}")
-
-        return activation_ratio
-
-
 # 负责整合，遗忘，合并记忆
 class ParahippocampalGyrus:
     def __init__(self, hippocampus: Hippocampus):
@@ -1373,88 +1104,72 @@ class ParahippocampalGyrus:
         """压缩和总结消息内容，生成记忆主题和摘要。
 
         Args:
-            messages (list): 消息列表，每个消息是一个字典，包含以下字段：
-                - time: float, 消息的时间戳
-                - detailed_plain_text: str, 消息的详细文本内容
+            messages (list): 消息列表，每个消息是一个字典，包含数据库消息结构。
             compress_rate (float, optional): 压缩率，用于控制生成的主题数量。默认为0.1。
 
         Returns:
             tuple: (compressed_memory, similar_topics_dict)
                 - compressed_memory: set, 压缩后的记忆集合，每个元素是一个元组 (topic, summary)
-                    - topic: str, 记忆主题
-                    - summary: str, 主题的摘要描述
-                - similar_topics_dict: dict, 相似主题字典，key为主题，value为相似主题列表
-                    每个相似主题是一个元组 (similar_topic, similarity)
-                    - similar_topic: str, 相似的主题
-                    - similarity: float, 相似度分数（0-1之间）
+                - similar_topics_dict: dict, 相似主题字典
 
         Process:
-            1. 合并消息文本并生成时间信息
-            2. 使用LLM提取关键主题
-            3. 过滤掉包含禁用关键词的主题
-            4. 为每个主题生成摘要
-            5. 查找与现有记忆中的相似主题
+            1. 使用 build_readable_messages 生成包含时间、人物信息的格式化文本。
+            2. 使用LLM提取关键主题。
+            3. 过滤掉包含禁用关键词的主题。
+            4. 为每个主题生成摘要。
+            5. 查找与现有记忆中的相似主题。
         """
         if not messages:
             return set(), {}
 
-        # 合并消息文本，同时保留时间信息
-        input_text = ""
-        time_info = ""
-        # 计算最早和最晚时间
-        earliest_time = min(msg["time"] for msg in messages)
-        latest_time = max(msg["time"] for msg in messages)
+        # 1. 使用 build_readable_messages 生成格式化文本
+        # build_readable_messages 只返回一个字符串，不需要解包
+        input_text = await build_readable_messages(
+            messages,
+            merge_messages=True,  # 合并连续消息
+            timestamp_mode="normal",  # 使用 'YYYY-MM-DD HH:MM:SS' 格式
+            replace_bot_name=False,  # 保留原始用户名
+        )
 
-        earliest_dt = datetime.datetime.fromtimestamp(earliest_time)
-        latest_dt = datetime.datetime.fromtimestamp(latest_time)
+        # 如果生成的可读文本为空（例如所有消息都无效），则直接返回
+        if not input_text:
+            logger.warning("无法从提供的消息生成可读文本，跳过记忆压缩。")
+            return set(), {}
 
-        # 如果是同一年
-        if earliest_dt.year == latest_dt.year:
-            earliest_str = earliest_dt.strftime("%m-%d %H:%M:%S")
-            latest_str = latest_dt.strftime("%m-%d %H:%M:%S")
-            time_info += f"是在{earliest_dt.year}年，{earliest_str} 到 {latest_str} 的对话:\n"
-        else:
-            earliest_str = earliest_dt.strftime("%Y-%m-%d %H:%M:%S")
-            latest_str = latest_dt.strftime("%Y-%m-%d %H:%M:%S")
-            time_info += f"是从 {earliest_str} 到 {latest_str} 的对话:\n"
+        logger.debug(f"用于压缩的格式化文本:\n{input_text}")
 
-        for msg in messages:
-            input_text += f"{msg['detailed_plain_text']}\n"
-
-        logger.debug(input_text)
-
+        # 2. 使用LLM提取关键主题
         topic_num = self.hippocampus.calculate_topic_num(input_text, compress_rate)
         topics_response = await self.hippocampus.llm_topic_judge.generate_response(
             self.hippocampus.find_topic_llm(input_text, topic_num)
         )
 
-        # 使用正则表达式提取<>中的内容
+        # 提取<>中的内容
         topics = re.findall(r"<([^>]+)>", topics_response[0])
 
-        # 如果没有找到<>包裹的内容，返回['none']
         if not topics:
             topics = ["none"]
         else:
-            # 处理提取出的话题
             topics = [
                 topic.strip()
                 for topic in ",".join(topics).replace("，", ",").replace("、", ",").replace(" ", ",").split(",")
                 if topic.strip()
             ]
 
-        # 过滤掉包含禁用关键词的topic
+        # 3. 过滤掉包含禁用关键词的topic
         filtered_topics = [
             topic for topic in topics if not any(keyword in topic for keyword in self.config.memory_ban_words)
         ]
 
         logger.debug(f"过滤后话题: {filtered_topics}")
 
-        # 创建所有话题的请求任务
+        # 4. 创建所有话题的摘要生成任务
         tasks = []
         for topic in filtered_topics:
-            topic_what_prompt = self.hippocampus.topic_what(input_text, topic, time_info)
+            # 调用修改后的 topic_what，不再需要 time_info
+            topic_what_prompt = self.hippocampus.topic_what(input_text, topic)
             try:
-                task = self.hippocampus.llm_summary_by_topic.generate_response_async(topic_what_prompt)
+                task = self.hippocampus.llm_summary.generate_response_async(topic_what_prompt)
                 tasks.append((topic.strip(), task))
             except Exception as e:
                 logger.error(f"生成话题 '{topic}' 的摘要时发生错误: {e}")
@@ -1542,11 +1257,10 @@ class ParahippocampalGyrus:
                                 last_modified=current_time,
                             )
 
-            for i in range(len(all_topics)):
-                for j in range(i + 1, len(all_topics)):
-                    logger.debug(f"连接同批次节点: {all_topics[i]} 和 {all_topics[j]}")
-                    all_added_edges.append(f"{all_topics[i]}-{all_topics[j]}")
-                    self.memory_graph.connect_dot(all_topics[i], all_topics[j])
+            for topic1, topic2 in combinations(all_topics, 2):
+                logger.debug(f"连接同批次节点: {topic1} 和 {topic2}")
+                all_added_edges.append(f"{topic1}-{topic2}")
+                self.memory_graph.connect_dot(topic1, topic2)
 
         logger.success(f"更新记忆: {', '.join(all_added_nodes)}")
         logger.debug(f"强化连接: {', '.join(all_added_edges)}")
@@ -1624,26 +1338,56 @@ class ParahippocampalGyrus:
         logger.info("[遗忘] 开始检查节点...")
         node_check_start = time.time()
         for node in nodes_to_check:
+            # 检查节点是否存在，以防在迭代中被移除（例如边移除导致）
+            if node not in self.memory_graph.G:
+                continue
+
             node_data = self.memory_graph.G.nodes[node]
+
+            # 首先获取记忆项
+            memory_items = node_data.get("memory_items", [])
+            if not isinstance(memory_items, list):
+                memory_items = [memory_items] if memory_items else []
+
+            # 新增：检查节点是否为空
+            if not memory_items:
+                try:
+                    self.memory_graph.G.remove_node(node)
+                    node_changes["removed"].append(f"{node}(空节点)")  # 标记为空节点移除
+                    logger.debug(f"[遗忘] 移除了空的节点: {node}")
+                except nx.NetworkXError as e:
+                    logger.warning(f"[遗忘] 移除空节点 {node} 时发生错误（可能已被移除）: {e}")
+                continue  # 处理下一个节点
+
+            # --- 如果节点不为空，则执行原来的不活跃检查和随机移除逻辑 ---
             last_modified = node_data.get("last_modified", current_time)
-
+            # 条件1：检查是否长时间未修改 (超过24小时)
             if current_time - last_modified > 3600 * 24:
-                memory_items = node_data.get("memory_items", [])
-                if not isinstance(memory_items, list):
-                    memory_items = [memory_items] if memory_items else []
-
+                # 条件2：再次确认节点包含记忆项（理论上已确认，但作为保险）
                 if memory_items:
                     current_count = len(memory_items)
-                    removed_item = random.choice(memory_items)
-                    memory_items.remove(removed_item)
+                    # 如果列表非空，才进行随机选择
+                    if current_count > 0:
+                        removed_item = random.choice(memory_items)
+                        try:
+                            memory_items.remove(removed_item)
 
-                    if memory_items:
-                        self.memory_graph.G.nodes[node]["memory_items"] = memory_items
-                        self.memory_graph.G.nodes[node]["last_modified"] = current_time
-                        node_changes["reduced"].append(f"{node} (数量: {current_count} -> {len(memory_items)})")
-                    else:
-                        self.memory_graph.G.remove_node(node)
-                        node_changes["removed"].append(node)
+                            # 条件3：检查移除后 memory_items 是否变空
+                            if memory_items:  # 如果移除后列表不为空
+                                # self.memory_graph.G.nodes[node]["memory_items"] = memory_items # 直接修改列表即可
+                                self.memory_graph.G.nodes[node]["last_modified"] = current_time  # 更新修改时间
+                                node_changes["reduced"].append(f"{node} (数量: {current_count} -> {len(memory_items)})")
+                            else:  # 如果移除后列表为空
+                                # 尝试移除节点，处理可能的错误
+                                try:
+                                    self.memory_graph.G.remove_node(node)
+                                    node_changes["removed"].append(f"{node}(遗忘清空)")  # 标记为遗忘清空
+                                    logger.debug(f"[遗忘] 节点 {node} 因移除最后一项而被清空。")
+                                except nx.NetworkXError as e:
+                                    logger.warning(f"[遗忘] 尝试移除节点 {node} 时发生错误（可能已被移除）：{e}")
+                        except ValueError:
+                            # 这个错误理论上不应发生，因为 removed_item 来自 memory_items
+                            logger.warning(f"[遗忘] 尝试从节点 '{node}' 移除不存在的项目 '{removed_item[:30]}...'")
         node_check_end = time.time()
         logger.info(f"[遗忘] 节点检查耗时: {node_check_end - node_check_start:.2f}秒")
 
@@ -1681,6 +1425,119 @@ class ParahippocampalGyrus:
 
         end_time = time.time()
         logger.info(f"[遗忘] 总耗时: {end_time - start_time:.2f}秒")
+
+    async def operation_consolidate_memory(self):
+        """整合记忆：合并节点内相似的记忆项"""
+        start_time = time.time()
+        percentage = self.config.consolidate_memory_percentage
+        similarity_threshold = self.config.consolidation_similarity_threshold
+        logger.info(f"[整合] 开始检查记忆节点... 检查比例: {percentage:.2%}, 合并阈值: {similarity_threshold}")
+
+        # 获取所有至少有2条记忆项的节点
+        eligible_nodes = []
+        for node, data in self.memory_graph.G.nodes(data=True):
+            memory_items = data.get("memory_items", [])
+            if isinstance(memory_items, list) and len(memory_items) >= 2:
+                eligible_nodes.append(node)
+
+        if not eligible_nodes:
+            logger.info("[整合] 没有找到包含多个记忆项的节点，无需整合。")
+            return
+
+        # 计算需要检查的节点数量
+        check_nodes_count = max(1, min(len(eligible_nodes), int(len(eligible_nodes) * percentage)))
+
+        # 随机抽取节点进行检查
+        try:
+            nodes_to_check = random.sample(eligible_nodes, check_nodes_count)
+        except ValueError as e:
+            logger.error(f"[整合] 抽样节点时出错: {e}")
+            return
+
+        logger.info(f"[整合] 将检查 {len(nodes_to_check)} / {len(eligible_nodes)} 个符合条件的节点。")
+
+        merged_count = 0
+        nodes_modified = set()
+        current_timestamp = datetime.datetime.now().timestamp()
+
+        for node in nodes_to_check:
+            node_data = self.memory_graph.G.nodes[node]
+            memory_items = node_data.get("memory_items", [])
+            if not isinstance(memory_items, list) or len(memory_items) < 2:
+                continue  # 双重检查，理论上不会进入
+
+            items_copy = list(memory_items)  # 创建副本以安全迭代和修改
+
+            # 遍历所有记忆项组合
+            for item1, item2 in combinations(items_copy, 2):
+                # 确保 item1 和 item2 仍然存在于原始列表中（可能已被之前的合并移除）
+                if item1 not in memory_items or item2 not in memory_items:
+                    continue
+
+                similarity = self._calculate_item_similarity(item1, item2)
+
+                if similarity >= similarity_threshold:
+                    logger.debug(f"[整合] 节点 '{node}' 中发现相似项 (相似度: {similarity:.2f}):")
+                    logger.trace(f"  - '{item1}'")
+                    logger.trace(f"  - '{item2}'")
+
+                    # 比较信息量
+                    info1 = calculate_information_content(item1)
+                    info2 = calculate_information_content(item2)
+
+                    if info1 >= info2:
+                        item_to_keep = item1
+                        item_to_remove = item2
+                    else:
+                        item_to_keep = item2
+                        item_to_remove = item1
+
+                    # 从原始列表中移除信息量较低的项
+                    try:
+                        memory_items.remove(item_to_remove)
+                        logger.info(
+                            f"[整合] 已合并节点 '{node}' 中的记忆，保留: '{item_to_keep[:60]}...', 移除: '{item_to_remove[:60]}...'"
+                        )
+                        merged_count += 1
+                        nodes_modified.add(node)
+                        node_data["last_modified"] = current_timestamp  # 更新修改时间
+                        _merged_in_this_node = True
+                        break  # 每个节点每次检查只合并一对
+                    except ValueError:
+                        # 如果项已经被移除（例如，在之前的迭代中作为 item_to_keep），则跳过
+                        logger.warning(
+                            f"[整合] 尝试移除节点 '{node}' 中不存在的项 '{item_to_remove[:30]}...'，可能已被合并。"
+                        )
+                        continue
+            # # 如果节点内发生了合并，更新节点数据 (这种方式不安全，会丢失其他属性)
+            # if merged_in_this_node:
+            #      self.memory_graph.G.nodes[node]["memory_items"] = memory_items
+
+        if merged_count > 0:
+            logger.info(f"[整合] 共合并了 {merged_count} 对相似记忆项，分布在 {len(nodes_modified)} 个节点中。")
+            sync_start = time.time()
+            logger.info("[整合] 开始将变更同步到数据库...")
+            # 使用 resync 更安全地处理删除和添加
+            await self.hippocampus.entorhinal_cortex.resync_memory_to_db()
+            sync_end = time.time()
+            logger.info(f"[整合] 数据库同步耗时: {sync_end - sync_start:.2f}秒")
+        else:
+            logger.info("[整合] 本次检查未发现需要合并的记忆项。")
+
+        end_time = time.time()
+        logger.info(f"[整合] 整合检查完成，总耗时: {end_time - start_time:.2f}秒")
+
+    @staticmethod
+    def _calculate_item_similarity(item1: str, item2: str) -> float:
+        """计算两条记忆项文本的余弦相似度"""
+        words1 = set(jieba.cut(item1))
+        words2 = set(jieba.cut(item2))
+        all_words = words1 | words2
+        if not all_words:
+            return 0.0
+        v1 = [1 if word in words1 else 0 for word in all_words]
+        v2 = [1 if word in words2 else 0 for word in all_words]
+        return cosine_similarity(v1, v2)
 
 
 class HippocampusManager:
@@ -1720,12 +1577,12 @@ class HippocampusManager:
         edge_count = len(memory_graph.edges())
 
         logger.success(f"""--------------------------------
-                       记忆系统参数配置:
-                       构建间隔: {global_config.build_memory_interval}秒|样本数: {config.build_memory_sample_num},长度: {config.build_memory_sample_length}|压缩率: {config.memory_compress_rate}
-                       记忆构建分布: {config.memory_build_distribution}
-                       遗忘间隔: {global_config.forget_memory_interval}秒|遗忘比例: {global_config.memory_forget_percentage}|遗忘: {config.memory_forget_time}小时之后
-                       记忆图统计信息: 节点数量: {node_count}, 连接数量: {edge_count}
-                       --------------------------------""")  # noqa: E501
+                    记忆系统参数配置:
+                    构建间隔: {global_config.build_memory_interval}秒|样本数: {config.build_memory_sample_num},长度: {config.build_memory_sample_length}|压缩率: {config.memory_compress_rate}
+                    记忆构建分布: {config.memory_build_distribution}
+                    遗忘间隔: {global_config.forget_memory_interval}秒|遗忘比例: {global_config.memory_forget_percentage}|遗忘: {config.memory_forget_time}小时之后
+                    记忆图统计信息: 节点数量: {node_count}, 连接数量: {edge_count}
+                    --------------------------------""")  # noqa: E501
 
         return self._hippocampus
 
@@ -1741,6 +1598,14 @@ class HippocampusManager:
             raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
         return await self._hippocampus.parahippocampal_gyrus.operation_forget_topic(percentage)
 
+    async def consolidate_memory(self):
+        """整合记忆的公共接口"""
+        if not self._initialized:
+            raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
+        # 注意：目前 operation_consolidate_memory 内部直接读取配置，percentage 参数暂时无效
+        # 如果需要外部控制比例，需要修改 operation_consolidate_memory
+        return await self._hippocampus.parahippocampal_gyrus.operation_consolidate_memory()
+
     async def get_memory_from_text(
         self,
         text: str,
@@ -1755,6 +1620,21 @@ class HippocampusManager:
         try:
             response = await self._hippocampus.get_memory_from_text(
                 text, max_memory_num, max_memory_length, max_depth, fast_retrieval
+            )
+        except Exception as e:
+            logger.error(f"文本激活记忆失败: {e}")
+            response = []
+        return response
+
+    async def get_memory_from_topic(
+        self, valid_keywords: list[str], max_memory_num: int = 3, max_memory_length: int = 2, max_depth: int = 3
+    ) -> list:
+        """从文本中获取相关记忆的公共接口"""
+        if not self._initialized:
+            raise RuntimeError("HippocampusManager 尚未初始化，请先调用 initialize 方法")
+        try:
+            response = await self._hippocampus.get_memory_from_topic(
+                valid_keywords, max_memory_num, max_memory_length, max_depth
             )
         except Exception as e:
             logger.error(f"文本激活记忆失败: {e}")

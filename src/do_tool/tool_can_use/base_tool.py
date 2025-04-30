@@ -3,9 +3,9 @@ import inspect
 import importlib
 import pkgutil
 import os
-from src.common.logger import get_module_logger
+from src.common.logger_manager import get_logger
 
-logger = get_module_logger("base_tool")
+logger = get_logger("base_tool")
 
 # 工具注册表
 TOOL_REGISTRY = {}
@@ -36,12 +36,11 @@ class BaseTool:
             "function": {"name": cls.name, "description": cls.description, "parameters": cls.parameters},
         }
 
-    async def execute(self, function_args: Dict[str, Any], message_txt: str = "") -> Dict[str, Any]:
+    async def execute(self, function_args: Dict[str, Any]) -> Dict[str, Any]:
         """执行工具函数
 
         Args:
             function_args: 工具调用参数
-            message_txt: 原始消息文本
 
         Returns:
             Dict: 工具执行结果
@@ -63,7 +62,7 @@ def register_tool(tool_class: Type[BaseTool]):
         raise ValueError(f"工具类 {tool_class.__name__} 没有定义 name 属性")
 
     TOOL_REGISTRY[tool_name] = tool_class
-    logger.info(f"已注册工具: {tool_name}")
+    logger.info(f"已注册: {tool_name}")
 
 
 def discover_tools():

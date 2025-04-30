@@ -3,8 +3,8 @@ import asyncio
 import traceback
 from typing import Optional, Dict, Any, List
 from src.common.logger import get_module_logger
-from ..message.message_base import UserInfo
-from ..config.config import global_config
+from maim_message import UserInfo
+from ...config.config import global_config
 from .chat_states import NotificationManager, create_new_message_notification, create_cold_chat_notification
 from .message_storage import MongoDBMessageStorage
 
@@ -18,7 +18,7 @@ class ChatObserver:
     _instances: Dict[str, "ChatObserver"] = {}
 
     @classmethod
-    def get_instance(cls, stream_id: str) -> "ChatObserver":
+    def get_instance(cls, stream_id: str, private_name: str) -> "ChatObserver":
         """获取或创建观察器实例
 
         Args:
@@ -28,10 +28,10 @@ class ChatObserver:
             ChatObserver: 观察器实例
         """
         if stream_id not in cls._instances:
-            cls._instances[stream_id] = cls(stream_id)
+            cls._instances[stream_id] = cls(stream_id, private_name)
         return cls._instances[stream_id]
 
-    def __init__(self, stream_id: str):
+    def __init__(self, stream_id: str, private_name: str):
         """初始化观察器
 
         Args:
@@ -41,6 +41,7 @@ class ChatObserver:
             raise RuntimeError(f"ChatObserver for {stream_id} already exists. Use get_instance() instead.")
 
         self.stream_id = stream_id
+        self.private_name = private_name
         self.message_storage = MongoDBMessageStorage()
 
         # self.last_user_speak_time: Optional[float] = None  # 对方上次发言时间
@@ -76,12 +77,12 @@ class ChatObserver:
         Returns:
             bool: 是否有新消息
         """
-        logger.debug(f"检查距离上一次观察之后是否有了新消息: {self.last_check_time}")
+        logger.debug(f"[私聊][{self.private_name}]检查距离上一次观察之后是否有了新消息: {self.last_check_time}")
 
         new_message_exists = await self.message_storage.has_new_messages(self.stream_id, self.last_check_time)
 
         if new_message_exists:
-            logger.debug("发现新消息")
+            logger.debug(f"[私聊][{self.private_name}]发现新消息")
             self.last_check_time = time.time()
 
         return new_message_exists
@@ -94,15 +95,13 @@ class ChatObserver:
         """
         try:
             # 发送新消息通知
-            # logger.info(f"发送新ccchandleer消息通知: {message}")
             notification = create_new_message_notification(
                 sender="chat_observer", target="observation_info", message=message
             )
-            # logger.info(f"发送新消ddddd息通知: {notification}")
             # print(self.notification_manager)
             await self.notification_manager.send_notification(notification)
         except Exception as e:
-            logger.error(f"添加消息到历史记录时出错: {e}")
+            logger.error(f"[私聊][{self.private_name}]添加消息到历史记录时出错: {e}")
             print(traceback.format_exc())
 
         # 检查并更新冷场状态
@@ -142,11 +141,13 @@ class ChatObserver:
         """
 
         if self.last_message_time is None:
-            logger.debug("没有最后消息时间，返回 False")
+            logger.debug(f"[私聊][{self.private_name}]没有最后消息时间，返回 False")
             return False
 
         has_new = self.last_message_time > time_point
-        logger.debug(f"判断是否在指定时间点后有新消息: {self.last_message_time} > {time_point} = {has_new}")
+        logger.debug(
+            f"[私聊][{self.private_name}]判断是否在指定时间点后有新消息: {self.last_message_time} > {time_point} = {has_new}"
+        )
         return has_new
 
     def get_message_history(
@@ -215,7 +216,7 @@ class ChatObserver:
         if new_messages:
             self.last_message_read = new_messages[-1]["message_id"]
 
-        logger.debug(f"获取指定时间点111之前的消息: {new_messages}")
+        logger.debug(f"[私聊][{self.private_name}]获取指定时间点111之前的消息: {new_messages}")
 
         return new_messages
 
@@ -228,9 +229,9 @@ class ChatObserver:
         #     messages = await self._fetch_new_messages_before(start_time)
         #     for message in messages:
         #         await self._add_message_to_history(message)
-        #     logger.debug(f"缓冲消息: {messages}")
+        #     logger.debug(f"[私聊][{self.private_name}]缓冲消息: {messages}")
         # except Exception as e:
-        #     logger.error(f"缓冲消息出错: {e}")
+        #     logger.error(f"[私聊][{self.private_name}]缓冲消息出错: {e}")
 
         while self._running:
             try:
@@ -258,8 +259,8 @@ class ChatObserver:
                 self._update_complete.set()
 
             except Exception as e:
-                logger.error(f"更新循环出错: {e}")
-                logger.error(traceback.format_exc())
+                logger.error(f"[私聊][{self.private_name}]更新循环出错: {e}")
+                logger.error(f"[私聊][{self.private_name}]{traceback.format_exc()}")
                 self._update_complete.set()  # 即使出错也要设置完成事件
 
     def trigger_update(self):
@@ -279,7 +280,7 @@ class ChatObserver:
             await asyncio.wait_for(self._update_complete.wait(), timeout=timeout)
             return True
         except asyncio.TimeoutError:
-            logger.warning(f"等待更新完成超时（{timeout}秒）")
+            logger.warning(f"[私聊][{self.private_name}]等待更新完成超时（{timeout}秒）")
             return False
 
     def start(self):
@@ -289,7 +290,7 @@ class ChatObserver:
 
         self._running = True
         self._task = asyncio.create_task(self._update_loop())
-        logger.info(f"ChatObserver for {self.stream_id} started")
+        logger.debug(f"[私聊][{self.private_name}]ChatObserver for {self.stream_id} started")
 
     def stop(self):
         """停止观察器"""
@@ -298,7 +299,7 @@ class ChatObserver:
         self._update_complete.set()  # 设置完成事件以解除等待
         if self._task:
             self._task.cancel()
-        logger.info(f"ChatObserver for {self.stream_id} stopped")
+        logger.debug(f"[私聊][{self.private_name}]ChatObserver for {self.stream_id} stopped")
 
     async def process_chat_history(self, messages: list):
         """处理聊天历史
@@ -316,7 +317,7 @@ class ChatObserver:
                 else:
                     self.update_user_speak_time(msg["time"])
             except Exception as e:
-                logger.warning(f"处理消息时间时出错: {e}")
+                logger.warning(f"[私聊][{self.private_name}]处理消息时间时出错: {e}")
                 continue
 
     def update_check_time(self):
@@ -355,7 +356,7 @@ class ChatObserver:
         Returns:
             List[Dict[str, Any]]: 缓存的消息历史列表
         """
-        return self.message_cache[:limit]
+        return self.message_cache[-limit:]
 
     def get_last_message(self) -> Optional[Dict[str, Any]]:
         """获取最后一条消息
@@ -365,7 +366,7 @@ class ChatObserver:
         """
         if not self.message_cache:
             return None
-        return self.message_cache[0]
+        return self.message_cache[-1]
 
     def __str__(self):
         return f"ChatObserver for {self.stream_id}"

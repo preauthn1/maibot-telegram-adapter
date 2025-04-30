@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/MaiM-with-u/MaiBot/">
-    <img src="depends-data/maimai.png" alt="Logo" width="200">
+    <img src="depends-data/maimai.png" alt="Logo" style="width: 200px">
   </a>
   <br />
   <a href="https://space.bilibili.com/123456783">
@@ -34,7 +34,6 @@
     ·
     <a href="https://github.com/MaiM-with-u/MaiBot/issues">提出新特性</a>
   </p>
-  
 </p>
 
 ## 新版0.6.x部署前先阅读：https://docs.mai-mai.org/manual/usage/mmc_q_a
@@ -53,7 +52,7 @@
 
 <div align="center">
 <a href="https://www.bilibili.com/video/BV1amAneGE3P" target="_blank">
-    <img src="depends-data/video.png" width="200" alt="麦麦演示视频">
+    <img src="depends-data/video.png" style="max-width: 200px" alt="麦麦演示视频">
     <br>
     👆 点击观看麦麦演示视频 👆
 </a>
@@ -62,7 +61,7 @@
 
 ### 📢 版本信息
 
-**最新版本: v0.6.2** ([查看更新日志](changelogs/changelog.md))
+**最新版本: v0.6.3** ([查看更新日志](changelogs/changelog.md))
 > [!WARNING]
 > 请阅读教程后更新！！！！！！！
 > 请阅读教程后更新！！！！！！！
@@ -91,15 +90,15 @@
 - 项目处于活跃开发阶段，功能和API可能随时调整
 
 ### 💬交流群（开发和建议相关讨论）不一定有空回复，会优先写文档和代码
+- [一群](https://qm.qq.com/q/VQ3XZrWgMs) 123456780 
+- [二群](https://qm.qq.com/q/RzmCiRtHEW) 123456782
 - [五群](https://qm.qq.com/q/JxvHZnxyec) 1022489779
-- [一群](https://qm.qq.com/q/VQ3XZrWgMs) 123456780 【已满】
-- [二群](https://qm.qq.com/q/RzmCiRtHEW) 123456782【已满】
 - [三群](https://qm.qq.com/q/wlH5eT8OmQ) 1035228475【已满】
 - [四群](https://qm.qq.com/q/wlH5eT8OmQ) 729957033【已满】
 
 
 <div align="left">
-<h2>📚 文档</h2>
+<h2>📚 文档 </h2>
 </div>
 
 ### (部分内容可能过时，请注意版本对应)
@@ -111,19 +110,20 @@
 - [🚀 最新版本部署教程](https://docs.mai-mai.org/manual/deployment/mmc_deploy_windows.html) - 基于MaiCore的新版本部署方式（与旧版本不兼容）
 
 
-## 🎯 功能介绍
+## 🎯 0.6.3 功能介绍
 
-| 模块 | 主要功能 | 特点 |
-|------|---------|------|
-| 💬 聊天系统 | • 心流/推理聊天<br>• 关键词主动发言<br>• 多模型支持<br>• 动态prompt构建<br>• 私聊功能(PFC) | 拟人化交互 |
-| 🧠 心流系统 | • 实时思考生成<br>• 自动启停机制<br>• 日程系统联动<br>• 工具调用能力 | 智能化决策 |
-| 🧠 记忆系统 | • 优化记忆抽取<br>• 海马体记忆机制<br>• 聊天记录概括 | 持久化记忆 |
-| 😊 表情系统 | • 情绪匹配发送<br>• GIF支持<br>• 自动收集与审查 | 丰富表达 |
-| 📅 日程系统 | • 动态日程生成<br>• 自定义想象力<br>• 思维流联动 | 智能规划 |
-| 👥 关系系统 | • 关系管理优化<br>• 丰富接口支持<br>• 个性化交互 | 深度社交 |
-| 📊 统计系统 | • 使用数据统计<br>• LLM调用记录<br>• 实时控制台显示 | 数据可视 |
-| 🔧 系统功能 | • 优雅关闭机制<br>• 自动数据保存<br>• 异常处理完善 | 稳定可靠 |
-| 🛠️ 工具系统 | • 知识获取工具<br>• 自动注册机制<br>• 多工具支持 | 扩展功能 |
+| 模块       | 主要功能                                                             | 特点    |
+|----------|------------------------------------------------------------------|-------|
+| 💬 聊天系统  | • **统一调控不同回复逻辑**<br>• 智能交互模式 (普通聊天/专注聊天)<br>• 关键词主动发言<br>• 多模型支持<br>• 动态prompt构建<br>• 私聊功能(PFC)增强 | 拟人化交互 |
+| 🧠 心流系统  | • 实时思考生成<br>• **智能状态管理**<br>• **概率回复机制**<br>• 自动启停机制<br>• 日程系统联动<br>• **上下文感知工具调用** | 智能化决策 |
+| 🧠 记忆系统  | • **记忆整合与提取**<br>• 海马体记忆机制<br>• 聊天记录概括 | 持久化记忆 |
+| 😊 表情系统  | • **全新表情包系统**<br>• **优化选择逻辑**<br>• 情绪匹配发送<br>• GIF支持<br>• 自动收集与审查 | 丰富表达  |
+| 📅 日程系统  | • 动态日程生成<br>• 自定义想象力<br>• 思维流联动                                  | 智能规划  |
+| 👥 关系系统  | • **工具调用动态更新**<br>• 关系管理优化<br>• 丰富接口支持<br>• 个性化交互         | 深度社交  |
+| 📊 统计系统  | • 使用数据统计<br>• LLM调用记录<br>• 实时控制台显示                               | 数据可视  |
+| 🛠️ 工具系统 | • **LPMM知识库集成**<br>• **上下文感知调用**<br>• 知识获取工具<br>• 自动注册机制<br>• 多工具支持 | 扩展功能  |
+| 📚 **知识库(LPMM)** | • **全新LPMM系统**<br>• **强大的信息检索能力**                             | 知识增强 |
+| ✨ **昵称系统** | • **自动为群友取昵称**<br>• **降低认错人概率** (早期阶段)                      | 身份识别 |
 
 ## 📐 项目架构
 
@@ -143,21 +143,9 @@ graph TD
     E --> M[情绪识别]
 ```
 
-
-## 开发计划TODO：LIST
-
-- 人格功能：WIP
-- 对特定对象的侧写功能
-- 图片发送，转发功能：WIP
-- 幽默和meme功能：WIP
-- 兼容gif的解析和保存
-- 小程序转发链接解析
-- 修复已知bug
-- 自动生成的回复逻辑，例如自生成的回复方向，回复风格
-
 ## ✍️如何给本项目报告BUG/提交建议/做贡献
 
-MaiCore是一个开源项目，我们非常欢迎你的参与。你的贡献，无论是提交bug报告、功能需求还是代码pr，都对项目非常宝贵。我们非常感谢你的支持！🎉 但无序的讨论会降低沟通效率，进而影响问题的解决速度，因此在提交任何贡献前，请务必先阅读本项目的[贡献指南](CONTRIBUTE.md)（待补完）
+MaiCore是一个开源项目，我们非常欢迎你的参与。你的贡献，无论是提交bug报告、功能需求还是代码pr，都对项目非常宝贵。我们非常感谢你的支持！🎉 但无序的讨论会降低沟通效率，进而影响问题的解决速度，因此在提交任何贡献前，请务必先阅读本项目的[贡献指南](depends-data/CONTRIBUTE.md)（待补完）
 
 
 
@@ -181,12 +169,16 @@ MaiCore是一个开源项目，我们非常欢迎你的参与。你的贡献，�
 
 - [NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现  
 
+## 麦麦仓库状态
+
+![Alt](https://repobeats.axiom.co/api/embed/9faca9fccfc467931b87dd357b60c6362b5cfae0.svg "Repobeats analytics image")
+
 ### 贡献者
 
 感谢各位大佬！
 
 <a href="https://github.com/MaiM-with-u/MaiBot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=MaiM-with-u/MaiBot" />
+  <img alt="contributors" src="https://contrib.rocks/image?repo=MaiM-with-u/MaiBot" />
 </a>
 
 **也感谢每一位给麦麦发展提出宝贵意见与建议的用户，感谢陪伴麦麦走到现在的你们**

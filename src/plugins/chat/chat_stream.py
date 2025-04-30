@@ -6,11 +6,12 @@ from typing import Dict, Optional
 
 
 from ...common.database import db
-from ..message.message_base import GroupInfo, UserInfo
+from maim_message import GroupInfo, UserInfo
 
-from src.common.logger import get_module_logger
+from src.common.logger_manager import get_logger
 
-logger = get_module_logger("chat_stream")
+
+logger = get_logger("chat_stream")
 
 
 class ChatStream:
@@ -103,7 +104,8 @@ class ChatManager:
             except Exception as e:
                 logger.error(f"聊天流自动保存失败: {str(e)}")
 
-    def _ensure_collection(self):
+    @staticmethod
+    def _ensure_collection():
         """确保数据库集合存在并创建索引"""
         if "chat_streams" not in db.list_collection_names():
             db.create_collection("chat_streams")
@@ -111,7 +113,8 @@ class ChatManager:
             db.chat_streams.create_index([("stream_id", 1)], unique=True)
             db.chat_streams.create_index([("platform", 1), ("user_info.user_id", 1), ("group_info.group_id", 1)])
 
-    def _generate_stream_id(self, platform: str, user_info: UserInfo, group_info: Optional[GroupInfo] = None) -> str:
+    @staticmethod
+    def _generate_stream_id(platform: str, user_info: UserInfo, group_info: Optional[GroupInfo] = None) -> str:
         """生成聊天流唯一ID"""
         if group_info:
             # 组合关键信息
@@ -188,7 +191,22 @@ class ChatManager:
         stream_id = self._generate_stream_id(platform, user_info, group_info)
         return self.streams.get(stream_id)
 
-    async def _save_stream(self, stream: ChatStream):
+    def get_stream_name(self, stream_id: str) -> Optional[str]:
+        """根据 stream_id 获取聊天流名称"""
+        stream = self.get_stream(stream_id)
+        if not stream:
+            return None
+
+        if stream.group_info and stream.group_info.group_name:
+            return stream.group_info.group_name
+        elif stream.user_info and stream.user_info.user_nickname:
+            return f"{stream.user_info.user_nickname}的私聊"
+        else:
+            # 如果没有群名或用户昵称，返回 None 或其他默认值
+            return None
+
+    @staticmethod
+    async def _save_stream(stream: ChatStream):
         """保存聊天流到数据库"""
         if not stream.saved:
             db.chat_streams.update_one({"stream_id": stream.stream_id}, {"$set": stream.to_dict()}, upsert=True)

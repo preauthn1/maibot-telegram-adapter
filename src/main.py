@@ -3,7 +3,7 @@ import time
 from .plugins.utils.statistic import LLMStatistics
 from .plugins.moods.moods import MoodManager
 from .plugins.schedule.schedule_generator import bot_schedule
-from .plugins.chat.emoji_manager import emoji_manager
+from .plugins.emoji_system.emoji_manager import emoji_manager
 from .plugins.person_info.person_info import person_info_manager
 from .plugins.willing.willing_manager import willing_manager
 from .plugins.chat.chat_stream import chat_manager
@@ -11,14 +11,14 @@ from .heart_flow.heartflow import heartflow
 from .plugins.memory_system.Hippocampus import HippocampusManager
 from .plugins.chat.message_sender import message_manager
 from .plugins.storage.storage import MessageStorage
-from .plugins.config.config import global_config
+from .config.config import global_config
 from .plugins.chat.bot import chat_bot
-from .common.logger import get_module_logger
+from .common.logger_manager import get_logger
 from .plugins.remote import heartbeat_thread  # noqa: F401
 from .individuality.individuality import Individuality
 from .common.server import global_server
 
-logger = get_module_logger("main")
+logger = get_logger("main")
 
 
 class MainSystem:
@@ -66,11 +66,6 @@ class MainSystem:
         # 启动愿望管理器
         await willing_manager.async_task_starter()
 
-        # 启动消息处理器
-        if not self._message_manager_started:
-            asyncio.create_task(message_manager.start_processor())
-            self._message_manager_started = True
-
         # 初始化聊天管理器
         await chat_manager._initialize()
         asyncio.create_task(chat_manager._auto_save_task())
@@ -88,7 +83,7 @@ class MainSystem:
         )
         asyncio.create_task(bot_schedule.mai_schedule_start())
 
-        # 启动FastAPI服务器
+        # 将bot.py中的chat_bot.message_process消息处理函数注册到api.py的消息处理基类中
         self.app.register_message_handler(chat_bot.message_process)
 
         # 初始化个体特征
@@ -106,7 +101,11 @@ class MainSystem:
         logger.success("个体特征初始化成功")
 
         try:
-            # 启动心流系统
+            # 启动全局消息管理器 (负责消息发送/排队)
+            await message_manager.start()
+            logger.success("全局消息管理器启动成功")
+
+            # 启动心流系统主循环
             asyncio.create_task(heartflow.heartflow_start_working())
             logger.success("心流系统启动成功")
 
@@ -122,23 +121,25 @@ class MainSystem:
             tasks = [
                 self.build_memory_task(),
                 self.forget_memory_task(),
+                self.consolidate_memory_task(),
                 self.print_mood_task(),
                 self.remove_recalled_message_task(),
                 emoji_manager.start_periodic_check_register(),
-                # emoji_manager.start_periodic_register(),
                 self.app.run(),
                 self.server.run(),
             ]
             await asyncio.gather(*tasks)
 
-    async def build_memory_task(self):
+    @staticmethod
+    async def build_memory_task():
         """记忆构建任务"""
         while True:
             await asyncio.sleep(global_config.build_memory_interval)
             logger.info("正在进行记忆构建")
             await HippocampusManager.get_instance().build_memory()
 
-    async def forget_memory_task(self):
+    @staticmethod
+    async def forget_memory_task():
         """记忆遗忘任务"""
         while True:
             await asyncio.sleep(global_config.forget_memory_interval)
@@ -146,13 +147,23 @@ class MainSystem:
             await HippocampusManager.get_instance().forget_memory(percentage=global_config.memory_forget_percentage)
             print("\033[1;32m[记忆遗忘]\033[0m 记忆遗忘完成")
 
+    @staticmethod
+    async def consolidate_memory_task():
+        """记忆整合任务"""
+        while True:
+            await asyncio.sleep(global_config.consolidate_memory_interval)
+            print("\033[1;32m[记忆整合]\033[0m 开始整合记忆...")
+            await HippocampusManager.get_instance().consolidate_memory()
+            print("\033[1;32m[记忆整合]\033[0m 记忆整合完成")
+
     async def print_mood_task(self):
         """打印情绪状态"""
         while True:
             self.mood_manager.print_mood_status()
-            await asyncio.sleep(30)
+            await asyncio.sleep(60)
 
-    async def remove_recalled_message_task(self):
+    @staticmethod
+    async def remove_recalled_message_task():
         """删除撤回消息任务"""
         while True:
             try:

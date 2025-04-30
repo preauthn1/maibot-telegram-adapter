@@ -1,24 +1,13 @@
-# Programmable Friendly Conversationalist
-# Prefrontal cortex
-import datetime
-
-# import asyncio
-from typing import List, Optional, Tuple, TYPE_CHECKING
+from typing import List, Tuple, TYPE_CHECKING
 from src.common.logger import get_module_logger
-from ..chat.chat_stream import ChatStream
-from ..message.message_base import UserInfo, Seg
-from ..chat.message import Message
-from ..models.utils_model import LLM_request
-from ..config.config import global_config
-from src.plugins.chat.message import MessageSending
-from ..message.api import global_api
-from ..storage.storage import MessageStorage
+from ..models.utils_model import LLMRequest
+from ...config.config import global_config
 from .chat_observer import ChatObserver
 from .pfc_utils import get_items_from_json
 from src.individuality.individuality import Individuality
 from .conversation_info import ConversationInfo
 from .observation_info import ObservationInfo
-import time
+from src.plugins.utils.chat_message_builder import build_readable_messages
 
 if TYPE_CHECKING:
     pass
@@ -29,15 +18,16 @@ logger = get_module_logger("pfc")
 class GoalAnalyzer:
     """对话目标分析器"""
 
-    def __init__(self, stream_id: str):
-        self.llm = LLM_request(
+    def __init__(self, stream_id: str, private_name: str):
+        self.llm = LLMRequest(
             model=global_config.llm_normal, temperature=0.7, max_tokens=1000, request_type="conversation_goal"
         )
 
-        self.personality_info = Individuality.get_instance().get_prompt(type="personality", x_person=2, level=2)
+        self.personality_info = Individuality.get_instance().get_prompt(x_person=2, level=3)
         self.name = global_config.BOT_NICKNAME
         self.nick_name = global_config.BOT_ALIAS_NAMES
-        self.chat_observer = ChatObserver.get_instance(stream_id)
+        self.private_name = private_name
+        self.chat_observer = ChatObserver.get_instance(stream_id, private_name)
 
         # 多目标存储结构
         self.goals = []  # 存储多个目标
@@ -58,16 +48,10 @@ class GoalAnalyzer:
         goals_str = ""
         if conversation_info.goal_list:
             for goal_reason in conversation_info.goal_list:
-                # 处理字典或元组格式
-                if isinstance(goal_reason, tuple):
-                    # 假设元组的第一个元素是目标，第二个元素是原因
-                    goal = goal_reason[0]
-                    reasoning = goal_reason[1] if len(goal_reason) > 1 else "没有明确原因"
-                elif isinstance(goal_reason, dict):
-                    goal = goal_reason.get("goal")
+                if isinstance(goal_reason, dict):
+                    goal = goal_reason.get("goal", "目标内容缺失")
                     reasoning = goal_reason.get("reasoning", "没有明确原因")
                 else:
-                    # 如果是其他类型，尝试转为字符串
                     goal = str(goal_reason)
                     reasoning = "没有明确原因"
 
@@ -79,29 +63,29 @@ class GoalAnalyzer:
             goals_str = f"目标：{goal}，产生该对话目标的原因：{reasoning}\n"
 
         # 获取聊天历史记录
-        chat_history_list = observation_info.chat_history
-        chat_history_text = ""
-        for msg in chat_history_list:
-            chat_history_text += f"{msg}\n"
+        chat_history_text = observation_info.chat_history_str
 
         if observation_info.new_messages_count > 0:
             new_messages_list = observation_info.unprocessed_messages
+            new_messages_str = await build_readable_messages(
+                new_messages_list,
+                replace_bot_name=True,
+                merge_messages=False,
+                timestamp_mode="relative",
+                read_mark=0.0,
+            )
+            chat_history_text += f"\n--- 以下是 {observation_info.new_messages_count} 条新消息 ---\n{new_messages_str}"
 
-            chat_history_text += f"有{observation_info.new_messages_count}条新消息：\n"
-            for msg in new_messages_list:
-                chat_history_text += f"{msg}\n"
+            # await observation_info.clear_unprocessed_messages()
 
-            observation_info.clear_unprocessed_messages()
-
-        personality_text = f"你的名字是{self.name}，{self.personality_info}"
-
+        persona_text = f"你的名字是{self.name}，{self.personality_info}。"
         # 构建action历史文本
         action_history_list = conversation_info.done_action
         action_history_text = "你之前做的事情是："
         for action in action_history_list:
             action_history_text += f"{action}\n"
 
-        prompt = f"""{personality_text}。现在你在参与一场QQ聊天，请分析以下聊天记录，并根据你的性格特征确定多个明确的对话目标。
+        prompt = f"""{persona_text}。现在你在参与一场QQ聊天，请分析以下聊天记录，并根据你的性格特征确定多个明确的对话目标。
 这些目标应该反映出对话的不同方面和意图。
 
 {action_history_text}
@@ -124,27 +108,32 @@ class GoalAnalyzer:
 
 输出格式示例：
 [
-  {{
+{{
     "goal": "回答用户关于Python编程的具体问题",
     "reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
-  }},
-  {{
+}},
+{{
     "goal": "回答用户关于python安装的具体问题",
     "reasoning": "用户提出了关于Python的技术问题，需要专业且准确的解答"
-  }}
+}}
 ]"""
 
-        logger.debug(f"发送到LLM的提示词: {prompt}")
+        logger.debug(f"[私聊][{self.private_name}]发送到LLM的提示词: {prompt}")
         try:
             content, _ = await self.llm.generate_response_async(prompt)
-            logger.debug(f"LLM原始返回内容: {content}")
+            logger.debug(f"[私聊][{self.private_name}]LLM原始返回内容: {content}")
         except Exception as e:
-            logger.error(f"分析对话目标时出错: {str(e)}")
+            logger.error(f"[私聊][{self.private_name}]分析对话目标时出错: {str(e)}")
             content = ""
 
         # 使用改进后的get_items_from_json函数处理JSON数组
         success, result = get_items_from_json(
-            content, "goal", "reasoning", required_types={"goal": str, "reasoning": str}, allow_array=True
+            content,
+            self.private_name,
+            "goal",
+            "reasoning",
+            required_types={"goal": str, "reasoning": str},
+            allow_array=True,
         )
 
         if success:
@@ -153,9 +142,7 @@ class GoalAnalyzer:
                 # 清空现有目标列表并添加新目标
                 conversation_info.goal_list = []
                 for item in result:
-                    goal = item.get("goal", "")
-                    reasoning = item.get("reasoning", "")
-                    conversation_info.goal_list.append((goal, reasoning))
+                    conversation_info.goal_list.append(item)
 
                 # 返回第一个目标作为当前主要目标（如果有）
                 if result:
@@ -163,9 +150,7 @@ class GoalAnalyzer:
                     return (first_goal.get("goal", ""), "", first_goal.get("reasoning", ""))
             else:
                 # 单个目标的情况
-                goal = result.get("goal", "")
-                reasoning = result.get("reasoning", "")
-                conversation_info.goal_list.append((goal, reasoning))
+                conversation_info.goal_list.append(result)
                 return (goal, "", reasoning)
 
         # 如果解析失败，返回默认值
@@ -234,18 +219,19 @@ class GoalAnalyzer:
 
     async def analyze_conversation(self, goal, reasoning):
         messages = self.chat_observer.get_cached_messages()
-        chat_history_text = ""
-        for msg in messages:
-            time_str = datetime.datetime.fromtimestamp(msg["time"]).strftime("%H:%M:%S")
-            user_info = UserInfo.from_dict(msg.get("user_info", {}))
-            sender = user_info.user_nickname or f"用户{user_info.user_id}"
-            if sender == self.name:
-                sender = "你说"
-            chat_history_text += f"{time_str},{sender}:{msg.get('processed_plain_text', '')}\n"
+        chat_history_text = await build_readable_messages(
+            messages,
+            replace_bot_name=True,
+            merge_messages=False,
+            timestamp_mode="relative",
+            read_mark=0.0,
+        )
 
-        personality_text = f"你的名字是{self.name}，{self.personality_info}"
+        persona_text = f"你的名字是{self.name}，{self.personality_info}。"
+        # ===> Persona 文本构建结束 <===
 
-        prompt = f"""{personality_text}。现在你在参与一场QQ聊天，
+        # --- 修改 Prompt 字符串，使用 persona_text ---
+        prompt = f"""{persona_text}。现在你在参与一场QQ聊天，
         当前对话目标：{goal}
         产生该对话目标的原因：{reasoning}
         
@@ -266,11 +252,12 @@ class GoalAnalyzer:
 
         try:
             content, _ = await self.llm.generate_response_async(prompt)
-            logger.debug(f"LLM原始返回内容: {content}")
+            logger.debug(f"[私聊][{self.private_name}]LLM原始返回内容: {content}")
 
             # 尝试解析JSON
             success, result = get_items_from_json(
                 content,
+                self.private_name,
                 "goal_achieved",
                 "stop_conversation",
                 "reason",
@@ -278,7 +265,7 @@ class GoalAnalyzer:
             )
 
             if not success:
-                logger.error("无法解析对话分析结果JSON")
+                logger.error(f"[私聊][{self.private_name}]无法解析对话分析结果JSON")
                 return False, False, "解析结果失败"
 
             goal_achieved = result["goal_achieved"]
@@ -288,75 +275,67 @@ class GoalAnalyzer:
             return goal_achieved, stop_conversation, reason
 
         except Exception as e:
-            logger.error(f"分析对话状态时出错: {str(e)}")
+            logger.error(f"[私聊][{self.private_name}]分析对话状态时出错: {str(e)}")
             return False, False, f"分析出错: {str(e)}"
 
 
-class DirectMessageSender:
-    """直接发送消息到平台的发送器"""
+# 先注释掉，万一以后出问题了还能开回来（（（
+# class DirectMessageSender:
+#     """直接发送消息到平台的发送器"""
 
-    def __init__(self):
-        self.logger = get_module_logger("direct_sender")
-        self.storage = MessageStorage()
+#     def __init__(self, private_name: str):
+#         self.logger = get_module_logger("direct_sender")
+#         self.storage = MessageStorage()
+#         self.private_name = private_name
 
-    async def send_via_ws(self, message: MessageSending) -> None:
-        try:
-            await global_api.send_message(message)
-        except Exception as e:
-            raise ValueError(f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件") from e
+#     async def send_via_ws(self, message: MessageSending) -> None:
+#         try:
+#             await global_api.send_message(message)
+#         except Exception as e:
+#             raise ValueError(f"未找到平台：{message.message_info.platform} 的url配置，请检查配置文件") from e
 
-    async def send_message(
-        self,
-        chat_stream: ChatStream,
-        content: str,
-        reply_to_message: Optional[Message] = None,
-    ) -> None:
-        """直接发送消息到平台
+#     async def send_message(
+#         self,
+#         chat_stream: ChatStream,
+#         content: str,
+#         reply_to_message: Optional[Message] = None,
+#     ) -> None:
+#         """直接发送消息到平台
 
-        Args:
-            chat_stream: 聊天流
-            content: 消息内容
-            reply_to_message: 要回复的消息
-        """
-        # 构建消息对象
-        message_segment = Seg(type="text", data=content)
-        bot_user_info = UserInfo(
-            user_id=global_config.BOT_QQ,
-            user_nickname=global_config.BOT_NICKNAME,
-            platform=chat_stream.platform,
-        )
+#         Args:
+#             chat_stream: 聊天流
+#             content: 消息内容
+#             reply_to_message: 要回复的消息
+#         """
+#         # 构建消息对象
+#         message_segment = Seg(type="text", data=content)
+#         bot_user_info = UserInfo(
+#             user_id=global_config.BOT_QQ,
+#             user_nickname=global_config.BOT_NICKNAME,
+#             platform=chat_stream.platform,
+#         )
 
-        message = MessageSending(
-            message_id=f"dm{round(time.time(), 2)}",
-            chat_stream=chat_stream,
-            bot_user_info=bot_user_info,
-            sender_info=reply_to_message.message_info.user_info if reply_to_message else None,
-            message_segment=message_segment,
-            reply=reply_to_message,
-            is_head=True,
-            is_emoji=False,
-            thinking_start_time=time.time(),
-        )
+#         message = MessageSending(
+#             message_id=f"dm{round(time.time(), 2)}",
+#             chat_stream=chat_stream,
+#             bot_user_info=bot_user_info,
+#             sender_info=reply_to_message.message_info.user_info if reply_to_message else None,
+#             message_segment=message_segment,
+#             reply=reply_to_message,
+#             is_head=True,
+#             is_emoji=False,
+#             thinking_start_time=time.time(),
+#         )
 
-        # 处理消息
-        await message.process()
+#         # 处理消息
+#         await message.process()
 
-        message_json = message.to_dict()
+#         _message_json = message.to_dict()
 
-        # 发送消息
-        try:
-            end_point = global_config.api_urls.get(message.message_info.platform, None)
-            if end_point:
-                # logger.info(f"发送消息到{end_point}")
-                # logger.info(message_json)
-                try:
-                    await global_api.send_message_REST(end_point, message_json)
-                except Exception as e:
-                    logger.error(f"REST方式发送失败，出现错误: {str(e)}")
-                    logger.info("尝试使用ws发送")
-                    await self.send_via_ws(message)
-            else:
-                await self.send_via_ws(message)
-            logger.success(f"PFC消息已发送: {content}")
-        except Exception as e:
-            logger.error(f"PFC消息发送失败: {str(e)}")
+#         # 发送消息
+#         try:
+#             await self.send_via_ws(message)
+#             await self.storage.store_message(message, chat_stream)
+#             logger.success(f"[私聊][{self.private_name}]PFC消息已发送: {content}")
+#         except Exception as e:
+#             logger.error(f"[私聊][{self.private_name}]PFC消息发送失败: {str(e)}")

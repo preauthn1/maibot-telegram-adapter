@@ -5,10 +5,15 @@ import platform
 import os
 import json
 import threading
-from src.common.logger import get_module_logger
-from src.plugins.config.config import global_config
+from src.common.logger import get_module_logger, LogConfig, REMOTE_STYLE_CONFIG
+from src.config.config import global_config
 
-logger = get_module_logger("remote")
+
+remote_log_config = LogConfig(
+    console_format=REMOTE_STYLE_CONFIG["console_format"],
+    file_format=REMOTE_STYLE_CONFIG["file_format"],
+)
+logger = get_module_logger("remote", config=remote_log_config)
 
 # UUID文件路径
 UUID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "client_uuid.json")
@@ -66,11 +71,12 @@ def send_heartbeat(server_url, client_id):
             logger.debug(f"心跳发送成功。服务器响应: {data}")
             return True
         else:
-            logger.error(f"心跳发送失败。状态码: {response.status_code}, 响应内容: {response.text}")
+            logger.debug(f"心跳发送失败。状态码: {response.status_code}, 响应内容: {response.text}")
             return False
 
     except requests.RequestException as e:
-        logger.error(f"发送心跳时出错: {e}")
+        # 如果请求异常，可能是网络问题，不记录错误
+        logger.debug(f"发送心跳时出错: {e}")
         return False
 
 
@@ -125,11 +131,13 @@ def main():
     if global_config.remote_enable:
         """主函数，启动心跳线程"""
         # 配置
-        SERVER_URL = "http://hyybuth.xyz:10058"
-        HEARTBEAT_INTERVAL = 300  # 5分钟（秒）
+        server_url = "http://hyybuth.xyz:10058"
+        # server_url = "http://localhost:10058"
+        heartbeat_interval = 300  # 5分钟（秒）
 
         # 创建并启动心跳线程
-        heartbeat_thread = HeartbeatThread(SERVER_URL, HEARTBEAT_INTERVAL)
+        heartbeat_thread = HeartbeatThread(server_url, heartbeat_interval)
         heartbeat_thread.start()
 
         return heartbeat_thread  # 返回线程对象，便于外部控制
+    return None

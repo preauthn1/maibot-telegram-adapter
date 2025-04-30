@@ -1,9 +1,9 @@
 from src.do_tool.tool_can_use.base_tool import BaseTool
-from src.common.logger import get_module_logger
+from src.common.logger_manager import get_logger
 from typing import Dict, Any
 from datetime import datetime
 
-logger = get_module_logger("get_time_date")
+logger = get_logger("get_time_date")
 
 
 class GetCurrentDateTimeTool(BaseTool):
@@ -17,7 +17,7 @@ class GetCurrentDateTimeTool(BaseTool):
         "required": [],
     }
 
-    async def execute(self, function_args: Dict[str, Any], message_txt: str = "") -> Dict[str, Any]:
+    async def execute(self, function_args: Dict[str, Any]) -> Dict[str, Any]:
         """执行获取当前时间、日期、年份和星期
 
         Args:

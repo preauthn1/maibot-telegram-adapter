@@ -1,16 +1,15 @@
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import urllib3
 
-from .utils_image import image_manager
-
-from ..message.message_base import Seg, UserInfo, BaseMessageInfo, MessageBase
+from src.common.logger_manager import get_logger
 from .chat_stream import ChatStream
-from src.common.logger import get_module_logger
+from .utils_image import image_manager
+from maim_message import Seg, UserInfo, BaseMessageInfo, MessageBase
 
-logger = get_module_logger("chat_message")
+logger = get_logger("chat_message")
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -31,7 +30,7 @@ class Message(MessageBase):
     def __init__(
         self,
         message_id: str,
-        time: float,
+        timestamp: float,
         chat_stream: ChatStream,
         user_info: UserInfo,
         message_segment: Optional[Seg] = None,
@@ -43,7 +42,7 @@ class Message(MessageBase):
         message_info = BaseMessageInfo(
             platform=chat_stream.platform,
             message_id=message_id,
-            time=time,
+            time=timestamp,
             group_info=chat_stream.group_info,
             user_info=user_info,
         )
@@ -128,12 +127,12 @@ class MessageRecv(Message):
                 # 如果是base64图片数据
                 if isinstance(seg.data, str):
                     return await image_manager.get_image_description(seg.data)
-                return "[图片]"
+                return "[发了一张图片，网卡了加载不出来]"
             elif seg.type == "emoji":
                 self.is_emoji = True
                 if isinstance(seg.data, str):
                     return await image_manager.get_emoji_description(seg.data)
-                return "[表情]"
+                return "[发了一个表情包，网卡了加载不出来]"
             else:
                 return f"[{seg.type}:{str(seg.data)}]"
         except Exception as e:
@@ -142,14 +141,10 @@ class MessageRecv(Message):
 
     def _generate_detailed_text(self) -> str:
         """生成详细文本，包含时间和用户信息"""
-        time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.message_info.time))
+        timestamp = self.message_info.time
         user_info = self.message_info.user_info
-        name = (
-            f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
-            if user_info.user_cardname != None
-            else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
-        )
-        return f"[{time_str}] {name}: {self.processed_plain_text}\n"
+        name = f"<{self.message_info.platform}:{user_info.user_id}:{user_info.user_nickname}:{user_info.user_cardname}>"
+        return f"[{timestamp}] {name}: {self.processed_plain_text}\n"
 
 
 @dataclass
@@ -168,7 +163,7 @@ class MessageProcessBase(Message):
         # 调用父类初始化
         super().__init__(
             message_id=message_id,
-            time=round(time.time(), 3),  # 保留3位小数
+            timestamp=round(time.time(), 3),  # 保留3位小数
             chat_stream=chat_stream,
             user_info=bot_user_info,
             message_segment=message_segment,
@@ -205,7 +200,7 @@ class MessageProcessBase(Message):
             # 处理单个消息段
             return await self._process_single_segment(segment)
 
-    async def _process_single_segment(self, seg: Seg) -> str:
+    async def _process_single_segment(self, seg: Seg) -> Union[str, None]:
         """处理单个消息段
 
         Args:
@@ -221,16 +216,17 @@ class MessageProcessBase(Message):
                 # 如果是base64图片数据
                 if isinstance(seg.data, str):
                     return await image_manager.get_image_description(seg.data)
-                return "[图片]"
+                return "[图片，网卡了加载不出来]"
             elif seg.type == "emoji":
                 if isinstance(seg.data, str):
                     return await image_manager.get_emoji_description(seg.data)
-                return "[表情]"
+                return "[表情，网卡了加载不出来]"
             elif seg.type == "at":
                 return f"[@{seg.data}]"
             elif seg.type == "reply":
                 if self.reply and hasattr(self.reply, "processed_plain_text"):
                     return f"[回复：{self.reply.processed_plain_text}]"
+                return None
             else:
                 return f"[{seg.type}:{str(seg.data)}]"
         except Exception as e:
@@ -239,14 +235,12 @@ class MessageProcessBase(Message):
 
     def _generate_detailed_text(self) -> str:
         """生成详细文本，包含时间和用户信息"""
-        time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.message_info.time))
+        # time_str = time.strftime("%m-%d %H:%M:%S", time.localtime(self.message_info.time))
+        timestamp = self.message_info.time
         user_info = self.message_info.user_info
-        name = (
-            f"{user_info.user_nickname}(ta的昵称:{user_info.user_cardname},ta的id:{user_info.user_id})"
-            if user_info.user_cardname != None
-            else f"{user_info.user_nickname}(ta的id:{user_info.user_id})"
-        )
-        return f"[{time_str}] {name}: {self.processed_plain_text}\n"
+
+        name = f"<{self.message_info.platform}:{user_info.user_id}:{user_info.user_nickname}:{user_info.user_cardname}>"
+        return f"[{timestamp}]，{name} 说：{self.processed_plain_text}\n"
 
 
 @dataclass
@@ -290,6 +284,7 @@ class MessageSending(MessageProcessBase):
         is_head: bool = False,
         is_emoji: bool = False,
         thinking_start_time: float = 0,
+        apply_set_reply_logic: bool = False,
     ):
         # 调用父类初始化
         super().__init__(
@@ -306,20 +301,22 @@ class MessageSending(MessageProcessBase):
         self.reply_to_message_id = reply.message_info.message_id if reply else None
         self.is_head = is_head
         self.is_emoji = is_emoji
+        self.apply_set_reply_logic = apply_set_reply_logic
 
     def set_reply(self, reply: Optional["MessageRecv"] = None) -> None:
         """设置回复消息"""
-        if reply:
-            self.reply = reply
-        if self.reply:
-            self.reply_to_message_id = self.reply.message_info.message_id
-            self.message_segment = Seg(
-                type="seglist",
-                data=[
-                    Seg(type="reply", data=self.reply.message_info.message_id),
-                    self.message_segment,
-                ],
-            )
+        if self.message_info.format_info is not None and "reply" in self.message_info.format_info.accept_format:
+            if reply:
+                self.reply = reply
+            if self.reply:
+                self.reply_to_message_id = self.reply.message_info.message_id
+                self.message_segment = Seg(
+                    type="seglist",
+                    data=[
+                        Seg(type="reply", data=self.reply.message_info.message_id),
+                        self.message_segment,
+                    ],
+                )
         return self
 
     async def process(self) -> None:

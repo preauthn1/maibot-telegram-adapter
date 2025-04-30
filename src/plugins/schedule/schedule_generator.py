@@ -11,8 +11,8 @@ sys.path.append(root_path)
 
 from src.common.database import db  # noqa: E402
 from src.common.logger import get_module_logger, SCHEDULE_STYLE_CONFIG, LogConfig  # noqa: E402
-from src.plugins.models.utils_model import LLM_request  # noqa: E402
-from src.plugins.config.config import global_config  # noqa: E402
+from src.plugins.models.utils_model import LLMRequest  # noqa: E402
+from src.config.config import global_config  # noqa: E402
 
 TIME_ZONE = tz.gettz(global_config.TIME_ZONE)  # 设置时区
 
@@ -30,13 +30,13 @@ class ScheduleGenerator:
 
     def __init__(self):
         # 使用离线LLM模型
-        self.llm_scheduler_all = LLM_request(
+        self.llm_scheduler_all = LLMRequest(
             model=global_config.llm_reasoning,
             temperature=global_config.SCHEDULE_TEMPERATURE + 0.3,
             max_tokens=7000,
             request_type="schedule",
         )
-        self.llm_scheduler_doing = LLM_request(
+        self.llm_scheduler_doing = LLMRequest(
             model=global_config.llm_normal,
             temperature=global_config.SCHEDULE_TEMPERATURE,
             max_tokens=2048,
@@ -73,29 +73,32 @@ class ScheduleGenerator:
     async def mai_schedule_start(self):
         """启动日程系统，每5分钟执行一次move_doing，并在日期变化时重新检查日程"""
         try:
-            logger.info(f"日程系统启动/刷新时间: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            # 初始化日程
-            await self.check_and_create_today_schedule()
-            self.print_schedule()
+            if global_config.ENABLE_SCHEDULE_GEN:
+                logger.info(f"日程系统启动/刷新时间: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                # 初始化日程
+                await self.check_and_create_today_schedule()
+                # self.print_schedule()
 
-            while True:
-                # print(self.get_current_num_task(1, True))
+                while True:
+                    # print(self.get_current_num_task(1, True))
 
-                current_time = datetime.datetime.now(TIME_ZONE)
+                    current_time = datetime.datetime.now(TIME_ZONE)
 
-                # 检查是否需要重新生成日程（日期变化）
-                if current_time.date() != self.start_time.date():
-                    logger.info("检测到日期变化，重新生成日程")
-                    self.start_time = current_time
-                    await self.check_and_create_today_schedule()
-                    self.print_schedule()
+                    # 检查是否需要重新生成日程（日期变化）
+                    if current_time.date() != self.start_time.date():
+                        logger.info("检测到日期变化，重新生成日程")
+                        self.start_time = current_time
+                        await self.check_and_create_today_schedule()
+                        # self.print_schedule()
 
-                # 执行当前活动
-                # mind_thinking = heartflow.current_state.current_mind
+                    # 执行当前活动
+                    # mind_thinking = heartflow.current_state.current_mind
 
-                await self.move_doing()
+                    await self.move_doing()
 
-                await asyncio.sleep(self.schedule_doing_update_interval)
+                    await asyncio.sleep(self.schedule_doing_update_interval)
+            else:
+                logger.info("日程系统未启用")
 
         except Exception as e:
             logger.error(f"日程系统运行时出错: {str(e)}")
@@ -235,6 +238,7 @@ class ScheduleGenerator:
 
         Args:
             num (int): 需要获取的日程数量，默认为1
+            time_info (bool): 是否包含时间信息，默认为False
 
         Returns:
             list: 最新加入的日程列表
@@ -267,7 +271,8 @@ class ScheduleGenerator:
         db.schedule.update_one({"date": date_str}, {"$set": schedule_data}, upsert=True)
         logger.debug(f"已保存{date_str}的日程到数据库")
 
-    def load_schedule_from_db(self, date: datetime.datetime):
+    @staticmethod
+    def load_schedule_from_db(date: datetime.datetime):
         """从数据库加载日程，同时加载 today_done_list"""
         date_str = date.strftime("%Y-%m-%d")
         existing_schedule = db.schedule.find_one({"date": date_str})

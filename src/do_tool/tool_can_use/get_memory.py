@@ -9,18 +9,18 @@ logger = get_module_logger("mid_chat_mem_tool")
 class GetMemoryTool(BaseTool):
     """从记忆系统中获取相关记忆的工具"""
 
-    name = "mid_chat_mem"
+    name = "get_memory"
     description = "从记忆系统中获取相关记忆"
     parameters = {
         "type": "object",
         "properties": {
-            "text": {"type": "string", "description": "要查询的相关文本"},
+            "topic": {"type": "string", "description": "要查询的相关主题,用逗号隔开"},
             "max_memory_num": {"type": "integer", "description": "最大返回记忆数量"},
         },
-        "required": ["text"],
+        "required": ["topic"],
     }
 
-    async def execute(self, function_args: Dict[str, Any], message_txt: str = "") -> Dict[str, Any]:
+    async def execute(self, function_args: Dict[str, Any]) -> Dict[str, Any]:
         """执行记忆获取
 
         Args:
@@ -31,12 +31,15 @@ class GetMemoryTool(BaseTool):
             Dict: 工具执行结果
         """
         try:
-            text = function_args.get("text", message_txt)
+            topic = function_args.get("topic")
             max_memory_num = function_args.get("max_memory_num", 2)
 
+            # 将主题字符串转换为列表
+            topic_list = topic.split(",")
+
             # 调用记忆系统
-            related_memory = await HippocampusManager.get_instance().get_memory_from_text(
-                text=text, max_memory_num=max_memory_num, max_memory_length=2, max_depth=3, fast_retrieval=False
+            related_memory = await HippocampusManager.get_instance().get_memory_from_topic(
+                valid_keywords=topic_list, max_memory_num=max_memory_num, max_memory_length=2, max_depth=3
             )
 
             memory_info = ""
@@ -45,14 +48,16 @@ class GetMemoryTool(BaseTool):
                     memory_info += memory[1] + "\n"
 
             if memory_info:
-                content = f"你记得这些事情: {memory_info}"
-            else:
-                content = f"你不太记得有关{text}的记忆，你对此不太了解"
+                content = f"你记得这些事情: {memory_info}\n"
+                content += "以上是你的回忆，不一定是目前聊天里的人说的，也不一定是现在发生的事情，请记住。\n"
 
-            return {"name": "mid_chat_mem", "content": content}
+            else:
+                content = f"{topic}的记忆，你记不太清"
+
+            return {"name": "get_memory", "content": content}
         except Exception as e:
             logger.error(f"记忆获取工具执行失败: {str(e)}")
-            return {"name": "mid_chat_mem", "content": f"记忆获取失败: {str(e)}"}
+            return {"name": "get_memory", "content": f"记忆获取失败: {str(e)}"}
 
 
 # 注册工具

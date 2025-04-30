@@ -24,7 +24,8 @@ class LLMStatistics:
         self._init_database()
         self.name_dict: Dict[List] = {}
 
-    def _init_database(self):
+    @staticmethod
+    def _init_database():
         """初始化数据库集合"""
         if "online_time" not in db.list_collection_names():
             db.create_collection("online_time")
@@ -51,7 +52,8 @@ class LLMStatistics:
         if self.console_thread:
             self.console_thread.join()
 
-    def _record_online_time(self):
+    @staticmethod
+    def _record_online_time():
         """记录在线时间"""
         current_time = datetime.now()
         # 检查5分钟内是否已有记录
@@ -175,13 +177,8 @@ class LLMStatistics:
 
     def _format_stats_section(self, stats: Dict[str, Any], title: str) -> str:
         """格式化统计部分的输出"""
-        output = []
+        output = ["\n" + "-" * 84, f"{title}", "-" * 84, f"总请求数: {stats['total_requests']}"]
 
-        output.append("\n" + "-" * 84)
-        output.append(f"{title}")
-        output.append("-" * 84)
-
-        output.append(f"总请求数: {stats['total_requests']}")
         if stats["total_requests"] > 0:
             output.append(f"总Token数: {stats['total_tokens']}")
             output.append(f"总花费: {stats['total_cost']:.4f}¥")
@@ -192,7 +189,7 @@ class LLMStatistics:
 
             # 按模型统计
             output.append("按模型统计:")
-            output.append(("模型名称                              调用次数       Token总量         累计花费"))
+            output.append("模型名称                              调用次数       Token总量         累计花费")
             for model_name, count in sorted(stats["requests_by_model"].items()):
                 tokens = stats["tokens_by_model"][model_name]
                 cost = stats["costs_by_model"][model_name]
@@ -203,7 +200,7 @@ class LLMStatistics:
 
             # 按请求类型统计
             output.append("按请求类型统计:")
-            output.append(("模型名称                              调用次数       Token总量         累计花费"))
+            output.append("模型名称                              调用次数       Token总量         累计花费")
             for req_type, count in sorted(stats["requests_by_type"].items()):
                 tokens = stats["tokens_by_type"][req_type]
                 cost = stats["costs_by_type"][req_type]
@@ -214,7 +211,7 @@ class LLMStatistics:
 
             # 修正用户统计列宽
             output.append("按用户统计:")
-            output.append(("用户ID                               调用次数       Token总量         累计花费"))
+            output.append("用户ID                               调用次数       Token总量         累计花费")
             for user_id, count in sorted(stats["requests_by_user"].items()):
                 tokens = stats["tokens_by_user"][user_id]
                 cost = stats["costs_by_user"][user_id]
@@ -230,7 +227,7 @@ class LLMStatistics:
 
             # 添加聊天统计
             output.append("群组统计:")
-            output.append(("群组名称                              消息数量"))
+            output.append("群组名称                              消息数量")
             for group_id, count in sorted(stats["messages_by_chat"].items()):
                 output.append(f"{self.name_dict[group_id][0][:32]:<32}  {count:>10}")
 
@@ -238,11 +235,7 @@ class LLMStatistics:
 
     def _format_stats_section_lite(self, stats: Dict[str, Any], title: str) -> str:
         """格式化统计部分的输出"""
-        output = []
-
-        output.append("\n" + "-" * 84)
-        output.append(f"{title}")
-        output.append("-" * 84)
+        output = ["\n" + "-" * 84, f"{title}", "-" * 84]
 
         # output.append(f"总请求数: {stats['total_requests']}")
         if stats["total_requests"] > 0:
@@ -255,7 +248,7 @@ class LLMStatistics:
 
             # 按模型统计
             output.append("按模型统计:")
-            output.append(("模型名称                              调用次数       Token总量         累计花费"))
+            output.append("模型名称                              调用次数       Token总量         累计花费")
             for model_name, count in sorted(stats["requests_by_model"].items()):
                 tokens = stats["tokens_by_model"][model_name]
                 cost = stats["costs_by_model"][model_name]
@@ -293,7 +286,7 @@ class LLMStatistics:
 
             # 添加聊天统计
             output.append("群组统计:")
-            output.append(("群组名称                              消息数量"))
+            output.append("群组名称                              消息数量")
             for group_id, count in sorted(stats["messages_by_chat"].items()):
                 output.append(f"{self.name_dict[group_id][0][:32]:<32}  {count:>10}")
 
@@ -303,8 +296,7 @@ class LLMStatistics:
         """将统计结果保存到文件"""
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        output = []
-        output.append(f"LLM请求统计报告 (生成时间: {current_time})")
+        output = [f"LLM请求统计报告 (生成时间: {current_time})"]
 
         # 添加各个时间段的统计
         sections = [

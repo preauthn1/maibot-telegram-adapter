@@ -1,25 +1,20 @@
 from ..moods.moods import MoodManager  # 导入情绪管理器
-from ..config.config import global_config
+from ...config.config import global_config
 from .message import MessageRecv
 from ..PFC.pfc_manager import PFCManager
 from .chat_stream import chat_manager
-from ..chat_module.only_process.only_message_process import MessageProcessor
+from .only_message_process import MessageProcessor
 
-from src.common.logger import get_module_logger, CHAT_STYLE_CONFIG, LogConfig
-from ..chat_module.think_flow_chat.think_flow_chat import ThinkFlowChat
-from ..chat_module.reasoning_chat.reasoning_chat import ReasoningChat
+from src.common.logger_manager import get_logger
+from ..heartFC_chat.heartflow_processor import HeartFCProcessor
 from ..utils.prompt_builder import Prompt, global_prompt_manager
 import traceback
 
 # 定义日志配置
-chat_config = LogConfig(
-    # 使用消息发送专用样式
-    console_format=CHAT_STYLE_CONFIG["console_format"],
-    file_format=CHAT_STYLE_CONFIG["file_format"],
-)
+
 
 # 配置主程序日志格式
-logger = get_module_logger("chat_bot", config=chat_config)
+logger = get_logger("chat")
 
 
 class ChatBot:
@@ -27,12 +22,10 @@ class ChatBot:
         self.bot = None  # bot 实例引用
         self._started = False
         self.mood_manager = MoodManager.get_instance()  # 获取情绪管理器单例
-        self.mood_manager.start_mood_update()  # 启动情绪更新
-        self.think_flow_chat = ThinkFlowChat()
-        self.reasoning_chat = ReasoningChat()
-        self.only_process_chat = MessageProcessor()
+        self.heartflow_processor = HeartFCProcessor()  # 新增
 
         # 创建初始化PFC管理器的任务，会在_ensure_started时执行
+        self.only_process_chat = MessageProcessor()
         self.pfc_manager = PFCManager.get_instance()
 
     async def _ensure_started(self):
@@ -42,30 +35,24 @@ class ChatBot:
 
             self._started = True
 
-    async def _create_PFC_chat(self, message: MessageRecv):
+    async def _create_pfc_chat(self, message: MessageRecv):
         try:
             chat_id = str(message.chat_stream.stream_id)
+            private_name = str(message.message_info.user_info.user_nickname)
 
             if global_config.enable_pfc_chatting:
-                await self.pfc_manager.get_or_create_conversation(chat_id)
+                await self.pfc_manager.get_or_create_conversation(chat_id, private_name)
 
         except Exception as e:
             logger.error(f"创建PFC聊天失败: {e}")
 
     async def message_process(self, message_data: str) -> None:
         """处理转化后的统一格式消息
-        根据global_config.response_mode选择不同的回复模式：
-        1. heart_flow模式：使用思维流系统进行回复
-           - 包含思维流状态管理
-           - 在回复前进行观察和状态更新
-           - 回复后更新思维流状态
-
-        2. reasoning模式：使用推理系统进行回复
-           - 直接使用意愿管理器计算回复概率
-           - 没有思维流相关的状态管理
-           - 更简单直接的回复逻辑
-
-        所有模式都包含：
+        这个函数本质是预处理一些数据，根据配置信息和消息内容，预处理消息，并分发到合适的消息处理器中
+        heart_flow模式：使用思维流系统进行回复
+        - 包含思维流状态管理
+        - 在回复前进行观察和状态更新
+        - 回复后更新思维流状态
         - 消息过滤
         - 记忆激活
         - 意愿计算
@@ -77,15 +64,29 @@ class ChatBot:
             # 确保所有任务已启动
             await self._ensure_started()
 
+            if message_data["message_info"].get("group_info") is not None:
+                message_data["message_info"]["group_info"]["group_id"] = str(
+                    message_data["message_info"]["group_info"]["group_id"]
+                )
+            message_data["message_info"]["user_info"]["user_id"] = str(
+                message_data["message_info"]["user_info"]["user_id"]
+            )
+            logger.trace(f"处理消息:{str(message_data)[:120]}...")
             message = MessageRecv(message_data)
             groupinfo = message.message_info.group_info
             userinfo = message.message_info.user_info
-            logger.trace(f"处理消息:{str(message_data)[:120]}...")
 
+            # 用户黑名单拦截
             if userinfo.user_id in global_config.ban_user_id:
                 logger.debug(f"用户{userinfo.user_id}被禁止回复")
                 return
 
+            # 群聊黑名单拦截
+            if groupinfo != None and groupinfo.group_id not in global_config.talk_allowed_groups:
+                logger.trace(f"群{groupinfo.group_id}被禁止回复")
+                return
+
+            # 确认从接口发来的message是否有自定义的prompt模板信息
             if message.message_info.template_info and not message.message_info.template_info.template_default:
                 template_group_name = message.message_info.template_info.template_name
                 template_items = message.message_info.template_info.template_items
@@ -98,52 +99,36 @@ class ChatBot:
                 template_group_name = None
 
             async def preprocess():
-                if global_config.enable_pfc_chatting:
-                    try:
-                        if groupinfo is None:
-                            if global_config.enable_friend_chat:
-                                userinfo = message.message_info.user_info
-                                messageinfo = message.message_info
-                                # 创建聊天流
-                                chat = await chat_manager.get_or_create_stream(
-                                    platform=messageinfo.platform,
-                                    user_info=userinfo,
-                                    group_info=groupinfo,
-                                )
-                                message.update_chat_stream(chat)
-                                await self.only_process_chat.process_message(message)
-                                await self._create_PFC_chat(message)
+                logger.trace("开始预处理消息...")
+                # 如果在私聊中
+                if groupinfo is None:
+                    logger.trace("检测到私聊消息")
+                    # 是否在配置信息中开启私聊模式
+                    if global_config.enable_friend_chat:
+                        logger.trace("私聊模式已启用")
+                        # 是否进入PFC
+                        if global_config.enable_pfc_chatting:
+                            logger.trace("进入PFC私聊处理流程")
+                            userinfo = message.message_info.user_info
+                            messageinfo = message.message_info
+                            # 创建聊天流
+                            logger.trace(f"为{userinfo.user_id}创建/获取聊天流")
+                            chat = await chat_manager.get_or_create_stream(
+                                platform=messageinfo.platform,
+                                user_info=userinfo,
+                                group_info=groupinfo,
+                            )
+                            message.update_chat_stream(chat)
+                            await self.only_process_chat.process_message(message)
+                            await self._create_pfc_chat(message)
+                        # 禁止PFC，进入普通的心流消息处理逻辑
                         else:
-                            if groupinfo.group_id in global_config.talk_allowed_groups:
-                                # logger.debug(f"开始群聊模式{str(message_data)[:50]}...")
-                                if global_config.response_mode == "heart_flow":
-                                    await self.think_flow_chat.process_message(message_data)
-                                elif global_config.response_mode == "reasoning":
-                                    # logger.debug(f"开始推理模式{str(message_data)[:50]}...")
-                                    await self.reasoning_chat.process_message(message_data)
-                                else:
-                                    logger.error(f"未知的回复模式，请检查配置文件！！: {global_config.response_mode}")
-                    except Exception as e:
-                        logger.error(f"处理PFC消息失败: {e}")
+                            logger.trace("进入普通心流私聊处理")
+                            await self.heartflow_processor.process_message(message_data)
+                # 群聊默认进入心流消息处理逻辑
                 else:
-                    if groupinfo is None:
-                        if global_config.enable_friend_chat:
-                            # 私聊处理流程
-                            # await self._handle_private_chat(message)
-                            if global_config.response_mode == "heart_flow":
-                                await self.think_flow_chat.process_message(message_data)
-                            elif global_config.response_mode == "reasoning":
-                                await self.reasoning_chat.process_message(message_data)
-                            else:
-                                logger.error(f"未知的回复模式，请检查配置文件！！: {global_config.response_mode}")
-                    else:  # 群聊处理
-                        if groupinfo.group_id in global_config.talk_allowed_groups:
-                            if global_config.response_mode == "heart_flow":
-                                await self.think_flow_chat.process_message(message_data)
-                            elif global_config.response_mode == "reasoning":
-                                await self.reasoning_chat.process_message(message_data)
-                            else:
-                                logger.error(f"未知的回复模式，请检查配置文件！！: {global_config.response_mode}")
+                    logger.trace(f"检测到群聊消息，群ID: {groupinfo.group_id}")
+                    await self.heartflow_processor.process_message(message_data)
 
             if template_group_name:
                 async with global_prompt_manager.async_message_scope(template_group_name):

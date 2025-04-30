@@ -3,17 +3,13 @@ import threading
 import time
 from dataclasses import dataclass
 
-from ..config.config import global_config
-from src.common.logger import get_module_logger, LogConfig, MOOD_STYLE_CONFIG
+from ...config.config import global_config
+from src.common.logger_manager import get_logger
 from ..person_info.relationship_manager import relationship_manager
 from src.individuality.individuality import Individuality
 
-mood_config = LogConfig(
-    # 使用海马体专用样式
-    console_format=MOOD_STYLE_CONFIG["console_format"],
-    file_format=MOOD_STYLE_CONFIG["file_format"],
-)
-logger = get_module_logger("mood_manager", config=mood_config)
+
+logger = get_logger("mood")
 
 
 @dataclass
@@ -256,7 +252,7 @@ class MoodManager:
     def print_mood_status(self) -> None:
         """打印当前情绪状态"""
         logger.info(
-            f"[情绪状态]愉悦度: {self.current_mood.valence:.2f}, "
+            f"愉悦度: {self.current_mood.valence:.2f}, "
             f"唤醒度: {self.current_mood.arousal:.2f}, "
             f"心情: {self.current_mood.text}"
         )

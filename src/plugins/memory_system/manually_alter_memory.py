@@ -5,7 +5,8 @@ import time
 from pathlib import Path
 import datetime
 from rich.console import Console
-from memory_manual_build import Memory_graph, Hippocampus  # 海马体和记忆图
+from Hippocampus import Hippocampus  # 海马体和记忆图
+
 
 from dotenv import load_dotenv
 
@@ -45,13 +46,13 @@ else:
 
 
 # 查询节点信息
-def query_mem_info(memory_graph: Memory_graph):
+def query_mem_info(hippocampus: Hippocampus):
     while True:
         query = input("\n请输入新的查询概念（输入'退出'以结束）：")
         if query.lower() == "退出":
             break
 
-        items_list = memory_graph.get_related_item(query)
+        items_list = hippocampus.memory_graph.get_related_item(query)
         if items_list:
             have_memory = False
             first_layer, second_layer = items_list
@@ -177,7 +178,7 @@ def remove_mem_edge(hippocampus: Hippocampus):
 
 # 修改节点信息
 def alter_mem_node(hippocampus: Hippocampus):
-    batchEnviroment = dict()
+    batch_environment = dict()
     while True:
         concept = input("请输入节点概念名（输入'终止'以结束）:\n")
         if concept.lower() == "终止":
@@ -229,7 +230,7 @@ def alter_mem_node(hippocampus: Hippocampus):
                 break
 
             try:
-                user_exec(command, node_environment, batchEnviroment)
+                user_exec(command, node_environment, batch_environment)
             except Exception as e:
                 console.print(e)
                 console.print(
@@ -239,7 +240,7 @@ def alter_mem_node(hippocampus: Hippocampus):
 
 # 修改边信息
 def alter_mem_edge(hippocampus: Hippocampus):
-    batchEnviroment = dict()
+    batch_enviroment = dict()
     while True:
         source = input("请输入 **第一个节点** 名称（输入'终止'以结束）：\n")
         if source.lower() == "终止":
@@ -262,21 +263,21 @@ def alter_mem_edge(hippocampus: Hippocampus):
         console.print("[yellow]你将获得一个执行任意代码的环境[/yellow]")
         console.print("[red]你已经被警告过了。[/red]\n")
 
-        edgeEnviroment = {"source": "<节点名>", "target": "<节点名>", "strength": "<强度值,装在一个list里>"}
+        edge_environment = {"source": "<节点名>", "target": "<节点名>", "strength": "<强度值,装在一个list里>"}
         console.print(
             "[green]环境变量中会有env与batchEnv两个dict, env在切换节点时会清空, batchEnv在操作终止时才会清空[/green]"
         )
         console.print(
-            f"[green] env 会被初始化为[/green]\n{edgeEnviroment}\n[green]且会在用户代码执行完毕后被提交 [/green]"
+            f"[green] env 会被初始化为[/green]\n{edge_environment}\n[green]且会在用户代码执行完毕后被提交 [/green]"
         )
         console.print(
             "[yellow]为便于书写临时脚本，请手动在输入代码通过Ctrl+C等方式触发KeyboardInterrupt来结束代码执行[/yellow]"
         )
 
         # 拷贝数据以防操作炸了
-        edgeEnviroment["strength"] = [edge["strength"]]
-        edgeEnviroment["source"] = source
-        edgeEnviroment["target"] = target
+        edge_environment["strength"] = [edge["strength"]]
+        edge_environment["source"] = source
+        edge_environment["target"] = target
 
         while True:
 
@@ -288,8 +289,8 @@ def alter_mem_edge(hippocampus: Hippocampus):
             except KeyboardInterrupt:
                 # 稍微防一下小天才
                 try:
-                    if isinstance(edgeEnviroment["strength"][0], int):
-                        edge["strength"] = edgeEnviroment["strength"][0]
+                    if isinstance(edge_environment["strength"][0], int):
+                        edge["strength"] = edge_environment["strength"][0]
                     else:
                         raise Exception
 
@@ -301,7 +302,7 @@ def alter_mem_edge(hippocampus: Hippocampus):
                 break
 
             try:
-                user_exec(command, edgeEnviroment, batchEnviroment)
+                user_exec(command, edge_environment, batch_enviroment)
             except Exception as e:
                 console.print(e)
                 console.print(
@@ -312,14 +313,11 @@ def alter_mem_edge(hippocampus: Hippocampus):
 async def main():
     start_time = time.time()
 
-    # 创建记忆图
-    memory_graph = Memory_graph()
-
     # 创建海马体
-    hippocampus = Hippocampus(memory_graph)
+    hippocampus = Hippocampus()
 
     # 从数据库同步数据
-    hippocampus.sync_memory_from_db()
+    hippocampus.entorhinal_cortex.sync_memory_from_db()
 
     end_time = time.time()
     logger.info(f"\033[32m[加载海马体耗时: {end_time - start_time:.2f} 秒]\033[0m")
@@ -338,7 +336,7 @@ async def main():
             query = -1
 
         if query == 0:
-            query_mem_info(memory_graph)
+            query_mem_info(hippocampus.memory_graph)
         elif query == 1:
             add_mem_node(hippocampus)
         elif query == 2:
@@ -355,7 +353,7 @@ async def main():
             print("已结束操作")
             break
 
-        hippocampus.sync_memory_to_db()
+        hippocampus.entorhinal_cortex.sync_memory_to_db()
 
 
 if __name__ == "__main__":
