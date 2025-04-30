@@ -9,9 +9,9 @@ logger = get_logger("mai_state")
 
 
 # -- 状态相关的可配置参数 (可以从 glocal_config 加载) --
-enable_unlimited_hfc_chat = True # 调试用：无限专注聊天
+enable_unlimited_hfc_chat = True  # 调试用：无限专注聊天
 # enable_unlimited_hfc_chat = False
-prevent_offline_state = True # 调试用：防止进入离线状态
+prevent_offline_state = True  # 调试用：防止进入离线状态
 
 # 不同状态下普通聊天的最大消息数
 MAX_NORMAL_CHAT_NUM_PEEKING = 30
@@ -24,6 +24,7 @@ MAX_FOCUSED_CHAT_NUM_NORMAL = 30
 MAX_FOCUSED_CHAT_NUM_FOCUSED = 40
 
 # -- 状态定义 --
+
 
 class MaiState(enum.Enum):
     """
@@ -204,8 +205,10 @@ class MaiStateManager:
             if time_limit_exceeded:
                 next_state_candidate = random.choices(choices_list, weights=weights, k=1)[0]
                 resolved_candidate = _resolve_offline(next_state_candidate)
-                logger.debug(f"规则{rule_id}：时间到，随机选择 {next_state_candidate.value}，resolve 为 {resolved_candidate.value}")
-                next_state = resolved_candidate # 直接使用解析后的状态
+                logger.debug(
+                    f"规则{rule_id}：时间到，随机选择 {next_state_candidate.value}，resolve 为 {resolved_candidate.value}"
+                )
+                next_state = resolved_candidate  # 直接使用解析后的状态
 
             # 注意：enable_unlimited_hfc_chat 优先级高于 prevent_offline_state
             # 如果触发了这个，它会覆盖上面规则2设置的 next_state

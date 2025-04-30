@@ -156,8 +156,12 @@ class InterestMonitorApp:
         self.mind_text_scroll = tk.Scrollbar(self.frame_mind_history)
         self.mind_text_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.mind_text = tk.Text(
-            self.frame_mind_history, height=25, state="disabled", wrap="word", font=("微软雅黑", 12),
-            yscrollcommand=self.mind_text_scroll.set
+            self.frame_mind_history,
+            height=25,
+            state="disabled",
+            wrap="word",
+            font=("微软雅黑", 12),
+            yscrollcommand=self.mind_text_scroll.set,
         )
         self.mind_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=1, padx=5, pady=5)
         self.mind_text_scroll.config(command=self.mind_text.yview)
