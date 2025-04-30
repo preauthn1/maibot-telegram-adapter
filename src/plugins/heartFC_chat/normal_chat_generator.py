@@ -29,7 +29,7 @@ class NormalChatGenerator:
         )
 
         self.model_sum = LLMRequest(
-            model=global_config.llm_summary_by_topic, temperature=0.7, max_tokens=3000, request_type="relation"
+            model=global_config.llm_summary, temperature=0.7, max_tokens=3000, request_type="relation"
         )
         self.current_model_type = "r1"  # 默认使用 R1
         self.current_model_name = "unknown model"
@@ -82,12 +82,14 @@ class NormalChatGenerator:
                 sender_name=sender_name,
                 chat_stream=message.chat_stream,
             )
-        logger.info(f"构建prompt时间: {t_build_prompt.human_readable}")
+        logger.debug(f"构建prompt时间: {t_build_prompt.human_readable}")
 
         try:
             content, reasoning_content, self.current_model_name = await model.generate_response(prompt)
 
-            logger.info(f"prompt:{prompt}\n生成回复：{content}")
+            logger.debug(f"prompt:{prompt}\n生成回复：{content}")
+
+            logger.info(f"对  {message.processed_plain_text}  的回复：{content}")
 
             info_catcher.catch_after_llm_generated(
                 prompt=prompt, response=content, reasoning_content=reasoning_content, model_name=self.current_model_name
