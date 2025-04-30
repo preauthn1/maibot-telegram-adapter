@@ -144,7 +144,7 @@ class MaiStateManager:
         # 辅助函数：根据 prevent_offline_state 标志调整目标状态
         def _resolve_offline(candidate_state: MaiState) -> MaiState:
             if prevent_offline_state and candidate_state == MaiState.OFFLINE:
-                logger.debug(f"阻止进入 OFFLINE，改为 PEEKING")
+                logger.debug("阻止进入 OFFLINE，改为 PEEKING")
                 return MaiState.PEEKING
             return candidate_state
 

@@ -192,7 +192,7 @@ class InterestMonitorApp:
             main_mind_entries.sort(key=lambda x: x[0])
             recent_entries = main_mind_entries[-MAX_QUEUE_SIZE:]
             self.main_mind_history.clear()
-            for ts, entry in recent_entries:
+            for _ts, entry in recent_entries:
                 self.main_mind_history.append(entry)
             if recent_entries:
                 self.last_main_mind_timestamp = recent_entries[-1][0]
