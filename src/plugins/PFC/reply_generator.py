@@ -138,7 +138,7 @@ class ReplyGenerator:
             goals_str = "- 目前没有明确对话目标\n"  # 简化无目标情况
 
         # --- 新增：构建知识信息字符串 ---
-        knowledge_info_str = "【供参考的相关知识和记忆】\n" # 稍微改下标题，表明是供参考
+        knowledge_info_str = "【供参考的相关知识和记忆】\n"  # 稍微改下标题，表明是供参考
         try:
             # 检查 conversation_info 是否有 knowledge_list 并且不为空
             if hasattr(conversation_info, "knowledge_list") and conversation_info.knowledge_list:
@@ -158,7 +158,7 @@ class ReplyGenerator:
                         knowledge_info_str += f"{i + 1}. 发现一条格式不正确的知识记录。\n"
 
                 if not recent_knowledge:
-                    knowledge_info_str += "- 暂无。\n" # 更简洁的提示
+                    knowledge_info_str += "- 暂无。\n"  # 更简洁的提示
 
             else:
                 knowledge_info_str += "- 暂无。\n"

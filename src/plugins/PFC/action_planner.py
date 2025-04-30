@@ -235,12 +235,14 @@ class ActionPlanner:
                 recent_knowledge = conversation_info.knowledge_list[-3:]
                 for i, knowledge_item in enumerate(recent_knowledge):
                     if isinstance(knowledge_item, dict):
-                        query = knowledge_item.get('query', '未知查询')
-                        knowledge = knowledge_item.get('knowledge', '无知识内容')
-                        source = knowledge_item.get('source', '未知来源')
+                        query = knowledge_item.get("query", "未知查询")
+                        knowledge = knowledge_item.get("knowledge", "无知识内容")
+                        source = knowledge_item.get("source", "未知来源")
                         # 只取知识内容的前 2000 个字，避免太长
                         knowledge_snippet = knowledge[:2000] + "..." if len(knowledge) > 200 else knowledge
-                        knowledge_info_str += f"{i+1}. 关于 '{query}' 的知识 (来源: {source}):\n   {knowledge_snippet}\n"
+                        knowledge_info_str += (
+                            f"{i + 1}. 关于 '{query}' 的知识 (来源: {source}):\n   {knowledge_snippet}\n"
+                        )
                     else:
                         # 处理列表里不是字典的异常情况
                         knowledge_info_str += f"{i + 1}. 发现一条格式不正确的知识记录。\n"
