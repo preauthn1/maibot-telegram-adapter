@@ -238,8 +238,8 @@ class ActionPlanner:
                         query = knowledge_item.get('query', '未知查询')
                         knowledge = knowledge_item.get('knowledge', '无知识内容')
                         source = knowledge_item.get('source', '未知来源')
-                        # 只取知识内容的前 150 个字，避免太长
-                        knowledge_snippet = knowledge[:150] + "..." if len(knowledge) > 150 else knowledge
+                        # 只取知识内容的前 2000 个字，避免太长
+                        knowledge_snippet = knowledge[:2000] + "..." if len(knowledge) > 200 else knowledge
                         knowledge_info_str += f"{i+1}. 关于 '{query}' 的知识 (来源: {source}):\n   {knowledge_snippet}\n"
                     else:
                         # 处理列表里不是字典的异常情况
