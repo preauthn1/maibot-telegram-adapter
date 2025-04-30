@@ -269,7 +269,7 @@ class EmojiManager:
         """
         try:
             self._ensure_db()
-            time_start = time.time()
+            _time_start = time.time()
 
             # 获取所有表情包
             all_emojis = self.emoji_objects
@@ -287,38 +287,40 @@ class EmojiManager:
 
                 # 计算与每个emotion标签的相似度，取最大值
                 max_similarity = 0
-                best_matching_emotion = "" # 记录最匹配的 emotion 喵~
+                best_matching_emotion = ""  # 记录最匹配的 emotion 喵~
                 for emotion in emotions:
                     # 使用编辑距离计算相似度
                     distance = self._levenshtein_distance(text_emotion, emotion)
                     max_len = max(len(text_emotion), len(emotion))
                     similarity = 1 - (distance / max_len if max_len > 0 else 0)
-                    if similarity > max_similarity: # 如果找到更相似的喵~
+                    if similarity > max_similarity:  # 如果找到更相似的喵~
                         max_similarity = similarity
-                        best_matching_emotion = emotion # 就记下这个 emotion 喵~
+                        best_matching_emotion = emotion  # 就记下这个 emotion 喵~
 
-                if best_matching_emotion: # 确保有匹配的情感才添加喵~
-                    emoji_similarities.append((emoji, max_similarity, best_matching_emotion)) # 把 emotion 也存起来喵~
+                if best_matching_emotion:  # 确保有匹配的情感才添加喵~
+                    emoji_similarities.append((emoji, max_similarity, best_matching_emotion))  # 把 emotion 也存起来喵~
 
             # 按相似度降序排序
             emoji_similarities.sort(key=lambda x: x[1], reverse=True)
 
             # 获取前10个最相似的表情包
-            top_emojis = emoji_similarities[:10] if len(emoji_similarities) > 10 else emoji_similarities # 改个名字，更清晰喵~
+            top_emojis = (
+                emoji_similarities[:10] if len(emoji_similarities) > 10 else emoji_similarities
+            )  # 改个名字，更清晰喵~
 
             if not top_emojis:
                 logger.warning("未找到匹配的表情包")
                 return None
 
             # 从前几个中随机选择一个
-            selected_emoji, similarity, matched_emotion = random.choice(top_emojis) # 把匹配的 emotion 也拿出来喵~
+            selected_emoji, similarity, matched_emotion = random.choice(top_emojis)  # 把匹配的 emotion 也拿出来喵~
 
             # 更新使用次数
             self.record_usage(selected_emoji.hash)
 
-            time_end = time.time()
+            _time_end = time.time()
 
-            logger.info( # 使用匹配到的 emotion 记录日志喵~
+            logger.info(  # 使用匹配到的 emotion 记录日志喵~
                 f"为[{text_emotion}]找到表情包: {matched_emotion},({similarity:.4f})"
             )
             return selected_emoji.path, f"[ {selected_emoji.description} ]"

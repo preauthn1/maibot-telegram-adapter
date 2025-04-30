@@ -38,10 +38,10 @@ def safe_json_loads(json_str: str, default_value: T = None) -> Union[Any, T]:
             result = ast.literal_eval(json_str)
             # 确保结果是字典（因为我们通常期望参数是字典）
             if isinstance(result, dict):
-                 return result
+                return result
             else:
-                 logger.warning(f"ast.literal_eval 解析成功但结果不是字典: {type(result)}, 内容: {result}")
-                 return default_value
+                logger.warning(f"ast.literal_eval 解析成功但结果不是字典: {type(result)}, 内容: {result}")
+                return default_value
         except (ValueError, SyntaxError, MemoryError, RecursionError) as ast_e:
             logger.error(f"使用 ast.literal_eval 解析失败: {ast_e}, 字符串: {json_str[:100]}...")
             return default_value
@@ -203,8 +203,8 @@ def process_llm_tool_calls(
 
         # 1. 检查 arguments 是否存在且是字符串
         if args_value is None or not isinstance(args_value, str):
-             logger.warning(f"{log_prefix}工具调用[{i}]的'function'字段缺少'arguments'字符串: {func_details}")
-             continue
+            logger.warning(f"{log_prefix}工具调用[{i}]的'function'字段缺少'arguments'字符串: {func_details}")
+            continue
 
         # 2. 尝试安全地解析 arguments 字符串
         parsed_args = safe_json_loads(args_value, None)
