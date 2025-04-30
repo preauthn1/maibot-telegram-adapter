@@ -23,7 +23,6 @@ from src.individuality.individuality import Individuality
 import traceback
 
 
-
 # 初始化日志记录器
 
 logger = get_logger("subheartflow_manager")
@@ -359,9 +358,7 @@ class SubHeartflowManager:
             # 3. 检查 CHAT 上限
             current_chat_count = self.count_subflows_by_state_nolock(ChatState.CHAT)
             if current_chat_count >= chat_limit:
-                logger.info(
-                    f"{log_prefix} 想看看能不能聊，但是聊天太多了， ({current_chat_count}/{chat_limit}) 满了。"
-                )
+                logger.info(f"{log_prefix} 想看看能不能聊，但是聊天太多了， ({current_chat_count}/{chat_limit}) 满了。")
                 return  # 满了，这次就算了
 
             # --- 获取 FOCUSED 计数 ---
@@ -421,7 +418,7 @@ class SubHeartflowManager:
 
             # --- 4. LLM 评估是否想聊 ---
             yao_kai_shi_liao_ma, reason = await self._llm_evaluate_state_transition(prompt)
-            
+
             if reason:
                 if yao_kai_shi_liao_ma:
                     logger.info(f"{log_prefix} 打算开始聊，原因是: {reason}")
@@ -532,7 +529,6 @@ class SubHeartflowManager:
                 f"{log_prefix_task} 完成，共检查 {checked_count} 个子心流，{transitioned_to_absent} 个因超时转为 ABSENT。"
             )
 
-
     # --- 结束新增 ---
 
     async def _llm_evaluate_state_transition(self, prompt: str) -> Tuple[Optional[bool], Optional[str]]:
@@ -567,8 +563,8 @@ class SubHeartflowManager:
 
                 if isinstance(decision, bool):
                     logger.debug(f"{log_prefix} LLM评估结果 (来自JSON): {'建议转换' if decision else '建议不转换'}")
-                    
-                    return decision , reason
+
+                    return decision, reason
                 else:
                     logger.warning(
                         f"{log_prefix} LLM 返回的 JSON 中 'decision' 键的值不是布尔型: {decision}。响应: {response_text}"
