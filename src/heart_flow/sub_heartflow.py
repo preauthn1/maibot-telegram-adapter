@@ -18,7 +18,7 @@ from src.heart_flow.sub_mind import SubMind
 # 定义常量 (从 interest.py 移动过来)
 MAX_INTEREST = 15.0
 
-logger = get_logger("subheartflow")
+logger = get_logger("sub_heartflow")
 
 PROBABILITY_INCREASE_RATE_PER_SECOND = 0.1
 PROBABILITY_DECREASE_RATE_PER_SECOND = 0.1
