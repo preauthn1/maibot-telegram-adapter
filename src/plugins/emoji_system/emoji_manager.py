@@ -131,7 +131,9 @@ class MaiEmoji:
 
                 # 使用upsert确保记录存在或被更新
                 db["emoji"].update_one({"hash": self.hash}, {"$set": emoji_record}, upsert=True)
-                logger.success(f"[注册] 表情包信息保存到数据库: {self.description[:30]}...")
+                
+                
+                logger.success(f"[注册] 表情包信息保存到数据库: {self.emotion}")
 
                 return True
 
