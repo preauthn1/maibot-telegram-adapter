@@ -132,7 +132,7 @@ class BotConfig:
     # llm_reasoning_minor: Dict[str, str]
     llm_normal: Dict[str, str]  # LLM普通
     llm_topic_judge: Dict[str, str]  # LLM话题判断
-    llm_summary_by_topic: Dict[str, str]  # LLM话题总结
+    llm_summary: Dict[str, str]  # LLM话题总结
     llm_emotion_judge: Dict[str, str]  # LLM情感判断
     embedding: Dict[str, str]  # 嵌入
     vlm: Dict[str, str]  # VLM

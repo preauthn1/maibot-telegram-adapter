@@ -197,55 +197,44 @@ pfc_chatting = false # 是否启用PFC聊天，该功能仅作用于私聊，与
 # stream = <true|false> : 用于指定模型是否是使用流式输出
 # 如果不指定，则该项是 False
 
-[model.llm_reasoning] #只在回复模式为reasoning时启用
+#这个模型必须是推理模型
+[model.llm_reasoning] # 一般聊天模式的推理回复模型
 name = "Pro/deepseek-ai/DeepSeek-R1"
-# name = "Qwen/QwQ-32B"
 provider = "SILICONFLOW"
-pri_in = 4 #模型的输入价格（非必填，可以记录消耗）
-pri_out = 16 #模型的输出价格（非必填，可以记录消耗）
+pri_in = 1.0 #模型的输入价格（非必填，可以记录消耗）
+pri_out = 4.0 #模型的输出价格（非必填，可以记录消耗）
 
-#非推理模型
-
-[model.llm_normal] #V3 回复模型1 主要回复模型，默认temp 0.2 如果你使用的是老V3或者其他模型，请自己修改temp参数
+[model.llm_normal] #V3 回复模型 专注和一般聊天模式共用的回复模型
 name = "Pro/deepseek-ai/DeepSeek-V3"
 provider = "SILICONFLOW"
 pri_in = 2 #模型的输入价格（非必填，可以记录消耗）
 pri_out = 8 #模型的输出价格（非必填，可以记录消耗）
+#默认temp 0.2 如果你使用的是老V3或者其他模型，请自己修改temp参数
 temp = 0.2 #模型的温度，新V3建议0.1-0.3
 
-[model.llm_emotion_judge] #表情包判断 
-name = "Qwen/Qwen2.5-14B-Instruct"
-provider = "SILICONFLOW"
-pri_in = 0.7
-pri_out = 0.7
-
-[model.llm_topic_judge] #记忆主题判断：建议使用qwen2.5 7b
+[model.llm_topic_judge] #主题判断模型：建议使用qwen2.5 7b
 name = "Pro/Qwen/Qwen2.5-7B-Instruct"
 provider = "SILICONFLOW"
-pri_in = 0
-pri_out = 0
+pri_in = 0.35
+pri_out = 0.35
 
-[model.llm_summary_by_topic] #概括模型，建议使用qwen2.5 32b 及以上
+[model.llm_summary] #概括模型，建议使用qwen2.5 32b 及以上
 name = "Qwen/Qwen2.5-32B-Instruct"
 provider = "SILICONFLOW"
 pri_in = 1.26
 pri_out = 1.26
 
-[model.llm_tool_use] #工具调用模型，需要使用支持工具调用的模型，建议使用qwen2.5 32b
-name = "Qwen/Qwen2.5-32B-Instruct"
-provider = "SILICONFLOW"
-pri_in = 1.26
-pri_out = 1.26
-
-# 识图模型
-
-[model.vlm] #图像识别 
+[model.vlm] # 图像识别模型
 name = "Pro/Qwen/Qwen2.5-VL-7B-Instruct"
 provider = "SILICONFLOW"
 pri_in = 0.35
 pri_out = 0.35
 
-
+[model.llm_heartflow] # 用于控制麦麦是否参与聊天的模型
+name = "Qwen/Qwen2.5-32B-Instruct"
+provider = "SILICONFLOW"
+pri_in = 1.26
+pri_out = 1.26
 
 [model.llm_observation] #观察模型，压缩聊天内容，建议用免费的
 # name = "Pro/Qwen/Qwen2.5-7B-Instruct"
@@ -254,19 +243,18 @@ provider = "SILICONFLOW"
 pri_in = 0
 pri_out = 0
 
-[model.llm_sub_heartflow] #子心流：认真水群时,生成麦麦的内心想法
-name = "Qwen/Qwen2.5-72B-Instruct"
+[model.llm_sub_heartflow] #心流：认真水群时,生成麦麦的内心想法，必须使用具有工具调用能力的模型
+name = "Pro/deepseek-ai/DeepSeek-V3"
 provider = "SILICONFLOW"
-pri_in = 4.13
-pri_out = 4.13
-temp = 0.7 #模型的温度，新V3建议0.1-0.3
+pri_in = 2
+pri_out = 8
+temp = 0.3 #模型的温度，新V3建议0.1-0.3
 
-
-[model.llm_plan] #决策模型：认真水群时,负责决定麦麦该做什么
-name = "Qwen/Qwen2.5-32B-Instruct"
+[model.llm_plan] #决策：认真水群时,负责决定麦麦该做什么
+name = "Pro/deepseek-ai/DeepSeek-V3"
 provider = "SILICONFLOW"
-pri_in = 1.26
-pri_out = 1.26
+pri_in = 2
+pri_out = 8
 
 #嵌入模型
 
@@ -303,11 +291,13 @@ pri_in = 2
 pri_out = 8
 
 
-#此模型暂时没有使用！！
-#此模型暂时没有使用！！
-#此模型暂时没有使用！！
-[model.llm_heartflow] #心流
-# name = "Pro/Qwen/Qwen2.5-7B-Instruct"
+#以下模型暂时没有使用！！
+#以下模型暂时没有使用！！
+#以下模型暂时没有使用！！
+#以下模型暂时没有使用！！
+#以下模型暂时没有使用！！
+
+[model.llm_tool_use] #工具调用模型，需要使用支持工具调用的模型，建议使用qwen2.5 32b
 name = "Qwen/Qwen2.5-32B-Instruct"
 provider = "SILICONFLOW"
 pri_in = 1.26
