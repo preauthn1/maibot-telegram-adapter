@@ -13,6 +13,7 @@ from .utils.dyn_topk import dyn_select_top_k
 
 MAX_KNOWLEDGE_LENGTH = 10000  # 最大知识长度
 
+
 class QAManager:
     def __init__(
         self,
