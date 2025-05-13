@@ -36,7 +36,7 @@
   </p>
 </p>
 
-## 新版0.6.x部署前先阅读：https://docs.mai-mai.org/manual/usage/mmc_q_a
+## 新版0.6.x部署前先阅读：https://docs.mai-mai.org/faq/maibot/backup_update.html
 
 
 ## 📝 项目简介
@@ -85,7 +85,7 @@
 
 ### ⚠️ 重要提示
 
-- 升级到v0.6.x版本前请务必阅读：[升级指南](https://docs.mai-mai.org/manual/usage/mmc_q_a)
+- 升级到v0.6.x版本前请务必阅读：[升级指南](https://docs.mai-mai.org/faq/maibot/backup_update.html)
 - 本版本基于MaiCore重构，通过nonebot插件与QQ平台交互
 - 项目处于活跃开发阶段，功能和API可能随时调整
 
@@ -94,7 +94,7 @@
 - [二群](https://qm.qq.com/q/RzmCiRtHEW) 123456782
 - [五群](https://qm.qq.com/q/JxvHZnxyec) 1022489779
 - [三群](https://qm.qq.com/q/wlH5eT8OmQ) 1035228475【已满】
-- [四群](https://qm.qq.com/q/wlH5eT8OmQ) 729957033【已满】
+- [四群](https://qm.qq.com/q/wGePTl1UyY) 729957033【已满】
 
 
 
