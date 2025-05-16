@@ -1,9 +1,9 @@
-# 麦麦！MaiCore-MaiBot (编辑中)
-
 <picture>
   <source media="(max-width: 600px)" srcset="depends-data/maimai.png" width="100%">
   <img alt="MaiBot" src="depends-data/maimai.png" title="作者:略nd" align="right" width="30%">
 </picture>
+
+# 麦麦！MaiCore-MaiBot (编辑中)
 
 ![Python Version](https://img.shields.io/badge/Python-3.10+-blue)
 ![License](https://img.shields.io/github/license/SengokuCola/MaiMBot?label=协议)
@@ -55,7 +55,7 @@
 ### 最新版本部署教程 (MaiCore 版本)
 - [🚀 最新版本部署教程](https://docs.mai-mai.org/manual/deployment/mmc_deploy_windows.html) - 基于 MaiCore 的新版本部署方式（与旧版本不兼容）
 
-> [!WARNING]重要提示
+> [!WARNING]
 > - 从 0.5.x 旧版本升级前请务必阅读：[升级指南](https://docs.mai-mai.org/faq/maibot/backup_update.html)
 > - 项目处于活跃开发阶段，功能和 API 可能随时调整。
 > - 文档未完善，有问题可以提交 Issue 或者 Discussion。
@@ -76,7 +76,7 @@
 **部分内容可能更新不够及时，请注意版本对应**
 
 - [📚 核心 Wiki 文档](https://docs.mai-mai.org) - 项目最全面的文档中心，你可以了解麦麦有关的一切。
-
+- [📚 开发文档](https://docs.mai-mai.org/develop/) - 为开发者提供了有关MaiBot架构、API和扩展开发的全面指南。
 ### 设计理念（原始时代的火花）
 
 > **千石可乐说：**
@@ -86,17 +86,13 @@
 > - 代码会保持开源和开放，但个人希望 MaiMbot 的运行时数据保持封闭，尽量避免以显式命令来对其进行控制和调试。我认为一个你无法完全掌控的个体才更能让你感觉到它的自主性，而视其成为一个对话机器。
 > - SengokuCola~~纯编程外行，面向 cursor 编程，很多代码写得不好多多包涵~~已得到大脑升级。
 
-## 📌 注意事项
-
-> [!WARNING]
-> 使用本项目前必须阅读和同意[用户协议](EULA.md)和[隐私协议](PRIVACY.md)。  
-> 本应用生成内容来自人工智能模型，由 AI 生成，请仔细甄别，请勿用于违反法律的用途，AI 生成内容不代表本项目团队的观点和立场。
-
 ## 🙋 贡献和致谢
 
-MaiCore 是一个开源项目，我们非常欢迎你的参与。你的贡献，无论是提交 bug 报告、功能需求还是代码 pr，都对项目非常宝贵。我们非常感谢你的支持！🎉 但无序的讨论会降低沟通效率，进而影响问题的解决速度，因此在提交任何贡献前，请务必先阅读本项目的[贡献指南](docs/CONTRIBUTE.md)（待补完）  
+MaiCore 是一个开源项目，我们非常欢迎你的参与。你的贡献，无论是提交 bug 报告、功能需求还是代码 pr，都对项目非常宝贵。我们非常感谢你的支持！  🎉  
+你可以阅读[开发文档](https://docs.mai-mai.org/develop/)来更好的了解麦麦!  
+但无序的讨论会降低沟通效率，进而影响问题的解决速度，因此在提交任何贡献前，请务必先阅读本项目的[贡献指南](docs/CONTRIBUTE.md)（待补完）  
 
-### 贡献
+### 贡献者
 
 感谢各位大佬！  
 
@@ -106,10 +102,16 @@ MaiCore 是一个开源项目，我们非常欢迎你的参与。你的贡献，
 
 ### 致谢
 
-- [略nd](https://space.bilibili.com/123456783): 感谢为麦麦绘制人设。
+- [略nd](https://space.bilibili.com/123456783): 为麦麦绘制人设。
 - [NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现。
 
-**也感谢每一位给麦麦发展提出宝贵意见与建议的用户，感谢陪伴麦麦走到现在的你们**
+**也感谢每一位给麦麦发展提出宝贵意见与建议的用户，感谢陪伴麦麦走到现在的你们！**
+
+## 📌 注意事项
+
+> [!WARNING]
+> 使用本项目前必须阅读和同意[用户协议](EULA.md)和[隐私协议](PRIVACY.md)。  
+> 本应用生成内容来自人工智能模型，由 AI 生成，请仔细甄别，请勿用于违反法律的用途，AI 生成内容不代表本项目团队的观点和立场。
 
 ## 麦麦仓库状态
 
@@ -118,3 +120,7 @@ MaiCore 是一个开源项目，我们非常欢迎你的参与。你的贡献，
 ### Star 趋势
 
 [![Star 趋势](https://starchart.cc/MaiM-with-u/MaiBot.svg?variant=adaptive)](https://starchart.cc/MaiM-with-u/MaiBot)
+
+## License
+
+GPL-3.0
