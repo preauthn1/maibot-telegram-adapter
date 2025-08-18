@@ -3,7 +3,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 EXPOSE 8000
 
 # 编译器
-RUN RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
 RUN uv pip install --system --upgrade pip Cython py-cpuinfo setuptools
 
 # 工作目录
