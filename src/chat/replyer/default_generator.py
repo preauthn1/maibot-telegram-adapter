@@ -26,7 +26,6 @@ from src.chat.utils.chat_message_builder import (
 )
 from src.chat.express.expression_selector import expression_selector
 from src.chat.memory_system.memory_activator import MemoryActivator
-from src.chat.memory_system.instant_memory import InstantMemory
 from src.mood.mood_manager import mood_manager
 from src.person_info.person_info import Person, is_person_known
 from src.plugin_system.base.component_types import ActionInfo, EventType
@@ -147,7 +146,6 @@ class DefaultReplyer:
         self.is_group_chat, self.chat_target_info = get_chat_type_and_target_info(self.chat_stream.stream_id)
         self.heart_fc_sender = HeartFCSender()
         self.memory_activator = MemoryActivator()
-        self.instant_memory = InstantMemory(chat_id=self.chat_stream.stream_id)
 
         from src.plugin_system.core.tool_use import ToolExecutor  # 延迟导入ToolExecutor，不然会循环依赖
 
@@ -375,19 +373,10 @@ class DefaultReplyer:
 
         instant_memory = None
 
-        # running_memories = await self.memory_activator.activate_memory_with_chat_history(
-        #     target_message=target, chat_history=chat_history
-        # )
+        running_memories = await self.memory_activator.activate_memory_with_chat_history(
+            target_message=target, chat_history=chat_history
+        )
         running_memories = None
-
-        if global_config.memory.enable_instant_memory:
-            chat_history_str = build_readable_messages(
-                messages=chat_history, replace_bot_name=True, timestamp_mode="normal"
-            )
-            asyncio.create_task(self.instant_memory.create_and_store_memory(chat_history_str))
-
-            instant_memory = await self.instant_memory.get_memory(target)
-            logger.info(f"即时记忆：{instant_memory}")
 
         if not running_memories:
             return ""
@@ -662,9 +651,11 @@ class DefaultReplyer:
                 action_name = action_plan_info.action_type
                 if action_name == "reply":
                     continue
+                action_description: str = "无描述"
+                reasoning: str = "无原因"
                 if action := available_actions.get(action_name):
-                    action_description = action.description or "无描述"
-                    reasoning = action_plan_info.reasoning or "无原因"
+                    action_description = action.description or action_description
+                    reasoning = action_plan_info.reasoning or reasoning
 
                 chosen_action_descriptions += f"- {action_name}: {action_description}，原因：{reasoning}\n"
 
@@ -716,22 +707,22 @@ class DefaultReplyer:
         is_group_chat = bool(chat_stream.group_info)
         platform = chat_stream.platform
 
+        user_id = "用户ID"
+        person_name = "用户"
+        sender = "用户"
+        target = "消息"
+
         if reply_message:
             user_id = reply_message.user_info.user_id
             person = Person(platform=platform, user_id=user_id)
             person_name = person.person_name or user_id
             sender = person_name
             target = reply_message.processed_plain_text
-        else:
-            person_name = "用户"
-            sender = "用户"
-            target = "消息"
 
+        mood_prompt: str = ""
         if global_config.mood.enable_mood:
             chat_mood = mood_manager.get_mood_by_chat_id(chat_id)
             mood_prompt = chat_mood.mood_state
-        else:
-            mood_prompt = ""
 
         target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
 
@@ -950,9 +941,7 @@ class DefaultReplyer:
         else:
             chat_target_name = "对方"
             if self.chat_target_info:
-                chat_target_name = (
-                    self.chat_target_info.person_name or self.chat_target_info.user_nickname or "对方"
-                )
+                chat_target_name = self.chat_target_info.person_name or self.chat_target_info.user_nickname or "对方"
             chat_target_1 = await global_prompt_manager.format_prompt(
                 "chat_target_private1", sender_name=chat_target_name
             )
