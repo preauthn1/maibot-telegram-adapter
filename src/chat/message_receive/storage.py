@@ -18,7 +18,7 @@ class MessageStorage:
         if isinstance(keywords, list):
             return json.dumps(keywords, ensure_ascii=False)
         return "[]"
-    
+
     @staticmethod
     def _deserialize_keywords(keywords_str: str) -> list:
         """将JSON字符串反序列化为关键词列表"""
@@ -33,7 +33,6 @@ class MessageStorage:
     async def store_message(message: Union[MessageSending, MessageRecv], chat_stream: ChatStream) -> None:
         """存储消息到数据库"""
         try:
-            # 莫越权 救世啊
             pattern = r"<MainRule>.*?</MainRule>|<schedule>.*?</schedule>|<UserMessage>.*?</UserMessage>"
 
             # print(message)
@@ -85,7 +84,7 @@ class MessageStorage:
                 key_words = MessageStorage._serialize_keywords(message.key_words)
                 key_words_lite = MessageStorage._serialize_keywords(message.key_words_lite)
                 selected_expressions = ""
-                
+
             chat_info_dict = chat_stream.to_dict()
             user_info_dict = message.message_info.user_info.to_dict()  # type: ignore
 
@@ -143,31 +142,26 @@ class MessageStorage:
 
     # 如果需要其他存储相关的函数，可以在这里添加
     @staticmethod
-    async def update_message(
-        message: MessageRecv,
-    ) -> None:  # 用于实时更新数据库的自身发送消息ID，目前能处理text,reply,image和emoji
-        """更新最新一条匹配消息的message_id"""
+    def update_message(mmc_message_id: str | None, qq_message_id: str | None) -> bool:
+        """实时更新数据库的自身发送消息ID"""
         try:
-            if message.message_segment.type == "notify":
-                mmc_message_id = message.message_segment.data.get("echo")  # type: ignore
-                qq_message_id = message.message_segment.data.get("actual_id")  # type: ignore
-            else:
-                logger.info(f"更新消息ID错误，seg类型为{message.message_segment.type}")
-                return
             if not qq_message_id:
                 logger.info("消息不存在message_id，无法更新")
-                return
+                return False
             if matched_message := (
                 Messages.select().where((Messages.message_id == mmc_message_id)).order_by(Messages.time.desc()).first()
             ):
                 # 更新找到的消息记录
                 Messages.update(message_id=qq_message_id).where(Messages.id == matched_message.id).execute()  # type: ignore
                 logger.debug(f"更新消息ID成功: {matched_message.message_id} -> {qq_message_id}")
+                return True
             else:
                 logger.debug("未找到匹配的消息")
+                return False
 
         except Exception as e:
             logger.error(f"更新消息ID失败: {e}")
+            return False
 
     @staticmethod
     def replace_image_descriptions(text: str) -> str:

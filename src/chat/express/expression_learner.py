@@ -8,7 +8,6 @@ from typing import List, Dict, Optional, Any, Tuple
 
 from src.common.logger import get_logger
 from src.common.database.database_model import Expression
-from src.common.data_models.database_data_model import DatabaseMessages
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 from src.chat.utils.chat_message_builder import get_raw_msg_by_timestamp_with_chat_inclusive, build_anonymous_messages
@@ -17,7 +16,7 @@ from src.chat.message_receive.chat_stream import get_chat_manager
 
 
 MAX_EXPRESSION_COUNT = 300
-DECAY_DAYS = 30  # 30天衰减到0.01
+DECAY_DAYS = 15  # 30天衰减到0.01
 DECAY_MIN = 0.01  # 最小衰减值
 
 logger = get_logger("expressor")
@@ -46,10 +45,10 @@ def init_prompt() -> None:
 例如：当"AAAAA"时，可以"BBBBB", AAAAA代表某个具体的场景，不超过20个字。BBBBB代表对应的语言风格，特定句式或表达方式，不超过20个字。
 
 例如：
-当"对某件事表示十分惊叹，有些意外"时，使用"我嘞个xxxx"
-当"表示讽刺的赞同，不想讲道理"时，使用"对对对"
-当"想说明某个具体的事实观点，但懒得明说，或者不便明说，或表达一种默契"，使用"懂的都懂"
-当"当涉及游戏相关时，表示意外的夸赞，略带戏谑意味"时，使用"这么强！"
+当"对某件事表示十分惊叹"时，使用"我嘞个xxxx"
+当"表示讽刺的赞同，不讲道理"时，使用"对对对"
+当"想说明某个具体的事实观点，但懒得明说，使用"懂的都懂"
+当"当涉及游戏相关时，夸赞，略带戏谑意味"时，使用"这么强！"
 
 请注意：不要总结你自己（SELF）的发言，尽量保证总结内容的逻辑性
 现在请你概括

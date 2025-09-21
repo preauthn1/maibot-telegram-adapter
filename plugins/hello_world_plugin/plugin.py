@@ -1,3 +1,4 @@
+import random
 from typing import List, Tuple, Type, Any
 from src.plugin_system import (
     BasePlugin,
@@ -12,7 +13,10 @@ from src.plugin_system import (
     EventType,
     MaiMessages,
     ToolParamType,
+    ReplyContentType,
+    emoji_api,
 )
+from src.config.config import global_config
 
 
 class CompareNumbersTool(BaseTool):
@@ -24,6 +28,7 @@ class CompareNumbersTool(BaseTool):
         ("num1", ToolParamType.FLOAT, "第一个数字", True, None),
         ("num2", ToolParamType.FLOAT, "第二个数字", True, None),
     ]
+    available_for_llm = True
 
     async def execute(self, function_args: dict[str, Any]) -> dict[str, Any]:
         """执行比较两个数的大小
@@ -136,12 +141,80 @@ class PrintMessage(BaseEventHandler):
     handler_name = "print_message_handler"
     handler_description = "打印接收到的消息"
 
-    async def execute(self, message: MaiMessages | None) -> Tuple[bool, bool, str | None, None]:
+    async def execute(self, message: MaiMessages | None) -> Tuple[bool, bool, str | None, None, None]:
         """执行打印消息事件处理"""
         # 打印接收到的消息
         if self.get_config("print_message.enabled", False):
             print(f"接收到消息: {message.raw_message if message else '无效消息'}")
-        return True, True, "消息已打印", None
+        return True, True, "消息已打印", None, None
+
+
+class ForwardMessages(BaseEventHandler):
+    """
+    把接收到的消息转发到指定聊天ID
+
+    此组件是HYBRID消息和FORWARD消息的使用示例。
+    每收到10条消息，就会以1%的概率使用HYBRID消息转发，否则使用FORWARD消息转发。
+    """
+
+    event_type = EventType.ON_MESSAGE
+    handler_name = "forward_messages_handler"
+    handler_description = "把接收到的消息转发到指定聊天ID"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.counter = 0  # 用于计数转发的消息数量
+        self.messages: List[str] = []
+
+    async def execute(self, message: MaiMessages | None) -> Tuple[bool, bool, None, None, None]:
+        if not message:
+            return True, True, None, None, None
+        stream_id = message.stream_id or ""
+
+        if message.plain_text:
+            self.messages.append(message.plain_text)
+            self.counter += 1
+        if self.counter % 10 == 0:
+            if random.random() < 0.01:
+                success = await self.send_hybrid(stream_id, [(ReplyContentType.TEXT, msg) for msg in self.messages])
+            else:
+                success = await self.send_forward(
+                    stream_id,
+                    [
+                        (
+                            str(global_config.bot.qq_account),
+                            str(global_config.bot.nickname),
+                            [(ReplyContentType.TEXT, msg)],
+                        )
+                        for msg in self.messages
+                    ],
+                )
+            if not success:
+                raise ValueError("转发消息失败")
+            self.messages = []
+        return True, True, None, None, None
+
+
+class RandomEmojis(BaseCommand):
+    command_name = "random_emojis"
+    command_description = "发送多张随机表情包"
+    command_pattern = r"^/random_emojis$"
+
+    async def execute(self):
+        emojis = await emoji_api.get_random(5)
+        if not emojis:
+            return False, "未找到表情包", False
+        emoji_base64_list = []
+        for emoji in emojis:
+            emoji_base64_list.append(emoji[0])
+        return await self.forward_images(emoji_base64_list)
+
+    async def forward_images(self, images: List[str]):
+        """
+        把多张图片用合并转发的方式发给用户
+        """
+        success = await self.send_forward([("0", "神秘用户", [(ReplyContentType.IMAGE, img)]) for img in images])
+        return (True, "已发送随机表情包", True) if success else (False, "发送随机表情包失败", False)
 
 
 # ===== 插件注册 =====
@@ -153,7 +226,7 @@ class HelloWorldPlugin(BasePlugin):
 
     # 插件基本信息
     plugin_name: str = "hello_world_plugin"  # 内部标识符
-    enable_plugin: bool = True
+    enable_plugin: bool = False
     dependencies: List[str] = []  # 插件依赖列表
     python_dependencies: List[str] = []  # Python包依赖列表
     config_file_name: str = "config.toml"  # 配置文件名
@@ -185,6 +258,8 @@ class HelloWorldPlugin(BasePlugin):
             (ByeAction.get_action_info(), ByeAction),  # 添加告别Action
             (TimeCommand.get_command_info(), TimeCommand),
             (PrintMessage.get_handler_info(), PrintMessage),
+            (ForwardMessages.get_handler_info(), ForwardMessages),
+            (RandomEmojis.get_command_info(), RandomEmojis),
         ]
 
 

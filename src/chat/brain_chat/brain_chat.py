@@ -12,19 +12,16 @@ from src.common.data_models.message_data_model import ReplyContentType
 from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
 from src.chat.utils.prompt_builder import global_prompt_manager
 from src.chat.utils.timer_calculator import Timer
-from src.chat.planner_actions.planner import ActionPlanner
+from src.chat.brain_chat.brain_planner import BrainPlanner
 from src.chat.planner_actions.action_modifier import ActionModifier
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
 from src.chat.heart_flow.hfc_utils import send_typing, stop_typing
 from src.chat.express.expression_learner import expression_learner_manager
-from src.chat.frequency_control.frequency_control import frequency_control_manager
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
 from src.plugin_system.core import events_manager
 from src.plugin_system.apis import generator_api, send_api, message_api, database_api
-from src.mais4u.mai_think import mai_thinking_manager
-from src.mais4u.s4u_config import s4u_config
 from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
@@ -56,19 +53,18 @@ install(extra_lines=3)
 
 # 注释：原来的动作修改超时常量已移除，因为改为顺序执行
 
-logger = get_logger("hfc")  # Logger Name Changed
+logger = get_logger("bc")  # Logger Name Changed
 
 
-class HeartFChatting:
+class BrainChatting:
     """
-    管理一个连续的Focus Chat循环
+    管理一个连续的私聊Brain Chat循环
     用于在特定聊天流中生成回复。
-    其生命周期现在由其关联的 SubHeartflow 的 FOCUSED 状态控制。
     """
 
     def __init__(self, chat_id: str):
         """
-        HeartFChatting 初始化函数
+        BrainChatting 初始化函数
 
         参数:
             chat_id: 聊天流唯一标识符(如stream_id)
@@ -85,7 +81,7 @@ class HeartFChatting:
         self.expression_learner = expression_learner_manager.get_expression_learner(self.stream_id)
 
         self.action_manager = ActionManager()
-        self.action_planner = ActionPlanner(chat_id=self.stream_id, action_manager=self.action_manager)
+        self.action_planner = BrainPlanner(chat_id=self.stream_id, action_manager=self.action_manager)
         self.action_modifier = ActionModifier(action_manager=self.action_manager, chat_id=self.stream_id)
 
         # 循环控制内部状态
@@ -99,16 +95,15 @@ class HeartFChatting:
 
         self.last_read_time = time.time() - 2
 
-        self.talk_threshold = global_config.chat.talk_value
-
-        self.no_reply_until_call = False
+        self.more_plan = False
+        
 
     async def start(self):
         """检查是否需要启动主循环，如果未激活则启动。"""
 
         # 如果循环已经激活，直接返回
         if self.running:
-            logger.debug(f"{self.log_prefix} HeartFChatting 已激活，无需重复启动")
+            logger.debug(f"{self.log_prefix} BrainChatting 已激活，无需重复启动")
             return
 
         try:
@@ -117,25 +112,25 @@ class HeartFChatting:
 
             self._loop_task = asyncio.create_task(self._main_chat_loop())
             self._loop_task.add_done_callback(self._handle_loop_completion)
-            logger.info(f"{self.log_prefix} HeartFChatting 启动完成")
+            logger.info(f"{self.log_prefix} BrainChatting 启动完成")
 
         except Exception as e:
             # 启动失败时重置状态
             self.running = False
             self._loop_task = None
-            logger.error(f"{self.log_prefix} HeartFChatting 启动失败: {e}")
+            logger.error(f"{self.log_prefix} BrainChatting 启动失败: {e}")
             raise
 
     def _handle_loop_completion(self, task: asyncio.Task):
         """当 _hfc_loop 任务完成时执行的回调。"""
         try:
             if exception := task.exception():
-                logger.error(f"{self.log_prefix} HeartFChatting: 脱离了聊天(异常): {exception}")
+                logger.error(f"{self.log_prefix} BrainChatting: 脱离了聊天(异常): {exception}")
                 logger.error(traceback.format_exc())  # Log full traceback for exceptions
             else:
-                logger.info(f"{self.log_prefix} HeartFChatting: 脱离了聊天 (外部停止)")
+                logger.info(f"{self.log_prefix} BrainChatting: 脱离了聊天 (外部停止)")
         except asyncio.CancelledError:
-            logger.info(f"{self.log_prefix} HeartFChatting: 结束了聊天")
+            logger.info(f"{self.log_prefix} BrainChatting: 结束了聊天")
 
     def start_cycle(self) -> Tuple[Dict[str, float], str]:
         self._cycle_counter += 1
@@ -175,41 +170,13 @@ class HeartFChatting:
         )
 
         if len(recent_messages_list) >= 1:
-            # !处理no_reply_until_call逻辑
-            if self.no_reply_until_call:
-                for message in recent_messages_list:
-                    if (
-                        message.is_mentioned
-                        or message.is_at
-                        or len(recent_messages_list) >= 8
-                        or time.time() - self.last_read_time > 600
-                    ):
-                        self.no_reply_until_call = False
-                        break
-                # 没有提到，继续保持沉默
-                if self.no_reply_until_call:
-                    # logger.info(f"{self.log_prefix} 没有提到，继续保持沉默")
-                    await asyncio.sleep(1)
-                    return True
-
             self.last_read_time = time.time()
-
-            # !此处使at或者提及必定回复
-            mentioned_message = None
-            for message in recent_messages_list:
-                if (message.is_mentioned or message.is_at) and global_config.chat.mentioned_bot_reply:
-                    mentioned_message = message
-
-            # *控制频率用
-            if mentioned_message:
-                await self._observe(recent_messages_list=recent_messages_list, force_reply_message=mentioned_message)
-            elif random.random() < global_config.chat.talk_value * frequency_control_manager.get_or_create_frequency_control(self.stream_id).get_talk_frequency_adjust():
-                await self._observe(recent_messages_list=recent_messages_list)
-            else:
-                # 没有提到，继续保持沉默，等待5秒防止频繁触发
-                await asyncio.sleep(5)
-                return True
+            await self._observe(
+                recent_messages_list=recent_messages_list
+            )
+            
         else:
+            # Normal模式：消息数量不足，等待
             await asyncio.sleep(0.2)
             return True
         return True
@@ -266,15 +233,11 @@ class HeartFChatting:
 
     async def _observe(
         self,  # interest_value: float = 0.0,
-        recent_messages_list: Optional[List["DatabaseMessages"]] = None,
-        force_reply_message: Optional["DatabaseMessages"] = None,
+        recent_messages_list: Optional[List["DatabaseMessages"]] = None
     ) -> bool:  # sourcery skip: merge-else-if-into-elif, remove-redundant-if
         if recent_messages_list is None:
             recent_messages_list = []
         reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
-
-        if s4u_config.enable_s4u:
-            await send_typing()
 
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             await self.expression_learner.trigger_learning_for_chat()
@@ -326,23 +289,6 @@ class HeartFChatting:
                 action_to_use_info, _ = await self.action_planner.plan(
                     loop_start_time=self.last_read_time,
                     available_actions=available_actions,
-                )
-
-            has_reply = False
-            for action in action_to_use_info:
-                if action.action_type == "reply":
-                    has_reply = True
-                    break
-
-            if not has_reply and force_reply_message:
-                action_to_use_info.append(
-                    ActionPlannerInfo(
-                        action_type="reply",
-                        reasoning="有人提到了你，进行回复",
-                        action_data={},
-                        action_message=force_reply_message,
-                        available_actions=available_actions,
-                    )
                 )
 
             # 3. 并行执行所有动作
@@ -405,12 +351,6 @@ class HeartFChatting:
 
             self.end_cycle(loop_info, cycle_timers)
             self.print_cycle_info(cycle_timers)
-
-            """S4U内容，暂时保留"""
-            if s4u_config.enable_s4u:
-                await stop_typing()
-                await mai_thinking_manager.get_mai_think(self.stream_id).do_think_after_response(reply_text)
-            """S4U内容，暂时保留"""
 
             return True
 
@@ -544,6 +484,7 @@ class HeartFChatting:
         """执行单个动作的通用函数"""
         try:
             with Timer(f"动作{action_planner_info.action_type}", cycle_timers):
+                
                 if action_planner_info.action_type == "no_reply":
                     # 直接处理no_action逻辑，不再通过动作系统
                     reason = action_planner_info.reasoning or "选择不回复"
@@ -561,17 +502,6 @@ class HeartFChatting:
                     )
                     return {"action_type": "no_action", "success": True, "reply_text": "", "command": ""}
 
-                elif action_planner_info.action_type == "wait_time":
-                    action_planner_info.action_data = action_planner_info.action_data or {}
-                    logger.info(f"{self.log_prefix} 等待{action_planner_info.action_data['time']}秒后回复")
-                    await asyncio.sleep(action_planner_info.action_data["time"])
-                    return {"action_type": "wait_time", "success": True, "reply_text": "", "command": ""}
-
-                elif action_planner_info.action_type == "no_reply_until_call":
-                    logger.info(f"{self.log_prefix} 保持沉默，直到有人直接叫的名字")
-                    self.no_reply_until_call = True
-                    return {"action_type": "no_reply_until_call", "success": True, "reply_text": "", "command": ""}
-
                 elif action_planner_info.action_type == "reply":
                     try:
                         success, llm_response = await generator_api.generate_reply(
@@ -587,9 +517,7 @@ class HeartFChatting:
 
                         if not success or not llm_response or not llm_response.reply_set:
                             if action_planner_info.action_message:
-                                logger.info(
-                                    f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败"
-                                )
+                                logger.info(f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败")
                             else:
                                 logger.info("回复生成失败")
                             return {"action_type": "reply", "success": False, "reply_text": "", "loop_info": None}

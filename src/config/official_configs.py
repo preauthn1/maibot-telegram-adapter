@@ -43,9 +43,19 @@ class PersonalityConfig(ConfigBase):
 
     reply_style: str = ""
     """表达风格"""
-    
+
     interest: str = ""
     """兴趣"""
+    
+    plan_style: str = ""
+    """说话规则，行为风格"""
+    
+    visual_style: str = ""
+    """图片提示词"""
+    
+    private_plan_style: str = ""
+    """私聊说话规则，行为风格"""
+
 
 @dataclass
 class RelationshipConfig(ConfigBase):
@@ -61,56 +71,22 @@ class ChatConfig(ConfigBase):
 
     max_context_size: int = 18
     """上下文长度"""
-    
+
     interest_rate_mode: Literal["fast", "accurate"] = "fast"
     """兴趣值计算模式，fast为快速计算，accurate为精确计算"""
 
-    mentioned_bot_reply: float = 1
-    """提及 bot 必然回复，1为100%回复，0为不额外增幅"""
-    
     planner_size: float = 1.5
     """副规划器大小，越小，麦麦的动作执行能力越精细，但是消耗更多token，调大可以缓解429类错误"""
 
+    mentioned_bot_reply: bool = True
+    """是否启用提及必回复"""
+
     at_bot_inevitable_reply: float = 1
     """@bot 必然回复，1为100%回复，0为不额外增幅"""
-    
-    talk_frequency: float = 0.5
-    """回复频率阈值"""
 
-    # 合并后的时段频率配置
-    talk_frequency_adjust: list[list[str]] = field(default_factory=lambda: [])
-
-
-    focus_value: float = 0.5
-    """麦麦的专注思考能力，越低越容易专注，消耗token也越多"""
     
-    focus_value_adjust: list[list[str]] = field(default_factory=lambda: [])
-    
-    """
-    统一的活跃度和专注度配置
-    格式：[["platform:chat_id:type", "HH:MM,frequency", "HH:MM,frequency", ...], ...]
-    
-    全局配置示例：
-    [["", "8:00,1", "12:00,2", "18:00,1.5", "00:00,0.5"]]
-    
-    特定聊天流配置示例：
-    [
-        ["", "8:00,1", "12:00,1.2", "18:00,1.5", "01:00,0.6"],  # 全局默认配置
-        ["qq:123456784:group", "12:20,1", "16:10,2", "20:10,1", "00:10,0.3"],  # 特定群聊配置
-        ["qq:729957033:private", "8:20,1", "12:10,2", "20:10,1.5", "00:10,0.2"]  # 特定私聊配置
-    ]
-    
-    说明：
-    - 当第一个元素为空字符串""时，表示全局默认配置
-    - 当第一个元素为"platform:id:type"格式时，表示特定聊天流配置
-    - 后续元素是"时间,频率"格式，表示从该时间开始使用该频率，直到下一个时间点
-    - 优先级：特定聊天流配置 > 全局配置 > 默认值
-    
-    注意：
-    - talk_frequency_adjust 控制回复频率，数值越高回复越频繁
-    - focus_value_adjust 控制专注思考能力，数值越低越容易专注，消耗token也越多
-    """
-    
+    talk_value: float = 1
+    """思考频率"""
 
 
 @dataclass
@@ -122,6 +98,7 @@ class MessageReceiveConfig(ConfigBase):
 
     ban_msgs_regex: set[str] = field(default_factory=lambda: set())
     """过滤正则表达式列表"""
+
 
 @dataclass
 class ExpressionConfig(ConfigBase):
@@ -322,26 +299,6 @@ class EmojiConfig(ConfigBase):
 
 
 @dataclass
-class MemoryConfig(ConfigBase):
-    """记忆配置类"""
-
-    enable_memory: bool = True
-    """是否启用记忆系统"""
-
-    forget_memory_interval: int = 1500
-    """记忆遗忘间隔（秒）"""
-
-    memory_forget_time: int = 24
-    """记忆遗忘时间（小时）"""
-
-    memory_forget_percentage: float = 0.01
-    """记忆遗忘比例"""
-
-    memory_ban_words: list[str] = field(default_factory=lambda: ["表情包", "图片", "回复", "聊天记录"])
-    """不允许记忆的词列表"""
-
-
-@dataclass
 class MoodConfig(ConfigBase):
     """情绪配置类"""
 
@@ -397,14 +354,6 @@ class KeywordReactionConfig(ConfigBase):
         for rule in self.keyword_rules + self.regex_rules:
             if not isinstance(rule, KeywordRuleConfig):
                 raise ValueError(f"规则必须是KeywordRuleConfig类型，而不是{type(rule).__name__}")
-
-
-@dataclass
-class CustomPromptConfig(ConfigBase):
-    """自定义提示词配置类"""
-
-    image_prompt: str = ""
-    """图片提示词"""
 
 
 @dataclass
@@ -474,9 +423,6 @@ class ExperimentalConfig(ConfigBase):
 
     enable_friend_chat: bool = False
     """是否启用好友聊天"""
-
-    pfc_chatting: bool = False
-    """是否启用PFC"""
 
 
 @dataclass

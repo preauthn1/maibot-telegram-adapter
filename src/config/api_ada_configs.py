@@ -102,9 +102,6 @@ class ModelTaskConfig(ConfigBase):
     replyer: TaskConfig
     """normal_chat首要回复模型模型配置"""
 
-    emotion: TaskConfig
-    """情绪模型配置"""
-
     vlm: TaskConfig
     """视觉语言模型配置"""
 
@@ -116,9 +113,6 @@ class ModelTaskConfig(ConfigBase):
 
     planner: TaskConfig
     """规划模型配置"""
-
-    planner_small: TaskConfig
-    """副规划模型配置"""
 
     embedding: TaskConfig
     """嵌入模型配置"""
