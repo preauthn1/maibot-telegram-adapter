@@ -351,7 +351,7 @@ class GeminiClient(BaseClient):
 
         # 尝试传入自定义base_url(实验性，必须为Gemini格式)
         if hasattr(api_provider, "base_url") and api_provider.base_url:
-            self.client._api_client._base_url = api_provider.base_url
+            self.client._api_client._http_options.base_url = api_provider.base_url
             self._api_client = self.client._api_client
 
     @staticmethod
