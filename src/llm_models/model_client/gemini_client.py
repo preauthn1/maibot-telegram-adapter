@@ -351,7 +351,14 @@ class GeminiClient(BaseClient):
 
         # 尝试传入自定义base_url(实验性，必须为Gemini格式)
         if hasattr(api_provider, "base_url") and api_provider.base_url:
-            self.client._api_client._http_options.base_url = api_provider.base_url
+            base_url = api_provider.base_url.rstrip("/")  # 去掉末尾 /
+            self.client._api_client._http_options.base_url = base_url
+
+            # 如果 base_url 已经带了 /v1 或 /v1beta，就清掉 SDK 的 api_version
+            if base_url.endswith("/v1") or base_url.endswith("/v1beta"):
+                self.client._api_client._http_options.api_version = None
+
+            # 让 GeminiClient 内部也能访问底层 api_client
             self._api_client = self.client._api_client
 
     @staticmethod
