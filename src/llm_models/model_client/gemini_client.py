@@ -4,7 +4,6 @@ import base64
 from typing import Callable, AsyncIterator, Optional, Coroutine, Any, List
 
 from google import genai
-from google.genai import _base_url as genai_base_url
 from google.genai.types import (
     Content,
     Part,
@@ -352,8 +351,7 @@ class GeminiClient(BaseClient):
 
         # 尝试传入自定义base_url(实验性，必须为Gemini格式)
         if hasattr(api_provider, "base_url") and api_provider.base_url:
-            self.base_url = api_provider.base_url
-            self.client._api_client._base_url = self.base_url
+            self._api_client.http_options.base_url = api_provider.base_url
 
     @staticmethod
     def clamp_thinking_budget(tb: int, model_id: str) -> int:
