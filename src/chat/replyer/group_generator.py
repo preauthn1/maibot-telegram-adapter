@@ -961,7 +961,7 @@ class DefaultReplyer:
     async def llm_generate_content(self, prompt: str):
         with Timer("LLM生成", {}):  # 内部计时器，可选保留
             # 直接使用已初始化的模型实例
-            logger.info(f"\n{prompt}\n")
+            # logger.info(f"\n{prompt}\n")
 
             if global_config.debug.show_prompt:
                 logger.info(f"\n{prompt}\n")

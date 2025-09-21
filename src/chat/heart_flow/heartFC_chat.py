@@ -206,9 +206,10 @@ class HeartFChatting:
             elif random.random() < global_config.chat.talk_value * frequency_control_manager.get_or_create_frequency_control(self.stream_id).get_talk_frequency_adjust():
                 await self._observe(recent_messages_list=recent_messages_list)
             else:
+                # 没有提到，继续保持沉默，等待5秒防止频繁触发
+                await asyncio.sleep(5)
                 return True
         else:
-            # Normal模式：消息数量不足，等待
             await asyncio.sleep(0.2)
             return True
         return True
