@@ -17,6 +17,7 @@ from google.genai.types import (
     EmbedContentResponse,
     EmbedContentConfig,
     SafetySetting,
+    HttpOptions,
     HarmCategory,
     HarmBlockThreshold,
 )
@@ -345,21 +346,20 @@ class GeminiClient(BaseClient):
 
     def __init__(self, api_provider: APIProvider):
         super().__init__(api_provider)
+
+        http_options_kwargs = {"timeout": api_provider.timeout}
+        # 增加传入参数处理
+        if api_provider.base_url:
+            parts = api_provider.base_url.rsplit("/", 1)
+            if len(parts) == 2 and parts[1].startswith("v"):
+                http_options_kwargs["base_url"] = parts[0] + "/"
+                http_options_kwargs["api_version"] = parts[1]
+            else:
+                http_options_kwargs["base_url"] = api_provider.base_url
         self.client = genai.Client(
+            http_options=HttpOptions(**http_options_kwargs),
             api_key=api_provider.api_key,
         )  # 这里和openai不一样，gemini会自己决定自己是否需要retry
-
-        # 尝试传入自定义base_url(实验性，必须为Gemini格式)
-        if hasattr(api_provider, "base_url") and api_provider.base_url:
-            base_url = api_provider.base_url.rstrip("/")  # 去掉末尾 /
-            self.client._api_client._http_options.base_url = base_url
-
-            # 如果 base_url 已经带了 /v1 或 /v1beta，就清掉 SDK 的 api_version
-            if base_url.endswith("/v1") or base_url.endswith("/v1beta"):
-                self.client._api_client._http_options.api_version = None
-
-            # 让 GeminiClient 内部也能访问底层 api_client
-            self._api_client = self.client._api_client
 
     @staticmethod
     def clamp_thinking_budget(tb: int, model_id: str) -> int:
