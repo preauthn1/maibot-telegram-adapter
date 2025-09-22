@@ -350,9 +350,9 @@ class GeminiClient(BaseClient):
         http_options_kwargs = {"timeout": api_provider.timeout}
         # 增加传入参数处理
         if api_provider.base_url:
-            parts = api_provider.base_url.rsplit("/", 1)
+            parts = api_provider.base_url.rstrip("/").rsplit("/", 1)
             if len(parts) == 2 and parts[1].startswith("v"):
-                http_options_kwargs["base_url"] = parts[0] + "/"
+                http_options_kwargs["base_url"] = f"{parts[0]}/"
                 http_options_kwargs["api_version"] = parts[1]
             else:
                 http_options_kwargs["base_url"] = api_provider.base_url
