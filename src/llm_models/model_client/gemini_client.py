@@ -346,9 +346,15 @@ class GeminiClient(BaseClient):
 
     def __init__(self, api_provider: APIProvider):
         super().__init__(api_provider)
-
-        http_options_kwargs = {"timeout": api_provider.timeout}
+        
         # 增加传入参数处理
+        http_options_kwargs = {"timeout": api_provider.timeout}
+
+        # 秒转换为毫秒传入
+        if api_provider.timeout is not None:
+            http_options_kwargs["timeout"] = int(api_provider.timeout * 1000)
+        
+        # 传入并处理地址和版本(必须为Gemini格式)
         if api_provider.base_url:
             parts = api_provider.base_url.rstrip("/").rsplit("/", 1)
             if len(parts) == 2 and parts[1].startswith("v"):
