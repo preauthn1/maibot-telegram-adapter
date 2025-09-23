@@ -131,9 +131,8 @@ enable_thinking = false # 禁用思考
 [models.extra_params]
 thinking = {type = "disabled"} # 禁用思考
 ```
-请注意，`extra_params` 的配置应该构成一个合法的TOML字典结构，具体内容取决于API服务商的要求。
 
-对于`gemini`需要单独进行配置
+而对于`gemini`需要单独进行配置
 ```toml
 [[models]]
 model_identifier = "gemini-2.5-flash"
@@ -143,6 +142,8 @@ api_provider = "google"
 thinking_budget = 0 # 禁用思考
 # thinking_budget = -1 由模型自己决定
 ```
+
+请注意，`extra_params` 的配置应该构成一个合法的TOML字典结构，具体内容取决于API服务商的要求。
 
 ### 3.3 配置参数说明
 
