@@ -1,7 +1,7 @@
 import asyncio
 import io
 import base64
-from typing import Callable, AsyncIterator, Optional, Coroutine, Any, List
+from typing import Callable, AsyncIterator, Optional, Coroutine, Any, List, Dict
 
 from google import genai
 from google.genai.types import (
@@ -346,14 +346,14 @@ class GeminiClient(BaseClient):
 
     def __init__(self, api_provider: APIProvider):
         super().__init__(api_provider)
-        
+
         # 增加传入参数处理
-        http_options_kwargs = {"timeout": api_provider.timeout}
+        http_options_kwargs: Dict[str, Any] = {}
 
         # 秒转换为毫秒传入
         if api_provider.timeout is not None:
             http_options_kwargs["timeout"] = int(api_provider.timeout * 1000)
-        
+
         # 传入并处理地址和版本(必须为Gemini格式)
         if api_provider.base_url:
             parts = api_provider.base_url.rstrip("/").rsplit("/", 1)
@@ -463,7 +463,9 @@ class GeminiClient(BaseClient):
             try:
                 tb = int(extra_params["thinking_budget"])
             except (ValueError, TypeError):
-                logger.warning(f"无效的 thinking_budget 值 {extra_params['thinking_budget']}，将使用模型自动预算模式 {tb}")
+                logger.warning(
+                    f"无效的 thinking_budget 值 {extra_params['thinking_budget']}，将使用模型自动预算模式 {tb}"
+                )
         # 裁剪到模型支持的范围
         tb = self.clamp_thinking_budget(tb, model_info.model_identifier)
 
