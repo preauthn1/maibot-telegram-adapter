@@ -28,16 +28,6 @@ class EmojiAction(BaseAction):
     action_name = "emoji"
     action_description = "发送表情包辅助表达情绪"
 
-    # LLM判断提示词
-    llm_judge_prompt = """
-    判定是否需要使用表情动作的条件：
-    1. 用户明确要求使用表情包
-    2. 这是一个适合表达强烈情绪的场合
-    3. 不要发送太多表情包，如果你已经发送过多个表情包则回答"否"
-    
-    请回答"是"或"否"。
-    """
-
     # 动作参数定义
     action_parameters = {}
 
