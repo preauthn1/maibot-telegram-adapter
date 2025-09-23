@@ -137,7 +137,7 @@ thinking = {type = "disabled"} # 禁用思考
 [[models]]
 model_identifier = "gemini-2.5-flash"
 name = "gemini-2.5-flash"
-api_provider = "google"
+api_provider = "Google"
 [models.extra_params]
 thinking_budget = 0 # 禁用思考
 # thinking_budget = -1 由模型自己决定
