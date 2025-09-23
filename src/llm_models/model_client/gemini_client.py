@@ -386,20 +386,29 @@ class GeminiClient(BaseClient):
                     limits = THINKING_BUDGET_LIMITS[key]
                     break
 
-        # 特殊值处理
+        # 预算值处理
         if tb == THINKING_BUDGET_AUTO:
             return THINKING_BUDGET_AUTO
         if tb == THINKING_BUDGET_DISABLED:
             if limits and limits.get("can_disable", False):
                 return THINKING_BUDGET_DISABLED
-            return limits["min"] if limits else THINKING_BUDGET_AUTO
+            if limits:
+                logger.warning(f"模型 {model_id} 不支持禁用思考预算，已回退到最小值 {limits['min']}")
+                return limits["min"]
+            return THINKING_BUDGET_AUTO
 
-        # 已知模型裁剪到范围
+        # 已知模型范围裁剪 + 提示
         if limits:
-            return max(limits["min"], min(tb, limits["max"]))
+            if tb < limits["min"]:
+                logger.warning(f"模型 {model_id} 的 thinking_budget={tb} 过小，已调整为最小值 {limits['min']}")
+                return limits["min"]
+            if tb > limits["max"]:
+                logger.warning(f"模型 {model_id} 的 thinking_budget={tb} 过大，已调整为最大值 {limits['max']}")
+                return limits["max"]
+            return tb
 
-        # 未知模型，返回动态模式
-        logger.warning(f"模型 {model_id} 未在 THINKING_BUDGET_LIMITS 中定义，将使用动态模式 tb=-1 兼容。")
+        # 未知模型 → 默认自动模式
+        logger.warning(f"模型 {model_id} 未在 THINKING_BUDGET_LIMITS 中定义，已启用模型自动预算兼容")
         return THINKING_BUDGET_AUTO
 
     async def get_response(
@@ -454,7 +463,7 @@ class GeminiClient(BaseClient):
             try:
                 tb = int(extra_params["thinking_budget"])
             except (ValueError, TypeError):
-                logger.warning(f"无效的 thinking_budget 值 {extra_params['thinking_budget']}，将使用默认动态模式 {tb}")
+                logger.warning(f"无效的 thinking_budget 值 {extra_params['thinking_budget']}，将使用模型自动预算模式 {tb}")
         # 裁剪到模型支持的范围
         tb = self.clamp_thinking_budget(tb, model_info.model_identifier)
 
