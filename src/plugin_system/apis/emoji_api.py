@@ -366,17 +366,72 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
 
         # 4. 生成文件名
         if not filename:
-            # 基于时间戳和UUID生成唯一文件名
+            # 基于时间戳、微秒和短base64生成唯一文件名
+            import time
             timestamp = int(time.time())
-            unique_id = str(uuid.uuid4())[:8]
-            filename = f"emoji_{timestamp}_{unique_id}"
+            microseconds = int(time.time() * 1000000) % 1000000  # 添加微秒级精度
+
+            # 生成12位随机标识符，使用base64编码（增加随机性）
+            import random
+            random_bytes = random.getrandbits(72).to_bytes(9, 'big')  # 72位 = 9字节 = 12位base64
+            short_id = base64.b64encode(random_bytes).decode('ascii')[:12].rstrip('=')
+            # 确保base64编码适合文件名（替换/和-）
+            short_id = short_id.replace('/', '_').replace('+', '-')
+            filename = f"emoji_{timestamp}_{microseconds}_{short_id}"
 
         # 确保文件名有扩展名
         if not filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
             filename = f"{filename}.png"  # 默认使用png格式
 
-        # 5. 保存base64图片到emoji目录
+        # 检查文件名是否已存在，如果存在则重新生成短标识符
         temp_file_path = os.path.join(EMOJI_DIR, filename)
+        attempts = 0
+        max_attempts = 10
+        while os.path.exists(temp_file_path) and attempts < max_attempts:
+            # 重新生成短标识符
+            import random
+            random_bytes = random.getrandbits(48).to_bytes(6, 'big')
+            short_id = base64.b64encode(random_bytes).decode('ascii')[:8].rstrip('=')
+            short_id = short_id.replace('/', '_').replace('+', '-')
+
+            # 分离文件名和扩展名，重新生成文件名
+            name_part, ext = os.path.splitext(filename)
+            # 去掉原来的标识符，添加新的
+            base_name = name_part.rsplit('_', 1)[0]  # 移除最后一个_后的部分
+            filename = f"{base_name}_{short_id}{ext}"
+            temp_file_path = os.path.join(EMOJI_DIR, filename)
+            attempts += 1
+
+        # 如果还是冲突，使用UUID作为备用方案
+        if os.path.exists(temp_file_path):
+            uuid_short = str(uuid.uuid4())[:8]
+            name_part, ext = os.path.splitext(filename)
+            base_name = name_part.rsplit('_', 1)[0]
+            filename = f"{base_name}_{uuid_short}{ext}"
+            temp_file_path = os.path.join(EMOJI_DIR, filename)
+
+            # 如果UUID方案也冲突，添加序号
+            counter = 1
+            original_filename = filename
+            while os.path.exists(temp_file_path):
+                name_part, ext = os.path.splitext(original_filename)
+                filename = f"{name_part}_{counter}{ext}"
+                temp_file_path = os.path.join(EMOJI_DIR, filename)
+                counter += 1
+
+                # 防止无限循环，最多尝试100次
+                if counter > 100:
+                    logger.error(f"[EmojiAPI] 无法生成唯一文件名，尝试次数过多: {original_filename}")
+                    return {
+                        "success": False,
+                        "message": "无法生成唯一文件名，请稍后重试",
+                        "description": None,
+                        "emotions": None,
+                        "replaced": None,
+                        "hash": None
+                    }
+
+        # 5. 保存base64图片到emoji目录
 
         try:
             # 解码base64并保存图片
@@ -467,4 +522,182 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
             "emotions": None,
             "replaced": None,
             "hash": None
+        }
+
+
+# =============================================================================
+# 表情包删除API函数
+# =============================================================================
+
+
+async def delete_emoji(emoji_hash: str) -> Dict[str, Any]:
+    """删除表情包
+
+    Args:
+        emoji_hash: 要删除的表情包的哈希值
+
+    Returns:
+        Dict[str, Any]: 删除结果，包含以下字段：
+            - success: bool, 是否成功删除
+            - message: str, 结果消息
+            - count_before: Optional[int], 删除前的表情包数量
+            - count_after: Optional[int], 删除后的表情包数量
+            - description: Optional[str], 被删除的表情包描述（成功时）
+            - emotions: Optional[List[str]], 被删除的表情包情感标签（成功时）
+
+    Raises:
+        ValueError: 如果哈希值为空
+        TypeError: 如果哈希值不是字符串类型
+    """
+    if not emoji_hash:
+        raise ValueError("表情包哈希值不能为空")
+    if not isinstance(emoji_hash, str):
+        raise TypeError("emoji_hash必须是字符串类型")
+
+    try:
+        logger.info(f"[EmojiAPI] 开始删除表情包，哈希值: {emoji_hash}")
+
+        # 1. 获取emoji管理器和删除前的数量
+        emoji_manager = get_emoji_manager()
+        count_before = emoji_manager.emoji_num
+
+        # 2. 获取被删除表情包的信息（用于返回结果）
+        try:
+            deleted_emoji = await emoji_manager.get_emoji_from_manager(emoji_hash)
+            description = deleted_emoji.description if deleted_emoji else None
+            emotions = deleted_emoji.emotion if deleted_emoji else None
+        except Exception as info_error:
+            logger.warning(f"[EmojiAPI] 获取被删除表情包信息失败: {info_error}")
+            description = None
+            emotions = None
+
+        # 3. 执行删除操作
+        delete_success = await emoji_manager.delete_emoji(emoji_hash)
+
+        # 4. 获取删除后的数量
+        count_after = emoji_manager.emoji_num
+
+        # 5. 构建返回结果
+        if delete_success:
+            return {
+                "success": True,
+                "message": f"表情包删除成功 (哈希: {emoji_hash[:8]}...)",
+                "count_before": count_before,
+                "count_after": count_after,
+                "description": description,
+                "emotions": emotions
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"表情包删除失败，可能因为哈希值不存在或删除过程出错",
+                "count_before": count_before,
+                "count_after": count_after,
+                "description": None,
+                "emotions": None
+            }
+
+    except Exception as e:
+        logger.error(f"[EmojiAPI] 删除表情包时发生异常: {e}")
+        return {
+            "success": False,
+            "message": f"删除过程中发生错误: {str(e)}",
+            "count_before": None,
+            "count_after": None,
+            "description": None,
+            "emotions": None
+        }
+
+
+async def delete_emoji_by_description(description: str, exact_match: bool = False) -> Dict[str, Any]:
+    """根据描述删除表情包
+
+    Args:
+        description: 表情包描述文本
+        exact_match: 是否精确匹配描述，False则为模糊匹配
+
+    Returns:
+        Dict[str, Any]: 删除结果，包含以下字段：
+            - success: bool, 是否成功删除
+            - message: str, 结果消息
+            - deleted_count: int, 删除的表情包数量
+            - deleted_hashes: List[str], 被删除的表情包哈希列表
+            - matched_count: int, 匹配到的表情包数量
+
+    Raises:
+        ValueError: 如果描述为空
+        TypeError: 如果描述不是字符串类型
+    """
+    if not description:
+        raise ValueError("描述不能为空")
+    if not isinstance(description, str):
+        raise TypeError("description必须是字符串类型")
+
+    try:
+        logger.info(f"[EmojiAPI] 根据描述删除表情包: {description} (精确匹配: {exact_match})")
+
+        emoji_manager = get_emoji_manager()
+        all_emojis = emoji_manager.emoji_objects
+
+        # 筛选匹配的表情包
+        matching_emojis = []
+        for emoji_obj in all_emojis:
+            if emoji_obj.is_deleted:
+                continue
+
+            if exact_match:
+                if emoji_obj.description == description:
+                    matching_emojis.append(emoji_obj)
+            else:
+                if description.lower() in emoji_obj.description.lower():
+                    matching_emojis.append(emoji_obj)
+
+        matched_count = len(matching_emojis)
+        if matched_count == 0:
+            return {
+                "success": False,
+                "message": f"未找到匹配描述 '{description}' 的表情包",
+                "deleted_count": 0,
+                "deleted_hashes": [],
+                "matched_count": 0
+            }
+
+        # 删除匹配的表情包
+        deleted_count = 0
+        deleted_hashes = []
+        for emoji_obj in matching_emojis:
+            try:
+                delete_success = await emoji_manager.delete_emoji(emoji_obj.hash)
+                if delete_success:
+                    deleted_count += 1
+                    deleted_hashes.append(emoji_obj.hash)
+            except Exception as delete_error:
+                logger.error(f"[EmojiAPI] 删除表情包失败 (哈希: {emoji_obj.hash}): {delete_error}")
+
+        # 构建返回结果
+        if deleted_count > 0:
+            return {
+                "success": True,
+                "message": f"成功删除 {deleted_count} 个表情包 (匹配到 {matched_count} 个)",
+                "deleted_count": deleted_count,
+                "deleted_hashes": deleted_hashes,
+                "matched_count": matched_count
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"匹配到 {matched_count} 个表情包，但删除全部失败",
+                "deleted_count": 0,
+                "deleted_hashes": [],
+                "matched_count": matched_count
+            }
+
+    except Exception as e:
+        logger.error(f"[EmojiAPI] 根据描述删除表情包时发生异常: {e}")
+        return {
+            "success": False,
+            "message": f"删除过程中发生错误: {str(e)}",
+            "deleted_count": 0,
+            "deleted_hashes": [],
+            "matched_count": 0
         }
