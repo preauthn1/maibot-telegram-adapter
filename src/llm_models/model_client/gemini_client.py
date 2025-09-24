@@ -335,7 +335,32 @@ def _default_normal_response_parser(
 
     # 最终的、唯一的空响应检查
     if not api_response.content and not api_response.tool_calls:
-        raise EmptyResponseException("响应中既无文本内容也无工具调用")
+        finish_reason = None
+        try:
+            if resp.candidates:
+                c0 = resp.candidates[0]
+                finish_reason = getattr(c0, "finish_reason", None) or getattr(c0, "finishReason", None)
+        except Exception:
+            pass
+
+        um = getattr(resp, "usage_metadata", None)
+
+        if finish_reason and str(finish_reason).upper().endswith("MAX_TOKENS"):
+            # 特殊处理：模型因为 max_tokens 截断
+            logger.warning(
+                f"Gemini 响应因达到 max_tokens 限制被截断，usage={um}"
+            )
+            # 返回一个带警告的响应，而不是抛异常
+            api_response.content = ""
+            api_response.reasoning_content = None
+            return api_response, None
+
+        logger.error(
+            f"Gemini 空响应诊断：finish_reason={finish_reason}, usage={um}"
+        )
+        raise EmptyResponseException(
+            f"响应中既无文本内容也无工具调用（finish_reason={finish_reason}）"
+        )
 
     return api_response, _usage_record
 
