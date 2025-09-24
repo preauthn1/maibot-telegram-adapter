@@ -16,8 +16,30 @@ from src.plugin_system import (
     ReplyContentType,
     emoji_api,
 )
+from maim_message import Seg
 from src.config.config import global_config
 
+class AddEmojiCommand(BaseCommand):
+    command_name = "add_emoji"
+    command_description = "添加表情包"
+    command_pattern = r".*/emoji add.*"
+    
+    async def execute(self) -> Tuple[bool, str, bool]:
+        emoji_base64_list = self.find_and_return_emoji_in_message(self.message.message_segment)
+        return True, f"找到了{len(emoji_base64_list)}个表情包", True
+    
+    def find_and_return_emoji_in_message(self, message_segments: List[Seg]) -> List[str]:
+        emoji_base64_list = []
+        for seg in message_segments:
+            if seg.type == "emoji":
+                emoji_base64_list.append(seg.data)
+            elif seg.type == "image":
+                # 假设图片数据是base64编码的
+                emoji_base64_list.append(seg.data)
+            elif seg.type == "seglist":
+                # 递归处理嵌套的Seg列表
+                emoji_base64_list.extend(self.find_and_return_emoji_in_message(seg.data))
+        return emoji_base64_list
 
 class ListEmojiCommand(BaseCommand):
     """列表表情包Command - 响应/emoji list命令"""
