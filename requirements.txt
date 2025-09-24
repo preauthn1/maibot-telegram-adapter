@@ -7,7 +7,7 @@ faiss-cpu
 fastapi
 jieba
 jsonlines
-maim_message
+maim-message>=0
 quick_algo
 networkx
 numpy
