@@ -527,15 +527,20 @@ class GeminiClient(BaseClient):
 
                 resp, usage_record = async_response_parser(req_task.result())
         except (ClientError, ServerError) as e:
-            # 重封装ClientError和ServerError为RespNotOkException
+            # 重封装 ClientError 和 ServerError 为 RespNotOkException
             raise RespNotOkException(e.code, e.message) from None
         except (
             UnknownFunctionCallArgumentError,
             UnsupportedFunctionError,
             FunctionInvocationError,
         ) as e:
-            raise ValueError(f"工具类型错误：请检查工具选项和参数：{str(e)}") from None
+            # 工具调用相关错误
+            raise RespParseException(None, f"工具调用参数错误: {str(e)}") from None
+        except EmptyResponseException as e:
+            # 保持原始异常，便于区分“空响应”和网络异常
+            raise e
         except Exception as e:
+            # 其他未预料的错误，才归为网络连接类
             raise NetworkConnectionError() from e
 
         if usage_record:
