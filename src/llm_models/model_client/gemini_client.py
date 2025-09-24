@@ -333,34 +333,41 @@ def _default_normal_response_parser(
 
     api_response.raw_data = resp
 
+    # 检查是否因为 max_tokens 截断
+    try:
+        if resp.candidates:
+            c0 = resp.candidates[0]
+            reason = getattr(c0, "finish_reason", None) or getattr(c0, "finishReason", None)
+            if reason and "MAX_TOKENS" in str(reason):
+                # 检查第二个及之后的 parts 是否有内容
+                has_real_output = False
+                if getattr(c0, "content", None) and getattr(c0.content, "parts", None):
+                    for p in c0.content.parts[1:]:  # 跳过第一个 thought
+                        if getattr(p, "text", None) and p.text.strip():
+                            has_real_output = True
+                            break
+
+                if not has_real_output and getattr(resp, "text", None):
+                    has_real_output = True
+
+                if has_real_output:
+                    logger.warning(
+                        "⚠ Gemini 响应因达到 max_tokens 限制被部分截断，\n"
+                        "    可能会对回复内容造成影响，建议修改模型 max_tokens 配置！"
+                    )
+                else:
+                    logger.warning(
+                        "⚠ Gemini 响应因达到 max_tokens 限制被截断，\n"
+                        "    请修改模型 max_tokens 配置！"
+                    )
+
+                return api_response, _usage_record
+    except Exception as e:
+        logger.debug(f"检查 MAX_TOKENS 截断时异常: {e}")
+
     # 最终的、唯一的空响应检查
     if not api_response.content and not api_response.tool_calls:
-        finish_reason = None
-        try:
-            if resp.candidates:
-                c0 = resp.candidates[0]
-                finish_reason = getattr(c0, "finish_reason", None) or getattr(c0, "finishReason", None)
-        except Exception:
-            pass
-
-        um = getattr(resp, "usage_metadata", None)
-
-        if finish_reason and str(finish_reason).upper().endswith("MAX_TOKENS"):
-            # 特殊处理：模型因为 max_tokens 截断
-            logger.warning(
-                f"Gemini 响应因达到 max_tokens 限制被截断，usage={um}"
-            )
-            # 返回一个带警告的响应，而不是抛异常
-            api_response.content = ""
-            api_response.reasoning_content = None
-            return api_response, None
-
-        logger.error(
-            f"Gemini 空响应诊断：finish_reason={finish_reason}, usage={um}"
-        )
-        raise EmptyResponseException(
-            f"响应中既无文本内容也无工具调用（finish_reason={finish_reason}）"
-        )
+        raise EmptyResponseException("响应中既无文本内容也无工具调用")
 
     return api_response, _usage_record
 
