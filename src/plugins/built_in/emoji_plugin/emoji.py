@@ -46,8 +46,9 @@ class EmojiAction(BaseAction):
         """执行表情动作"""
         try:
             # 1. 获取发送表情的原因
-            reason = self.action_data.get("reason", "表达当前情绪")
-
+            # reason = self.action_data.get("reason", "表达当前情绪")
+            reason = self.reasoning
+            
             # 2. 随机获取20个表情包
             sampled_emojis = await emoji_api.get_random(30)
             if not sampled_emojis:
@@ -62,6 +63,9 @@ class EmojiAction(BaseAction):
                 emotion_map[emo].append((b64, desc))
 
             available_emotions = list(emotion_map.keys())
+            available_emotions_str = ""
+            for emotion in available_emotions:
+                available_emotions_str += f"{emotion}\n"
 
             if not available_emotions:
                 logger.warning(f"{self.log_prefix} 获取到的表情包均无情感标签, 将随机发送")
@@ -80,14 +84,15 @@ class EmojiAction(BaseAction):
                     )
 
                 # 4. 构建prompt让LLM选择情感
-                prompt = f"""
-                你是一个正在进行聊天的网友，你需要根据一个理由和最近的聊天记录，从一个情感标签列表中选择最匹配的一个。
-                这是最近的聊天记录：
-                {messages_text}
-                
-                这是理由：“{reason}”
-                这里是可用的情感标签：{available_emotions}
-                请直接返回最匹配的那个情感标签，不要进行任何解释或添加其他多余的文字。
+                prompt = f"""你正在进行QQ聊天，你需要根据聊天记录，选出一个合适的情感标签。
+请你根据以下原因和聊天记录进行选择
+原因：{reason}
+聊天记录：
+{messages_text}
+
+这里是可用的情感标签：
+{available_emotions_str}
+请直接返回最匹配的那个情感标签，不要进行任何解释或添加其他多余的文字。
                 """
 
                 if global_config.debug.show_prompt:
@@ -97,10 +102,10 @@ class EmojiAction(BaseAction):
 
                 # 5. 调用LLM
                 models = llm_api.get_available_models()
-                chat_model_config = models.get("utils_small")  # 使用字典访问方式
+                chat_model_config = models.get("replyer")  # 使用字典访问方式
                 if not chat_model_config:
-                    logger.error(f"{self.log_prefix} 未找到'utils_small'模型配置，无法调用LLM")
-                    return False, "未找到'utils_small'模型配置"
+                    logger.error(f"{self.log_prefix} 未找到'replyer'模型配置，无法调用LLM")
+                    return False, "未找到'replyer'模型配置"
 
                 success, chosen_emotion, _, _ = await llm_api.generate_with_model(
                     prompt, model_config=chat_model_config, request_type="emoji"

@@ -344,6 +344,10 @@ class HeartFChatting:
                         available_actions=available_actions,
                     )
                 )
+                
+            logger.info(
+            f"{self.log_prefix}决定执行{len(action_to_use_info)}个动作: {' '.join([a.action_type for a in action_to_use_info])}"
+        )
 
             # 3. 并行执行所有动作
             action_tasks = [

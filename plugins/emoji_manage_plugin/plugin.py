@@ -18,18 +18,84 @@ from src.plugin_system import (
 )
 from maim_message import Seg
 from src.config.config import global_config
+from src.common.logger import get_logger
+logger = get_logger("emoji_manage_plugin")
 
 class AddEmojiCommand(BaseCommand):
     command_name = "add_emoji"
     command_description = "添加表情包"
     command_pattern = r".*/emoji add.*"
-    
+
     async def execute(self) -> Tuple[bool, str, bool]:
+        # 查找消息中的表情包
+        logger.info(f"查找消息中的表情包: {self.message.message_segment}")
+        
         emoji_base64_list = self.find_and_return_emoji_in_message(self.message.message_segment)
-        return True, f"找到了{len(emoji_base64_list)}个表情包", True
-    
-    def find_and_return_emoji_in_message(self, message_segments: List[Seg]) -> List[str]:
+
+        if not emoji_base64_list:
+            return False, "未在消息中找到表情包或图片", False
+
+        # 注册找到的表情包
+        success_count = 0
+        fail_count = 0
+        results = []
+
+        for i, emoji_base64 in enumerate(emoji_base64_list):
+            try:
+                # 使用emoji_api注册表情包
+                result = await emoji_api.register_emoji(emoji_base64, filename=f"emoji_{i+1}")
+
+                if result["success"]:
+                    success_count += 1
+                    description = result.get("description", "未知描述")
+                    emotions = result.get("emotions", [])
+                    replaced = result.get("replaced", False)
+
+                    result_msg = f"表情包 {i+1} 注册成功{'(替换旧表情包)' if replaced else '(新增表情包)'}"
+                    if description:
+                        result_msg += f"\n描述: {description}"
+                    if emotions:
+                        result_msg += f"\n情感标签: {', '.join(emotions)}"
+
+                    results.append(result_msg)
+                else:
+                    fail_count += 1
+                    error_msg = result.get("message", "注册失败")
+                    results.append(f"表情包 {i+1} 注册失败: {error_msg}")
+
+            except Exception as e:
+                fail_count += 1
+                results.append(f"表情包 {i+1} 注册时发生错误: {str(e)}")
+
+        # 构建返回消息
+        total_count = success_count + fail_count
+        summary_msg = f"表情包注册完成: 成功 {success_count} 个，失败 {fail_count} 个，共处理 {total_count} 个"
+
+        # 如果有结果详情，添加到返回消息中
+        if results:
+            details_msg = "\n" + "\n".join(results)
+            final_msg = summary_msg + details_msg
+        else:
+            final_msg = summary_msg
+
+        return success_count > 0, final_msg, success_count > 0
+
+    def find_and_return_emoji_in_message(self, message_segments) -> List[str]:
         emoji_base64_list = []
+
+        # 处理单个Seg对象的情况
+        if isinstance(message_segments, Seg):
+            if message_segments.type == "emoji":
+                emoji_base64_list.append(message_segments.data)
+            elif message_segments.type == "image":
+                # 假设图片数据是base64编码的
+                emoji_base64_list.append(message_segments.data)
+            elif message_segments.type == "seglist":
+                # 递归处理嵌套的Seg列表
+                emoji_base64_list.extend(self.find_and_return_emoji_in_message(message_segments.data))
+            return emoji_base64_list
+
+        # 处理Seg列表的情况
         for seg in message_segments:
             if seg.type == "emoji":
                 emoji_base64_list.append(seg.data)
@@ -64,67 +130,6 @@ class ListEmojiCommand(BaseCommand):
         await self.send_text(message)
 
         return True, f"显示了当前时间: {time_str}", True
-
-
-class PrintMessage(BaseEventHandler):
-    """打印消息事件处理器 - 处理打印消息事件"""
-
-    event_type = EventType.ON_MESSAGE
-    handler_name = "print_message_handler"
-    handler_description = "打印接收到的消息"
-
-    async def execute(self, message: MaiMessages | None) -> Tuple[bool, bool, str | None, None, None]:
-        """执行打印消息事件处理"""
-        # 打印接收到的消息
-        if self.get_config("print_message.enabled", False):
-            print(f"接收到消息: {message.raw_message if message else '无效消息'}")
-        return True, True, "消息已打印", None, None
-
-
-class ForwardMessages(BaseEventHandler):
-    """
-    把接收到的消息转发到指定聊天ID
-
-    此组件是HYBRID消息和FORWARD消息的使用示例。
-    每收到10条消息，就会以1%的概率使用HYBRID消息转发，否则使用FORWARD消息转发。
-    """
-
-    event_type = EventType.ON_MESSAGE
-    handler_name = "forward_messages_handler"
-    handler_description = "把接收到的消息转发到指定聊天ID"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.counter = 0  # 用于计数转发的消息数量
-        self.messages: List[str] = []
-
-    async def execute(self, message: MaiMessages | None) -> Tuple[bool, bool, None, None, None]:
-        if not message:
-            return True, True, None, None, None
-        stream_id = message.stream_id or ""
-
-        if message.plain_text:
-            self.messages.append(message.plain_text)
-            self.counter += 1
-        if self.counter % 10 == 0:
-            if random.random() < 0.01:
-                success = await self.send_hybrid(stream_id, [(ReplyContentType.TEXT, msg) for msg in self.messages])
-            else:
-                success = await self.send_forward(
-                    stream_id,
-                    [
-                        (
-                            str(global_config.bot.qq_account),
-                            str(global_config.bot.nickname),
-                            [(ReplyContentType.TEXT, msg)],
-                        )
-                        for msg in self.messages
-                    ],
-                )
-            if not success:
-                raise ValueError("转发消息失败")
-            self.messages = []
-        return True, True, None, None, None
 
 
 class RandomEmojis(BaseCommand):
@@ -169,36 +174,13 @@ class EmojiManagePlugin(BasePlugin):
     # 配置Schema定义
     config_schema: dict = {
         "plugin": {
-            "version": ConfigField(type=str, default="1.0.0", description="插件版本"),
-            "enabled": ConfigField(type=bool, default=False, description="是否启用插件"),
+            "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
+            "config_version": ConfigField(type=str, default="1.0.1", description="配置文件版本"),
         },
     }
 
     def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
         return [
-            (PrintMessage.get_handler_info(), PrintMessage),
-            (ForwardMessages.get_handler_info(), ForwardMessages),
             (RandomEmojis.get_command_info(), RandomEmojis),
+            (AddEmojiCommand.get_command_info(), AddEmojiCommand),
         ]
-
-
-# @register_plugin
-# class HelloWorldEventPlugin(BaseEPlugin):
-#     """Hello World事件插件 - 处理问候和告别事件"""
-
-#     plugin_name = "hello_world_event_plugin"
-#     enable_plugin = False
-#     dependencies = []
-#     python_dependencies = []
-#     config_file_name = "event_config.toml"
-
-#     config_schema = {
-#         "plugin": {
-#             "name": ConfigField(type=str, default="hello_world_event_plugin", description="插件名称"),
-#             "version": ConfigField(type=str, default="1.0.0", description="插件版本"),
-#             "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
-#         },
-#     }
-
-#     def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
-#         return [(PrintMessage.get_handler_info(), PrintMessage)]
