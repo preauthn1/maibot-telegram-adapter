@@ -297,18 +297,6 @@ class EmojiConfig(ConfigBase):
     filtration_prompt: str = "符合公序良俗"
     """表情包过滤要求"""
 
-
-@dataclass
-class MoodConfig(ConfigBase):
-    """情绪配置类"""
-
-    enable_mood: bool = False
-    """是否启用情绪系统"""
-
-    mood_update_threshold: float = 1.0
-    """情绪更新阈值,越高，更新越慢"""
-
-
 @dataclass
 class KeywordRuleConfig(ConfigBase):
     """关键词规则配置类"""

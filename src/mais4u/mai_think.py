@@ -24,7 +24,7 @@ def init_prompt():
 {chat_info}
 {identity}
 
-你刚刚在{chat_target_2},你你刚刚的心情是：{mood_state}
+你刚刚在{chat_target_2}
 ---------------------
 在这样的情况下，你对上面的内容，你对 {sender} 发送的 消息 “{target}” 进行了回复
 你刚刚选择回复的内容是：{reponse}
@@ -55,7 +55,6 @@ class MaiThinking:
         self.chat_target = ""
         self.chat_target_2 = ""
         self.chat_info = ""
-        self.mood_state = ""
         self.identity = ""
         self.sender = ""
         self.target = ""
@@ -76,7 +75,6 @@ class MaiThinking:
             chat_target=self.chat_target,
             chat_target_2=self.chat_target_2,
             chat_info=self.chat_info,
-            mood_state=self.mood_state,
             identity=self.identity,
             sender=self.sender,
             target=self.target,

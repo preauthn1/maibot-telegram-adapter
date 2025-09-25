@@ -18,7 +18,6 @@ from src.config.official_configs import (
     ExpressionConfig,
     ChatConfig,
     EmojiConfig,
-    MoodConfig,
     KeywordReactionConfig,
     ChineseTypoConfig,
     ResponsePostProcessConfig,
@@ -345,7 +344,6 @@ class Config(ConfigBase):
     message_receive: MessageReceiveConfig
     emoji: EmojiConfig
     expression: ExpressionConfig
-    mood: MoodConfig
     keyword_reaction: KeywordReactionConfig
     chinese_typo: ChineseTypoConfig
     response_post_process: ResponsePostProcessConfig

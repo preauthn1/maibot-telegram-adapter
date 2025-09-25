@@ -18,7 +18,6 @@ def init_rewrite_prompt():
 {chat_info}
 {identity}
 
-你现在的心情是：{mood_state}
 你正在{chat_target_2},{reply_target_block}
 你想要对上述的发言进行回复，回复的具体内容（原句）是：{raw_reply}
 原因是：{reason}

@@ -11,7 +11,6 @@ from src.chat.heart_flow.heartflow import heartflow
 from src.chat.utils.utils import is_mentioned_bot_in_message
 from src.chat.utils.chat_message_builder import replace_user_references
 from src.common.logger import get_logger
-from src.mood.mood_manager import mood_manager
 from src.person_info.person_info import Person
 from src.common.database.database_model import Images
 

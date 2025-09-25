@@ -27,7 +27,7 @@ from src.chat.utils.chat_message_builder import (
 from src.chat.express.expression_selector import expression_selector
 
 # from src.chat.memory_system.memory_activator import MemoryActivator
-from src.mood.mood_manager import mood_manager
+
 from src.person_info.person_info import Person, is_person_known
 from src.plugin_system.base.component_types import ActionInfo, EventType
 from src.plugin_system.apis import llm_api
@@ -521,10 +521,7 @@ class PrivateReplyer:
             sender = person_name
             target = reply_message.processed_plain_text
 
-        mood_prompt: str = ""
-        if global_config.mood.enable_mood:
-            chat_mood = mood_manager.get_mood_by_chat_id(chat_id)
-            mood_prompt = chat_mood.mood_state
+
 
         target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
         target = re.sub(r"\\[picid:[^\\]]+\\]", "[图片]", target)
@@ -657,7 +654,7 @@ class PrivateReplyer:
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
                 action_descriptions=actions_info,
-                mood_state=mood_prompt,
+
                 dialogue_prompt=dialogue_prompt,
                 time_block=time_block,
                 target=target,
@@ -678,7 +675,6 @@ class PrivateReplyer:
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
                 action_descriptions=actions_info,
-                mood_state=mood_prompt,
                 dialogue_prompt=dialogue_prompt,
                 time_block=time_block,
                 reply_target_block=reply_target_block,
@@ -702,12 +698,7 @@ class PrivateReplyer:
         target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
         target = re.sub(r"\\[picid:[^\\]]+\\]", "[图片]", target)
 
-        # 添加情绪状态获取
-        if global_config.mood.enable_mood:
-            chat_mood = mood_manager.get_mood_by_chat_id(chat_id)
-            mood_prompt = chat_mood.mood_state
-        else:
-            mood_prompt = ""
+
 
         message_list_before_now_half = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,
@@ -785,7 +776,6 @@ class PrivateReplyer:
             reply_target_block=reply_target_block,
             raw_reply=raw_reply,
             reason=reason,
-            mood_state=mood_prompt,  # 添加情绪状态参数
             reply_style=global_config.personality.reply_style,
             keywords_reaction_prompt=keywords_reaction_prompt,
             moderation_prompt=moderation_prompt_block,

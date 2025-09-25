@@ -27,7 +27,6 @@ from src.chat.utils.chat_message_builder import (
 from src.chat.express.expression_selector import expression_selector
 
 # from src.chat.memory_system.memory_activator import MemoryActivator
-from src.mood.mood_manager import mood_manager
 from src.person_info.person_info import Person, is_person_known
 from src.plugin_system.base.component_types import ActionInfo, EventType
 from src.plugin_system.apis import llm_api
@@ -524,7 +523,7 @@ class DefaultReplyer:
         time_block: str,
         chat_target_1: str,
         chat_target_2: str,
-        mood_prompt: str,
+
         identity_block: str,
         sender: str,
         target: str,
@@ -539,7 +538,7 @@ class DefaultReplyer:
             time_block: 时间块内容
             chat_target_1: 聊天目标1
             chat_target_2: 聊天目标2
-            mood_prompt: 情绪提示
+
             identity_block: 身份块内容
             sender: 发送者名称
             target: 目标消息内容
@@ -555,7 +554,7 @@ class DefaultReplyer:
         mai_think.chat_target = chat_target_1
         mai_think.chat_target_2 = chat_target_2
         mai_think.chat_info = chat_info
-        mai_think.mood_state = mood_prompt
+
         mai_think.identity = identity_block
         mai_think.sender = sender
         mai_think.target = target
@@ -648,11 +647,6 @@ class DefaultReplyer:
             person_name = person.person_name or user_id
             sender = person_name
             target = reply_message.processed_plain_text
-
-        mood_prompt: str = ""
-        if global_config.mood.enable_mood:
-            chat_mood = mood_manager.get_mood_by_chat_id(chat_id)
-            mood_prompt = chat_mood.mood_state
 
         target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
         target = re.sub(r"\\[picid:[^\\]]+\\]", "[图片]", target)
@@ -790,7 +784,6 @@ class DefaultReplyer:
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
                 action_descriptions=actions_info,
-                mood_state=mood_prompt,
                 background_dialogue_prompt=background_dialogue_prompt,
                 time_block=time_block,
                 target=target,
@@ -811,7 +804,6 @@ class DefaultReplyer:
                 identity=personality_prompt,
                 action_descriptions=actions_info,
                 sender_name=sender,
-                mood_state=mood_prompt,
                 background_dialogue_prompt=background_dialogue_prompt,
                 time_block=time_block,
                 core_dialogue_prompt=core_dialogue_prompt,
@@ -834,13 +826,6 @@ class DefaultReplyer:
         sender, target = self._parse_reply_target(reply_to)
         target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
         target = re.sub(r"\\[picid:[^\\]]+\\]", "[图片]", target)
-
-        # 添加情绪状态获取
-        if global_config.mood.enable_mood:
-            chat_mood = mood_manager.get_mood_by_chat_id(chat_id)
-            mood_prompt = chat_mood.mood_state
-        else:
-            mood_prompt = ""
 
         message_list_before_now_half = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,
@@ -918,7 +903,6 @@ class DefaultReplyer:
             reply_target_block=reply_target_block,
             raw_reply=raw_reply,
             reason=reason,
-            mood_state=mood_prompt,  # 添加情绪状态参数
             reply_style=global_config.personality.reply_style,
             keywords_reaction_prompt=keywords_reaction_prompt,
             moderation_prompt=moderation_prompt_block,
