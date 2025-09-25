@@ -182,7 +182,15 @@ def _process_delta(
 
     if delta.text:
         fc_delta_buffer.write(delta.text)
-
+        
+    # 处理 thought（Gemini 的特殊字段）
+    for c in getattr(delta, "candidates", []):
+        if c.content and getattr(c.content, "parts", None):
+            for p in c.content.parts:
+                if getattr(p, "thought", False) and getattr(p, "text", None):
+                    # 把 thought 写入 buffer，避免 resp.content 永远为空
+                    fc_delta_buffer.write(p.text)
+    
     if delta.function_calls:  # 为什么不用hasattr呢，是因为这个属性一定有，即使是个空的
         for call in delta.function_calls:
             try:
@@ -204,6 +212,7 @@ def _process_delta(
 def _build_stream_api_resp(
     _fc_delta_buffer: io.StringIO,
     _tool_calls_buffer: list[tuple[str, str, dict]],
+    last_resp: GenerateContentResponse | None = None,  # 传入 last_resp
 ) -> APIResponse:
     # sourcery skip: simplify-len-comparison, use-assigned-variable
     resp = APIResponse()
@@ -228,6 +237,24 @@ def _build_stream_api_resp(
 
             resp.tool_calls.append(ToolCall(call_id, function_name, arguments))
 
+    # 检查是否因为 max_tokens 截断
+    reason = None
+    if last_resp and getattr(last_resp, "candidates", None):
+        c0 = last_resp.candidates[0]
+        reason = getattr(c0, "finish_reason", None) or getattr(c0, "finishReason", None)
+
+    if str(reason).endswith("MAX_TOKENS"):
+        if resp.content and resp.content.strip():
+            logger.warning(
+                "⚠ Gemini 响应因达到 max_tokens 限制被部分截断，\n"
+                "    可能会对回复内容造成影响，建议修改模型 max_tokens 配置！"
+            )
+        else:
+            logger.warning(
+                "⚠ Gemini 响应因达到 max_tokens 限制被截断，\n"
+                "    请修改模型 max_tokens 配置！"
+            )
+    
     if not resp.content and not resp.tool_calls:
         raise EmptyResponseException()
 
@@ -274,30 +301,13 @@ async def _default_stream_response_handler(
             )
 
     try:
-        api_response = _build_stream_api_resp(
+        return _build_stream_api_resp(
             _fc_delta_buffer,
             _tool_calls_buffer,
-        )
-
-        # 检查是否因为 max_tokens 截断
-        if last_resp and last_resp.candidates:
-            c0 = last_resp.candidates[0]
-            reason = getattr(c0, "finish_reason", None) or getattr(c0, "finishReason", None)
-            if reason and "MAX_TOKENS" in str(reason):
-                if api_response.content and api_response.content.strip():
-                    logger.warning(
-                        "⚠ Gemini 响应因达到 max_tokens 限制被部分截断，\n"
-                        "    可能会对回复内容造成影响，建议修改模型 max_tokens 配置！"
-                    )
-                else:
-                    logger.warning(
-                        "⚠ Gemini 响应因达到 max_tokens 限制被截断，\n"
-                        "    请修改模型 max_tokens 配置！"
-                    )
-
-        return api_response, _usage_record
-
+            last_resp=last_resp,
+        ), _usage_record
     except Exception:
+        # 确保缓冲区被关闭
         _insure_buffer_closed()
         raise
 
