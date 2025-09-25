@@ -951,13 +951,13 @@ class DefaultReplyer:
             if global_config.debug.show_prompt:
                 logger.info(f"\n{prompt}\n")
             else:
-                logger.debug(f"\n{prompt}\n")
+                logger.debug(f"\nreplyer_Prompt:{prompt}\n")
 
             content, (reasoning_content, model_name, tool_calls) = await self.express_model.generate_response_async(
                 prompt
             )
 
-            logger.info(f"使用{model_name}生成回复内容: {content}")
+            logger.info(f"使用 {model_name} 生成回复内容: {content}")
         return content, reasoning_content, model_name, tool_calls
 
     async def get_prompt_info(self, message: str, sender: str, target: str):

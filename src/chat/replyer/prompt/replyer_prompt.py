@@ -86,7 +86,7 @@ def init_replyer_prompt():
 尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。
 {reply_style}
 请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只输出回复内容。
-{moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。
+{moderation_prompt}不要输出多余内容(包括冒号和引号，括号，表情包，at或 @等 )。
 """,
         "private_replyer_self_prompt",
     )
