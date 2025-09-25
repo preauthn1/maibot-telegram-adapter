@@ -276,6 +276,9 @@ class HeartFChatting:
             recent_messages_list = []
         reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
 
+        
+        start_time = time.time()
+        
         if s4u_config.enable_s4u:
             await send_typing()
 
@@ -410,8 +413,18 @@ class HeartFChatting:
                 }
                 reply_text = action_reply_text
 
+            end_time = time.time()
+            if end_time - start_time < global_config.chat.planner_smooth:
+                wait_time = global_config.chat.planner_smooth - (end_time - start_time)
+                await asyncio.sleep(wait_time)
+            else:
+                await asyncio.sleep(0.1)
+
+
             self.end_cycle(loop_info, cycle_timers)
             self.print_cycle_info(cycle_timers)
+            
+
 
             """S4U内容，暂时保留"""
             if s4u_config.enable_s4u:

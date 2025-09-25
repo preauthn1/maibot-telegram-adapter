@@ -84,6 +84,8 @@ class ChatConfig(ConfigBase):
     at_bot_inevitable_reply: float = 1
     """@bot 必然回复，1为100%回复，0为不额外增幅"""
 
+    planner_smooth: float = 3
+    """规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐2-5，0为关闭，必须大于等于0"""
     
     talk_value: float = 1
     """思考频率"""
