@@ -215,29 +215,30 @@ class DefaultReplyer:
             traceback.print_exc()
             return False, llm_response
 
-    async def build_relation_info(self, chat_content: str, sender: str, person_list: List[Person]):
-        if not global_config.relationship.enable_relationship:
-            return ""
+#移动到 relation插件中构建
+    # async def build_relation_info(self, chat_content: str, sender: str, person_list: List[Person]):
+    #     if not global_config.relationship.enable_relationship:
+    #         return ""
 
-        if not sender:
-            return ""
+    #     if not sender:
+    #         return ""
 
-        if sender == global_config.bot.nickname:
-            return ""
+    #     if sender == global_config.bot.nickname:
+    #         return ""
 
-        # 获取用户ID
-        person = Person(person_name=sender)
-        if not is_person_known(person_name=sender):
-            logger.warning(f"未找到用户 {sender} 的ID，跳过信息提取")
-            return f"你完全不认识{sender}，不理解ta的相关信息。"
+    #     # 获取用户ID
+    #     person = Person(person_name=sender)
+    #     if not is_person_known(person_name=sender):
+    #         logger.warning(f"未找到用户 {sender} 的ID，跳过信息提取")
+    #         return f"你完全不认识{sender}，不理解ta的相关信息。"
 
-        sender_relation = await person.build_relationship(chat_content)
-        others_relation = ""
-        for person in person_list:
-            person_relation = await person.build_relationship()
-            others_relation += person_relation
+    #     sender_relation = await person.build_relationship(chat_content)
+    #     others_relation = ""
+    #     for person in person_list:
+    #         person_relation = await person.build_relationship()
+    #         others_relation += person_relation
 
-        return f"{sender_relation}\n{others_relation}"
+    #     return f"{sender_relation}\n{others_relation}"
 
     async def build_expression_habits(self, chat_history: str, target: str) -> Tuple[str, List[int]]:
         # sourcery skip: for-append-to-extend
@@ -680,8 +681,8 @@ class DefaultReplyer:
             if person.is_known:
                 person_list_short.append(person)
 
-        for person in person_list_short:
-            print(person.person_name)
+        # for person in person_list_short:
+        #     print(person.person_name)
 
         chat_talking_prompt_short = build_readable_messages(
             message_list_before_short,
@@ -956,7 +957,7 @@ class DefaultReplyer:
                 prompt
             )
 
-            logger.debug(f"replyer生成内容: {content}")
+            logger.info(f"使用{model_name}生成回复内容: {content}")
         return content, reasoning_content, model_name, tool_calls
 
     async def get_prompt_info(self, message: str, sender: str, target: str):

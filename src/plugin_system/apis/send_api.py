@@ -100,7 +100,7 @@ async def _send_to_target(
         anchor_message: Union["MessageRecv", None] = None
         if reply_message:
             anchor_message = db_message_to_message_recv(reply_message)
-            logger.info(f"[SendAPI] 找到匹配的回复消息，发送者: {anchor_message.message_info.user_info.user_id}")  # type: ignore
+            logger.debug(f"[SendAPI] 找到匹配的回复消息，发送者: {anchor_message.message_info.user_info.user_id}")  # type: ignore
             if anchor_message:
                 anchor_message.update_chat_stream(target_stream)
                 assert anchor_message.message_info.user_info, "用户信息缺失"

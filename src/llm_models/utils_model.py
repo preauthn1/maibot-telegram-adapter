@@ -148,6 +148,8 @@ class LLMRequest:
         )
 
         logger.debug(f"LLM请求总耗时: {time.time() - start_time}")
+        logger.debug(f"LLM生成内容: {response}")
+        
         content = response.content
         reasoning_content = response.reasoning_content or ""
         tool_calls = response.tool_calls

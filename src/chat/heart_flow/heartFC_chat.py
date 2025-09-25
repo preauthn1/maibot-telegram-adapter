@@ -154,13 +154,16 @@ class HeartFChatting:
         # 记录循环信息和计时器结果
         timer_strings = []
         for name, elapsed in cycle_timers.items():
-            formatted_time = f"{elapsed * 1000:.2f}毫秒" if elapsed < 1 else f"{elapsed:.2f}秒"
+            if elapsed < 0.1:
+                # 不显示小于0.1秒的计时器
+                continue
+            formatted_time = f"{elapsed:.2f}秒"
             timer_strings.append(f"{name}: {formatted_time}")
 
         logger.info(
             f"{self.log_prefix} 第{self._current_cycle_detail.cycle_id}次思考,"
-            f"耗时: {self._current_cycle_detail.end_time - self._current_cycle_detail.start_time:.1f}秒"  # type: ignore
-            + (f"\n详情: {'; '.join(timer_strings)}" if timer_strings else "")
+            f"耗时: {self._current_cycle_detail.end_time - self._current_cycle_detail.start_time:.1f}秒;"  # type: ignore
+            + (f"详情: {'; '.join(timer_strings)}" if timer_strings else "")
         )
 
     async def _loopbody(self):  # sourcery skip: hoist-if-from-if
@@ -346,8 +349,8 @@ class HeartFChatting:
                 )
                 
             logger.info(
-            f"{self.log_prefix}决定执行{len(action_to_use_info)}个动作: {' '.join([a.action_type for a in action_to_use_info])}"
-        )
+                f"{self.log_prefix} 决定执行{len(action_to_use_info)}个动作: {' '.join([a.action_type for a in action_to_use_info])}"
+            )
 
             # 3. 并行执行所有动作
             action_tasks = [

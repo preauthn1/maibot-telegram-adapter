@@ -563,8 +563,8 @@ class PrivateReplyer:
             if person.is_known:
                 person_list_short.append(person)
 
-        for person in person_list_short:
-            print(person.person_name)
+        # for person in person_list_short:
+        #     print(person.person_name)
 
         chat_talking_prompt_short = build_readable_messages(
             message_list_before_short,
@@ -829,7 +829,7 @@ class PrivateReplyer:
                 prompt
             )
 
-            logger.debug(f"replyer生成内容: {content}")
+            logger.info(f"使用 {model_name} 生成回复内容: {content}")
         return content, reasoning_content, model_name, tool_calls
 
     async def get_prompt_info(self, message: str, sender: str, target: str):

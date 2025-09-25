@@ -180,7 +180,6 @@ class ToolExecutor:
 
                     tool_results.append(tool_info)
                     used_tools.append(tool_name)
-                    logger.info(f"{self.log_prefix}工具{tool_name}执行成功，类型: {tool_info['type']}")
                     preview = content[:200]
                     logger.debug(f"{self.log_prefix}工具{tool_name}结果内容: {preview}...")
             except Exception as e:

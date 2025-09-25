@@ -466,8 +466,8 @@ class Person:
 <分类1><分类2><分类3>......
 如果没有相关的分类，请输出<none>"""
             response, _ = await relation_selection_model.generate_response_async(prompt)
-            print(prompt)
-            print(response)
+            # print(prompt)
+            # print(response)
             category_list = extract_categories_from_response(response)
             if  "none" not in category_list:
                 for category in category_list:

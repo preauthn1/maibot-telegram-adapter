@@ -363,8 +363,8 @@ MODULE_COLORS = {
     "planner": "\033[36m",
     "relation": "\033[38;5;139m",  # 柔和的紫色，不刺眼
     # 聊天相关模块
-    "normal_chat": "\033[38;5;81m",  # 亮蓝绿色
-    "heartflow": "\033[38;5;175m",  # 柔和的粉色，不显眼但保持粉色系
+    "hfc": "\033[38;5;175m",  # 柔和的粉色，不显眼但保持粉色系
+    "bc": "\033[38;5;175m",  # 柔和的粉色，不显眼但保持粉色系
     "sub_heartflow": "\033[38;5;207m",  # 粉紫色
     "subheartflow_manager": "\033[38;5;201m",  # 深粉色
     "background_tasks": "\033[38;5;240m",  # 灰色
@@ -372,8 +372,6 @@ MODULE_COLORS = {
     "chat_stream": "\033[38;5;51m",  # 亮青色
     "message_storage": "\033[38;5;33m",  # 深蓝色
     "expressor": "\033[38;5;166m",  # 橙色
-    # 专注聊天模块
-    "memory_activator": "\033[38;5;117m",  # 天蓝色
     # 插件系统
     "plugins": "\033[31m",  # 红色
     "plugin_api": "\033[33m",  # 黄色
