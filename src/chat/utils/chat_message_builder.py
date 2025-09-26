@@ -417,12 +417,6 @@ def _build_readable_messages_internal(
         timestamp = message.time
         content = message.display_message or message.processed_plain_text or ""
 
-        # 向下兼容
-        if "ᶠ" in content:
-            content = content.replace("ᶠ", "")
-        if "ⁿ" in content:
-            content = content.replace("ⁿ", "")
-
         # 处理图片ID
         if show_pic:
             content = process_pic_ids(content)
@@ -862,16 +856,9 @@ async def build_anonymous_messages(messages: List[DatabaseMessages]) -> str:
             user_id = msg.user_info.user_id
             content = msg.display_message or msg.processed_plain_text or ""
 
-            if "ᶠ" in content:
-                content = content.replace("ᶠ", "")
-            if "ⁿ" in content:
-                content = content.replace("ⁿ", "")
-
             # 处理图片ID
             content = process_pic_ids(content)
 
-            # if not all([platform, user_id, timestamp is not None]):
-            # continue
 
             anon_name = get_anon_name(platform, user_id)
             # print(f"anon_name:{anon_name}")
@@ -937,3 +924,44 @@ async def get_person_id_list(messages: List[Dict[str, Any]]) -> List[str]:
             person_ids_set.add(person_id)
 
     return list(person_ids_set)  # 将集合转换为列表返回
+
+
+async def build_bare_messages(messages: List[DatabaseMessages]) -> str:
+    """
+    构建简化版消息字符串，只包含processed_plain_text内容，不考虑用户名和时间戳
+
+    Args:
+        messages: 消息列表
+
+    Returns:
+        只包含消息内容的字符串
+    """
+    if not messages:
+        return ""
+
+    output_lines = []
+
+    for msg in messages:
+        # 获取纯文本内容
+        content = msg.processed_plain_text or ""
+
+
+        # 处理图片ID
+        pic_pattern = r"\[picid:[^\]]+\]"
+        def replace_pic_id(match):
+            return "[图片]"
+        content = re.sub(pic_pattern, replace_pic_id, content)
+
+        # 处理用户引用格式，移除回复和@标记
+        reply_pattern = r"回复<[^:<>]+:[^:<>]+>"
+        content = re.sub(reply_pattern, "回复[某人]", content)
+
+        at_pattern = r"@<[^:<>]+:[^:<>]+>"
+        content = re.sub(at_pattern, "@[某人]", content)
+
+        # 清理并添加到输出
+        content = content.strip()
+        if content:
+            output_lines.append(content)
+
+    return "\n".join(output_lines)

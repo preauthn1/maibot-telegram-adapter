@@ -412,6 +412,9 @@ class HeartFChatting:
                     },
                 }
                 reply_text = action_reply_text
+                
+            self.end_cycle(loop_info, cycle_timers)
+            self.print_cycle_info(cycle_timers)
 
             end_time = time.time()
             if end_time - start_time < global_config.chat.planner_smooth:
@@ -421,8 +424,7 @@ class HeartFChatting:
                 await asyncio.sleep(0.1)
 
 
-            self.end_cycle(loop_info, cycle_timers)
-            self.print_cycle_info(cycle_timers)
+            
             
 
 
