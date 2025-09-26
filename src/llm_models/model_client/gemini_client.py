@@ -192,9 +192,6 @@ def _process_delta(
                 elif getattr(p, "text", None):
                     # 正常输出写入 buffer
                     fc_delta_buffer.write(p.text)
-
-    if delta.text:
-        fc_delta_buffer.write(delta.text)
     
     if delta.function_calls:  # 为什么不用hasattr呢，是因为这个属性一定有，即使是个空的
         for call in delta.function_calls:
