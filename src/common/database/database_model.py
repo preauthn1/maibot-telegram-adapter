@@ -302,6 +302,13 @@ class Expression(BaseModel):
     situation = TextField()
     style = TextField()
     count = FloatField()
+
+    # new mode fields
+    context = TextField(null=True)
+    context_words = TextField(null=True)
+    full_context = TextField(null=True)
+    full_context_embedding = TextField(null=True)
+
     last_active_time = FloatField()
     chat_id = TextField(index=True)
     type = TextField()

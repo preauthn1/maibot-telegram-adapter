@@ -106,6 +106,9 @@ class MessageReceiveConfig(ConfigBase):
 class ExpressionConfig(ConfigBase):
     """表达配置类"""
 
+    mode: Literal["llm", "context", "full-context"] = "context"
+    """表达方式模式，可选：llm模式，context上下文模式，full-context 完整上下文嵌入模式"""
+
     learning_list: list[list] = field(default_factory=lambda: [])
     """
     表达学习配置列表，支持按聊天流配置

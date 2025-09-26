@@ -55,6 +55,31 @@ def init_prompt() -> None:
 """
     Prompt(learn_style_prompt, "learn_style_prompt")
 
+    match_expression_context_prompt = """
+**聊天内容**
+{chat_str}
+
+**从聊天内容总结的表达方式pairs**
+{expression_pairs}
+
+请你为上面的每一条表达方式，找到该表达方式的原文句子，并输出匹配结果。
+如果找不到原句，就不输出该句的匹配结果。
+以json格式输出：
+格式如下：
+{{
+    "expression_pair": "表达方式pair的序号（数字）",
+    "context": "与表达方式对应的原文句子的原始内容，不要修改原文句子的内容",
+}}，
+{{
+    "expression_pair": "表达方式pair的序号（数字）",
+    "context": "与表达方式对应的原文句子的原始内容，不要修改原文句子的内容",
+}}，
+...
+
+现在请你输出匹配结果：
+"""
+    Prompt(match_expression_context_prompt, "match_expression_context_prompt")
+
 
 class ExpressionLearner:
     def __init__(self, chat_id: str) -> None:
@@ -261,6 +286,28 @@ class ExpressionLearner:
                     expr.delete_instance()
         return learnt_expressions
 
+    async def match_expression_context(self, expression_pairs: List[Tuple[str, str]], random_msg_match_str: str) -> List[Tuple[str, str, str]]:
+        prompt = "match_expression_context_prompt"
+        prompt = await global_prompt_manager.format_prompt(
+            prompt,
+            expression_pairs=expression_pairs,
+            chat_str=random_msg_match_str,
+        )
+
+        match_responses = []
+        # 解析所有match结果到 match_response
+
+        matched_expressions = []
+        for match_response in match_responses:
+            #exp序号
+            match_response["expression_pair"]
+            matched_expressions.append((match_response["expression_pair"], match_response["context"]))
+
+
+
+        
+        response, _ = await self.express_learn_model.generate_response_async(prompt, temperature=0.3)
+
     async def learn_expression(self, num: int = 10) -> Optional[Tuple[List[Tuple[str, str, str]], str]]:
         """从指定聊天流学习表达方式
 
@@ -286,6 +333,7 @@ class ExpressionLearner:
         chat_id: str = random_msg[0].chat_id
         # random_msg_str: str = build_readable_messages(random_msg, timestamp_mode="normal")
         random_msg_str: str = await build_anonymous_messages(random_msg)
+        random_msg_match_str: str = await build_bare_messages(random_msg)
         
 
         prompt: str = await global_prompt_manager.format_prompt(
@@ -306,7 +354,12 @@ class ExpressionLearner:
 
         expressions: List[Tuple[str, str, str]] = self.parse_expression_response(response, chat_id)
 
-        return expressions, chat_id
+
+        matched_expressions = await self.match_expression_context(expressions, random_msg_match_str)
+
+
+
+        return matched_expressions, chat_id
 
     def parse_expression_response(self, response: str, chat_id: str) -> List[Tuple[str, str, str]]:
         """
