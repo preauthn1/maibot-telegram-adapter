@@ -46,13 +46,13 @@ class PersonalityConfig(ConfigBase):
 
     interest: str = ""
     """兴趣"""
-    
+
     plan_style: str = ""
     """说话规则，行为风格"""
-    
+
     visual_style: str = ""
     """图片提示词"""
-    
+
     private_plan_style: str = ""
     """私聊说话规则，行为风格"""
 
@@ -86,7 +86,7 @@ class ChatConfig(ConfigBase):
 
     planner_smooth: float = 3
     """规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐2-5，0为关闭，必须大于等于0"""
-    
+
     talk_value: float = 1
     """思考频率"""
 
@@ -301,6 +301,7 @@ class EmojiConfig(ConfigBase):
 
     filtration_prompt: str = "符合公序良俗"
     """表情包过滤要求"""
+
 
 @dataclass
 class KeywordRuleConfig(ConfigBase):

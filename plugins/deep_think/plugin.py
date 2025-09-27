@@ -10,20 +10,21 @@ from src.plugin_system.base.base_tool import BaseTool, ToolParamType
 from src.common.logger import get_logger
 
 from src.plugins.built_in.relation.relation import BuildRelationAction
+from src.plugin_system.apis import llm_api
 
 logger = get_logger("relation_actions")
 
 
-class GetPersonInfoTool(BaseTool):
+
+class DeepThinkTool(BaseTool):
     """获取用户信息"""
 
-    name = "get_person_info"
-    description = "获取某个人的信息，包括印象，特征点，与用户的关系等等"
+    name = "deep_think"
+    description = "深度思考，对某个问题进行全面且深入的思考，当面临复杂环境或重要问题时，使用此获得更好的解决方案"
     parameters = [
-        ("person_name", ToolParamType.STRING, "需要获取信息的人的名称", True, None),
-        ("info_type", ToolParamType.STRING, "需要获取信息的类型", True, None),
+        ("question", ToolParamType.STRING, "需要思考的问题，越具体越好", True, None),
     ]
-
+    
     available_for_llm = True
 
     async def execute(self, function_args: dict[str, Any]) -> dict[str, Any]:
@@ -35,22 +36,31 @@ class GetPersonInfoTool(BaseTool):
         Returns:
             dict: 工具执行结果
         """
-        person_name: str = function_args.get("person_name")  # type: ignore
-        info_type: str = function_args.get("info_type")  # type: ignore
+        question: str = function_args.get("question")  # type: ignore
+        
+        print(f"question: {question}")
+        
+        prompt = f"""
+请你思考以下问题，以简洁的一段话回答：
+{question}
+        """
+        
+        models = llm_api.get_available_models()
+        chat_model_config = models.get("replyer")  # 使用字典访问方式
 
-        person = Person(person_name=person_name)
-        if not person:
-            return {"content": f"用户 {person_name} 不存在"}
-        if not person.is_known:
-            return {"content": f"不认识用户 {person_name}"}
-
-        relation_str = await person.build_relationship(info_type=info_type)
-
-        return {"content": relation_str}
+        success, thinking_result, _, _ = await llm_api.generate_with_model(
+            prompt, model_config=chat_model_config, request_type="deep_think"
+        )
+        
+        print(f"thinking_result: {thinking_result}")
+        
+        thinking_result =f"思考结果：{thinking_result}\n**注意** 因为你进行了深度思考，最后的回复内容可以回复的长一些，更加详细一些，不用太简洁。\n"
+        
+        return {"content": thinking_result}
 
 
 @register_plugin
-class RelationActionsPlugin(BasePlugin):
+class DeepThinkPlugin(BasePlugin):
     """关系动作插件
 
     系统内置插件，提供基础的聊天交互功能：
@@ -62,7 +72,7 @@ class RelationActionsPlugin(BasePlugin):
     """
 
     # 插件基本信息
-    plugin_name: str = "relation_actions"  # 内部标识符
+    plugin_name: str = "deep_think"  # 内部标识符
     enable_plugin: bool = True
     dependencies: list[str] = []  # 插件依赖列表
     python_dependencies: list[str] = []  # Python包依赖列表
@@ -77,12 +87,9 @@ class RelationActionsPlugin(BasePlugin):
     # 配置Schema定义
     config_schema: dict = {
         "plugin": {
-            "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="1.0.0", description="配置文件版本"),
-        },
-        "components": {
-            "relation_max_memory_num": ConfigField(type=int, default=10, description="关系记忆最大数量"),
-        },
+            "enabled": ConfigField(type=bool, default=False, description="是否启用插件"),
+            "config_version": ConfigField(type=str, default="2.0.0", description="配置文件版本"),
+        }
     }
 
     def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
@@ -90,7 +97,6 @@ class RelationActionsPlugin(BasePlugin):
 
         # --- 根据配置注册组件 ---
         components = []
-        components.append((BuildRelationAction.get_action_info(), BuildRelationAction))
-        components.append((GetPersonInfoTool.get_tool_info(), GetPersonInfoTool))
+        components.append((DeepThinkTool.get_tool_info(), DeepThinkTool))
 
         return components

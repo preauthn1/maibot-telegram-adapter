@@ -12,7 +12,6 @@ import random
 import base64
 import os
 import uuid
-import time
 
 from typing import Optional, Tuple, List, Dict, Any
 from src.common.logger import get_logger
@@ -358,7 +357,7 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
                 "description": None,
                 "emotions": None,
                 "replaced": None,
-                "hash": None
+                "hash": None,
             }
 
         # 3. 确保emoji目录存在
@@ -368,19 +367,21 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
         if not filename:
             # 基于时间戳、微秒和短base64生成唯一文件名
             import time
+
             timestamp = int(time.time())
             microseconds = int(time.time() * 1000000) % 1000000  # 添加微秒级精度
 
             # 生成12位随机标识符，使用base64编码（增加随机性）
             import random
-            random_bytes = random.getrandbits(72).to_bytes(9, 'big')  # 72位 = 9字节 = 12位base64
-            short_id = base64.b64encode(random_bytes).decode('ascii')[:12].rstrip('=')
+
+            random_bytes = random.getrandbits(72).to_bytes(9, "big")  # 72位 = 9字节 = 12位base64
+            short_id = base64.b64encode(random_bytes).decode("ascii")[:12].rstrip("=")
             # 确保base64编码适合文件名（替换/和-）
-            short_id = short_id.replace('/', '_').replace('+', '-')
+            short_id = short_id.replace("/", "_").replace("+", "-")
             filename = f"emoji_{timestamp}_{microseconds}_{short_id}"
 
         # 确保文件名有扩展名
-        if not filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+        if not filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
             filename = f"{filename}.png"  # 默认使用png格式
 
         # 检查文件名是否已存在，如果存在则重新生成短标识符
@@ -390,14 +391,15 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
         while os.path.exists(temp_file_path) and attempts < max_attempts:
             # 重新生成短标识符
             import random
-            random_bytes = random.getrandbits(48).to_bytes(6, 'big')
-            short_id = base64.b64encode(random_bytes).decode('ascii')[:8].rstrip('=')
-            short_id = short_id.replace('/', '_').replace('+', '-')
+
+            random_bytes = random.getrandbits(48).to_bytes(6, "big")
+            short_id = base64.b64encode(random_bytes).decode("ascii")[:8].rstrip("=")
+            short_id = short_id.replace("/", "_").replace("+", "-")
 
             # 分离文件名和扩展名，重新生成文件名
             name_part, ext = os.path.splitext(filename)
             # 去掉原来的标识符，添加新的
-            base_name = name_part.rsplit('_', 1)[0]  # 移除最后一个_后的部分
+            base_name = name_part.rsplit("_", 1)[0]  # 移除最后一个_后的部分
             filename = f"{base_name}_{short_id}{ext}"
             temp_file_path = os.path.join(EMOJI_DIR, filename)
             attempts += 1
@@ -406,7 +408,7 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
         if os.path.exists(temp_file_path):
             uuid_short = str(uuid.uuid4())[:8]
             name_part, ext = os.path.splitext(filename)
-            base_name = name_part.rsplit('_', 1)[0]
+            base_name = name_part.rsplit("_", 1)[0]
             filename = f"{base_name}_{uuid_short}{ext}"
             temp_file_path = os.path.join(EMOJI_DIR, filename)
 
@@ -428,7 +430,7 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
                         "description": None,
                         "emotions": None,
                         "replaced": None,
-                        "hash": None
+                        "hash": None,
                     }
 
         # 5. 保存base64图片到emoji目录
@@ -443,7 +445,7 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
                     "description": None,
                     "emotions": None,
                     "replaced": None,
-                    "hash": None
+                    "hash": None,
                 }
 
             logger.debug(f"[EmojiAPI] 图片已保存到临时文件: {temp_file_path}")
@@ -456,7 +458,7 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
                 "description": None,
                 "emotions": None,
                 "replaced": None,
-                "hash": None
+                "hash": None,
             }
 
         # 6. 调用注册方法
@@ -483,8 +485,8 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
                     # 通过文件名查找新注册的表情包（注意：文件名在注册后可能已经改变）
                     for emoji_obj in reversed(emoji_manager.emoji_objects):
                         if not emoji_obj.is_deleted and (
-                            emoji_obj.filename == filename or  # 直接匹配
-                            (hasattr(emoji_obj, 'full_path') and filename in emoji_obj.full_path)  # 路径包含匹配
+                            emoji_obj.filename == filename  # 直接匹配
+                            or (hasattr(emoji_obj, "full_path") and filename in emoji_obj.full_path)  # 路径包含匹配
                         ):
                             new_emoji_info = emoji_obj
                             break
@@ -501,7 +503,7 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
                 "description": description,
                 "emotions": emotions,
                 "replaced": replaced,
-                "hash": emoji_hash
+                "hash": emoji_hash,
             }
         else:
             return {
@@ -510,7 +512,7 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
                 "description": None,
                 "emotions": None,
                 "replaced": None,
-                "hash": None
+                "hash": None,
             }
 
     except Exception as e:
@@ -521,7 +523,7 @@ async def register_emoji(image_base64: str, filename: Optional[str] = None) -> D
             "description": None,
             "emotions": None,
             "replaced": None,
-            "hash": None
+            "hash": None,
         }
 
 
@@ -585,16 +587,16 @@ async def delete_emoji(emoji_hash: str) -> Dict[str, Any]:
                 "count_before": count_before,
                 "count_after": count_after,
                 "description": description,
-                "emotions": emotions
+                "emotions": emotions,
             }
         else:
             return {
                 "success": False,
-                "message": f"表情包删除失败，可能因为哈希值不存在或删除过程出错",
+                "message": "表情包删除失败，可能因为哈希值不存在或删除过程出错",
                 "count_before": count_before,
                 "count_after": count_after,
                 "description": None,
-                "emotions": None
+                "emotions": None,
             }
 
     except Exception as e:
@@ -605,7 +607,7 @@ async def delete_emoji(emoji_hash: str) -> Dict[str, Any]:
             "count_before": None,
             "count_after": None,
             "description": None,
-            "emotions": None
+            "emotions": None,
         }
 
 
@@ -659,7 +661,7 @@ async def delete_emoji_by_description(description: str, exact_match: bool = Fals
                 "message": f"未找到匹配描述 '{description}' 的表情包",
                 "deleted_count": 0,
                 "deleted_hashes": [],
-                "matched_count": 0
+                "matched_count": 0,
             }
 
         # 删除匹配的表情包
@@ -681,7 +683,7 @@ async def delete_emoji_by_description(description: str, exact_match: bool = Fals
                 "message": f"成功删除 {deleted_count} 个表情包 (匹配到 {matched_count} 个)",
                 "deleted_count": deleted_count,
                 "deleted_hashes": deleted_hashes,
-                "matched_count": matched_count
+                "matched_count": matched_count,
             }
         else:
             return {
@@ -689,7 +691,7 @@ async def delete_emoji_by_description(description: str, exact_match: bool = Fals
                 "message": f"匹配到 {matched_count} 个表情包，但删除全部失败",
                 "deleted_count": 0,
                 "deleted_hashes": [],
-                "matched_count": matched_count
+                "matched_count": matched_count,
             }
 
     except Exception as e:
@@ -699,5 +701,5 @@ async def delete_emoji_by_description(description: str, exact_match: bool = Fals
             "message": f"删除过程中发生错误: {str(e)}",
             "deleted_count": 0,
             "deleted_hashes": [],
-            "matched_count": 0
+            "matched_count": 0,
         }

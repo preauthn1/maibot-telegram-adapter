@@ -6,6 +6,7 @@ import re
 
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
+from src.chat.memory_system.Memory_chest import global_memory_chest
 from src.mais4u.mai_think import mai_thinking_manager
 from src.common.logger import get_logger
 from src.common.data_models.database_data_model import DatabaseMessages
@@ -27,7 +28,7 @@ from src.chat.utils.chat_message_builder import (
 from src.chat.express.expression_selector import expression_selector
 
 # from src.chat.memory_system.memory_activator import MemoryActivator
-from src.person_info.person_info import Person, is_person_known
+from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import ActionInfo, EventType
 from src.plugin_system.apis import llm_api
 
@@ -41,6 +42,7 @@ init_rewrite_prompt()
 
 
 logger = get_logger("replyer")
+
 
 class DefaultReplyer:
     def __init__(
@@ -215,7 +217,7 @@ class DefaultReplyer:
             traceback.print_exc()
             return False, llm_response
 
-#移动到 relation插件中构建
+    # 移动到 relation插件中构建
     # async def build_relation_info(self, chat_content: str, sender: str, person_list: List[Person]):
     #     if not global_config.relationship.enable_relationship:
     #         return ""
@@ -277,9 +279,7 @@ class DefaultReplyer:
         expression_habits_block = ""
         expression_habits_title = ""
         if style_habits_str.strip():
-            expression_habits_title = (
-                "在回复时,你可以参考以下的语言习惯，不要生硬使用："
-            )
+            expression_habits_title = "在回复时,你可以参考以下的语言习惯，不要生硬使用："
             expression_habits_block += f"{style_habits_str}\n"
 
         return f"{expression_habits_title}\n{expression_habits_block}", selected_ids
@@ -315,6 +315,17 @@ class DefaultReplyer:
     #         memory_str += f"- {instant_memory}\n"
 
     #     return memory_str
+    
+    async def build_memory_block(self) -> str:
+        """构建记忆块
+        """
+        # if not global_config.memory.enable_memory:
+            # return ""
+
+        if global_memory_chest.get_chat_memories_as_string(self.chat_stream.stream_id):
+            return f"你有以下记忆：\n{global_memory_chest.get_chat_memories_as_string(self.chat_stream.stream_id)}"
+        else:
+            return ""
 
     async def build_tool_info(self, chat_history: str, sender: str, target: str, enable_tool: bool = True) -> str:
         """构建工具信息块
@@ -498,7 +509,6 @@ class DefaultReplyer:
 --------------------------------
 """
 
-
         # 构建背景对话 prompt
         all_dialogue_prompt = ""
         if message_list_before_now:
@@ -524,7 +534,6 @@ class DefaultReplyer:
         time_block: str,
         chat_target_1: str,
         chat_target_2: str,
-
         identity_block: str,
         sender: str,
         target: str,
@@ -701,6 +710,7 @@ class DefaultReplyer:
             #     self.build_relation_info(chat_talking_prompt_short, sender, person_list_short), "relation_info"
             # ),
             # self._time_and_run_task(self.build_memory_block(message_list_before_short, target), "memory_block"),
+            self._time_and_run_task(self.build_memory_block(), "memory_block"),
             self._time_and_run_task(
                 self.build_tool_info(chat_talking_prompt_short, sender, target, enable_tool=enable_tool), "tool_info"
             ),
@@ -714,6 +724,7 @@ class DefaultReplyer:
             "expression_habits": "选取表达方式",
             "relation_info": "感受关系",
             # "memory_block": "回忆",
+            "memory_block": "记忆",
             "tool_info": "使用工具",
             "prompt_info": "获取知识",
             "actions_info": "动作信息",
@@ -742,6 +753,7 @@ class DefaultReplyer:
         selected_expressions: List[int]
         # relation_info: str = results_dict["relation_info"]
         # memory_block: str = results_dict["memory_block"]
+        memory_block: str = results_dict["memory_block"]
         tool_info: str = results_dict["tool_info"]
         prompt_info: str = results_dict["prompt_info"]  # 直接使用格式化后的结果
         actions_info: str = results_dict["actions_info"]
@@ -759,13 +771,9 @@ class DefaultReplyer:
 
         if sender:
             if is_group_chat:
-                reply_target_block = (
-                    f"现在{sender}说的:{target}。引起了你的注意"
-                )
+                reply_target_block = f"现在{sender}说的:{target}。引起了你的注意"
             else:  # private chat
-                reply_target_block = (
-                    f"现在{sender}说的:{target}。引起了你的注意"
-                )
+                reply_target_block = f"现在{sender}说的:{target}。引起了你的注意"
         else:
             reply_target_block = ""
 
@@ -779,6 +787,7 @@ class DefaultReplyer:
                 "replyer_self_prompt",
                 expression_habits_block=expression_habits_block,
                 tool_info_block=tool_info,
+                memory_block=memory_block,
                 knowledge_prompt=prompt_info,
                 # memory_block=memory_block,
                 # relation_info_block=relation_info,
@@ -798,6 +807,7 @@ class DefaultReplyer:
                 "replyer_prompt",
                 expression_habits_block=expression_habits_block,
                 tool_info_block=tool_info,
+                memory_block=memory_block,
                 knowledge_prompt=prompt_info,
                 # memory_block=memory_block,
                 # relation_info_block=relation_info,
@@ -946,7 +956,7 @@ class DefaultReplyer:
     async def llm_generate_content(self, prompt: str):
         with Timer("LLM生成", {}):  # 内部计时器，可选保留
             # 直接使用已初始化的模型实例
-            # logger.info(f"\n{prompt}\n")
+            logger.info(f"\n{prompt}\n")
 
             if global_config.debug.show_prompt:
                 logger.info(f"\n{prompt}\n")
@@ -1044,6 +1054,3 @@ def weighted_sample_no_replacement(items, weights, k) -> list:
                 pool.pop(idx)
                 break
     return selected
-
-
-

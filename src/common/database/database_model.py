@@ -317,6 +317,19 @@ class Expression(BaseModel):
     class Meta:
         table_name = "expression"
 
+class MemoryChest(BaseModel):
+    """
+    用于存储记忆仓库的模型
+    """
+
+    title = TextField()  # 标题
+    content = TextField()  # 内容
+
+    class Meta:
+        table_name = "memory_chest"
+    
+    
+
 
 class GraphNodes(BaseModel):
     """
@@ -369,6 +382,7 @@ def create_tables():
                 GraphNodes,  # 添加图节点表
                 GraphEdges,  # 添加图边表
                 ActionRecords,  # 添加 ActionRecords 到初始化列表
+                MemoryChest,
             ]
         )
 
@@ -396,6 +410,7 @@ def initialize_database(sync_constraints=False):
         GraphNodes,
         GraphEdges,
         ActionRecords,  # 添加 ActionRecords 到初始化列表
+        MemoryChest,
     ]
 
     try:
@@ -493,6 +508,7 @@ def sync_field_constraints():
         GraphNodes,
         GraphEdges,
         ActionRecords,
+        MemoryChest,
     ]
 
     try:
@@ -732,11 +748,14 @@ def check_field_constraints():
         logger.exception(f"检查字段约束时出错: {e}")
 
     return inconsistencies
+
+
 def fix_image_id():
     """
     修复表情包的 image_id 字段
     """
     import uuid
+
     try:
         with db:
             for img in Images.select():
@@ -746,6 +765,7 @@ def fix_image_id():
                     logger.info(f"已为表情包 {img.id} 生成新的 image_id: {img.image_id}")
     except Exception as e:
         logger.exception(f"修复 image_id 时出错: {e}")
+
 
 # 模块加载时调用初始化函数
 initialize_database(sync_constraints=True)

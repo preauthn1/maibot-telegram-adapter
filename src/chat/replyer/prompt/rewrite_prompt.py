@@ -1,7 +1,5 @@
-
 from src.chat.utils.prompt_builder import Prompt
 # from src.chat.memory_system.memory_activator import MemoryActivator
-
 
 
 def init_rewrite_prompt():

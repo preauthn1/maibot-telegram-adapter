@@ -44,7 +44,7 @@ def init_prompt():
 """,
         "get_mood_prompt",
     )
-    
+
     Prompt(
         """
 {chat_talking_prompt}
@@ -103,9 +103,7 @@ class ChatMood:
         if random.random() > update_probability:
             return
 
-        logger.debug(
-            f"{self.log_prefix} 更新情绪状态，更新概率: {update_probability:.2f}"
-        )
+        logger.debug(f"{self.log_prefix} 更新情绪状态，更新概率: {update_probability:.2f}")
 
         message_time: float = message.message_info.time  # type: ignore
         message_list_before_now = get_raw_msg_by_timestamp_with_chat_inclusive(
@@ -154,12 +152,12 @@ class ChatMood:
         self.mood_state = response
 
         self.last_change_time = message_time
-        
+
     async def get_mood(self) -> str:
         self.regression_count = 0
 
         current_time = time.time()
-        
+
         logger.info(f"{self.log_prefix} 获取情绪状态")
         message_list_before_now = get_raw_msg_by_timestamp_with_chat_inclusive(
             chat_id=self.chat_id,
@@ -207,7 +205,7 @@ class ChatMood:
         self.mood_state = response
 
         self.last_change_time = current_time
-        
+
         return response
 
     async def regress_mood(self):

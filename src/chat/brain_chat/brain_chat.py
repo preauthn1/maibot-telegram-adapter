@@ -16,7 +16,6 @@ from src.chat.brain_chat.brain_planner import BrainPlanner
 from src.chat.planner_actions.action_modifier import ActionModifier
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
-from src.chat.heart_flow.hfc_utils import send_typing, stop_typing
 from src.chat.express.expression_learner import expression_learner_manager
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
@@ -96,7 +95,6 @@ class BrainChatting:
         self.last_read_time = time.time() - 2
 
         self.more_plan = False
-        
 
     async def start(self):
         """检查是否需要启动主循环，如果未激活则启动。"""
@@ -171,10 +169,8 @@ class BrainChatting:
 
         if len(recent_messages_list) >= 1:
             self.last_read_time = time.time()
-            await self._observe(
-                recent_messages_list=recent_messages_list
-            )
-            
+            await self._observe(recent_messages_list=recent_messages_list)
+
         else:
             # Normal模式：消息数量不足，等待
             await asyncio.sleep(0.2)
@@ -233,11 +229,11 @@ class BrainChatting:
 
     async def _observe(
         self,  # interest_value: float = 0.0,
-        recent_messages_list: Optional[List["DatabaseMessages"]] = None
+        recent_messages_list: Optional[List["DatabaseMessages"]] = None,
     ) -> bool:  # sourcery skip: merge-else-if-into-elif, remove-redundant-if
         if recent_messages_list is None:
             recent_messages_list = []
-        reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
+        _reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
 
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             await self.expression_learner.trigger_learning_for_chat()
@@ -334,7 +330,7 @@ class BrainChatting:
                         "taken_time": time.time(),
                     }
                 )
-                reply_text = reply_text_from_reply
+                _reply_text = reply_text_from_reply
             else:
                 # 没有回复信息，构建纯动作的loop_info
                 loop_info = {
@@ -347,7 +343,7 @@ class BrainChatting:
                         "taken_time": time.time(),
                     },
                 }
-                reply_text = action_reply_text
+                _reply_text = action_reply_text
 
             self.end_cycle(loop_info, cycle_timers)
             self.print_cycle_info(cycle_timers)
@@ -484,7 +480,6 @@ class BrainChatting:
         """执行单个动作的通用函数"""
         try:
             with Timer(f"动作{action_planner_info.action_type}", cycle_timers):
-                
                 if action_planner_info.action_type == "no_reply":
                     # 直接处理no_action逻辑，不再通过动作系统
                     reason = action_planner_info.reasoning or "选择不回复"
@@ -517,7 +512,9 @@ class BrainChatting:
 
                         if not success or not llm_response or not llm_response.reply_set:
                             if action_planner_info.action_message:
-                                logger.info(f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败")
+                                logger.info(
+                                    f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败"
+                                )
                             else:
                                 logger.info("回复生成失败")
                             return {"action_type": "reply", "success": False, "reply_text": "", "loop_info": None}

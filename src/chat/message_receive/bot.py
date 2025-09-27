@@ -8,7 +8,7 @@ from maim_message import UserInfo, Seg, GroupInfo
 from src.common.logger import get_logger
 from src.config.config import global_config
 from src.mood.mood_manager import mood_manager  # 导入情绪管理器
-from src.chat.message_receive.chat_stream import get_chat_manager, ChatStream
+from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.message_receive.message import MessageRecv, MessageRecvS4U
 from src.chat.message_receive.storage import MessageStorage
 from src.chat.heart_flow.heartflow_message_processor import HeartFCMessageReceiver

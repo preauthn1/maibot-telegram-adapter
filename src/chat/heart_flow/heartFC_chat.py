@@ -25,6 +25,7 @@ from src.plugin_system.core import events_manager
 from src.plugin_system.apis import generator_api, send_api, message_api, database_api
 from src.mais4u.mai_think import mai_thinking_manager
 from src.mais4u.s4u_config import s4u_config
+from src.chat.memory_system.Memory_chest import global_memory_chest
 from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
@@ -102,6 +103,7 @@ class HeartFChatting:
         self.talk_threshold = global_config.chat.talk_value
 
         self.no_reply_until_call = False
+        
 
     async def start(self):
         """检查是否需要启动主循环，如果未激活则启动。"""
@@ -206,7 +208,11 @@ class HeartFChatting:
             # *控制频率用
             if mentioned_message:
                 await self._observe(recent_messages_list=recent_messages_list, force_reply_message=mentioned_message)
-            elif random.random() < global_config.chat.talk_value * frequency_control_manager.get_or_create_frequency_control(self.stream_id).get_talk_frequency_adjust():
+            elif (
+                random.random()
+                < global_config.chat.talk_value
+                * frequency_control_manager.get_or_create_frequency_control(self.stream_id).get_talk_frequency_adjust()
+            ):
                 await self._observe(recent_messages_list=recent_messages_list)
             else:
                 # 没有提到，继续保持沉默，等待5秒防止频繁触发
@@ -276,14 +282,17 @@ class HeartFChatting:
             recent_messages_list = []
         reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
 
-        
         start_time = time.time()
-        
+
         if s4u_config.enable_s4u:
             await send_typing()
 
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             await self.expression_learner.trigger_learning_for_chat()
+            
+            await global_memory_chest.build_running_content(chat_id=self.stream_id)   
+            
+            
 
             cycle_timers, thinking_id = self.start_cycle()
             logger.info(f"{self.log_prefix} 开始第{self._cycle_counter}次思考")
@@ -350,7 +359,7 @@ class HeartFChatting:
                         available_actions=available_actions,
                     )
                 )
-                
+
             logger.info(
                 f"{self.log_prefix} 决定执行{len(action_to_use_info)}个动作: {' '.join([a.action_type for a in action_to_use_info])}"
             )
@@ -412,7 +421,7 @@ class HeartFChatting:
                     },
                 }
                 reply_text = action_reply_text
-                
+
             self.end_cycle(loop_info, cycle_timers)
             self.print_cycle_info(cycle_timers)
 
@@ -422,11 +431,6 @@ class HeartFChatting:
                 await asyncio.sleep(wait_time)
             else:
                 await asyncio.sleep(0.1)
-
-
-            
-            
-
 
             """S4U内容，暂时保留"""
             if s4u_config.enable_s4u:

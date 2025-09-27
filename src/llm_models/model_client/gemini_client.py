@@ -192,7 +192,7 @@ def _process_delta(
                 elif getattr(p, "text", None):
                     # 正常输出写入 buffer
                     fc_delta_buffer.write(p.text)
-    
+
     if delta.function_calls:  # 为什么不用hasattr呢，是因为这个属性一定有，即使是个空的
         for call in delta.function_calls:
             try:
@@ -396,10 +396,7 @@ def _default_normal_response_parser(
                         "    可能会对回复内容造成影响，建议修改模型 max_tokens 配置！"
                     )
                 else:
-                    logger.warning(
-                        "⚠ Gemini 响应因达到 max_tokens 限制被截断，\n"
-                        "    请修改模型 max_tokens 配置！"
-                    )
+                    logger.warning("⚠ Gemini 响应因达到 max_tokens 限制被截断，\n    请修改模型 max_tokens 配置！")
 
                 return api_response, _usage_record
     except Exception as e:
@@ -456,7 +453,7 @@ class GeminiClient(BaseClient):
                 logger.warning(
                     f"无效的 thinking_budget 值 {extra_params['thinking_budget']}，将使用模型自动预算模式 {tb}"
                 )
-        
+
         # 优先尝试精确匹配
         if model_id in THINKING_BUDGET_LIMITS:
             limits = THINKING_BUDGET_LIMITS[model_id]
@@ -541,7 +538,7 @@ class GeminiClient(BaseClient):
         tools = _convert_tool_options(tool_options) if tool_options else None
         # 解析并裁剪 thinking_budget
         tb = self.clamp_thinking_budget(extra_params, model_info.model_identifier)
-        
+
         # 将response_format转换为Gemini API所需的格式
         generation_config_dict = {
             "max_output_tokens": max_tokens,

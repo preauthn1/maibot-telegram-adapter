@@ -109,7 +109,7 @@ no_reply_until_call
         """
 {action_name}
 动作描述：{action_description}
-使用条件：
+使用条件{parallel_text}：
 {action_require}
 {{
     "action": "{action_name}",{action_parameters},
@@ -343,7 +343,6 @@ class ActionPlanner:
                 interest=interest,
                 plan_style=global_config.personality.plan_style,
             )
-            
 
             return prompt, message_id_list
         except Exception as e:
@@ -421,6 +420,11 @@ class ActionPlanner:
             for require_item in action_info.action_require:
                 require_text += f"- {require_item}\n"
             require_text = require_text.rstrip("\n")
+            
+            if not action_info.parallel_action:
+                parallel_text = "(当选择这个动作时，请不要选择其他动作)"
+            else:
+                parallel_text = ""
 
             # 获取动作提示模板并填充
             using_action_prompt = await global_prompt_manager.get_prompt_async("action_prompt")
@@ -429,6 +433,7 @@ class ActionPlanner:
                 action_description=action_info.description,
                 action_parameters=param_text,
                 action_require=require_text,
+                parallel_text=parallel_text,
             )
 
             action_options_block += using_action_prompt
@@ -502,9 +507,7 @@ class ActionPlanner:
             action.action_data = action.action_data or {}
             action.action_data["loop_start_time"] = loop_start_time
 
-        logger.debug(
-            f"{self.log_prefix}规划器选择了{len(actions)}个动作: {' '.join([a.action_type for a in actions])}"
-        )
+        logger.debug(f"{self.log_prefix}规划器选择了{len(actions)}个动作: {' '.join([a.action_type for a in actions])}")
 
         return actions
 
