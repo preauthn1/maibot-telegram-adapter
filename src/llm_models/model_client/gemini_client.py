@@ -255,10 +255,7 @@ def _build_stream_api_resp(
                 "    可能会对回复内容造成影响，建议修改模型 max_tokens 配置！"
             )
         else:
-            logger.warning(
-                "⚠ Gemini 响应因达到 max_tokens 限制被截断，\n"
-                "    请修改模型 max_tokens 配置！"
-            )
+            logger.warning("⚠ Gemini 响应因达到 max_tokens 限制被截断，\n    请修改模型 max_tokens 配置！")
 
     if not resp.content and not resp.tool_calls:
         if not getattr(resp, "reasoning_content", None):
