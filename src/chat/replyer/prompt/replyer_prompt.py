@@ -1,7 +1,5 @@
-
 from src.chat.utils.prompt_builder import Prompt
 # from src.chat.memory_system.memory_activator import MemoryActivator
-
 
 
 def init_replyer_prompt():
@@ -9,10 +7,9 @@ def init_replyer_prompt():
     Prompt("你正在和{sender_name}聊天，这是你们之前聊的内容：", "chat_target_private1")
     Prompt("正在群里聊天", "chat_target_group2")
     Prompt("和{sender_name}聊天", "chat_target_private2")
-    
-    
+
     Prompt(
-"""{knowledge_prompt}{tool_info_block}{extra_info_block}
+        """{knowledge_prompt}{tool_info_block}{extra_info_block}
 {expression_habits_block}
 
 你正在qq群里聊天，下面是群里正在聊的内容:
@@ -29,8 +26,6 @@ def init_replyer_prompt():
 {moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
         "replyer_prompt",
     )
-
-
 
     Prompt(
         """{knowledge_prompt}{tool_info_block}{extra_info_block}
@@ -50,11 +45,9 @@ def init_replyer_prompt():
 """,
         "replyer_self_prompt",
     )
-    
-    
-    
+
     Prompt(
-"""{knowledge_prompt}{tool_info_block}{extra_info_block}
+        """{knowledge_prompt}{tool_info_block}{extra_info_block}
 {expression_habits_block}
 
 你正在和{sender_name}聊天，这是你们之前聊的内容:
@@ -70,10 +63,9 @@ def init_replyer_prompt():
 {moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。""",
         "private_replyer_prompt",
     )
-    
-    
+
     Prompt(
-    """{knowledge_prompt}{tool_info_block}{extra_info_block}
+        """{knowledge_prompt}{tool_info_block}{extra_info_block}
 {expression_habits_block}
 
 你正在和{sender_name}聊天，这是你们之前聊的内容:

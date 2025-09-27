@@ -6,7 +6,6 @@ import re
 
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
-from src.mais4u.mai_think import mai_thinking_manager
 from src.common.logger import get_logger
 from src.common.data_models.database_data_model import DatabaseMessages
 from src.common.data_models.info_data_model import ActionPlannerInfo
@@ -42,6 +41,7 @@ init_rewrite_prompt()
 
 
 logger = get_logger("replyer")
+
 
 class PrivateReplyer:
     def __init__(
@@ -273,9 +273,7 @@ class PrivateReplyer:
         expression_habits_block = ""
         expression_habits_title = ""
         if style_habits_str.strip():
-            expression_habits_title = (
-                "在回复时,你可以参考以下的语言习惯，不要生硬使用："
-            )
+            expression_habits_title = "在回复时,你可以参考以下的语言习惯，不要生硬使用："
             expression_habits_block += f"{style_habits_str}\n"
 
         return f"{expression_habits_title}\n{expression_habits_block}", selected_ids
@@ -521,8 +519,6 @@ class PrivateReplyer:
             sender = person_name
             target = reply_message.processed_plain_text
 
-
-
         target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
         target = re.sub(r"\\[picid:[^\\]]+\\]", "[图片]", target)
 
@@ -531,7 +527,7 @@ class PrivateReplyer:
             timestamp=time.time(),
             limit=global_config.chat.max_context_size,
         )
-        
+
         dialogue_prompt = build_readable_messages(
             message_list_before_now_long,
             replace_bot_name=True,
@@ -579,9 +575,7 @@ class PrivateReplyer:
             self._time_and_run_task(
                 self.build_expression_habits(chat_talking_prompt_short, target), "expression_habits"
             ),
-            self._time_and_run_task(
-                self.build_relation_info(chat_talking_prompt_short, sender), "relation_info"
-            ),
+            self._time_and_run_task(self.build_relation_info(chat_talking_prompt_short, sender), "relation_info"),
             # self._time_and_run_task(self.build_memory_block(message_list_before_short, target), "memory_block"),
             self._time_and_run_task(
                 self.build_tool_info(chat_talking_prompt_short, sender, target, enable_tool=enable_tool), "tool_info"
@@ -639,9 +633,7 @@ class PrivateReplyer:
 
         moderation_prompt_block = "请不要输出违法违规内容，不要输出色情，暴力，政治相关内容，如有敏感内容，请规避。"
 
-        reply_target_block = (
-            f"现在对方说的:{target}。引起了你的注意"
-        )
+        reply_target_block = f"现在对方说的:{target}。引起了你的注意"
 
         if global_config.bot.qq_account == user_id and platform == global_config.bot.platform:
             return await global_prompt_manager.format_prompt(
@@ -654,7 +646,6 @@ class PrivateReplyer:
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
                 action_descriptions=actions_info,
-
                 dialogue_prompt=dialogue_prompt,
                 time_block=time_block,
                 target=target,
@@ -697,8 +688,6 @@ class PrivateReplyer:
         sender, target = self._parse_reply_target(reply_to)
         target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
         target = re.sub(r"\\[picid:[^\\]]+\\]", "[图片]", target)
-
-
 
         message_list_before_now_half = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,
@@ -916,6 +905,3 @@ def weighted_sample_no_replacement(items, weights, k) -> list:
                 pool.pop(idx)
                 break
     return selected
-
-
-

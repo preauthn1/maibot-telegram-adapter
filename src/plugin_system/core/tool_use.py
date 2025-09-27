@@ -91,7 +91,7 @@ class ToolExecutor:
         # 缓存未命中，执行工具调用
         # 获取可用工具
         tools = self._get_tool_definitions()
-        
+
         # print(f"tools: {tools}")
 
         # 获取当前时间

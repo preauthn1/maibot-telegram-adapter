@@ -487,7 +487,7 @@ class OpenaiClient(BaseClient):
                         req_task.cancel()
                         raise ReqAbortException("请求被外部信号中断")
                     await asyncio.sleep(0.1)  # 等待0.5秒后再次检查任务&中断信号量状态
-                
+
                 # logger.
                 logger.debug(f"OpenAI API响应(非流式): {req_task.result()}")
 
@@ -511,7 +511,7 @@ class OpenaiClient(BaseClient):
             )
 
         # logger.debug(f"OpenAI API响应: {resp}")
-        
+
         return resp
 
     async def get_embedding(
