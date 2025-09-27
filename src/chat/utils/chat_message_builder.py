@@ -859,7 +859,6 @@ async def build_anonymous_messages(messages: List[DatabaseMessages]) -> str:
             # 处理图片ID
             content = process_pic_ids(content)
 
-
             anon_name = get_anon_name(platform, user_id)
             # print(f"anon_name:{anon_name}")
 
@@ -945,11 +944,12 @@ async def build_bare_messages(messages: List[DatabaseMessages]) -> str:
         # 获取纯文本内容
         content = msg.processed_plain_text or ""
 
-
         # 处理图片ID
         pic_pattern = r"\[picid:[^\]]+\]"
+
         def replace_pic_id(match):
             return "[图片]"
+
         content = re.sub(pic_pattern, replace_pic_id, content)
 
         # 处理用户引用格式，移除回复和@标记

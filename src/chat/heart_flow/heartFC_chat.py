@@ -208,7 +208,11 @@ class HeartFChatting:
             # *控制频率用
             if mentioned_message:
                 await self._observe(recent_messages_list=recent_messages_list, force_reply_message=mentioned_message)
-            elif random.random() < global_config.chat.talk_value * frequency_control_manager.get_or_create_frequency_control(self.stream_id).get_talk_frequency_adjust():
+            elif (
+                random.random()
+                < global_config.chat.talk_value
+                * frequency_control_manager.get_or_create_frequency_control(self.stream_id).get_talk_frequency_adjust()
+            ):
                 await self._observe(recent_messages_list=recent_messages_list)
             else:
                 # 没有提到，继续保持沉默，等待5秒防止频繁触发
@@ -278,9 +282,8 @@ class HeartFChatting:
             recent_messages_list = []
         reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
 
-        
         start_time = time.time()
-        
+
         if s4u_config.enable_s4u:
             await send_typing()
 
@@ -356,7 +359,7 @@ class HeartFChatting:
                         available_actions=available_actions,
                     )
                 )
-                
+
             logger.info(
                 f"{self.log_prefix} 决定执行{len(action_to_use_info)}个动作: {' '.join([a.action_type for a in action_to_use_info])}"
             )
@@ -418,7 +421,7 @@ class HeartFChatting:
                     },
                 }
                 reply_text = action_reply_text
-                
+
             self.end_cycle(loop_info, cycle_timers)
             self.print_cycle_info(cycle_timers)
 
@@ -428,11 +431,6 @@ class HeartFChatting:
                 await asyncio.sleep(wait_time)
             else:
                 await asyncio.sleep(0.1)
-
-
-            
-            
-
 
             """S4U内容，暂时保留"""
             if s4u_config.enable_s4u:

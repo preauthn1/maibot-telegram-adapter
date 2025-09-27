@@ -1,10 +1,8 @@
-import asyncio
 import re
 import traceback
 
 from typing import Tuple, TYPE_CHECKING
 
-from src.config.config import global_config
 from src.chat.message_receive.message import MessageRecv
 from src.chat.message_receive.storage import MessageStorage
 from src.chat.heart_flow.heartflow import heartflow
@@ -74,7 +72,7 @@ class HeartFCMessageReceiver:
 
             await self.storage.store_message(message, chat)
 
-            heartflow_chat: HeartFChatting = await heartflow.get_or_create_heartflow_chat(chat.stream_id)  # type: ignore
+            _heartflow_chat: HeartFChatting = await heartflow.get_or_create_heartflow_chat(chat.stream_id)  # type: ignore
 
             # 3. 日志记录
             mes_name = chat.group_info.group_name if chat.group_info else "私聊"
@@ -102,7 +100,7 @@ class HeartFCMessageReceiver:
                 replace_bot_name=True,
             )
             # if not processed_plain_text:
-                # print(message)
+            # print(message)
 
             logger.info(f"[{mes_name}]{userinfo.user_nickname}:{processed_plain_text}")  # type: ignore
 

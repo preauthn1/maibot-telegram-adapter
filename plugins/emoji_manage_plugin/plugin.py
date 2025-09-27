@@ -1,25 +1,18 @@
-import random
-from typing import List, Tuple, Type, Any
+from typing import List, Tuple, Type
 from src.plugin_system import (
     BasePlugin,
     register_plugin,
-    BaseAction,
     BaseCommand,
-    BaseTool,
     ComponentInfo,
-    ActionActivationType,
     ConfigField,
-    BaseEventHandler,
-    EventType,
-    MaiMessages,
-    ToolParamType,
     ReplyContentType,
     emoji_api,
 )
 from maim_message import Seg
-from src.config.config import global_config
 from src.common.logger import get_logger
+
 logger = get_logger("emoji_manage_plugin")
+
 
 class AddEmojiCommand(BaseCommand):
     command_name = "add_emoji"
@@ -29,7 +22,7 @@ class AddEmojiCommand(BaseCommand):
     async def execute(self) -> Tuple[bool, str, bool]:
         # 查找消息中的表情包
         # logger.info(f"查找消息中的表情包: {self.message.message_segment}")
-        
+
         emoji_base64_list = self.find_and_return_emoji_in_message(self.message.message_segment)
 
         if not emoji_base64_list:
@@ -51,7 +44,7 @@ class AddEmojiCommand(BaseCommand):
                     emotions = result.get("emotions", [])
                     replaced = result.get("replaced", False)
 
-                    result_msg = f"表情包 {i+1} 注册成功{'(替换旧表情包)' if replaced else '(新增表情包)'}"
+                    result_msg = f"表情包 {i + 1} 注册成功{'(替换旧表情包)' if replaced else '(新增表情包)'}"
                     if description:
                         result_msg += f"\n描述: {description}"
                     if emotions:
@@ -61,11 +54,11 @@ class AddEmojiCommand(BaseCommand):
                 else:
                     fail_count += 1
                     error_msg = result.get("message", "注册失败")
-                    results.append(f"表情包 {i+1} 注册失败: {error_msg}")
+                    results.append(f"表情包 {i + 1} 注册失败: {error_msg}")
 
             except Exception as e:
                 fail_count += 1
-                results.append(f"表情包 {i+1} 注册时发生错误: {str(e)}")
+                results.append(f"表情包 {i + 1} 注册时发生错误: {str(e)}")
 
         # 构建返回消息
         total_count = success_count + fail_count
@@ -140,6 +133,7 @@ class AddEmojiCommand(BaseCommand):
                 emoji_base64_list.extend(self.find_and_return_emoji_in_message(seg.data))
         return emoji_base64_list
 
+
 class ListEmojiCommand(BaseCommand):
     """列表表情包Command - 响应/emoji list命令"""
 
@@ -156,6 +150,7 @@ class ListEmojiCommand(BaseCommand):
 
         # 解析命令参数
         import re
+
         match = re.match(r"^/emoji list(?:\s+(\d+))?$", self.message.raw_message)
         max_count = 10  # 默认显示10个
         if match and match.group(1):
@@ -195,7 +190,7 @@ class ListEmojiCommand(BaseCommand):
         display_emojis = all_emojis[:max_count]
         message_lines.append(f"\n📋 显示前 {len(display_emojis)} 个表情包:")
 
-        for i, (emoji_base64, description, emotion) in enumerate(display_emojis, 1):
+        for i, (_, description, emotion) in enumerate(display_emojis, 1):
             # 截断过长的描述
             short_desc = description[:50] + "..." if len(description) > 50 else description
             message_lines.append(f"{i}. {short_desc} [{emotion}]")
@@ -257,7 +252,7 @@ class DeleteEmojiCommand(BaseCommand):
                     count_after = result.get("count_after", 0)
                     emotions = result.get("emotions", [])
 
-                    result_msg = f"表情包 {i+1} 删除成功"
+                    result_msg = f"表情包 {i + 1} 删除成功"
                     if description:
                         result_msg += f"\n描述: {description}"
                     if emotions:
@@ -268,11 +263,11 @@ class DeleteEmojiCommand(BaseCommand):
                 else:
                     fail_count += 1
                     error_msg = result.get("message", "删除失败")
-                    results.append(f"表情包 {i+1} 删除失败: {error_msg}")
+                    results.append(f"表情包 {i + 1} 删除失败: {error_msg}")
 
             except Exception as e:
                 fail_count += 1
-                results.append(f"表情包 {i+1} 删除时发生错误: {str(e)}")
+                results.append(f"表情包 {i + 1} 删除时发生错误: {str(e)}")
 
         # 构建返回消息
         total_count = success_count + fail_count

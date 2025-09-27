@@ -307,7 +307,9 @@ class BrainPlanner:
 
             if chat_target_info:
                 # 构建聊天上下文描述
-                chat_context_description = f"你正在和 {chat_target_info.person_name or chat_target_info.user_nickname or '对方'} 聊天中"
+                chat_context_description = (
+                    f"你正在和 {chat_target_info.person_name or chat_target_info.user_nickname or '对方'} 聊天中"
+                )
 
             # 构建动作选项块
             action_options_block = await self._build_action_options_block(current_available_actions)
