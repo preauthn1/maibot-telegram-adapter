@@ -323,6 +323,8 @@ run_pet.bat
 !/plugins/hello_world_plugin
 !/plugins/emoji_manage_plugin
 !/plugins/take_picture_plugin
+!/plugins/deep_think
+!/plugins/__init__.py
 
 config.toml
 

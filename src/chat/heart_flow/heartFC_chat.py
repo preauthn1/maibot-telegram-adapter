@@ -25,6 +25,7 @@ from src.plugin_system.core import events_manager
 from src.plugin_system.apis import generator_api, send_api, message_api, database_api
 from src.mais4u.mai_think import mai_thinking_manager
 from src.mais4u.s4u_config import s4u_config
+from src.chat.memory_system.Memory_chest import global_memory_chest
 from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
@@ -102,6 +103,7 @@ class HeartFChatting:
         self.talk_threshold = global_config.chat.talk_value
 
         self.no_reply_until_call = False
+        
 
     async def start(self):
         """检查是否需要启动主循环，如果未激活则启动。"""
@@ -284,6 +286,10 @@ class HeartFChatting:
 
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             await self.expression_learner.trigger_learning_for_chat()
+            
+            await global_memory_chest.build_running_content(chat_id=self.stream_id)   
+            
+            
 
             cycle_timers, thinking_id = self.start_cycle()
             logger.info(f"{self.log_prefix} 开始第{self._cycle_counter}次思考")

@@ -427,7 +427,7 @@ class ExpressionLearner:
             chat_str=random_msg_str,
         )
 
-        print(f"random_msg_str:{random_msg_str}")
+        # print(f"random_msg_str:{random_msg_str}")
         logger.info(f"学习{type_str}的prompt: {prompt}")
 
         try:

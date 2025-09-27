@@ -3,9 +3,13 @@ from typing import Tuple
 from src.common.logger import get_logger
 from src.config.config import global_config
 from src.chat.utils.prompt_builder import Prompt
+from src.llm_models.payload_content.tool_option import ToolParamType
 from src.plugin_system import BaseAction, ActionActivationType
 from src.chat.memory_system.Hippocampus import hippocampus_manager
 from src.chat.utils.utils import cut_key_words
+from src.chat.memory_system.Memory_chest import global_memory_chest
+from src.plugin_system.base.base_tool import BaseTool
+from typing import Any
 
 logger = get_logger("memory")
 
@@ -66,73 +70,153 @@ def init_prompt():
     )
 
 
-class BuildMemoryAction(BaseAction):
-    """关系动作 - 构建关系"""
+# class BuildMemoryAction(BaseAction):
+#     """关系动作 - 构建关系"""
 
+#     activation_type = ActionActivationType.LLM_JUDGE
+#     parallel_action = True
+
+#     # 动作基本信息
+#     action_name = "build_memory"
+#     action_description = (
+#         "了解对于某个概念或者某件事的记忆，并存储下来，在之后的聊天中，你可以根据这条记忆来获取相关信息"
+#     )
+
+#     # 动作参数定义
+#     action_parameters = {
+#         "concept_name": "需要了解或记忆的概念或事件的名称",
+#         "concept_description": "需要了解或记忆的概念或事件的描述，需要具体且明确",
+#     }
+
+#     # 动作使用场景
+#     action_require = [
+#         "了解对于某个概念或者某件事的记忆，并存储下来，在之后的聊天中，你可以根据这条记忆来获取相关信息",
+#         "有你不了解的概念",
+#         "有人要求你记住某个概念或者事件",
+#         "你对某件事或概念有新的理解，或产生了兴趣",
+#     ]
+
+#     # 关联类型
+#     associated_types = ["text"]
+
+#     async def execute(self) -> Tuple[bool, str]:
+#         """执行关系动作"""
+
+#         try:
+#             # 1. 获取构建关系的原因
+#             concept_description = self.action_data.get("concept_description", "")
+#             logger.info(f"{self.log_prefix} 添加记忆原因: {self.reasoning}")
+#             concept_name = self.action_data.get("concept_name", "")
+#             # 2. 获取目标用户信息
+
+#             # 对 concept_name 进行jieba分词
+#             concept_name_tokens = cut_key_words(concept_name)
+#             # logger.info(f"{self.log_prefix} 对 concept_name 进行分词结果: {concept_name_tokens}")
+
+#             filtered_concept_name_tokens = [
+#                 token
+#                 for token in concept_name_tokens
+#                 if all(keyword not in token for keyword in global_config.memory.memory_ban_words)
+#             ]
+
+#             if not filtered_concept_name_tokens:
+#                 logger.warning(f"{self.log_prefix} 过滤后的概念名称列表为空，跳过添加记忆")
+#                 return False, "过滤后的概念名称列表为空，跳过添加记忆"
+
+#             similar_topics_dict = (
+#                 hippocampus_manager.get_hippocampus().parahippocampal_gyrus.get_similar_topics_from_keywords(
+#                     filtered_concept_name_tokens
+#                 )
+#             )
+#             await hippocampus_manager.get_hippocampus().parahippocampal_gyrus.add_memory_with_similar(
+#                 concept_description, similar_topics_dict
+#             )
+
+#             return True, f"成功添加记忆: {concept_name}"
+
+#         except Exception as e:
+#             logger.error(f"{self.log_prefix} 构建记忆时出错: {e}")
+#             return False, f"构建记忆时出错: {e}"
+
+class GetMemoryTool(BaseTool):
+    """获取用户信息"""
+
+    name = "get_memory"
+    description = "在记忆中搜索，获取某个问题的答案"
+    parameters = [
+        ("question", ToolParamType.STRING, "需要获取答案的问题", True, None)
+    ]
+    
+    available_for_llm = True
+
+    async def execute(self, function_args: dict[str, Any]) -> dict[str, Any]:
+        """执行比较两个数的大小
+
+        Args:
+            function_args: 工具参数
+
+        Returns:
+            dict: 工具执行结果
+        """
+        question: str = function_args.get("question")  # type: ignore
+
+        answer = await global_memory_chest.get_answer_by_question(question=question)
+        if not answer:
+            return {"content": f"没有找到相关记忆"}
+        
+        return {"content": f"问题：{question}，答案：{answer}"}
+
+
+
+class GetMemoryAction(BaseAction):
+    """关系动作 - 获取记忆"""
+    
     activation_type = ActionActivationType.LLM_JUDGE
     parallel_action = True
-
-    # 动作基本信息
-    action_name = "build_memory"
+    
+        # 动作基本信息
+    action_name = "get_memory"
     action_description = (
-        "了解对于某个概念或者某件事的记忆，并存储下来，在之后的聊天中，你可以根据这条记忆来获取相关信息"
+        "在记忆中搜寻某个问题的答案"
     )
 
     # 动作参数定义
     action_parameters = {
-        "concept_name": "需要了解或记忆的概念或事件的名称",
-        "concept_description": "需要了解或记忆的概念或事件的描述，需要具体且明确",
+        "question": "需要搜寻或回答的问题",
     }
 
     # 动作使用场景
     action_require = [
-        "了解对于某个概念或者某件事的记忆，并存储下来，在之后的聊天中，你可以根据这条记忆来获取相关信息",
+        "在记忆中搜寻某个问题的答案",
         "有你不了解的概念",
-        "有人要求你记住某个概念或者事件",
-        "你对某件事或概念有新的理解，或产生了兴趣",
+        "有人提问关于过去的事情"
+        "你需要根据记忆回答某个问题",
     ]
-
+    
     # 关联类型
     associated_types = ["text"]
-
+    
     async def execute(self) -> Tuple[bool, str]:
         """执行关系动作"""
-
-        try:
-            # 1. 获取构建关系的原因
-            concept_description = self.action_data.get("concept_description", "")
-            logger.info(f"{self.log_prefix} 添加记忆原因: {self.reasoning}")
-            concept_name = self.action_data.get("concept_name", "")
-            # 2. 获取目标用户信息
-
-            # 对 concept_name 进行jieba分词
-            concept_name_tokens = cut_key_words(concept_name)
-            # logger.info(f"{self.log_prefix} 对 concept_name 进行分词结果: {concept_name_tokens}")
-
-            filtered_concept_name_tokens = [
-                token
-                for token in concept_name_tokens
-                if all(keyword not in token for keyword in global_config.memory.memory_ban_words)
-            ]
-
-            if not filtered_concept_name_tokens:
-                logger.warning(f"{self.log_prefix} 过滤后的概念名称列表为空，跳过添加记忆")
-                return False, "过滤后的概念名称列表为空，跳过添加记忆"
-
-            similar_topics_dict = (
-                hippocampus_manager.get_hippocampus().parahippocampal_gyrus.get_similar_topics_from_keywords(
-                    filtered_concept_name_tokens
-                )
+        
+        question = self.action_data.get("question", "")
+        answer = await global_memory_chest.get_answer_by_question(self.chat_id, question)
+        if not answer:
+            await self.store_action_info(
+                action_build_into_prompt=True,
+                action_prompt_display=f"你回忆了有关问题：{question}的记忆，但是没有找到相关记忆",
+                action_done=True,
             )
-            await hippocampus_manager.get_hippocampus().parahippocampal_gyrus.add_memory_with_similar(
-                concept_description, similar_topics_dict
-            )
-
-            return True, f"成功添加记忆: {concept_name}"
-
-        except Exception as e:
-            logger.error(f"{self.log_prefix} 构建记忆时出错: {e}")
-            return False, f"构建记忆时出错: {e}"
+            
+            return False, f"没有找到相关记忆"
+        
+        await self.store_action_info(
+            action_build_into_prompt=True,
+            action_prompt_display=f"你回忆了有关问题：{question}的记忆，答案是：{answer}",
+            action_done=True,
+        )
+        
+        return True, f"成功获取记忆: {answer}"
 
 
 # 还缺一个关系的太多遗忘和对应的提取
