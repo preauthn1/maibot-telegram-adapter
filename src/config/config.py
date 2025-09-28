@@ -30,6 +30,7 @@ from src.config.official_configs import (
     RelationshipConfig,
     ToolConfig,
     VoiceConfig,
+    MemoryConfig,
     DebugConfig,
 )
 
@@ -353,6 +354,7 @@ class Config(ConfigBase):
     maim_message: MaimMessageConfig
     lpmm_knowledge: LPMMKnowledgeConfig
     tool: ToolConfig
+    memory: MemoryConfig
     debug: DebugConfig
     voice: VoiceConfig
 

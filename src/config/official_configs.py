@@ -101,6 +101,15 @@ class MessageReceiveConfig(ConfigBase):
     ban_msgs_regex: set[str] = field(default_factory=lambda: set())
     """过滤正则表达式列表"""
 
+@dataclass
+class MemoryConfig(ConfigBase):
+    """记忆配置类"""
+    
+    max_memory_number: int = 100
+    """记忆最大数量"""
+    
+    max_memory_size: int = 2048
+    """记忆最大大小"""
 
 @dataclass
 class ExpressionConfig(ConfigBase):

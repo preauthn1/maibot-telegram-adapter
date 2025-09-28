@@ -1,3 +1,5 @@
+import json
+import re
 
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config
@@ -7,6 +9,7 @@ from src.config.config import global_config
 from src.plugin_system.apis.message_api import build_readable_messages
 import time
 from src.plugin_system.apis.message_api import get_raw_msg_by_timestamp_with_chat
+from json_repair import repair_json
 
 logger = get_logger("memory_chest")
 
@@ -24,7 +27,7 @@ class MemoryChest:
         )
         
         self.memory_build_threshold = 30
-        self.memory_size_limit = 1024
+        self.memory_size_limit = global_config.memory.max_memory_size
   
         self.running_content_list = {}  # {chat_id: {"content": running_content, "last_update_time": timestamp}}
         self.fetched_memory_list = []  # [(chat_id, (question, answer, timestamp)), ...]
@@ -323,6 +326,181 @@ class MemoryChest:
 
         except Exception as e:
             logger.error(f"保存记忆仓库内容时出错: {e}")
+    
+    async def choose_merge_target(self, memory_title: str) -> list[str]:
+        """
+        选择与给定记忆标题相关的记忆目标
+        
+        Args:
+            memory_title: 要匹配的记忆标题
+            
+        Returns:
+            list[str]: 选中的记忆内容列表
+        """
+        try:
+            all_titles = self.get_all_titles()
+            content = ""
+            for title in all_titles:
+                content += f"{title}\n"
+            
+            prompt = f"""
+所有记忆列表
+{content}
+
+请根据以上记忆列表，选择一个与"{memory_title}"相关的记忆，用json输出：
+可以选择多个相关的记忆，但最多不超过5个
+例如：
+{{
+    "selected_title": "选择的相关记忆标题"
+}},
+{{
+    "selected_title": "选择的相关记忆标题"
+}},
+{{
+    "selected_title": "选择的相关记忆标题"
+}}
+...
+请输出JSON格式，不要输出其他内容：
+"""
+            if global_config.debug.show_prompt:
+                logger.info(f"选择合并目标 prompt: {prompt}")
+            else:
+                logger.debug(f"选择合并目标 prompt: {prompt}")
+                
+            merge_target_response, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
+            
+            # 解析JSON响应
+            selected_titles = self._parse_merge_target_json(merge_target_response)
+            
+            # 根据标题查找对应的内容
+            selected_contents = self._get_memories_by_titles(selected_titles)
+            
+            logger.info(f"选择合并目标结果: {len(selected_contents)} 条记忆")
+            return selected_contents
+            
+        except Exception as e:
+            logger.error(f"选择合并目标时出错: {e}")
+            return []
+    
+    def _get_memories_by_titles(self, titles: list[str]) -> list[str]:
+        """
+        根据标题列表查找对应的记忆内容
+        
+        Args:
+            titles: 记忆标题列表
+            
+        Returns:
+            list[str]: 记忆内容列表
+        """
+        try:
+            from src.common.database.database_model import MemoryChest as MemoryChestModel
+            
+            contents = []
+            for title in titles:
+                if not title or not title.strip():
+                    continue
+                    
+                # 在数据库中查找匹配的记忆
+                try:
+                    memory_record = MemoryChestModel.select().where(MemoryChestModel.title == title.strip()).first()
+                    if memory_record:
+                        contents.append(memory_record.content)
+                        logger.debug(f"找到记忆: {memory_record.title}")
+                    else:
+                        logger.warning(f"未找到标题为 '{title}' 的记忆")
+                except Exception as e:
+                    logger.error(f"查找标题 '{title}' 的记忆时出错: {e}")
+                    continue
+            
+            logger.info(f"成功找到 {len(contents)} 条记忆内容")
+            return contents
+            
+        except Exception as e:
+            logger.error(f"根据标题查找记忆时出错: {e}")
+            return []
+    
+    def _parse_merge_target_json(self, json_text: str) -> list[str]:
+        """
+        解析choose_merge_target生成的JSON响应
+        
+        Args:
+            json_text: LLM返回的JSON文本
+            
+        Returns:
+            list[str]: 解析出的记忆标题列表
+        """
+        try:
+            # 清理JSON文本，移除可能的额外内容
+            repaired_content = repair_json(json_text)
+            
+            # 尝试直接解析JSON
+            try:
+                parsed_data = json.loads(repaired_content)
+                if isinstance(parsed_data, list):
+                    # 如果是列表，提取selected_title字段
+                    titles = []
+                    for item in parsed_data:
+                        if isinstance(item, dict) and "selected_title" in item:
+                            titles.append(item["selected_title"])
+                    return titles
+                elif isinstance(parsed_data, dict) and "selected_title" in parsed_data:
+                    # 如果是单个对象
+                    return [parsed_data["selected_title"]]
+            except json.JSONDecodeError:
+                pass
+            
+            # 如果直接解析失败，尝试提取JSON对象
+            # 查找所有包含selected_title的JSON对象
+            pattern = r'\{[^}]*"selected_title"[^}]*\}'
+            matches = re.findall(pattern, repaired_content)
+            
+            titles = []
+            for match in matches:
+                try:
+                    obj = json.loads(match)
+                    if "selected_title" in obj:
+                        titles.append(obj["selected_title"])
+                except json.JSONDecodeError:
+                    continue
+            
+            if titles:
+                return titles
+            
+            logger.warning(f"无法解析JSON响应: {json_text[:200]}...")
+            return []
+            
+        except Exception as e:
+            logger.error(f"解析合并目标JSON时出错: {e}")
+            return []
+            
+    async def merge_memory(self,memory_list: list[str]) -> tuple[str, str]:
+        """
+        合并记忆
+        """
+        try:
+            content = ""
+            for memory in memory_list:
+                content += f"{memory.content}\n"
+            
+            prompt = f"""
+以下是多段记忆内容，请将它们合并成一段记忆：
+{content}
+
+请主要关注概念和知识，而不是聊天的琐事
+记忆为一段纯文本，逻辑清晰，指出事件，概念的含义，并说明关系
+请输出添加后的记忆内容，不要输出其他内容：
+"""
+
+            if global_config.debug.show_prompt:
+                logger.info(f"合并记忆 prompt: {prompt}")
+            else:
+                logger.debug(f"合并记忆 prompt: {prompt}")
+
+            merged_memory, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
+
+            return merged_memory
+        except Exception as e:
+            logger.error(f"合并记忆时出错: {e}")
     
     
 global_memory_chest = MemoryChest()

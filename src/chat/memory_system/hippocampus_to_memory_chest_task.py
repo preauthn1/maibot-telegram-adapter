@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
+import asyncio
 import random
+import re
 from typing import List
 
 from src.manager.async_task_manager import AsyncTask
 from src.chat.memory_system.Hippocampus import hippocampus_manager
-from src.chat.memory_system.Memory_chest import global_memory_chest
 from src.common.logger import get_logger
 
 logger = get_logger("hippocampus_to_memory_chest")
@@ -13,20 +14,42 @@ logger = get_logger("hippocampus_to_memory_chest")
 class HippocampusToMemoryChestTask(AsyncTask):
     """海马体到记忆仓库的转换任务
     
-    每60秒随机选择5个海马体节点，将内容拼接为content，
-    然后根据memory_chest的格式生成标题并存储
+    每10秒执行一次转换，每次最多处理50批，每批15个节点，
+    当没有新节点时停止任务运行
     """
     
     def __init__(self):
         super().__init__(
             task_name="Hippocampus to Memory Chest Task",
-            wait_before_start=10,  # 启动后等待60秒再开始
-            run_interval=60  # 每60秒运行一次
+            wait_before_start=5,  # 启动后等待5秒再开始
+            run_interval=10  # 每10秒运行一次
         )
+        self.task_stopped = False  # 标记任务是否已停止
+    
+    async def start_task(self, abort_flag: asyncio.Event):
+        """重写start_task方法，支持任务停止"""
+        if self.wait_before_start > 0:
+            # 等待指定时间后开始任务
+            await asyncio.sleep(self.wait_before_start)
+
+        while not abort_flag.is_set() and not self.task_stopped:
+            await self.run()
+            if self.run_interval > 0:
+                await asyncio.sleep(self.run_interval)
+            else:
+                break
+        
+        if self.task_stopped:
+            logger.info("[海马体转换] 任务已完全停止，不再执行")
         
     async def run(self):
         """执行转换任务"""
         try:
+            # 检查任务是否已停止
+            if self.task_stopped:
+                logger.info("[海马体转换] 任务已停止，跳过执行")
+                return
+                
             logger.info("[海马体转换] 开始执行海马体到记忆仓库的转换任务")
             
             # 检查海马体管理器是否已初始化
@@ -38,81 +61,100 @@ class HippocampusToMemoryChestTask(AsyncTask):
             hippocampus = hippocampus_manager.get_hippocampus()
             memory_graph = hippocampus.memory_graph.G
             
-            # 获取所有节点
-            all_nodes = list(memory_graph.nodes())
+            # 执行10批转换
+            total_processed = 0
+            total_success = 0
             
-            if len(all_nodes) < 10:
-                selected_nodes = all_nodes
-                logger.info(f"[海马体转换] 当前只有 {len(all_nodes)} 个节点，少于5个，跳过本次转换")
-            else:
+            for batch_num in range(1, 51):  # 执行10批
+                logger.info(f"[海马体转换] 开始执行第 {batch_num} 批转换")
                 
-                # 随机选择5个节点
-                selected_nodes = random.sample(all_nodes, 10)
-                logger.info(f"[海马体转换] 随机选择了 {len(selected_nodes)} 个节点: {selected_nodes}")
-            
-            # 拼接节点内容
-            content_parts = []
-            for node in selected_nodes:
-                node_data = memory_graph.nodes[node]
-                memory_items = node_data.get("memory_items", "")
+                # 检查剩余节点
+                remaining_nodes = list(memory_graph.nodes())
+                if len(remaining_nodes) == 0:
+                    logger.info(f"[海马体转换] 第 {batch_num} 批：没有剩余节点，停止任务运行")
+                    self.task_stopped = True
+                    break
                 
-                if memory_items and memory_items.strip():
-                    # 添加节点名称和内容
-                    content_parts.append(f"【{node}】{memory_items}")
+                # 如果剩余节点不足10个，使用所有剩余节点
+                if len(remaining_nodes) < 15:
+                    selected_nodes = remaining_nodes
+                    logger.info(f"[海马体转换] 第 {batch_num} 批：剩余节点不足10个（{len(remaining_nodes)}个），使用所有剩余节点")
                 else:
-                    logger.debug(f"[海马体转换] 节点 {node} 没有记忆内容，跳过")
-                    
-            if not content_parts:
-                logger.info("[海马体转换] 没有找到有效的记忆内容，跳过本次转换")
-                return
+                    # 随机选择10个节点
+                    selected_nodes = random.sample(remaining_nodes, 15)
+                logger.info(f"[海马体转换] 第 {batch_num} 批：选择了 {len(selected_nodes)} 个节点")
                 
-            # 拼接所有内容
-            combined_content = "\n\n".join(content_parts)
-            logger.info(f"[海马体转换] 拼接完成，内容长度: {len(combined_content)} 字符")
+                # 拼接节点内容
+                content_parts = []
+                valid_nodes = []
+                
+                for node in selected_nodes:
+                    node_data = memory_graph.nodes[node]
+                    memory_items = node_data.get("memory_items", "")
+                    
+                    if memory_items and memory_items.strip():
+                        # 添加节点名称和内容
+                        content_parts.append(f"【{node}】{memory_items}")
+                        valid_nodes.append(node)
+                    else:
+                        logger.debug(f"[海马体转换] 第 {batch_num} 批：节点 {node} 没有记忆内容，跳过")
+                        
+                if not content_parts:
+                    logger.info(f"[海马体转换] 第 {batch_num} 批：没有找到有效的记忆内容，跳过")
+                    continue
+                    
+                # 拼接所有内容
+                combined_content = "\n\n".join(content_parts)
+                logger.info(f"[海马体转换] 第 {batch_num} 批：拼接完成，内容长度: {len(combined_content)} 字符")
+                
+                # 生成标题并存储到记忆仓库
+                success = await self._save_to_memory_chest(combined_content, batch_num)
+                
+                # 如果保存成功，删除已转换的节点
+                if success:
+                    await self._remove_converted_nodes(valid_nodes)
+                    total_success += 1
+                    logger.info(f"[海马体转换] 第 {batch_num} 批：转换成功")
+                else:
+                    logger.warning(f"[海马体转换] 第 {batch_num} 批：转换失败")
+                
+                total_processed += 1
+                
+                # 批次间短暂休息，避免过于频繁的数据库操作
+                if batch_num < 10:
+                    await asyncio.sleep(0.1)
             
-            # 生成标题并存储到记忆仓库
-            success = await self._save_to_memory_chest(combined_content)
-            
-            # 如果保存成功，删除已转换的节点
-            if success:
-                await self._remove_converted_nodes(selected_nodes)
+            logger.info(f"[海马体转换] 本次执行完成：共处理 {total_processed} 批，成功 {total_success} 批")
             
             logger.info("[海马体转换] 转换任务完成")
             
         except Exception as e:
             logger.error(f"[海马体转换] 执行转换任务时发生错误: {e}", exc_info=True)
     
-    async def _save_to_memory_chest(self, content: str) -> bool:
+    async def _save_to_memory_chest(self, content: str, batch_num: int = 1) -> bool:
         """将内容保存到记忆仓库
         
         Args:
             content: 要保存的内容
+            batch_num: 批次号
             
         Returns:
             bool: 保存是否成功
         """
         try:
-            # 使用Memory_chest的LLMRequest生成标题
-            title_prompt = f"""
-请为以下内容生成一个描述全面的标题，要求描述内容的主要概念和事件：
-{content}
-
-请只输出标题，不要输出其他内容：
-"""
+            # 从内容中提取节点名称作为标题
+            title = self._generate_title_from_content(content, batch_num)
             
-            # 使用Memory_chest的LLM模型生成标题
-            title, (reasoning_content, model_name, tool_calls) = await global_memory_chest.LLMRequest_build.generate_response_async(title_prompt)
-            
-            if title and title.strip():
+            if title:
                 # 保存到数据库
                 from src.common.database.database_model import MemoryChest as MemoryChestModel
                 
                 MemoryChestModel.create(
-                    title=title.strip(),
+                    title=title,
                     content=content
                 )
                 
-                logger.info(f"[海马体转换] 已保存到记忆仓库，标题: {title.strip()}")
+                logger.info(f"[海马体转换] 第 {batch_num} 批：已保存到记忆仓库，标题: {title}")
                 return True
             else:
                 logger.warning("[海马体转换] 生成标题失败，跳过保存")
@@ -121,6 +163,34 @@ class HippocampusToMemoryChestTask(AsyncTask):
         except Exception as e:
             logger.error(f"[海马体转换] 保存到记忆仓库时发生错误: {e}", exc_info=True)
             return False
+    
+    def _generate_title_from_content(self, content: str, batch_num: int = 1) -> str:
+        """从内容中提取节点名称生成标题
+        
+        Args:
+            content: 拼接的内容
+            batch_num: 批次号
+            
+        Returns:
+            str: 生成的标题
+        """
+        try:
+            # 提取所有【节点名称】中的节点名称
+            node_pattern = r'【([^】]+)】'
+            nodes = re.findall(node_pattern, content)
+            
+            if nodes:
+                # 去重并限制数量（最多显示前5个）
+                unique_nodes = list(dict.fromkeys(nodes))[:5]
+                title = f"关于{','.join(unique_nodes)}的记忆"
+                return title
+            else:
+                logger.warning("[海马体转换] 无法从内容中提取节点名称")
+                return ""
+                
+        except Exception as e:
+            logger.error(f"[海马体转换] 生成标题时发生错误: {e}", exc_info=True)
+            return ""
     
     async def _remove_converted_nodes(self, nodes_to_remove: List[str]):
         """删除已转换的海马体节点

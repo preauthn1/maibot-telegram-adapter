@@ -15,6 +15,7 @@ from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
 from src.chat.memory_system.Hippocampus import hippocampus_manager
 from src.chat.memory_system.hippocampus_to_memory_chest_task import HippocampusToMemoryChestTask
+from src.chat.memory_system.memory_management_task import MemoryManagementTask
 from rich.traceback import install
 from src.migrate_helper.migrate import check_and_run_migrations
 # from src.api.main import start_api_server
@@ -101,6 +102,10 @@ class MainSystem:
         # 添加海马体到记忆仓库的转换任务
         await async_task_manager.add_task(HippocampusToMemoryChestTask())
         logger.info("海马体到记忆仓库转换任务已启动")
+        
+        # 添加记忆管理任务
+        await async_task_manager.add_task(MemoryManagementTask())
+        logger.info("记忆管理任务已启动")
 
         # await asyncio.sleep(0.5) #防止logger输出飞了
 
