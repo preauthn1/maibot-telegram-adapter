@@ -36,7 +36,7 @@ class GetMemoryTool(BaseTool):
 
         answer = await global_memory_chest.get_answer_by_question(question=question)
         if not answer:
-            return {"content": f"没有找到相关记忆"}
+            return {"content": f"问题：{question}，没有找到相关记忆"}
         
         return {"content": f"问题：{question}，答案：{answer}"}
 
@@ -80,7 +80,7 @@ class GetMemoryAction(BaseAction):
                 action_done=True,
             )
             
-            return False, f"没有找到相关记忆"
+            return False, f"问题：{question}，没有找到相关记忆"
         
         await self.store_action_info(
             action_build_into_prompt=True,

@@ -76,12 +76,12 @@ class HippocampusToMemoryChestTask(AsyncTask):
                     break
                 
                 # 如果剩余节点不足10个，使用所有剩余节点
-                if len(remaining_nodes) < 15:
+                if len(remaining_nodes) < 5:
                     selected_nodes = remaining_nodes
                     logger.info(f"[海马体转换] 第 {batch_num} 批：剩余节点不足10个（{len(remaining_nodes)}个），使用所有剩余节点")
                 else:
                     # 随机选择10个节点
-                    selected_nodes = random.sample(remaining_nodes, 15)
+                    selected_nodes = random.sample(remaining_nodes, 5)
                 logger.info(f"[海马体转换] 第 {batch_num} 批：选择了 {len(selected_nodes)} 个节点")
                 
                 # 拼接节点内容

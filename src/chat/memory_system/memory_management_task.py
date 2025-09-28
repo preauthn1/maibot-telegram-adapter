@@ -60,10 +60,10 @@ class MemoryManagementTask(AsyncTask):
                 return 3600
             elif percentage < 0.7:
                 # 大于等于50%，每300秒执行一次
-                return 600
+                return 1800
             elif percentage < 0.9:
                 # 大于等于70%，每120秒执行一次
-                return 120
+                return 300
             elif percentage < 1.2:
                 return 30
             else:
@@ -107,15 +107,15 @@ class MemoryManagementTask(AsyncTask):
             logger.info(f"[记忆管理] 随机选择的记忆标题: {selected_title}")
             
             # 执行choose_merge_target获取相关记忆内容
-            related_contents = await global_memory_chest.choose_merge_target(selected_title)
-            if not related_contents:
+            related_contents_titles = await global_memory_chest.choose_merge_target(selected_title)
+            if not related_contents_titles:
                 logger.warning("[记忆管理] 未找到相关记忆内容，跳过合并")
                 return
             
-            logger.info(f"[记忆管理] 找到 {len(related_contents)} 条相关记忆")
+            logger.info(f"[记忆管理] 找到 {len(related_contents_titles)} 条相关记忆")
             
             # 执行merge_memory合并记忆
-            merged_title, merged_content = await global_memory_chest.merge_memory(related_contents)
+            merged_title, merged_content = await global_memory_chest.merge_memory(related_contents_titles)
             if not merged_title or not merged_content:
                 logger.warning("[记忆管理] 记忆合并失败，跳过删除")
                 return
@@ -123,7 +123,7 @@ class MemoryManagementTask(AsyncTask):
             logger.info(f"[记忆管理] 记忆合并成功，新标题: {merged_title}")
             
             # 删除原始记忆（包括选中的标题和相关的记忆）
-            deleted_count = self._delete_original_memories(selected_title, related_contents)
+            deleted_count = self._delete_original_memories(related_contents_titles)
             logger.info(f"[记忆管理] 已删除 {deleted_count} 条原始记忆")
             
             logger.info("[记忆管理] 记忆管理任务完成")
@@ -147,20 +147,10 @@ class MemoryManagementTask(AsyncTask):
             logger.error(f"[记忆管理] 获取随机记忆标题时发生错误: {e}")
             return ""
     
-    def _delete_original_memories(self, selected_title: str, related_contents: List[str]) -> int:
+    def _delete_original_memories(self, related_contents: List[str]) -> int:
         """删除原始记忆"""
         try:
             deleted_count = 0
-            
-            # 删除选中的标题对应的记忆
-            try:
-                deleted = MemoryChestModel.delete().where(MemoryChestModel.title == selected_title).execute()
-                if deleted > 0:
-                    deleted_count += deleted
-                    logger.debug(f"[记忆管理] 删除选中记忆: {selected_title}")
-            except Exception as e:
-                logger.error(f"[记忆管理] 删除选中记忆时出错: {e}")
-            
             # 删除相关记忆（通过内容匹配）
             for content in related_contents:
                 try:

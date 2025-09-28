@@ -1,7 +1,8 @@
 import asyncio
 import json
 import re
-from difflib import SequenceMatcher
+import time
+import random
 
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config
@@ -9,9 +10,12 @@ from src.common.database.database_model import MemoryChest as MemoryChestModel
 from src.common.logger import get_logger
 from src.config.config import global_config
 from src.plugin_system.apis.message_api import build_readable_messages
-import time
 from src.plugin_system.apis.message_api import get_raw_msg_by_timestamp_with_chat
 from json_repair import repair_json
+from .memory_utils import (
+    find_best_matching_memory,
+    check_title_exists_fuzzy
+)
 
 logger = get_logger("memory_chest")
 
@@ -146,6 +150,8 @@ class MemoryChest:
         """
         根据问题获取答案
         """
+        logger.info(f"正在回忆问题答案: {question}")
+        
         title = await self.select_title_by_question(question)
         
         if not title:
@@ -154,12 +160,18 @@ class MemoryChest:
         for memory in MemoryChestModel.select():
             if memory.title == title:
                 content =  memory.content
-        
+                
+        if random.random() < 0.5:        
+            type = "要求原文能够较为全面的回答问题"
+        else:
+            type = "要求提取简短的内容"
+            
         prompt = f"""
 {content}
 
 请根据问题：{question}
-在上方内容中，提取相关信息的原文并输出，请务必提取上面原文，不要输出其他内容：
+在上方内容中，提取相关信息的原文并输出，{type}
+请务必提取上面原文，不要输出其他内容：
 """
 
         if global_config.debug.show_prompt:
@@ -170,7 +182,7 @@ class MemoryChest:
         answer, (reasoning_content, model_name, tool_calls) = await self.LLMRequest.generate_response_async(prompt)
         
         
-        logger.info(f"记忆仓库获取答案: {answer}")
+        logger.info(f"记忆仓库对问题 “{question}” 获取答案: {answer}")
 
         # 将问题和答案存到fetched_memory_list
         if chat_id and answer:
@@ -251,7 +263,7 @@ class MemoryChest:
         selected_title = None
 
         # 使用模糊查找匹配标题
-        best_match = self.find_best_matching_memory(title, similarity_threshold=0.8)
+        best_match = find_best_matching_memory(title, similarity_threshold=0.8)
         if best_match:
             selected_title = best_match[0]  # 获取匹配的标题
             logger.info(f"记忆仓库选择标题: {selected_title} (相似度: {best_match[2]:.3f})")
@@ -407,7 +419,7 @@ class MemoryChest:
                     
                 # 使用模糊查找匹配记忆
                 try:
-                    best_match = self.find_best_matching_memory(title.strip(), similarity_threshold=0.8)
+                    best_match = find_best_matching_memory(title.strip(), similarity_threshold=0.8)
                     if best_match:
                         contents.append(best_match[1])  # best_match[1] 是 content
                         logger.debug(f"找到记忆: {best_match[0]} (相似度: {best_match[2]:.3f})")
@@ -550,7 +562,7 @@ class MemoryChest:
             
             if title:
                 # 检查是否存在相似标题
-                if self.check_title_exists_fuzzy(title, similarity_threshold=0.9):
+                if check_title_exists_fuzzy(title, similarity_threshold=0.9):
                     logger.warning(f"生成的标题 '{title}' 与现有标题相似，使用时间戳后缀")
                     title = f"{title}_{int(time.time())}"
                 
@@ -563,144 +575,6 @@ class MemoryChest:
         except Exception as e:
             logger.error(f"生成合并记忆标题时出错: {e}")
             return f"合并记忆_{int(time.time())}"
-    
-    def fuzzy_find_memory_by_title(self, target_title: str, similarity_threshold: float = 0.9) -> list[tuple[str, str, float]]:
-        """
-        根据标题模糊查找记忆
-        
-        Args:
-            target_title: 目标标题
-            similarity_threshold: 相似度阈值，默认0.6
-            
-        Returns:
-            list[tuple[str, str, float]]: 匹配的记忆列表，每个元素为(title, content, similarity_score)
-        """
-        try:
-            # 获取所有记忆
-            all_memories = MemoryChestModel.select()
-            
-            matches = []
-            for memory in all_memories:
-                similarity = self._calculate_similarity(target_title, memory.title)
-                if similarity >= similarity_threshold:
-                    matches.append((memory.title, memory.content, similarity))
-            
-            # 按相似度降序排序
-            matches.sort(key=lambda x: x[2], reverse=True)
-            
-            logger.info(f"模糊查找标题 '{target_title}' 找到 {len(matches)} 个匹配项")
-            return matches
-            
-        except Exception as e:
-            logger.error(f"模糊查找记忆时出错: {e}")
-            return []
-    
-    def _calculate_similarity(self, text1: str, text2: str) -> float:
-        """
-        计算两个文本的相似度
-        
-        Args:
-            text1: 第一个文本
-            text2: 第二个文本
-            
-        Returns:
-            float: 相似度分数 (0-1)
-        """
-        try:
-            # 预处理文本
-            text1 = self._preprocess_text(text1)
-            text2 = self._preprocess_text(text2)
-            
-            # 使用SequenceMatcher计算相似度
-            similarity = SequenceMatcher(None, text1, text2).ratio()
-            
-            # 如果其中一个文本包含另一个，提高相似度
-            if text1 in text2 or text2 in text1:
-                similarity = max(similarity, 0.8)
-            
-            return similarity
-            
-        except Exception as e:
-            logger.error(f"计算相似度时出错: {e}")
-            return 0.0
-    
-    def _preprocess_text(self, text: str) -> str:
-        """
-        预处理文本，提高匹配准确性
-        
-        Args:
-            text: 原始文本
-            
-        Returns:
-            str: 预处理后的文本
-        """
-        try:
-            # 转换为小写
-            text = text.lower()
-            
-            # 移除标点符号和特殊字符
-            text = re.sub(r'[^\w\s]', '', text)
-            
-            # 移除多余空格
-            text = re.sub(r'\s+', ' ', text).strip()
-            
-            return text
-            
-        except Exception as e:
-            logger.error(f"预处理文本时出错: {e}")
-            return text
-    
-    def find_best_matching_memory(self, target_title: str, similarity_threshold: float = 0.9) -> tuple[str, str, float] | None:
-        """
-        查找最佳匹配的记忆
-        
-        Args:
-            target_title: 目标标题
-            similarity_threshold: 相似度阈值
-            
-        Returns:
-            tuple[str, str, float] | None: 最佳匹配的记忆(title, content, similarity)或None
-        """
-        try:
-            matches = self.fuzzy_find_memory_by_title(target_title, similarity_threshold)
-            
-            if matches:
-                best_match = matches[0]  # 已经按相似度排序，第一个是最佳匹配
-                logger.info(f"找到最佳匹配: '{best_match[0]}' (相似度: {best_match[2]:.3f})")
-                return best_match
-            else:
-                logger.info(f"未找到相似度 >= {similarity_threshold} 的记忆")
-                return None
-                
-        except Exception as e:
-            logger.error(f"查找最佳匹配记忆时出错: {e}")
-            return None
-    
-    def check_title_exists_fuzzy(self, target_title: str, similarity_threshold: float = 0.9) -> bool:
-        """
-        检查标题是否已存在（模糊匹配）
-        
-        Args:
-            target_title: 目标标题
-            similarity_threshold: 相似度阈值，默认0.8（较高阈值避免误判）
-            
-        Returns:
-            bool: 是否存在相似标题
-        """
-        try:
-            matches = self.fuzzy_find_memory_by_title(target_title, similarity_threshold)
-            exists = len(matches) > 0
-            
-            if exists:
-                logger.info(f"发现相似标题: '{matches[0][0]}' (相似度: {matches[0][2]:.3f})")
-            else:
-                logger.debug("未发现相似标题")
-                
-            return exists
-            
-        except Exception as e:
-            logger.error(f"检查标题是否存在时出错: {e}")
-            return False
     
     
 global_memory_chest = MemoryChest()

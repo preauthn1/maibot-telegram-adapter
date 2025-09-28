@@ -355,7 +355,7 @@ class DefaultReplyer:
                     content = tool_result.get("content", "")
                     result_type = tool_result.get("type", "tool_result")
 
-                    tool_info_str += f"- 【{tool_name}】{result_type}: {content}\n"
+                    tool_info_str += f"- 【{tool_name}】: {content}\n"
 
                 tool_info_str += "以上是你获取到的实时信息，请在回复时参考这些信息。"
                 logger.info(f"获取到 {len(tool_results)} 个工具结果")
