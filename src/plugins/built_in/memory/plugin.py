@@ -39,7 +39,7 @@ class MemoryBuildPlugin(BasePlugin):
     config_schema: dict = {
         "plugin": {
             "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="1.1.0", description="配置文件版本"),
+            "config_version": ConfigField(type=str, default="1.1.1", description="配置文件版本"),
         },
     }
 

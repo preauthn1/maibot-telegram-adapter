@@ -24,7 +24,7 @@ class MemoryChest:
         )
         
         self.memory_build_threshold = 30
-        self.memory_size_limit = 800
+        self.memory_size_limit = 1024
   
         self.running_content_list = {}  # {chat_id: {"content": running_content, "last_update_time": timestamp}}
         self.fetched_memory_list = []  # [(chat_id, (question, answer, timestamp)), ...]

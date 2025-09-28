@@ -20,7 +20,7 @@ class HippocampusToMemoryChestTask(AsyncTask):
     def __init__(self):
         super().__init__(
             task_name="Hippocampus to Memory Chest Task",
-            wait_before_start=60,  # 启动后等待60秒再开始
+            wait_before_start=10,  # 启动后等待60秒再开始
             run_interval=60  # 每60秒运行一次
         )
         
@@ -41,13 +41,14 @@ class HippocampusToMemoryChestTask(AsyncTask):
             # 获取所有节点
             all_nodes = list(memory_graph.nodes())
             
-            if len(all_nodes) < 5:
+            if len(all_nodes) < 10:
+                selected_nodes = all_nodes
                 logger.info(f"[海马体转换] 当前只有 {len(all_nodes)} 个节点，少于5个，跳过本次转换")
-                return
+            else:
                 
-            # 随机选择5个节点
-            selected_nodes = random.sample(all_nodes, 5)
-            logger.info(f"[海马体转换] 随机选择了 {len(selected_nodes)} 个节点: {selected_nodes}")
+                # 随机选择5个节点
+                selected_nodes = random.sample(all_nodes, 10)
+                logger.info(f"[海马体转换] 随机选择了 {len(selected_nodes)} 个节点: {selected_nodes}")
             
             # 拼接节点内容
             content_parts = []
