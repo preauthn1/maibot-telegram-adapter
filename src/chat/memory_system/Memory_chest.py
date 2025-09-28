@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 
@@ -295,10 +296,12 @@ class MemoryChest:
         """
         try:
             # 生成标题
+            title = ""
             title_prompt = f"""
 请为以下内容生成一个描述全面的标题，要求描述内容的主要概念和事件：
 {content}
 
+标题不要分点，不要换行，不要输出其他内容
 请只输出标题，不要输出其他内容：
 """
 
@@ -309,6 +312,9 @@ class MemoryChest:
 
             title, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(title_prompt)
 
+            
+            await asyncio.sleep(0.5)
+            
             if title:
                 # 保存到数据库
                 MemoryChestModel.create(
@@ -480,7 +486,7 @@ class MemoryChest:
         try:
             content = ""
             for memory in memory_list:
-                content += f"{memory.content}\n"
+                content += f"{memory}\n"
             
             prompt = f"""
 以下是多段记忆内容，请将它们合并成一段记忆：
@@ -498,9 +504,61 @@ class MemoryChest:
 
             merged_memory, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
 
-            return merged_memory
+            # 生成合并后的标题
+            merged_title = await self._generate_title_for_merged_memory(merged_memory)
+            
+            # 保存合并后的记忆到数据库
+            MemoryChestModel.create(
+                title=merged_title,
+                content=merged_memory
+            )
+            
+            logger.info(f"合并记忆已保存: {merged_title}")
+            
+            return merged_title, merged_memory
         except Exception as e:
             logger.error(f"合并记忆时出错: {e}")
+            return "", ""
+    
+    async def _generate_title_for_merged_memory(self, merged_content: str) -> str:
+        """
+        为合并后的记忆生成标题
+        
+        Args:
+            merged_content: 合并后的记忆内容
+            
+        Returns:
+            str: 生成的标题
+        """
+        try:
+            prompt = f"""
+请为以下内容生成一个描述全面的标题，要求描述内容的主要概念和事件：
+{merged_content}
+
+标题不要分点，不要换行，不要输出其他内容
+请只输出标题，不要输出其他内容：
+"""
+            
+            if global_config.debug.show_prompt:
+                logger.info(f"生成合并记忆标题 prompt: {prompt}")
+            else:
+                logger.debug(f"生成合并记忆标题 prompt: {prompt}")
+            
+            title_response, (reasoning_content, model_name, tool_calls) = await self.LLMRequest.generate_response_async(prompt)
+            
+            # 清理标题，移除可能的引号或多余字符
+            title = title_response.strip().strip('"').strip("'").strip()
+            
+            if title:
+                logger.info(f"生成合并记忆标题: {title}")
+                return title
+            else:
+                logger.warning("生成合并记忆标题失败，使用默认标题")
+                return f"合并记忆_{int(time.time())}"
+                
+        except Exception as e:
+            logger.error(f"生成合并记忆标题时出错: {e}")
+            return f"合并记忆_{int(time.time())}"
     
     
 global_memory_chest = MemoryChest()
