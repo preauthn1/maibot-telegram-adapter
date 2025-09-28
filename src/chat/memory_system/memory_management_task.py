@@ -61,10 +61,14 @@ class MemoryManagementTask(AsyncTask):
             elif percentage < 0.7:
                 # 大于等于50%，每300秒执行一次
                 return 600
-            else:
+            elif percentage < 0.9:
                 # 大于等于70%，每120秒执行一次
                 return 120
-                
+            elif percentage < 1.2:
+                return 30
+            else:
+                return 10
+            
         except Exception as e:
             logger.error(f"[记忆管理] 计算执行间隔时出错: {e}")
             return 300  # 默认300秒
