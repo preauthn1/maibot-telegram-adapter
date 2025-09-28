@@ -13,6 +13,8 @@ from src.common.logger import get_logger
 from src.common.server import get_global_server, Server
 from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
+from src.chat.memory_system.Hippocampus import hippocampus_manager
+from src.chat.memory_system.hippocampus_to_memory_chest_task import HippocampusToMemoryChestTask
 from rich.traceback import install
 from src.migrate_helper.migrate import check_and_run_migrations
 # from src.api.main import start_api_server
@@ -92,13 +94,13 @@ class MainSystem:
 
         logger.info("聊天管理器初始化成功")
 
-        # # 根据配置条件性地初始化记忆系统
-        # if global_config.memory.enable_memory:
-        #     if self.hippocampus_manager:
-        #         self.hippocampus_manager.initialize()
-        #         logger.info("记忆系统初始化成功")
-        # else:
-        #     logger.info("记忆系统已禁用，跳过初始化")
+        # 初始化记忆系统
+        hippocampus_manager.initialize()
+        logger.info("记忆系统初始化成功")
+        
+        # 添加海马体到记忆仓库的转换任务
+        await async_task_manager.add_task(HippocampusToMemoryChestTask())
+        logger.info("海马体到记忆仓库转换任务已启动")
 
         # await asyncio.sleep(0.5) #防止logger输出飞了
 

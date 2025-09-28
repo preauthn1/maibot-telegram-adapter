@@ -18,8 +18,13 @@ class MemoryChest:
             request_type="memory_chest",
         )
         
-        self.memory_build_threshold = 20
-        self.memory_size_limit = 300
+        self.LLMRequest_build = LLMRequest(
+            model_set=model_config.model_task_config.utils,
+            request_type="memory_chest_build",
+        )
+        
+        self.memory_build_threshold = 30
+        self.memory_size_limit = 800
   
         self.running_content_list = {}  # {chat_id: {"content": running_content, "last_update_time": timestamp}}
         self.fetched_memory_list = []  # [(chat_id, (question, answer, timestamp)), ...]
@@ -80,6 +85,8 @@ class MemoryChest:
 
 请将下面的新聊天记录内的有用的信息，添加到你的记忆中
 请主要关注概念和知识，而不是聊天的琐事
+如果有表情包，仅在意表情包对上下文的影响，不要在意表情包本身
+如果有图片，尽在意内容，不要在意图片的名称和编号
 记忆为一段纯文本，逻辑清晰，指出事件，概念的含义，并说明关系
 请输出添加后的记忆内容，不要输出其他内容：
 {message_str}
@@ -90,7 +97,7 @@ class MemoryChest:
             else:
                 logger.debug(f"记忆仓库构建运行内容 prompt: {prompt}")
 
-            running_content, (reasoning_content, model_name, tool_calls) = await self.LLMRequest.generate_response_async(prompt)
+            running_content, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
             
             print(f"记忆仓库构建运行内容: {running_content}")
 
@@ -297,7 +304,7 @@ class MemoryChest:
             else:
                 logger.debug(f"记忆仓库生成标题 prompt: {title_prompt}")
 
-            title, (reasoning_content, model_name, tool_calls) = await self.LLMRequest.generate_response_async(title_prompt)
+            title, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(title_prompt)
 
             if title:
                 # 保存到数据库
