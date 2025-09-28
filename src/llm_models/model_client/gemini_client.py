@@ -244,9 +244,12 @@ def _build_stream_api_resp(
     # 检查是否因为 max_tokens 截断
     reason = None
     if last_resp and getattr(last_resp, "candidates", None):
-        c0 = last_resp.candidates[0]
-        reason = getattr(c0, "finish_reason", None) or getattr(c0, "finishReason", None)
-
+        for c in last_resp.candidates:
+            fr = getattr(c, "finish_reason", None) or getattr(c, "finishReason", None)
+            if fr:
+                reason = str(fr)
+                break
+    
     if str(reason).endswith("MAX_TOKENS"):
         has_visible_output = bool(resp.content and resp.content.strip())
         if has_visible_output:
