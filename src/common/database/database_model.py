@@ -326,6 +326,19 @@ class MemoryChest(BaseModel):
 
     class Meta:
         table_name = "memory_chest"
+
+class MemoryConflict(BaseModel):
+    """
+    用于存储记忆整合过程中冲突内容的模型
+    """
+
+    conflict_content = TextField()  # 冲突内容
+    answer = TextField(null=True)  # 回答内容
+    create_time = FloatField()  # 创建时间
+    update_time = FloatField()  # 更新时间
+
+    class Meta:
+        table_name = "memory_conflicts"
     
     
 
@@ -382,6 +395,7 @@ def create_tables():
                 GraphEdges,  # 添加图边表
                 ActionRecords,  # 添加 ActionRecords 到初始化列表
                 MemoryChest,
+                MemoryConflict,  # 添加记忆冲突表
             ]
         )
 
@@ -410,6 +424,7 @@ def initialize_database(sync_constraints=False):
         GraphEdges,
         ActionRecords,  # 添加 ActionRecords 到初始化列表
         MemoryChest,
+        MemoryConflict,
     ]
 
     try:
@@ -508,6 +523,7 @@ def sync_field_constraints():
         GraphEdges,
         ActionRecords,
         MemoryChest,
+        MemoryConflict,
     ]
 
     try:
@@ -692,6 +708,8 @@ def check_field_constraints():
         GraphNodes,
         GraphEdges,
         ActionRecords,
+        MemoryChest,
+        MemoryConflict,
     ]
 
     inconsistencies = {}

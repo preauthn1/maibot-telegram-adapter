@@ -2,7 +2,7 @@ import asyncio
 import math
 from typing import Tuple
 
-from src.chat.memory_system.Hippocampus import hippocampus_manager
+from src.memory_system.Hippocampus import hippocampus_manager
 from src.chat.message_receive.message import MessageRecv, MessageRecvS4U
 from maim_message.message_base import GroupInfo
 from src.chat.message_receive.storage import MessageStorage

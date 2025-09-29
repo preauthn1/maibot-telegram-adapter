@@ -4,7 +4,7 @@ import random
 from typing import List
 
 from src.manager.async_task_manager import AsyncTask
-from src.chat.memory_system.Memory_chest import global_memory_chest
+from src.memory_system.Memory_chest import global_memory_chest
 from src.common.logger import get_logger
 from src.common.database.database_model import MemoryChest as MemoryChestModel
 from src.config.config import global_config

@@ -422,6 +422,7 @@ MODULE_COLORS = {
     # s4u
     "context_web_api": "\033[38;5;240m",  # 深灰色
     "S4U_chat": "\033[92m",  # 深灰色
+    "conflict_tracker": "\033[38;5;82m",  # 柔和的粉色，不显眼但保持粉色系
 }
 
 # 定义模块别名映射 - 将真实的logger名称映射到显示的别名

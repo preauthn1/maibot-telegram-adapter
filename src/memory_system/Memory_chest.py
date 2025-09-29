@@ -99,19 +99,34 @@ class MemoryChest:
                 current_running_content = self.running_content_list[chat_id]["content"]
 
             prompt = f"""
-以下是你的记忆内容：
+以下是你的记忆内容和新的聊天记录，请你将他们整合和修改：
+记忆内容：
+<memory_content>
 {current_running_content}
+</memory_content>
 
-请将下面的新聊天记录内的有用的信息，添加到你的记忆中
-请主要关注概念和知识，而不是聊天的琐事
-重要！！你要关注的概念和知识必须是较为不常见的信息，或者时效性较强的信息！！
-不要！！关注常见的只是，或者已经过时的信息！！
+<聊天记录>
+{message_str}
+</聊天记录>
+聊天记录中可能包含有效信息，也可能信息密度很低，请你根据聊天记录中的信息，修改<part1>中的内容与<part2>中的内容
+--------------------------------
+请将上面的新聊天记录内的有用的信息进行整合到现有的记忆中
+请主要关注概念和知识或者时效性较强的信息！！，而不是聊天的琐事
 1.不要关注诸如某个用户做了什么，说了什么，不要关注某个用户的行为，而是关注其中的概念性信息
 2.概念要求精确，不啰嗦，像科普读物或教育课本那样
 3.如果有图片，请只关注图片和文本结合的知识和概念性内容
-记忆为一段纯文本，逻辑清晰，指出概念的含义，并说明关系
-请输出添加后的记忆内容，不要输出其他内容：
-{message_str}
+4.记忆为一段纯文本，逻辑清晰，指出概念的含义，并说明关系
+
+记忆内容的格式，你必须仿照下面的格式，但不一定全部使用:
+[概念] 是 [概念的含义(简短描述，不超过十个字)]
+[概念] 不是 [对概念的负面含义(简短描述，不超过十个字)]
+[概念1] 与 [概念2] 是 [概念1和概念2的关联(简短描述，不超过二十个字)]
+[概念1] 包含 [概念2] 和 [概念3]
+[概念1] 属于 [概念2]
+......(不要包含中括号)
+
+请仿照上述格式输出，每个知识点一句话。输出成一段平文本
+现在请你输出,不要输出其他内容，注意一定要直白，白话，口语化不要浮夸，修辞。：
 """
 
             if global_config.debug.show_prompt:
@@ -120,7 +135,7 @@ class MemoryChest:
                 logger.debug(f"记忆仓库构建运行内容 prompt: {prompt}")
 
             running_content, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
-            
+
             print(f"记忆仓库构建运行内容: {running_content}")
 
             # 如果有chat_id，更新对应的running_content
@@ -136,7 +151,7 @@ class MemoryChest:
                     "create_time": create_time
                 }
 
-                # 检查running_content长度是否大于500
+                # 检查running_content长度是否大于限制
                 if len(running_content) > self.memory_size_limit:
                     await self._save_to_database_and_clear(chat_id, running_content)
 
@@ -147,8 +162,7 @@ class MemoryChest:
                                f"内容大小 {len(running_content)} 达到限制的 {int(self.memory_size_limit * 0.3)} 字符，强制保存")
                     await self._save_to_database_and_clear(chat_id, running_content)
 
-            
-            
+
             return running_content
         
         
@@ -478,6 +492,54 @@ class MemoryChest:
             logger.error(f"根据标题查找记忆时出错: {e}")
             return []
     
+    def _parse_merged_parts(self, merged_response: str) -> tuple[str, str]:
+        """
+        解析合并记忆的part1和part2内容
+
+        Args:
+            merged_response: LLM返回的合并记忆响应
+
+        Returns:
+            tuple[str, str]: (part1_content, part2_content)
+        """
+        try:
+            # 使用正则表达式提取part1和part2内容
+            import re
+
+            # 提取part1内容
+            part1_pattern = r'<part1>(.*?)</part1>'
+            part1_match = re.search(part1_pattern, merged_response, re.DOTALL)
+            part1_content = part1_match.group(1).strip() if part1_match else ""
+
+            # 提取part2内容
+            part2_pattern = r'<part2>(.*?)</part2>'
+            part2_match = re.search(part2_pattern, merged_response, re.DOTALL)
+            part2_content = part2_match.group(1).strip() if part2_match else ""
+
+            # 检查是否包含none或None（不区分大小写）
+            def is_none_content(content: str) -> bool:
+                if not content:
+                    return True
+                # 检查是否只包含"none"或"None"（不区分大小写）
+                return re.match(r'^\s*none\s*$', content, re.IGNORECASE) is not None
+
+            # 如果包含none，则设置为空字符串
+            if is_none_content(part1_content):
+                part1_content = ""
+                logger.info("part1内容为none，设置为空")
+
+            if is_none_content(part2_content):
+                part2_content = ""
+                logger.info("part2内容为none，设置为空")
+
+            logger.info(f"解析合并记忆结果: part1={len(part1_content)}字符, part2={len(part2_content)}字符")
+
+            return part1_content, part2_content
+
+        except Exception as e:
+            logger.error(f"解析合并记忆part1/part2时出错: {e}")
+            return "", ""
+
     def _parse_merge_target_json(self, json_text: str) -> list[str]:
         """
         解析choose_merge_target生成的JSON响应
@@ -542,19 +604,35 @@ class MemoryChest:
                 content += f"{memory}\n"
             
             prompt = f"""
-以下是多段记忆内容，请将它们合并成一段记忆：
+以下是多段记忆内容，请将它们进行整合和修改：
 {content}
-
-请将下面的多段记忆内容，合并成一段记忆
+--------------------------------
+请将上面的多段记忆内容，合并成两部分内容，第一部分是可以整合，不冲突的概念和知识，第二部分是相互有冲突的概念和知识
 请主要关注概念和知识，而不是聊天的琐事
 重要！！你要关注的概念和知识必须是较为不常见的信息，或者时效性较强的信息！！
 不要！！关注常见的只是，或者已经过时的信息！！
 1.不要关注诸如某个用户做了什么，说了什么，不要关注某个用户的行为，而是关注其中的概念性信息
 2.概念要求精确，不啰嗦，像科普读物或教育课本那样
 3.如果有图片，请只关注图片和文本结合的知识和概念性内容
-4.如果记忆中有冲突的地方，可以进行整合。如果无法整合，需要在此处标注存在冲突的不同信息
-记忆为一段纯文本，逻辑清晰，指出概念的含义，并说明关系
-请输出合并的记忆内容，不要输出其他内容：
+4.记忆为一段纯文本，逻辑清晰，指出概念的含义，并说明关系
+**第一部分**
+1.如果两个概念在描述同一件事情，且相互之间逻辑不冲突（请你严格判断），且相互之间没有矛盾，请将它们整合成一个概念，并输出到第一部分
+2.如果某个概念在时间上更新了另一个概念，请用新概念更新就概念来整合，并输出到第一部分
+3.如果没有可整合的概念，请你输出none
+**第二部分**
+1.如果记忆中有无法整合的地方，例如概念不一致，有逻辑上的冲突，请你输出到第二部分
+2.如果两个概念在描述同一件事情，但相互之间逻辑冲突，请将它们输出到第二部分
+3.如果没有无法整合的概念，请你输出none
+
+**输出格式要求**
+请你按以下格式输出：
+<part1>
+第一部分内容，整合后的概念，如果第一部分为none，请输出none
+</part1>
+<part2>
+第二部分内容，无法整合，冲突的概念，如果第二部分为none，请输出none  
+</part2>
+不要输出其他内容，现在请你输出,不要输出其他内容，注意一定要直白，白话，口语化不要浮夸，修辞。：
 """
 
             if global_config.debug.show_prompt:
@@ -564,18 +642,33 @@ class MemoryChest:
 
             merged_memory, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
 
-            # 生成合并后的标题
-            merged_title = await self._generate_title_for_merged_memory(merged_memory)
-            
-            # 保存合并后的记忆到数据库
-            MemoryChestModel.create(
-                title=merged_title,
-                content=merged_memory
-            )
-            
-            logger.info(f"合并记忆已保存: {merged_title}")
-            
-            return merged_title, merged_memory
+            # 解析part1和part2
+            part1_content, part2_content = self._parse_merged_parts(merged_memory)
+
+            # 处理part2：独立记录冲突内容（无论part1是否为空）
+            if part2_content and part2_content.strip() != "none":
+                logger.info(f"合并记忆part2记录冲突内容: {len(part2_content)} 字符")
+                # 导入冲突追踪器
+                from src.curiousity.questions import global_conflict_tracker
+                # 记录冲突到数据库
+                await global_conflict_tracker.record_memory_merge_conflict(part2_content)
+
+            # 处理part1：生成标题并保存
+            if part1_content and part1_content.strip() != "none":
+                merged_title = await self._generate_title_for_merged_memory(part1_content)
+
+                # 保存part1到数据库
+                MemoryChestModel.create(
+                    title=merged_title,
+                    content=part1_content
+                )
+
+                logger.info(f"合并记忆part1已保存: {merged_title}")
+
+                return merged_title, part1_content
+            else:
+                logger.warning("合并记忆part1为空，跳过保存")
+                return "", ""
         except Exception as e:
             logger.error(f"合并记忆时出错: {e}")
             return "", ""

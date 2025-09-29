@@ -25,7 +25,7 @@ from src.plugin_system.core import events_manager
 from src.plugin_system.apis import generator_api, send_api, message_api, database_api
 from src.mais4u.mai_think import mai_thinking_manager
 from src.mais4u.s4u_config import s4u_config
-from src.chat.memory_system.Memory_chest import global_memory_chest
+from src.memory_system.Memory_chest import global_memory_chest
 from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,

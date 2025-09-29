@@ -6,7 +6,7 @@ import re
 
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
-from src.chat.memory_system.Memory_chest import global_memory_chest
+from src.memory_system.Memory_chest import global_memory_chest
 from src.mais4u.mai_think import mai_thinking_manager
 from src.common.logger import get_logger
 from src.common.data_models.database_data_model import DatabaseMessages
@@ -27,7 +27,7 @@ from src.chat.utils.chat_message_builder import (
 )
 from src.chat.express.expression_selector import expression_selector
 
-# from src.chat.memory_system.memory_activator import MemoryActivator
+# from src.memory_system.memory_activator import MemoryActivator
 
 from src.person_info.person_info import Person, is_person_known
 from src.plugin_system.base.component_types import ActionInfo, EventType

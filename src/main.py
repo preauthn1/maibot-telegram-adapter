@@ -13,9 +13,9 @@ from src.common.logger import get_logger
 from src.common.server import get_global_server, Server
 from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
-from src.chat.memory_system.Hippocampus import hippocampus_manager
-from src.chat.memory_system.hippocampus_to_memory_chest_task import HippocampusToMemoryChestTask
-from src.chat.memory_system.memory_management_task import MemoryManagementTask
+from src.memory_system.Hippocampus import hippocampus_manager
+from src.memory_system.hippocampus_to_memory_chest_task import HippocampusToMemoryChestTask
+from src.memory_system.memory_management_task import MemoryManagementTask
 from rich.traceback import install
 from src.migrate_helper.migrate import check_and_run_migrations
 # from src.api.main import start_api_server

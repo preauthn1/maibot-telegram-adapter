@@ -5,7 +5,7 @@ import re
 from typing import List
 
 from src.manager.async_task_manager import AsyncTask
-from src.chat.memory_system.Hippocampus import hippocampus_manager
+from src.memory_system.Hippocampus import hippocampus_manager
 from src.common.logger import get_logger
 
 logger = get_logger("hippocampus_to_memory_chest")
