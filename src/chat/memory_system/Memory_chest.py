@@ -32,7 +32,7 @@ class MemoryChest:
             request_type="memory_chest_build",
         )
         
-        self.memory_build_threshold = 30
+        self.memory_build_threshold = 20
         self.memory_size_limit = global_config.memory.max_memory_size
   
         self.running_content_list = {}  # {chat_id: {"content": running_content, "last_update_time": timestamp, "create_time": timestamp}}
@@ -154,9 +154,12 @@ class MemoryChest:
         
     
 
-    def get_all_titles(self) -> list[str]:
+    def get_all_titles(self, exclude_locked: bool = False) -> list[str]:
         """
         获取记忆仓库中的所有标题
+
+        Args:
+            exclude_locked: 是否排除锁定的记忆，默认为 False
 
         Returns:
             list: 包含所有标题的列表
@@ -166,6 +169,9 @@ class MemoryChest:
             titles = []
             for memory in MemoryChestModel.select():
                 if memory.title:
+                    # 如果 exclude_locked 为 True 且记忆已锁定，则跳过
+                    if exclude_locked and memory.locked:
+                        continue
                     titles.append(memory.title)
             return titles
         except Exception as e:
@@ -261,8 +267,8 @@ class MemoryChest:
         Returns:
             str: 选择的标题
         """
-        # 获取所有标题并构建格式化字符串
-        titles = self.get_all_titles()
+        # 获取所有标题并构建格式化字符串（排除锁定的记忆）
+        titles = self.get_all_titles(exclude_locked=True)
         formatted_titles = ""
         for title in titles:
             formatted_titles += f"{title}\n"
@@ -375,15 +381,15 @@ class MemoryChest:
     async def choose_merge_target(self, memory_title: str) -> list[str]:
         """
         选择与给定记忆标题相关的记忆目标
-        
+
         Args:
             memory_title: 要匹配的记忆标题
-            
+
         Returns:
             list[str]: 选中的记忆内容列表
         """
         try:
-            all_titles = self.get_all_titles()
+            all_titles = self.get_all_titles(exclude_locked=True)
             content = ""
             for title in all_titles:
                 content += f"{title}\n"
@@ -430,10 +436,10 @@ class MemoryChest:
     def _get_memories_by_titles(self, titles: list[str]) -> list[str]:
         """
         根据标题列表查找对应的记忆内容
-        
+
         Args:
             titles: 记忆标题列表
-            
+
         Returns:
             list[str]: 记忆内容列表
         """
@@ -442,22 +448,32 @@ class MemoryChest:
             for title in titles:
                 if not title or not title.strip():
                     continue
-                    
+
                 # 使用模糊查找匹配记忆
                 try:
                     best_match = find_best_matching_memory(title.strip(), similarity_threshold=0.8)
                     if best_match:
-                        contents.append(best_match[1])  # best_match[1] 是 content
-                        logger.debug(f"找到记忆: {best_match[0]} (相似度: {best_match[2]:.3f})")
+                        # 检查记忆是否被锁定
+                        memory_title = best_match[0]
+                        memory_content = best_match[1]
+
+                        # 查询数据库中的锁定状态
+                        for memory in MemoryChestModel.select():
+                            if memory.title == memory_title and memory.locked:
+                                logger.warning(f"记忆 '{memory_title}' 已锁定，跳过合并")
+                                continue
+
+                        contents.append(memory_content)
+                        logger.debug(f"找到记忆: {memory_title} (相似度: {best_match[2]:.3f})")
                     else:
                         logger.warning(f"未找到相似度 >= 0.8 的标题匹配: '{title}'")
                 except Exception as e:
                     logger.error(f"查找标题 '{title}' 的记忆时出错: {e}")
                     continue
-            
+
             logger.info(f"成功找到 {len(contents)} 条记忆内容")
             return contents
-            
+
         except Exception as e:
             logger.error(f"根据标题查找记忆时出错: {e}")
             return []

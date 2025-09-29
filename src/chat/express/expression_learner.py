@@ -248,8 +248,6 @@ class ExpressionLearner:
             style,
             _context,
             _context_words,
-            _full_context,
-            _full_context_embedding,
         ) in learnt_expressions:
             learnt_expressions_str += f"{situation}->{style}\n"
 
@@ -263,8 +261,6 @@ class ExpressionLearner:
             style,
             context,
             context_words,
-            full_context,
-            full_context_embedding,
         ) in learnt_expressions:
             if chat_id not in chat_dict:
                 chat_dict[chat_id] = []
@@ -274,8 +270,6 @@ class ExpressionLearner:
                     "style": style,
                     "context": context,
                     "context_words": context_words,
-                    "full_context": full_context,
-                    "full_context_embedding": full_context_embedding,
                 }
             )
 
@@ -299,8 +293,6 @@ class ExpressionLearner:
                         expr_obj.style = new_expr["style"]
                         expr_obj.context = new_expr["context"]
                         expr_obj.context_words = new_expr["context_words"]
-                        expr_obj.full_context = new_expr["full_context"]
-                        expr_obj.full_context_embedding = new_expr["full_context_embedding"]
                     expr_obj.count = expr_obj.count + 1
                     expr_obj.last_active_time = current_time
                     expr_obj.save()
@@ -315,8 +307,6 @@ class ExpressionLearner:
                         create_date=current_time,  # 手动设置创建日期
                         context=new_expr["context"],
                         context_words=new_expr["context_words"],
-                        full_context=new_expr["full_context"],
-                        full_context_embedding=new_expr["full_context_embedding"],
                     )
             # 限制最大数量
             exprs = list(
@@ -428,7 +418,7 @@ class ExpressionLearner:
 
     async def learn_expression(
         self, num: int = 10
-    ) -> Optional[List[Tuple[str, str, str, List[str], str, List[float]]]]:
+    ) -> Optional[List[Tuple[str, str, str, List[str]]]]:
         """从指定聊天流学习表达方式
 
         Args:
@@ -482,18 +472,13 @@ class ExpressionLearner:
         )
 
         split_matched_expressions_w_emb = []
-        full_context_embedding: List[float] = await self.get_full_context_embedding(random_msg_match_str)
 
         for situation, style, context, context_words in split_matched_expressions:
             split_matched_expressions_w_emb.append(
-                (self.chat_id, situation, style, context, context_words, random_msg_match_str, full_context_embedding)
+                (self.chat_id, situation, style, context, context_words)
             )
 
         return split_matched_expressions_w_emb
-
-    async def get_full_context_embedding(self, context: str) -> List[float]:
-        embedding, _ = await self.embedding_model.get_embedding(context)
-        return embedding
 
     def split_expression_context(
         self, matched_expressions: List[Tuple[str, str, str]]
