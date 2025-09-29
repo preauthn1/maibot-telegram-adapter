@@ -89,7 +89,7 @@ def init_prompt() -> None:
 class ExpressionLearner:
     def __init__(self, chat_id: str) -> None:
         self.express_learn_model: LLMRequest = LLMRequest(
-            model_set=model_config.model_task_config.replyer, request_type="expression.learner"
+            model_set=model_config.model_task_config.utils, request_type="expression.learner"
         )
         self.embedding_model: LLMRequest = LLMRequest(
             model_set=model_config.model_task_config.embedding, request_type="expression.embedding"
