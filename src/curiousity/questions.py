@@ -1,6 +1,5 @@
 import time
 import asyncio
-from rich.traceback import install
 from src.common.logger import get_logger
 from src.common.database.database_model import MemoryConflict
 from src.chat.utils.chat_message_builder import (
@@ -11,10 +10,6 @@ from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 
 logger = get_logger("conflict_tracker")
-
-logger = get_logger("conflict_tracker")
-
-install(extra_lines=3)
 
 class QuestionTracker:
     """
@@ -41,26 +36,25 @@ class QuestionTracker:
         """
         prompt = (
             "你是一个严谨的判定器。下面给出聊天记录以及一个问题。\n"
-            "任务：判断在这段聊天中，该问题是否已经得到明确解答。或从聊天内容中可以整理出答案\n"
+            "任务：判断在这段聊天中，该问题是否已经得到明确解答。\n"
             "如果已解答，请只输出：YES: <简短答案>\n"
             "如果没有，请只输出：NO\n\n"
             f"问题：{self.question}\n"
             "聊天记录如下：\n"
             f"{conversation_text}"
         )
-        
-        
 
         if global_config.debug.show_prompt:
             logger.info(f"判定提示词: {prompt}")
         else:
             logger.debug("已发送判定提示词")
 
-        result_text, _ = await self.llm_request.generate_response_async(prompt, temperature=0.2)
+        result_text, _ = await self.llm_request.generate_response_async(prompt, temperature=0.5)
+        
+        logger.info(f"判定结果: {prompt}\n{result_text}")
+        
         if not result_text:
             return False, ""
-        
-        logger.info(f"判定提示词: {prompt},问题: {self.question},result: {result_text}")
 
         text = result_text.strip()
         if text.upper().startswith("YES:"):
@@ -123,7 +117,7 @@ class ConflictTracker:
             max_duration = 30 * 60  # 30 分钟
             max_messages = 100      # 最多 100 条消息
             poll_interval = 2.0     # 秒
-
+            logger.info(f"开始跟踪问题: {original_question}")
             while tracker.active:
                 now_ts = time.time()
                 # 终止条件：时长达到上限
@@ -136,7 +130,7 @@ class ConflictTracker:
                     chat_id=tracker.chat_id,
                     timestamp_start=tracker.last_read_time,
                     timestamp_end=now_ts,
-                    limit=0,
+                    limit=30,
                     limit_mode="latest",
                     filter_bot=False,
                     filter_command=True,

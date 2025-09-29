@@ -124,6 +124,7 @@ def get_raw_msg_by_timestamp_with_chat(
     # 只有当 limit 为 0 时才应用外部 sort
     sort_order = [("time", 1)] if limit == 0 else None
     # 直接将 limit_mode 传递给 find_messages
+    # print(f"get_raw_msg_by_timestamp_with_chat: {chat_id}, {timestamp_start}, {timestamp_end}, {limit}, {limit_mode}, {filter_bot}, {filter_command}")
     return find_messages(
         message_filter=filter_query,
         sort=sort_order,
@@ -681,10 +682,9 @@ def build_readable_messages(
         filtered_messages = []
         for msg in messages:
             # 获取消息内容
-            content = msg.display_message or msg.processed_plain_text or ""
-
+            content = msg.processed_plain_text
             # 移除表情包
-            emoji_pattern = r"\[表情包:[^\]]+\]"
+            emoji_pattern = r"\[表情包：[^\]]+\]"
             content = re.sub(emoji_pattern, "", content)
 
             # 如果移除表情包后内容不为空，则保留消息
@@ -699,10 +699,8 @@ def build_readable_messages(
             # 创建 MessageAndActionModel 但移除表情包
             model = MessageAndActionModel.from_DatabaseMessages(msg)
             # 移除表情包
-            if model.display_message:
-                model.display_message = re.sub(r"\[表情包:[^\]]+\]", "", model.display_message)
             if model.processed_plain_text:
-                model.processed_plain_text = re.sub(r"\[表情包:[^\]]+\]", "", model.processed_plain_text)
+                model.processed_plain_text = re.sub(r"\[表情包：[^\]]+\]", "", model.processed_plain_text)
             copy_messages.append(model)
         else:
             copy_messages.append(MessageAndActionModel.from_DatabaseMessages(msg))

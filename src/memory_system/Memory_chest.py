@@ -98,6 +98,31 @@ class MemoryChest:
             if chat_id and chat_id in self.running_content_list:
                 current_running_content = self.running_content_list[chat_id]["content"]
 
+            # 随机从格式示例列表中选取若干行用于提示
+            format_candidates = [
+                "[概念] 是 [概念的含义(简短描述，不超过十个字)]",
+                "[概念] 不是 [对概念的负面含义(简短描述，不超过十个字)]",
+                "[概念1] 与 [概念2] 是 [概念1和概念2的关联(简短描述，不超过二十个字)]",
+                "[概念1] 包含 [概念2] 和 [概念3]",
+                "[概念1] 属于 [概念2]",
+                "[概念1] 的例子是 [例子1] 和 [例子2]",
+                "[概念] 的特征是 [特征1]、[特征2]",
+                "[概念1] 导致 [概念2]",
+                "[概念1] 需要 [条件1] 和 [条件2]",
+                "[概念1] 的用途是 [用途1] 和 [用途2]",
+                "[概念1] 与 [概念2] 的区别是 [区别点]",
+                "[概念] 的别名是 [别名]",
+                "[概念1] 包括但不限于 [概念2]、[概念3]",
+                "[概念] 的反义是 [反义概念]",
+                "[概念] 的组成有 [部分1]、[部分2]",
+                "[概念] 出现于 [时间或场景]",
+                "[概念] 的方法有 [方法1]、[方法2]",
+            ]
+
+            selected_count = random.randint(5, len(format_candidates))
+            selected_lines = random.sample(format_candidates, selected_count)
+            format_section = "\n".join(selected_lines) + "\n......(不要包含中括号)"
+
             prompt = f"""
 以下是你的记忆内容和新的聊天记录，请你将他们整合和修改：
 记忆内容：
@@ -117,13 +142,8 @@ class MemoryChest:
 3.如果有图片，请只关注图片和文本结合的知识和概念性内容
 4.记忆为一段纯文本，逻辑清晰，指出概念的含义，并说明关系
 
-记忆内容的格式，你必须仿照下面的格式，但不一定全部使用:
-[概念] 是 [概念的含义(简短描述，不超过十个字)]
-[概念] 不是 [对概念的负面含义(简短描述，不超过十个字)]
-[概念1] 与 [概念2] 是 [概念1和概念2的关联(简短描述，不超过二十个字)]
-[概念1] 包含 [概念2] 和 [概念3]
-[概念1] 属于 [概念2]
-......(不要包含中括号)
+ 记忆内容的格式，你必须仿照下面的格式，但不一定全部使用:
+{format_section}
 
 请仿照上述格式输出，每个知识点一句话。输出成一段平文本
 现在请你输出,不要输出其他内容，注意一定要直白，白话，口语化不要浮夸，修辞。：
@@ -136,7 +156,7 @@ class MemoryChest:
 
             running_content, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
 
-            print(f"记忆仓库构建运行内容: {running_content}")
+            print(f"prompt: {prompt}\n记忆仓库构建运行内容: {running_content}")
 
             # 如果有chat_id，更新对应的running_content
             if chat_id and running_content:

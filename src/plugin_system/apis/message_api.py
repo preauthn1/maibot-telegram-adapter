@@ -98,11 +98,19 @@ def get_messages_by_time_in_chat(
         raise ValueError("chat_id 不能为空")
     if not isinstance(chat_id, str):
         raise ValueError("chat_id 必须是字符串类型")
-    if filter_mai:
-        return filter_mai_messages(
-            get_raw_msg_by_timestamp_with_chat(chat_id, start_time, end_time, limit, limit_mode, filter_command)
-        )
-    return get_raw_msg_by_timestamp_with_chat(chat_id, start_time, end_time, limit, limit_mode, filter_command)
+    # if filter_mai:
+    #     return filter_mai_messages(
+    #         get_raw_msg_by_timestamp_with_chat(chat_id, start_time, end_time, limit, limit_mode, filter_command)
+    #     )
+    return get_raw_msg_by_timestamp_with_chat(
+        chat_id=chat_id,
+        timestamp_start=start_time,
+        timestamp_end=end_time,
+        limit=limit,
+        limit_mode=limit_mode,
+        filter_bot=filter_mai,
+        filter_command=filter_command
+    )
 
 
 def get_messages_by_time_in_chat_inclusive(

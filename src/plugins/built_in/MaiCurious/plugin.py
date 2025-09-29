@@ -18,7 +18,7 @@ from src.plugin_system.apis import frequency_api
 from src.plugin_system.apis import generator_api
 from src.curiousity.questions import global_conflict_tracker
 
-logger = get_logger("relation_actions")
+logger = get_logger("question_actions")
 
 
 
@@ -26,16 +26,16 @@ class CuriousAction(BaseAction):
     """频率调节动作 - 调整聊天发言频率"""
 
     activation_type = ActionActivationType.LLM_JUDGE
-    parallel_action = False
+    parallel_action = True
 
     # 动作基本信息
-    action_name = "question"
+    action_name = "make_question"
     
-    action_description = "对现有的存在疑问的信息生成一个问题"
+    action_description = "提出一个问题，当有人反驳你的观点，或其他人之间有观点冲突时使用"
 
     # 动作参数定义
     action_parameters = {
-        "question": "存在疑问的信息，提出一个问题",
+        "question": "对存在疑问的信息提出一个问题，描述全面，使用陈述句",
     }
 
     # 动作使用场景
@@ -46,6 +46,8 @@ class CuriousAction(BaseAction):
         f"当聊天记录中的信息存在逻辑上的矛盾时使用",
         f"当有人反对或否定你提出的信息时使用",
         f"或当你对现有的信息存在疑问时使用",
+        f"有人认为你的观点是错误的，请选择question动作",
+        f"有人与你观点不一致，请选择question动作",
     ]
 
     # 关联类型
@@ -59,10 +61,10 @@ class CuriousAction(BaseAction):
             # 存储问题到冲突追踪器
             if question:
                 await global_conflict_tracker.record_conflict(conflict_content=question, start_following=True,chat_id=self.chat_id)
-                logger.info(f"已存储问题到冲突追踪器: {len(question)} 字符")
+                logger.info(f"已存储问题到冲突追踪器: {question}")
                 await self.store_action_info(
                     action_build_into_prompt=True,
-                    action_prompt_display=f"你产生了一个问题，原因：{question}，尝试向其他人提问或回忆吧",
+                    action_prompt_display=f"你产生了一个问题：{question}，尝试向其他人提问或回忆吧",
                     action_done=True,
                 )
             return True, "问题已记录"
