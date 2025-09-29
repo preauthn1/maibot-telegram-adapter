@@ -622,6 +622,7 @@ def build_readable_messages_with_id(
     truncate: bool = False,
     show_actions: bool = False,
     show_pic: bool = True,
+    remove_emoji_stickers: bool = False,
 ) -> Tuple[str, List[Tuple[str, DatabaseMessages]]]:
     """
     将消息列表转换为可读的文本格式，并返回原始(时间戳, 昵称, 内容)列表。
@@ -638,6 +639,7 @@ def build_readable_messages_with_id(
         show_pic=show_pic,
         read_mark=read_mark,
         message_id_list=message_id_list,
+        remove_emoji_stickers=remove_emoji_stickers,
     )
 
     return formatted_string, message_id_list
@@ -652,6 +654,7 @@ def build_readable_messages(
     show_actions: bool = False,
     show_pic: bool = True,
     message_id_list: Optional[List[Tuple[str, DatabaseMessages]]] = None,
+    remove_emoji_stickers: bool = False,
 ) -> str:  # sourcery skip: extract-method
     """
     将消息列表转换为可读的文本格式。
@@ -666,13 +669,43 @@ def build_readable_messages(
         read_mark: 已读标记时间戳
         truncate: 是否截断长消息
         show_actions: 是否显示动作记录
+        remove_emoji_stickers: 是否移除表情包并过滤空消息
     """
     # WIP HERE and BELOW ----------------------------------------------
     # 创建messages的深拷贝，避免修改原始列表
     if not messages:
         return ""
 
-    copy_messages: List[MessageAndActionModel] = [MessageAndActionModel.from_DatabaseMessages(msg) for msg in messages]
+    # 如果启用移除表情包，先过滤消息
+    if remove_emoji_stickers:
+        filtered_messages = []
+        for msg in messages:
+            # 获取消息内容
+            content = msg.display_message or msg.processed_plain_text or ""
+
+            # 移除表情包
+            emoji_pattern = r"\[表情包:[^\]]+\]"
+            content = re.sub(emoji_pattern, "", content)
+
+            # 如果移除表情包后内容不为空，则保留消息
+            if content.strip():
+                filtered_messages.append(msg)
+
+        messages = filtered_messages
+
+    copy_messages: List[MessageAndActionModel] = []
+    for msg in messages:
+        if remove_emoji_stickers:
+            # 创建 MessageAndActionModel 但移除表情包
+            model = MessageAndActionModel.from_DatabaseMessages(msg)
+            # 移除表情包
+            if model.display_message:
+                model.display_message = re.sub(r"\[表情包:[^\]]+\]", "", model.display_message)
+            if model.processed_plain_text:
+                model.processed_plain_text = re.sub(r"\[表情包:[^\]]+\]", "", model.processed_plain_text)
+            copy_messages.append(model)
+        else:
+            copy_messages.append(MessageAndActionModel.from_DatabaseMessages(msg))
 
     if show_actions and copy_messages:
         # 获取所有消息的时间范围
@@ -901,6 +934,7 @@ def build_readable_messages_anonymized(
     show_actions: bool = False,
     show_pic: bool = True,
     replace_bot_name: bool = True,
+    remove_emoji_stickers: bool = False,
 ) -> Tuple[str, Dict[str, str]]:
     """
     仿照 build_readable_messages，构建匿名化的可读消息：
@@ -953,8 +987,37 @@ def build_readable_messages_anonymized(
             name_mapping[original_display] = anon
         return anon
 
+    # 如果启用移除表情包，先过滤消息
+    if remove_emoji_stickers:
+        filtered_messages = []
+        for msg in messages:
+            # 获取消息内容
+            content = msg.display_message or msg.processed_plain_text or ""
+
+            # 移除表情包
+            emoji_pattern = r"\[表情包:[^\]]+\]"
+            content = re.sub(emoji_pattern, "", content)
+
+            # 如果移除表情包后内容不为空，则保留消息
+            if content.strip():
+                filtered_messages.append(msg)
+
+        messages = filtered_messages
+
     # 将 DatabaseMessages 转换为可处理结构，并可选拼入动作
-    copy_messages: List[MessageAndActionModel] = [MessageAndActionModel.from_DatabaseMessages(msg) for msg in messages]
+    copy_messages: List[MessageAndActionModel] = []
+    for msg in messages:
+        if remove_emoji_stickers:
+            # 创建 MessageAndActionModel 但移除表情包
+            model = MessageAndActionModel.from_DatabaseMessages(msg)
+            # 移除表情包
+            if model.display_message:
+                model.display_message = re.sub(r"\[表情包:[^\]]+\]", "", model.display_message)
+            if model.processed_plain_text:
+                model.processed_plain_text = re.sub(r"\[表情包:[^\]]+\]", "", model.processed_plain_text)
+            copy_messages.append(model)
+        else:
+            copy_messages.append(MessageAndActionModel.from_DatabaseMessages(msg))
 
     if show_actions and copy_messages:
         min_time = min(msg.time or 0 for msg in copy_messages)

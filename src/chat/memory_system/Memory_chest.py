@@ -35,7 +35,7 @@ class MemoryChest:
         self.memory_build_threshold = 30
         self.memory_size_limit = global_config.memory.max_memory_size
   
-        self.running_content_list = {}  # {chat_id: {"content": running_content, "last_update_time": timestamp}}
+        self.running_content_list = {}  # {chat_id: {"content": running_content, "last_update_time": timestamp, "create_time": timestamp}}
         self.fetched_memory_list = []  # [(chat_id, (question, answer, timestamp)), ...]
 
     async def build_running_content(self, chat_id: str = None) -> str:
@@ -53,7 +53,8 @@ class MemoryChest:
         if chat_id not in self.running_content_list:
             self.running_content_list[chat_id] = {
                 "content": "",
-                "last_update_time": time.time()
+                "last_update_time": time.time(),
+                "create_time": time.time()
             }
         
         should_update = True
@@ -67,10 +68,18 @@ class MemoryChest:
                 chat_id=chat_id,
                 limit=global_config.chat.max_context_size * 2,
             )
-            
+
             new_messages_count = len(message_list)
-            should_update = new_messages_count > self.memory_build_threshold
-            logger.info(f"chat_id {chat_id} 自上次更新后有 {new_messages_count} 条新消息，{'需要' if should_update else '不需要'}更新")
+            time_diff_minutes = (current_time - last_update_time) / 60
+
+            # 检查是否满足强制构建条件：超过15分钟且至少有5条新消息
+            forced_update = time_diff_minutes > 15 and new_messages_count >= 5
+            should_update = new_messages_count > self.memory_build_threshold or forced_update
+
+            if forced_update:
+                logger.info(f"chat_id {chat_id} 距离上次更新已 {time_diff_minutes:.1f} 分钟，有 {new_messages_count} 条新消息，强制构建")
+            else:
+                logger.info(f"chat_id {chat_id} 自上次更新后有 {new_messages_count} 条新消息，{'需要' if should_update else '不需要'}更新")
 
 
         if should_update:
@@ -81,6 +90,7 @@ class MemoryChest:
                 timestamp_mode="relative",
                 read_mark=0.0,
                 show_actions=True,
+                remove_emoji_stickers=True,
             )
             
             
@@ -94,9 +104,12 @@ class MemoryChest:
 
 请将下面的新聊天记录内的有用的信息，添加到你的记忆中
 请主要关注概念和知识，而不是聊天的琐事
-如果有表情包，仅在意表情包对上下文的影响，不要在意表情包本身
-如果有图片，尽在意内容，不要在意图片的名称和编号
-记忆为一段纯文本，逻辑清晰，指出事件，概念的含义，并说明关系
+重要！！你要关注的概念和知识必须是较为不常见的信息，或者时效性较强的信息！！
+不要！！关注常见的只是，或者已经过时的信息！！
+1.不要关注诸如某个用户做了什么，说了什么，不要关注某个用户的行为，而是关注其中的概念性信息
+2.概念要求精确，不啰嗦，像科普读物或教育课本那样
+3.如果有图片，请只关注图片和文本结合的知识和概念性内容
+记忆为一段纯文本，逻辑清晰，指出概念的含义，并说明关系
 请输出添加后的记忆内容，不要输出其他内容：
 {message_str}
 """
@@ -112,13 +125,26 @@ class MemoryChest:
 
             # 如果有chat_id，更新对应的running_content
             if chat_id and running_content:
+                current_time = time.time()
+
+                # 保留原有的create_time，如果没有则使用当前时间
+                create_time = self.running_content_list[chat_id].get("create_time", current_time)
+
                 self.running_content_list[chat_id] = {
                     "content": running_content,
-                    "last_update_time": time.time()
+                    "last_update_time": current_time,
+                    "create_time": create_time
                 }
 
                 # 检查running_content长度是否大于500
                 if len(running_content) > self.memory_size_limit:
+                    await self._save_to_database_and_clear(chat_id, running_content)
+
+                # 检查是否需要强制保存：create_time超过1800秒且内容大小达到max_memory_size的30%
+                elif (current_time - create_time > 1800 and
+                      len(running_content) >= self.memory_size_limit * 0.3):
+                    logger.info(f"chat_id {chat_id} 内容创建时间已超过 {(current_time - create_time)/60:.1f} 分钟，"
+                               f"内容大小 {len(running_content)} 达到限制的 {int(self.memory_size_limit * 0.3)} 字符，强制保存")
                     await self._save_to_database_and_clear(chat_id, running_content)
 
             
@@ -503,9 +529,16 @@ class MemoryChest:
 以下是多段记忆内容，请将它们合并成一段记忆：
 {content}
 
+请将下面的多段记忆内容，合并成一段记忆
 请主要关注概念和知识，而不是聊天的琐事
-记忆为一段纯文本，逻辑清晰，指出事件，概念的含义，并说明关系
-请输出添加后的记忆内容，不要输出其他内容：
+重要！！你要关注的概念和知识必须是较为不常见的信息，或者时效性较强的信息！！
+不要！！关注常见的只是，或者已经过时的信息！！
+1.不要关注诸如某个用户做了什么，说了什么，不要关注某个用户的行为，而是关注其中的概念性信息
+2.概念要求精确，不啰嗦，像科普读物或教育课本那样
+3.如果有图片，请只关注图片和文本结合的知识和概念性内容
+4.如果记忆中有冲突的地方，可以进行整合。如果无法整合，需要在此处标注存在冲突的不同信息
+记忆为一段纯文本，逻辑清晰，指出概念的含义，并说明关系
+请输出合并的记忆内容，不要输出其他内容：
 """
 
             if global_config.debug.show_prompt:
@@ -546,7 +579,7 @@ class MemoryChest:
 请为以下内容生成一个描述全面的标题，要求描述内容的主要概念和事件：
 {merged_content}
 
-标题不要分点，不要换行，不要输出其他内容
+标题不要分点，不要换行，不要输出其他内容，不要浮夸，以白话简洁的风格输出标题
 请只输出标题，不要输出其他内容：
 """
             
