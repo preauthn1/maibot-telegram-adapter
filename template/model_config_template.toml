@@ -9,7 +9,7 @@ base_url = "https://api.deepseek.com/v1" # API服务商的BaseURL
 api_key = "your-api-key-here"           # API密钥（请替换为实际的API密钥）
 client_type = "openai"                  # 请求客户端（可选，默认值为"openai"，使用gimini等Google系模型时请配置为"gemini"）
 max_retry = 2                           # 最大重试次数（单个模型API调用失败，最多重试的次数）
-timeout = 30                            # API请求超时时间（单位：秒）
+timeout = 120                            # API请求超时时间（单位：秒）
 retry_interval = 10                     # 重试间隔时间（单位：秒）
 
 [[api_providers]] # 阿里 百炼 API服务商配置
@@ -18,7 +18,7 @@ base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 api_key = "your-bailian-key"
 client_type = "openai"
 max_retry = 2
-timeout = 15
+timeout = 120
 retry_interval = 5
 
 [[api_providers]] # 特殊：Google的Gimini使用特殊API，与OpenAI格式不兼容，需要配置client为"gemini"
@@ -27,7 +27,7 @@ base_url = "https://generativelanguage.googleapis.com/v1beta"
 api_key = "your-google-api-key-1"
 client_type = "gemini"
 max_retry = 2
-timeout = 30
+timeout = 120
 retry_interval = 10
 
 [[api_providers]] # SiliconFlow的API服务商配置
@@ -36,7 +36,7 @@ base_url = "https://api.siliconflow.cn/v1"
 api_key = "your-siliconflow-api-key"
 client_type = "openai"
 max_retry = 2
-timeout = 60
+timeout = 120
 retry_interval = 10
 
 

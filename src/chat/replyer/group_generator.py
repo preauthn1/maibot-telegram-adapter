@@ -20,6 +20,7 @@ from src.chat.message_receive.uni_message_sender import UniversalMessageSender
 from src.chat.utils.timer_calculator import Timer  # <--- Import Timer
 from src.chat.utils.utils import get_chat_type_and_target_info
 from src.chat.utils.prompt_builder import global_prompt_manager
+from src.mood.mood_manager import mood_manager
 from src.chat.utils.chat_message_builder import (
     build_readable_messages,
     get_raw_msg_before_timestamp_with_chat,
@@ -283,38 +284,13 @@ class DefaultReplyer:
             expression_habits_block += f"{style_habits_str}\n"
 
         return f"{expression_habits_title}\n{expression_habits_block}", selected_ids
-
-    # async def build_memory_block(self, chat_history: List[DatabaseMessages], target: str) -> str:
-    #     """构建记忆块
-
-    #     Args:
-    #         chat_history: 聊天历史记录
-    #         target: 目标消息内容
-
-    #     Returns:
-    #         str: 记忆信息字符串
-    #     """
-
-    #     if not global_config.memory.enable_memory:
-    #         return ""
-
-    #     instant_memory = None
-
-    #     running_memories = await self.memory_activator.activate_memory_with_chat_history(
-    #         target_message=target, chat_history=chat_history
-    #     )
-    #     if not running_memories:
-    #         return ""
-
-    #     memory_str = "以下是当前在聊天中，你回忆起的记忆：\n"
-    #     for running_memory in running_memories:
-    #         keywords, content = running_memory
-    #         memory_str += f"- {keywords}：{content}\n"
-
-    #     if instant_memory:
-    #         memory_str += f"- {instant_memory}\n"
-
-    #     return memory_str
+    
+    async def build_mood_state_prompt(self) -> str:
+        """构建情绪状态提示"""
+        if not global_config.mood.enable_mood:
+            return ""
+        mood_state = await mood_manager.get_mood_by_chat_id(self.chat_stream.stream_id).get_mood()
+        return f"你现在的心情是：{mood_state}"
     
     async def build_memory_block(self) -> str:
         """构建记忆块
@@ -526,50 +502,6 @@ class DefaultReplyer:
 
         return core_dialogue_prompt, all_dialogue_prompt
 
-    def build_mai_think_context(
-        self,
-        chat_id: str,
-        memory_block: str,
-        relation_info: str,
-        time_block: str,
-        chat_target_1: str,
-        chat_target_2: str,
-        identity_block: str,
-        sender: str,
-        target: str,
-        chat_info: str,
-    ) -> Any:
-        """构建 mai_think 上下文信息
-
-        Args:
-            chat_id: 聊天ID
-            memory_block: 记忆块内容
-            relation_info: 关系信息
-            time_block: 时间块内容
-            chat_target_1: 聊天目标1
-            chat_target_2: 聊天目标2
-
-            identity_block: 身份块内容
-            sender: 发送者名称
-            target: 目标消息内容
-            chat_info: 聊天信息
-
-        Returns:
-            Any: mai_think 实例
-        """
-        mai_think = mai_thinking_manager.get_mai_think(chat_id)
-        mai_think.memory_block = memory_block
-        mai_think.relation_info_block = relation_info
-        mai_think.time_block = time_block
-        mai_think.chat_target = chat_target_1
-        mai_think.chat_target_2 = chat_target_2
-        mai_think.chat_info = chat_info
-
-        mai_think.identity = identity_block
-        mai_think.sender = sender
-        mai_think.target = target
-        return mai_think
-
     async def build_actions_prompt(
         self, available_actions: Dict[str, ActionInfo], chosen_actions_info: Optional[List[ActionPlannerInfo]] = None
     ) -> str:
@@ -717,6 +649,7 @@ class DefaultReplyer:
             self._time_and_run_task(self.get_prompt_info(chat_talking_prompt_short, sender, target), "prompt_info"),
             self._time_and_run_task(self.build_actions_prompt(available_actions, chosen_actions), "actions_info"),
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
+            self._time_and_run_task(self.build_mood_state_prompt(), "mood_state_prompt"),
         )
 
         # 任务名称中英文映射
@@ -729,6 +662,7 @@ class DefaultReplyer:
             "prompt_info": "获取知识",
             "actions_info": "动作信息",
             "personality_prompt": "人格信息",
+            "mood_state_prompt": "情绪状态",
         }
 
         # 处理结果
@@ -759,6 +693,7 @@ class DefaultReplyer:
         actions_info: str = results_dict["actions_info"]
         personality_prompt: str = results_dict["personality_prompt"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
+        mood_state_prompt: str = results_dict["mood_state_prompt"]
 
         if extra_info:
             extra_info_block = f"以下是你在回复时需要参考的信息，现在请你阅读以下内容，进行决策\n{extra_info}\n以上是你在回复时需要参考的信息，现在请你阅读以下内容，进行决策"
@@ -789,6 +724,7 @@ class DefaultReplyer:
                 tool_info_block=tool_info,
                 memory_block=memory_block,
                 knowledge_prompt=prompt_info,
+                mood_state=mood_state_prompt,
                 # memory_block=memory_block,
                 # relation_info_block=relation_info,
                 extra_info_block=extra_info_block,
@@ -809,6 +745,7 @@ class DefaultReplyer:
                 tool_info_block=tool_info,
                 memory_block=memory_block,
                 knowledge_prompt=prompt_info,
+                mood_state=mood_state_prompt,
                 # memory_block=memory_block,
                 # relation_info_block=relation_info,
                 extra_info_block=extra_info_block,

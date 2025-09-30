@@ -14,7 +14,6 @@ from src.common.server import get_global_server, Server
 from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
 from src.memory_system.Hippocampus import hippocampus_manager
-from src.memory_system.hippocampus_to_memory_chest_task import HippocampusToMemoryChestTask
 from src.memory_system.memory_management_task import MemoryManagementTask
 from rich.traceback import install
 from src.migrate_helper.migrate import check_and_run_migrations
@@ -86,8 +85,9 @@ class MainSystem:
         logger.info("表情包管理器初始化成功")
 
         # 启动情绪管理器
-        await mood_manager.start()
-        logger.info("情绪管理器初始化成功")
+        if global_config.mood.enable_mood:
+            await mood_manager.start()
+            logger.info("情绪管理器初始化成功")
 
         # 初始化聊天管理器
         await get_chat_manager()._initialize()
@@ -98,10 +98,6 @@ class MainSystem:
         # 初始化记忆系统
         hippocampus_manager.initialize()
         logger.info("记忆系统初始化成功")
-        
-        # 添加海马体到记忆仓库的转换任务
-        await async_task_manager.add_task(HippocampusToMemoryChestTask())
-        logger.info("海马体到记忆仓库转换任务已启动")
         
         # 添加记忆管理任务
         await async_task_manager.add_task(MemoryManagementTask())

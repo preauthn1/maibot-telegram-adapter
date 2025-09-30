@@ -20,6 +20,8 @@ MaiBot-Napcat-Adapter
 nonebot-maibot-adapter/
 MaiMBot-LPMM
 *.zip
+run_bot.bat
+run_na.bat
 run.bat
 log_debug/
 run_amds.bat

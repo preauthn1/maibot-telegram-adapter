@@ -26,6 +26,7 @@ from src.chat.utils.chat_message_builder import (
     replace_user_references,
 )
 from src.chat.express.expression_selector import expression_selector
+from src.mood.mood_manager import mood_manager
 
 # from src.memory_system.memory_activator import MemoryActivator
 
@@ -281,37 +282,12 @@ class PrivateReplyer:
 
         return f"{expression_habits_title}\n{expression_habits_block}", selected_ids
 
-    # async def build_memory_block(self, chat_history: List[DatabaseMessages], target: str) -> str:
-    #     """构建记忆块
-
-    #     Args:
-    #         chat_history: 聊天历史记录
-    #         target: 目标消息内容
-
-    #     Returns:
-    #         str: 记忆信息字符串
-    #     """
-
-    #     if not global_config.memory.enable_memory:
-    #         return ""
-
-    #     instant_memory = None
-
-    #     running_memories = await self.memory_activator.activate_memory_with_chat_history(
-    #         target_message=target, chat_history=chat_history
-    #     )
-    #     if not running_memories:
-    #         return ""
-
-    #     memory_str = "以下是当前在聊天中，你回忆起的记忆：\n"
-    #     for running_memory in running_memories:
-    #         keywords, content = running_memory
-    #         memory_str += f"- {keywords}：{content}\n"
-
-    #     if instant_memory:
-    #         memory_str += f"- {instant_memory}\n"
-
-    #     return memory_str
+    async def build_mood_state_prompt(self) -> str:
+        """构建情绪状态提示"""
+        if not global_config.mood.enable_mood:
+            return ""
+        mood_state = await mood_manager.get_mood_by_chat_id(self.chat_stream.stream_id).get_mood()
+        return f"你现在的心情是：{mood_state}"
 
     
     async def build_memory_block(self) -> str:
@@ -600,6 +576,7 @@ class PrivateReplyer:
             self._time_and_run_task(self.get_prompt_info(chat_talking_prompt_short, sender, target), "prompt_info"),
             self._time_and_run_task(self.build_actions_prompt(available_actions, chosen_actions), "actions_info"),
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
+            self._time_and_run_task(self.build_mood_state_prompt(), "mood_state_prompt"),
         )
 
         # 任务名称中英文映射
@@ -611,6 +588,7 @@ class PrivateReplyer:
             "prompt_info": "获取知识",
             "actions_info": "动作信息",
             "personality_prompt": "人格信息",
+            "mood_state_prompt": "情绪状态",
         }
 
         # 处理结果
@@ -639,6 +617,7 @@ class PrivateReplyer:
         prompt_info: str = results_dict["prompt_info"]  # 直接使用格式化后的结果
         actions_info: str = results_dict["actions_info"]
         personality_prompt: str = results_dict["personality_prompt"]
+        mood_state_prompt: str = results_dict["mood_state_prompt"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
 
         if extra_info:
@@ -660,12 +639,12 @@ class PrivateReplyer:
                 expression_habits_block=expression_habits_block,
                 tool_info_block=tool_info,
                 knowledge_prompt=prompt_info,
+                mood_state=mood_state_prompt,
                 memory_block=memory_block,
                 relation_info_block=relation_info,
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
                 action_descriptions=actions_info,
-
                 dialogue_prompt=dialogue_prompt,
                 time_block=time_block,
                 target=target,
@@ -681,6 +660,7 @@ class PrivateReplyer:
                 expression_habits_block=expression_habits_block,
                 tool_info_block=tool_info,
                 knowledge_prompt=prompt_info,
+                mood_state=mood_state_prompt,
                 memory_block=memory_block,
                 relation_info_block=relation_info,
                 extra_info_block=extra_info_block,

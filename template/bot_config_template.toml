@@ -1,5 +1,5 @@
 [inner]
-version = "6.16.0"
+version = "6.17.0"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -23,8 +23,7 @@ personality = "是一个女大学生，现在在读大二，会刷贴吧。"
 #アイデンティティがない 生まれないらららら
 # 描述麦麦说话的表达风格，表达习惯，如要修改，可以酌情新增内容
 reply_style = "请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景。可以参考贴吧，知乎和微博的回复风格。"
-# 情感特征，影响情绪的变化情况
-emotion_style = "情绪较为稳定，但遭遇特定事件的时候起伏较大"
+
 # 麦麦的兴趣，会影响麦麦对什么话题进行回复
 interest = "对技术相关话题，游戏和动漫相关话题感兴趣，也对日常话题感兴趣，不喜欢太过沉重严肃的话题"
 
@@ -89,6 +88,12 @@ enable_relationship = true # 是否启用关系系统
 
 [tool]
 enable_tool = true # 是否启用回复工具
+
+[mood]
+enable_mood = false # 是否启用情绪系统
+mood_update_threshold = 1 # 情绪更新阈值,越高，更新越慢
+# 情感特征，影响情绪的变化情况
+emotion_style = "情绪较为稳定，但遭遇特定事件的时候起伏较大"
 
 [emoji]
 emoji_chance = 0.4 # 麦麦激活表情包动作的概率
@@ -172,7 +177,7 @@ file_log_level = "DEBUG" # 文件日志级别，可选: DEBUG, INFO, WARNING, ER
 
 # 第三方库日志控制
 suppress_libraries = ["faiss","httpx", "urllib3", "asyncio", "websockets", "httpcore", "requests", "peewee", "openai","uvicorn","jieba"] # 完全屏蔽的库
-library_log_levels = { "aiohttp" = "WARNING"} # 设置特定库的日志级别
+library_log_levels = { aiohttp = "WARNING"} # 设置特定库的日志级别
 
 [debug]
 show_prompt = false # 是否显示prompt
