@@ -22,7 +22,7 @@ class DeepThinkTool(BaseTool):
     name = "deep_think"
     description = "深度思考，对某个问题进行全面且深入的思考，当面临复杂环境或重要问题时，使用此获得更好的解决方案"
     parameters = [
-        ("question", ToolParamType.STRING, "需要思考的问题，越具体越好", True, None),
+        ("question", ToolParamType.STRING, "需要思考的问题，越具体越好（从上下文中总结）", True, None),
     ]
     
     available_for_llm = True

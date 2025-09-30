@@ -119,7 +119,7 @@ class MemoryChest:
                 "[概念] 的方法有 [方法1]、[方法2]",
             ]
 
-            selected_count = random.randint(5, len(format_candidates))
+            selected_count = random.randint(3, 6)
             selected_lines = random.sample(format_candidates, selected_count)
             format_section = "\n".join(selected_lines) + "\n......(不要包含中括号)"
 
