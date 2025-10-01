@@ -17,7 +17,7 @@ from .memory_utils import (
     check_title_exists_fuzzy
 )
 
-logger = get_logger("memory_chest")
+logger = get_logger("memory")
 
 class MemoryChest:
     def __init__(self):

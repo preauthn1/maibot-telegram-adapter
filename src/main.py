@@ -13,7 +13,6 @@ from src.common.logger import get_logger
 from src.common.server import get_global_server, Server
 from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
-from src.memory_system.Hippocampus import hippocampus_manager
 from src.memory_system.memory_management_task import MemoryManagementTask
 from rich.traceback import install
 from src.migrate_helper.migrate import check_and_run_migrations
@@ -94,10 +93,6 @@ class MainSystem:
         asyncio.create_task(get_chat_manager()._auto_save_task())
 
         logger.info("聊天管理器初始化成功")
-
-        # 初始化记忆系统
-        hippocampus_manager.initialize()
-        logger.info("记忆系统初始化成功")
         
         # 添加记忆管理任务
         await async_task_manager.add_task(MemoryManagementTask())

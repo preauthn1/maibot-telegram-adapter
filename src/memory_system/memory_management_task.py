@@ -9,7 +9,7 @@ from src.common.logger import get_logger
 from src.common.database.database_model import MemoryChest as MemoryChestModel
 from src.config.config import global_config
 
-logger = get_logger("memory_management")
+logger = get_logger("memory")
 
 
 class MemoryManagementTask(AsyncTask):
@@ -86,12 +86,11 @@ class MemoryManagementTask(AsyncTask):
     async def run(self):
         """执行记忆管理任务"""
         try:
-            logger.info("[记忆管理] 开始执行记忆管理任务")
-            
+
             # 获取当前记忆数量
             current_count = self._get_memory_count()
             percentage = current_count / self.max_memory_number
-            logger.info(f"[记忆管理] 当前记忆数量: {current_count}/{self.max_memory_number} ({percentage:.1%})")
+            logger.info(f"当前记忆数量: {current_count}/{self.max_memory_number} ({percentage:.1%})")
             
             # 如果记忆数量为0，跳过执行
             if current_count < 10:
@@ -100,7 +99,7 @@ class MemoryManagementTask(AsyncTask):
             # 随机选择一个记忆标题
             selected_title = self._get_random_memory_title()
             if not selected_title:
-                logger.warning("[记忆管理] 无法获取随机记忆标题，跳过执行")
+                logger.warning("无法获取随机记忆标题，跳过执行")
                 return
             
             # 执行choose_merge_target获取相关记忆（标题与内容）
@@ -117,15 +116,13 @@ class MemoryManagementTask(AsyncTask):
                 logger.warning("[记忆管理] 记忆合并失败，跳过删除")
                 return
             
-            logger.info(f"[记忆管理] 记忆合并成功，新标题: {merged_title}")
+            logger.info(f"记忆合并成功，新标题: {merged_title}")
             
             # 删除原始记忆（包括选中的标题和相关的记忆标题）
             titles_to_delete = [selected_title] + related_titles
             deleted_count = self._delete_original_memories(titles_to_delete)
-            logger.info(f"[记忆管理] 已删除 {deleted_count} 条原始记忆")
-            
-            logger.info("[记忆管理] 记忆管理任务完成")
-            
+            logger.info(f"已删除 {deleted_count} 条原始记忆")
+
         except Exception as e:
             logger.error(f"[记忆管理] 执行记忆管理任务时发生错误: {e}", exc_info=True)
     

@@ -5,7 +5,6 @@ from src.config.config import global_config
 from src.chat.utils.prompt_builder import Prompt
 from src.llm_models.payload_content.tool_option import ToolParamType
 from src.plugin_system import BaseAction, ActionActivationType
-from src.memory_system.Hippocampus import hippocampus_manager
 from src.chat.utils.utils import cut_key_words
 from src.memory_system.Memory_chest import global_memory_chest
 from src.plugin_system.base.base_tool import BaseTool
