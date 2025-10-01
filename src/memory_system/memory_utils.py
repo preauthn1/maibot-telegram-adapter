@@ -94,7 +94,7 @@ def fuzzy_find_memory_by_title(target_title: str, similarity_threshold: float = 
         # 按相似度降序排序
         matches.sort(key=lambda x: x[2], reverse=True)
         
-        logger.info(f"模糊查找标题 '{target_title}' 找到 {len(matches)} 个匹配项")
+        # logger.info(f"模糊查找标题 '{target_title}' 找到 {len(matches)} 个匹配项")
         return matches
         
     except Exception as e:
@@ -118,7 +118,7 @@ def find_best_matching_memory(target_title: str, similarity_threshold: float = 0
         
         if matches:
             best_match = matches[0]  # 已经按相似度排序，第一个是最佳匹配
-            logger.info(f"找到最佳匹配: '{best_match[0]}' (相似度: {best_match[2]:.3f})")
+            # logger.info(f"找到最佳匹配: '{best_match[0]}' (相似度: {best_match[2]:.3f})")
             return best_match
         else:
             logger.info(f"未找到相似度 >= {similarity_threshold} 的记忆")

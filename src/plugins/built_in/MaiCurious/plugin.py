@@ -35,7 +35,7 @@ class CuriousAction(BaseAction):
 
     # 动作参数定义
     action_parameters = {
-        "question": "对存在疑问的信息提出一个问题，描述全面，使用陈述句",
+        "question": "对存在疑问的信息提出一个问题，描述全面，使用无人称陈述句",
     }
 
     # 动作使用场景

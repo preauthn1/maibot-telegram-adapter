@@ -1,5 +1,5 @@
 [inner]
-version = "6.17.0"
+version = "6.18.0"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -79,6 +79,18 @@ mentioned_bot_reply = true # 是否启用提及必回复
 max_context_size = 30 # 上下文长度
 planner_smooth = 5 #规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐2-8，0为关闭，必须大于等于0
 
+# 动态发言频率规则：按时段/按chat_id调整 talk_value（优先匹配具体chat，再匹配全局）
+# 推荐格式（对象数组）：{ target="platform:id:type" 或 "", time="HH:MM-HH:MM", value=0.5 }
+# 说明:
+# - target 为空字符串表示全局；type 为 group/private，例如："qq:1919810:group" 或 "qq:114514:private"；
+# - 支持跨夜区间，例如 "23:00-02:00"；数值范围建议 0-1。
+talk_value_rules = [
+    { target = "", time = "00:00-08:59", value = 0.8 },
+    { target = "", time = "09:00-22:59", value = 1.0 },
+    { target = "qq:1919810:group", time = "20:00-23:59", value = 0.6 },
+    { target = "qq:114514:private", time = "00:00-23:59", value = 0.3 },
+]
+
 [memory]
 max_memory_number = 100 # 记忆最大数量
 max_memory_size = 2048 # 记忆最大大小
@@ -87,7 +99,7 @@ max_memory_size = 2048 # 记忆最大大小
 enable_relationship = true # 是否启用关系系统
 
 [tool]
-enable_tool = true # 是否启用回复工具
+enable_tool = true # 是否启用工具
 
 [mood]
 enable_mood = false # 是否启用情绪系统

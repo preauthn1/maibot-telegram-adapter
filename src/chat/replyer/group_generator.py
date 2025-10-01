@@ -7,7 +7,6 @@ import re
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 from src.memory_system.Memory_chest import global_memory_chest
-from src.mais4u.mai_think import mai_thinking_manager
 from src.common.logger import get_logger
 from src.common.data_models.database_data_model import DatabaseMessages
 from src.common.data_models.info_data_model import ActionPlannerInfo
@@ -218,31 +217,6 @@ class DefaultReplyer:
             traceback.print_exc()
             return False, llm_response
 
-    # 移动到 relation插件中构建
-    # async def build_relation_info(self, chat_content: str, sender: str, person_list: List[Person]):
-    #     if not global_config.relationship.enable_relationship:
-    #         return ""
-
-    #     if not sender:
-    #         return ""
-
-    #     if sender == global_config.bot.nickname:
-    #         return ""
-
-    #     # 获取用户ID
-    #     person = Person(person_name=sender)
-    #     if not is_person_known(person_name=sender):
-    #         logger.warning(f"未找到用户 {sender} 的ID，跳过信息提取")
-    #         return f"你完全不认识{sender}，不理解ta的相关信息。"
-
-    #     sender_relation = await person.build_relationship(chat_content)
-    #     others_relation = ""
-    #     for person in person_list:
-    #         person_relation = await person.build_relationship()
-    #         others_relation += person_relation
-
-    #     return f"{sender_relation}\n{others_relation}"
-
     async def build_expression_habits(self, chat_history: str, target: str) -> Tuple[str, List[int]]:
         # sourcery skip: for-append-to-extend
         """构建表达习惯块
@@ -425,11 +399,10 @@ class DefaultReplyer:
         duration = end_time - start_time
         return name, result, duration
 
-    def build_s4u_chat_history_prompts(
+    def build_chat_history_prompts(
         self, message_list_before_now: List[DatabaseMessages], target_user_id: str, sender: str
     ) -> Tuple[str, str]:
         """
-        构建 s4u 风格的分离对话 prompt
 
         Args:
             message_list_before_now: 历史消息列表
@@ -638,10 +611,6 @@ class DefaultReplyer:
             self._time_and_run_task(
                 self.build_expression_habits(chat_talking_prompt_short, target), "expression_habits"
             ),
-            # self._time_and_run_task(
-            #     self.build_relation_info(chat_talking_prompt_short, sender, person_list_short), "relation_info"
-            # ),
-            # self._time_and_run_task(self.build_memory_block(message_list_before_short, target), "memory_block"),
             self._time_and_run_task(self.build_memory_block(), "memory_block"),
             self._time_and_run_task(
                 self.build_tool_info(chat_talking_prompt_short, sender, target, enable_tool=enable_tool), "tool_info"
@@ -713,7 +682,7 @@ class DefaultReplyer:
             reply_target_block = ""
 
         # 构建分离的对话 prompt
-        core_dialogue_prompt, background_dialogue_prompt = self.build_s4u_chat_history_prompts(
+        core_dialogue_prompt, background_dialogue_prompt = self.build_chat_history_prompts(
             message_list_before_now_long, user_id, sender
         )
 

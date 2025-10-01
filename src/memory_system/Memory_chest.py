@@ -77,9 +77,9 @@ class MemoryChest:
             should_update = new_messages_count > self.memory_build_threshold or forced_update
 
             if forced_update:
-                logger.info(f"chat_id {chat_id} 距离上次更新已 {time_diff_minutes:.1f} 分钟，有 {new_messages_count} 条新消息，强制构建")
+                logger.debug(f"chat_id {chat_id} 距离上次更新已 {time_diff_minutes:.1f} 分钟，有 {new_messages_count} 条新消息，强制构建")
             else:
-                logger.info(f"chat_id {chat_id} 自上次更新后有 {new_messages_count} 条新消息，{'需要' if should_update else '不需要'}更新")
+                logger.debug(f"chat_id {chat_id} 自上次更新后有 {new_messages_count} 条新消息，{'需要' if should_update else '不需要'}更新")
 
 
         if should_update:
@@ -89,7 +89,7 @@ class MemoryChest:
                 replace_bot_name=True,
                 timestamp_mode="relative",
                 read_mark=0.0,
-                show_actions=True,
+                show_actions=False,
                 remove_emoji_stickers=True,
             )
             
@@ -233,11 +233,12 @@ class MemoryChest:
             type = "要求提取简短的内容"
             
         prompt = f"""
+目标文段：
 {content}
 
-请根据问题：{question}
-在上方内容中，提取相关信息的原文并输出，{type}
-请务必提取上面原文，不要输出其他内容：
+你现在需要从目标文段中找出合适的信息来回答问题：{question}
+请务必从目标文段中提取相关信息的**原文**并输出，{type}
+如果没有原文能够回答问题，输出"无有效信息"即可，不要输出其他内容：
 """
 
         if global_config.debug.show_prompt:
@@ -247,6 +248,9 @@ class MemoryChest:
 
         answer, (reasoning_content, model_name, tool_calls) = await self.LLMRequest.generate_response_async(prompt)
         
+        if "无有效" in answer or "无有效信息" in answer or "无信息" in answer:
+            logger.info(f"没有能够回答{question}的记忆")
+            return ""
         
         logger.info(f"记忆仓库对问题 “{question}” 获取答案: {answer}")
 
@@ -283,7 +287,7 @@ class MemoryChest:
             # 用换行符连接所有记忆
             result = "\n".join(memories)
 
-            logger.info(f"chat_id {chat_id} 共有 {len(memories)} 条记忆")
+            # logger.info(f"chat_id {chat_id} 共有 {len(memories)} 条记忆")
             return result
 
         except Exception as e:

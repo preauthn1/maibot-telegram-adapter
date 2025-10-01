@@ -23,8 +23,6 @@ from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
 from src.plugin_system.core import events_manager
 from src.plugin_system.apis import generator_api, send_api, message_api, database_api
-from src.mais4u.mai_think import mai_thinking_manager
-from src.mais4u.s4u_config import s4u_config
 from src.memory_system.Memory_chest import global_memory_chest
 from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
@@ -99,9 +97,6 @@ class HeartFChatting:
         self._current_cycle_detail: CycleDetail = None  # type: ignore
 
         self.last_read_time = time.time() - 2
-
-        self.talk_threshold = global_config.chat.talk_value
-
         self.no_reply_until_call = False
         
 
@@ -205,12 +200,14 @@ class HeartFChatting:
                 if (message.is_mentioned or message.is_at) and global_config.chat.mentioned_bot_reply:
                     mentioned_message = message
 
+            logger.info(f"{self.log_prefix} 当前talk_value: {global_config.chat.get_talk_value(self.stream_id)}")
+
             # *控制频率用
             if mentioned_message:
                 await self._observe(recent_messages_list=recent_messages_list, force_reply_message=mentioned_message)
             elif (
                 random.random()
-                < global_config.chat.talk_value
+                < global_config.chat.get_talk_value(self.stream_id)
                 * frequency_control_manager.get_or_create_frequency_control(self.stream_id).get_talk_frequency_adjust()
             ):
                 await self._observe(recent_messages_list=recent_messages_list)
@@ -284,8 +281,6 @@ class HeartFChatting:
 
         start_time = time.time()
 
-        if s4u_config.enable_s4u:
-            await send_typing()
 
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             await self.expression_learner.trigger_learning_for_chat()
@@ -431,13 +426,6 @@ class HeartFChatting:
                 await asyncio.sleep(wait_time)
             else:
                 await asyncio.sleep(0.1)
-
-            """S4U内容，暂时保留"""
-            if s4u_config.enable_s4u:
-                await stop_typing()
-                await mai_thinking_manager.get_mai_think(self.stream_id).do_think_after_response(reply_text)
-            """S4U内容，暂时保留"""
-
             return True
 
     async def _main_chat_loop(self):

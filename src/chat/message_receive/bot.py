@@ -9,13 +9,12 @@ from src.common.logger import get_logger
 from src.config.config import global_config
 from src.mood.mood_manager import mood_manager  # 导入情绪管理器
 from src.chat.message_receive.chat_stream import get_chat_manager
-from src.chat.message_receive.message import MessageRecv, MessageRecvS4U
+from src.chat.message_receive.message import MessageRecv
 from src.chat.message_receive.storage import MessageStorage
 from src.chat.heart_flow.heartflow_message_processor import HeartFCMessageReceiver
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugin_system.core import component_registry, events_manager, global_announcement_manager
 from src.plugin_system.base import BaseCommand, EventType
-from src.mais4u.mais4u_chat.s4u_msg_processor import S4UMessageProcessor
 from src.person_info.person_info import Person
 
 # 定义日志配置
@@ -77,8 +76,6 @@ class ChatBot:
         self._started = False
         self.mood_manager = mood_manager  # 获取情绪管理器单例
         self.heartflow_message_receiver = HeartFCMessageReceiver()  # 新增
-
-        self.s4u_message_processor = S4UMessageProcessor()
 
     async def _ensure_started(self):
         """确保所有任务已启动"""
@@ -157,31 +154,6 @@ class ChatBot:
 
             return True
 
-    async def do_s4u(self, message_data: Dict[str, Any]):
-        message = MessageRecvS4U(message_data)
-        group_info = message.message_info.group_info
-        user_info = message.message_info.user_info
-
-        get_chat_manager().register_message(message)
-        chat = await get_chat_manager().get_or_create_stream(
-            platform=message.message_info.platform,  # type: ignore
-            user_info=user_info,  # type: ignore
-            group_info=group_info,
-        )
-
-        message.update_chat_stream(chat)
-
-        # 处理消息内容
-        await message.process()
-
-        _ = Person.register_person(
-            platform=message.message_info.platform,  # type: ignore
-            user_id=message.message_info.user_info.user_id,  # type: ignore
-            nickname=user_info.user_nickname,  # type: ignore
-        )
-
-        await self.s4u_message_processor.process_message(message)
-
         return
 
     async def echo_message_process(self, raw_data: Dict[str, Any]) -> None:
@@ -219,11 +191,6 @@ class ChatBot:
             # 确保所有任务已启动
             await self._ensure_started()
 
-            platform = message_data["message_info"].get("platform")
-
-            if platform == "amaidesu_default":
-                await self.do_s4u(message_data)
-                return
 
             if message_data["message_info"].get("group_info") is not None:
                 message_data["message_info"]["group_info"]["group_id"] = str(

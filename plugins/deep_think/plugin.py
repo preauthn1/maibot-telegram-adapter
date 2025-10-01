@@ -20,7 +20,7 @@ class DeepThinkTool(BaseTool):
     """获取用户信息"""
 
     name = "deep_think"
-    description = "深度思考，对某个问题进行全面且深入的思考，当面临复杂环境或重要问题时，使用此获得更好的解决方案"
+    description = "深度思考，对某个知识，概念或逻辑问题进行全面且深入的思考，当面临复杂环境或重要问题时，使用此获得更好的解决方案。"
     parameters = [
         ("question", ToolParamType.STRING, "需要思考的问题，越具体越好（从上下文中总结）", True, None),
     ]
@@ -51,8 +51,8 @@ class DeepThinkTool(BaseTool):
         success, thinking_result, _, _ = await llm_api.generate_with_model(
             prompt, model_config=chat_model_config, request_type="deep_think"
         )
-        
-        print(f"thinking_result: {thinking_result}")
+
+        logger.info(f"{question}: {thinking_result}")
         
         thinking_result =f"思考结果：{thinking_result}\n**注意** 因为你进行了深度思考，最后的回复内容可以回复的长一些，更加详细一些，不用太简洁。\n"
         

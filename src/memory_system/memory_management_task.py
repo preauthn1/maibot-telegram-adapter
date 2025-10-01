@@ -95,7 +95,6 @@ class MemoryManagementTask(AsyncTask):
             
             # 如果记忆数量为0，跳过执行
             if current_count < 10:
-                logger.info("[记忆管理] 没有太多记忆，跳过执行")
                 return
             
             # 随机选择一个记忆标题
@@ -104,15 +103,13 @@ class MemoryManagementTask(AsyncTask):
                 logger.warning("[记忆管理] 无法获取随机记忆标题，跳过执行")
                 return
             
-            logger.info(f"[记忆管理] 随机选择的记忆标题: {selected_title}")
-            
             # 执行choose_merge_target获取相关记忆内容
             related_contents_titles = await global_memory_chest.choose_merge_target(selected_title)
             if not related_contents_titles:
-                logger.warning("[记忆管理] 未找到相关记忆内容，跳过合并")
+                logger.info("无合适合并内容，跳过本次合并")
                 return
             
-            logger.info(f"[记忆管理] 找到 {len(related_contents_titles)} 条相关记忆")
+            logger.info(f"为 [{selected_title}] 找到 {len(related_contents_titles)} 条相关记忆:related_contents_titles")
             
             # 执行merge_memory合并记忆
             merged_title, merged_content = await global_memory_chest.merge_memory(related_contents_titles)
