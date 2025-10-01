@@ -429,14 +429,23 @@ class MemoryChest:
         try:
             all_titles = self.get_all_titles(exclude_locked=True)
             content = ""
+            display_index = 1
             for title in all_titles:
-                content += f"{title}\n"
+                # 剔除掉输入的 memory_title 本身
+                if title and title.strip() == (memory_title or "").strip():
+                    continue
+                content += f"{display_index}. {title}\n"
+                display_index += 1
             
             prompt = f"""
 所有记忆列表
 {content}
 
 请根据以上记忆列表，选择一个与"{memory_title}"相关的记忆，用json输出：
+如果没有相关记忆，输出:
+{{
+    "selected_title": ""
+}}
 可以选择多个相关的记忆，但最多不超过5个
 例如：
 {{
@@ -449,8 +458,12 @@ class MemoryChest:
     "selected_title": "选择的相关记忆标题"
 }}
 ...
+注意：请返回原始标题本身作为 selected_title，不要包含前面的序号或多余字符。
 请输出JSON格式，不要输出其他内容：
 """
+
+            logger.info(f"选择合并目标 prompt: {prompt}")
+
             if global_config.debug.show_prompt:
                 logger.info(f"选择合并目标 prompt: {prompt}")
             else:
@@ -465,7 +478,7 @@ class MemoryChest:
             selected_contents = self._get_memories_by_titles(selected_titles)
             
             logger.info(f"选择合并目标结果: {len(selected_contents)} 条记忆:{selected_titles}")
-            return selected_contents
+            return selected_titles,selected_contents
             
         except Exception as e:
             logger.error(f"选择合并目标时出错: {e}")
@@ -509,7 +522,7 @@ class MemoryChest:
                     logger.error(f"查找标题 '{title}' 的记忆时出错: {e}")
                     continue
 
-            logger.info(f"成功找到 {len(contents)} 条记忆内容")
+            # logger.info(f"成功找到 {len(contents)} 条记忆内容")
             return contents
 
         except Exception as e:
@@ -556,8 +569,6 @@ class MemoryChest:
                 part2_content = ""
                 logger.info("part2内容为none，设置为空")
 
-            logger.info(f"解析合并记忆结果: part1={len(part1_content)}字符, part2={len(part2_content)}字符")
-
             return part1_content, part2_content
 
         except Exception as e:
@@ -586,11 +597,18 @@ class MemoryChest:
                     titles = []
                     for item in parsed_data:
                         if isinstance(item, dict) and "selected_title" in item:
-                            titles.append(item["selected_title"])
+                            value = item.get("selected_title", "")
+                            if isinstance(value, str) and value.strip():
+                                titles.append(value)
                     return titles
                 elif isinstance(parsed_data, dict) and "selected_title" in parsed_data:
                     # 如果是单个对象
-                    return [parsed_data["selected_title"]]
+                    value = parsed_data.get("selected_title", "")
+                    if isinstance(value, str) and value.strip():
+                        return [value]
+                    else:
+                        # 空字符串表示没有相关记忆
+                        return []
             except json.JSONDecodeError:
                 pass
             
@@ -604,7 +622,9 @@ class MemoryChest:
                 try:
                     obj = json.loads(match)
                     if "selected_title" in obj:
-                        titles.append(obj["selected_title"])
+                        value = obj.get("selected_title", "")
+                        if isinstance(value, str) and value.strip():
+                            titles.append(value)
                 except json.JSONDecodeError:
                     continue
             

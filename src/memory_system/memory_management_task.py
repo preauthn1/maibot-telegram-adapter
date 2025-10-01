@@ -103,24 +103,25 @@ class MemoryManagementTask(AsyncTask):
                 logger.warning("[记忆管理] 无法获取随机记忆标题，跳过执行")
                 return
             
-            # 执行choose_merge_target获取相关记忆内容
-            related_contents_titles = await global_memory_chest.choose_merge_target(selected_title)
-            if not related_contents_titles:
+            # 执行choose_merge_target获取相关记忆（标题与内容）
+            related_titles, related_contents = await global_memory_chest.choose_merge_target(selected_title)
+            if not related_titles or not related_contents:
                 logger.info("无合适合并内容，跳过本次合并")
                 return
             
-            logger.info(f"为 [{selected_title}] 找到 {len(related_contents_titles)} 条相关记忆:related_contents_titles")
+            logger.info(f"为 [{selected_title}] 找到 {len(related_contents)} 条相关记忆:{related_titles}")
             
             # 执行merge_memory合并记忆
-            merged_title, merged_content = await global_memory_chest.merge_memory(related_contents_titles)
+            merged_title, merged_content = await global_memory_chest.merge_memory(related_contents)
             if not merged_title or not merged_content:
                 logger.warning("[记忆管理] 记忆合并失败，跳过删除")
                 return
             
             logger.info(f"[记忆管理] 记忆合并成功，新标题: {merged_title}")
             
-            # 删除原始记忆（包括选中的标题和相关的记忆）
-            deleted_count = self._delete_original_memories(related_contents_titles)
+            # 删除原始记忆（包括选中的标题和相关的记忆标题）
+            titles_to_delete = [selected_title] + related_titles
+            deleted_count = self._delete_original_memories(titles_to_delete)
             logger.info(f"[记忆管理] 已删除 {deleted_count} 条原始记忆")
             
             logger.info("[记忆管理] 记忆管理任务完成")
@@ -144,15 +145,15 @@ class MemoryManagementTask(AsyncTask):
             logger.error(f"[记忆管理] 获取随机记忆标题时发生错误: {e}")
             return ""
     
-    def _delete_original_memories(self, related_contents: List[str]) -> int:
-        """删除原始记忆"""
+    def _delete_original_memories(self, related_titles: List[str]) -> int:
+        """按标题删除原始记忆"""
         try:
             deleted_count = 0
-            # 删除相关记忆（通过内容匹配）
-            for content in related_contents:
+            # 删除相关记忆（通过标题匹配）
+            for title in related_titles:
                 try:
-                    # 通过内容查找并删除对应的记忆
-                    memories_to_delete = MemoryChestModel.select().where(MemoryChestModel.content == content)
+                    # 通过标题查找并删除对应的记忆
+                    memories_to_delete = MemoryChestModel.select().where(MemoryChestModel.title == title)
                     for memory in memories_to_delete:
                         MemoryChestModel.delete().where(MemoryChestModel.id == memory.id).execute()
                         deleted_count += 1
