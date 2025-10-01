@@ -174,13 +174,8 @@ def _update_dict(target: TOMLDocument | dict | Table, source: TOMLDocument | dic
                 _update_dict(target_value, value)
             else:
                 try:
-                    # 对数组类型进行特殊处理
-                    if isinstance(value, list):
-                        # 如果是空数组，确保它保持为空数组
-                        target[key] = tomlkit.array(str(value)) if value else tomlkit.array()
-                    else:
-                        # 其他类型使用item方法创建新值
-                        target[key] = tomlkit.item(value)
+                    # 统一使用 tomlkit.item 来保持原生类型与转义，不对列表做字符串化处理
+                    target[key] = tomlkit.item(value)
                 except (TypeError, ValueError):
                     # 如果转换失败，直接赋值
                     target[key] = value
