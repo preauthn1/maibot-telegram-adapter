@@ -3,7 +3,7 @@ import time
 import traceback
 import random
 import re
-from typing import Dict, Optional, Tuple, List, TYPE_CHECKING
+from typing import Dict, Optional, Tuple, List, TYPE_CHECKING, Union
 from rich.traceback import install
 from datetime import datetime
 from json_repair import repair_json
@@ -132,7 +132,7 @@ class ActionPlanner:
         self.last_obs_time_mark = 0.0
 
 
-        self.plan_log:List[Tuple[str,str,ActionPlannerInfo]] = []
+        self.plan_log: List[Tuple[str, float, Union[List[ActionPlannerInfo], str]]] = []
 
     def find_message_by_id(
         self, message_id: str, message_id_list: List[Tuple[str, "DatabaseMessages"]]
@@ -293,14 +293,24 @@ class ActionPlanner:
 
     def add_plan_log(self, reasoning: str, actions: List[ActionPlannerInfo]):
         self.plan_log.append((reasoning, time.time(), actions))
-        if len(self.plan_log) > 100:
+        if len(self.plan_log) > 20:
+            self.plan_log.pop(0)
+    
+    def add_plan_excute_log(self, result: str):
+        self.plan_log.append(("", time.time(), result))
+        if len(self.plan_log) > 20:
             self.plan_log.pop(0)
 
     def get_plan_log_str(self) -> str:
         plan_log_str = ""
-        for reasoning, time, actions in self.plan_log:
-            time = datetime.fromtimestamp(time).strftime("%H:%M:%S")
-            plan_log_str += f"{time}:{reasoning}|使用了{','.join([action.action_type for action in actions])}\n"
+        for reasoning, time, content in self.plan_log:
+            if isinstance(content, list) and all(isinstance(action, ActionPlannerInfo) for action in content):
+                time = datetime.fromtimestamp(time).strftime("%H:%M:%S")
+                plan_log_str += f"{time}:{reasoning}|你使用了{','.join([action.action_type for action in content])}\n"
+            else:
+                time = datetime.fromtimestamp(time).strftime("%H:%M:%S")
+                plan_log_str += f"{time}:{content}\n"
+                
         return plan_log_str
 
 

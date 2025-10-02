@@ -381,20 +381,25 @@ class HeartFChatting:
             action_success = False
             action_reply_text = ""
 
+            excute_result_str = ""
             for result in results:
+                excute_result_str += f"{result['action_type']} 执行结果:{result['result']}\n"
+
                 if isinstance(result, BaseException):
                     logger.error(f"{self.log_prefix} 动作执行异常: {result}")
                     continue
 
                 if result["action_type"] != "reply":
                     action_success = result["success"]
-                    action_reply_text = result["reply_text"]
+                    action_reply_text = result["result"]
                 elif result["action_type"] == "reply":
                     if result["success"]:
                         reply_loop_info = result["loop_info"]
-                        reply_text_from_reply = result["reply_text"]
+                        reply_text_from_reply = result["result"]
                     else:
                         logger.warning(f"{self.log_prefix} 回复动作执行失败")
+
+            self.action_planner.add_plan_excute_log(result=excute_result_str)
 
             # 构建最终的循环信息
             if reply_loop_info:
@@ -490,23 +495,19 @@ class HeartFChatting:
             except Exception as e:
                 logger.error(f"{self.log_prefix} 创建动作处理器时出错: {e}")
                 traceback.print_exc()
-                return False, "", ""
-
-            if not action_handler:
-                logger.warning(f"{self.log_prefix} 未能创建动作处理器: {action}")
-                return False, "", ""
+                return False, ""
 
             # 处理动作并获取结果（固定记录一次动作信息）
             result = await action_handler.execute()
             success, action_text = result
-            command = ""
 
-            return success, action_text, command
+
+            return success, action_text
 
         except Exception as e:
             logger.error(f"{self.log_prefix} 处理{action}时出错: {e}")
             traceback.print_exc()
-            return False, "", ""
+            return False, ""
 
     async def _send_response(
         self,
@@ -581,7 +582,7 @@ class HeartFChatting:
                     )
 
 
-                    return {"action_type": "no_reply", "success": True, "reply_text": "", "command": ""}
+                    return {"action_type": "no_reply", "success": True, "result": "选择不回复", "command": ""}
 
                 elif action_planner_info.action_type == "no_reply_until_call":
                     # 直接当场执行no_reply_until_call逻辑
@@ -601,46 +602,44 @@ class HeartFChatting:
                     )
 
 
-                    return {"action_type": "no_reply_until_call", "success": True, "reply_text": "", "command": ""}
+                    return {"action_type": "no_reply_until_call", "success": True, "result": "保持沉默，直到有人直接叫的名字", "command": ""}
 
                 elif action_planner_info.action_type == "reply":
                     # 直接当场执行reply逻辑
-                    try:
-                        reason = action_planner_info.reasoning or "选择回复"
-                        await database_api.store_action_info(
-                            chat_stream=self.chat_stream,
-                            action_build_into_prompt=False,
-                            action_prompt_display=reason,
-                            action_done=True,
-                            thinking_id=thinking_id,
-                            action_data={},
-                            action_name="reply",
-                            action_reasoning=reason,
-                        )
 
-                        success, llm_response = await generator_api.generate_reply(
-                            chat_stream=self.chat_stream,
-                            reply_message=action_planner_info.action_message,
-                            available_actions=available_actions,
-                            chosen_actions=chosen_action_plan_infos,
-                            reply_reason=reason,
-                            enable_tool=global_config.tool.enable_tool,
-                            request_type="replyer",
-                            from_plugin=False,
-                        )
+                    reason = action_planner_info.reasoning or "选择回复"
+                    await database_api.store_action_info(
+                        chat_stream=self.chat_stream,
+                        action_build_into_prompt=False,
+                        action_prompt_display=reason,
+                        action_done=True,
+                        thinking_id=thinking_id,
+                        action_data={},
+                        action_name="reply",
+                        action_reasoning=reason,
+                    )
 
-                        if not success or not llm_response or not llm_response.reply_set:
-                            if action_planner_info.action_message:
-                                logger.info(
-                                    f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败"
-                                )
-                            else:
-                                logger.info("回复生成失败")
-                            return {"action_type": "reply", "success": False, "reply_text": "", "loop_info": None}
+                    success, llm_response = await generator_api.generate_reply(
+                        chat_stream=self.chat_stream,
+                        reply_message=action_planner_info.action_message,
+                        available_actions=available_actions,
+                        chosen_actions=chosen_action_plan_infos,
+                        reply_reason=reason,
+                        enable_tool=global_config.tool.enable_tool,
+                        request_type="replyer",
+                        from_plugin=False,
+                    )
 
-                    except asyncio.CancelledError:
-                        logger.debug(f"{self.log_prefix} 并行执行：回复生成任务已被取消")
-                        return {"action_type": "reply", "success": False, "reply_text": "", "loop_info": None}
+                    if not success or not llm_response or not llm_response.reply_set:
+                        if action_planner_info.action_message:
+                            logger.info(
+                                f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败"
+                            )
+                        else:
+                            logger.info("回复生成失败")
+                        return {"action_type": "reply", "success": False, "result": "回复生成失败", "loop_info": None}
+
+
                     response_set = llm_response.reply_set
                     selected_expressions = llm_response.selected_expressions
                     loop_info, reply_text, _ = await self._send_and_store_reply(
@@ -654,13 +653,13 @@ class HeartFChatting:
                     return {
                         "action_type": "reply",
                         "success": True,
-                        "reply_text": reply_text,
+                        "result": f"你回复内容{reply_text}",
                         "loop_info": loop_info,
                     }
                 else:
                     # 执行普通动作
                     with Timer("动作执行", cycle_timers):
-                        success, reply_text, command = await self._handle_action(
+                        success, result = await self._handle_action(
                             action = action_planner_info.action_type,
                             action_reasoning = action_planner_info.action_reasoning or "",
                             action_data = action_planner_info.action_data or {},
@@ -671,8 +670,7 @@ class HeartFChatting:
                     return {
                         "action_type": action_planner_info.action_type,
                         "success": success,
-                        "reply_text": reply_text,
-                        "command": command,
+                        "result": result,
                     }
 
         except Exception as e:
@@ -681,7 +679,7 @@ class HeartFChatting:
             return {
                 "action_type": action_planner_info.action_type,
                 "success": False,
-                "reply_text": "",
+                "result": "",
                 "loop_info": None,
                 "error": str(e),
             }
