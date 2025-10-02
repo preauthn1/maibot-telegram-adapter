@@ -185,6 +185,8 @@ class ActionRecords(BaseModel):
     action_id = TextField(index=True)  # 消息 ID (更改自 IntegerField)
     time = DoubleField()  # 消息时间戳
 
+    action_reasoning = TextField(null=True)
+
     action_name = TextField()
     action_data = TextField()
     action_done = BooleanField(default=False)

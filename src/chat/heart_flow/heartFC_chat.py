@@ -98,6 +98,8 @@ class HeartFChatting:
 
         self.last_read_time = time.time() - 2
         self.no_reply_until_call = False
+
+        self.is_mute = False
         
 
     async def start(self):
@@ -175,6 +177,8 @@ class HeartFChatting:
         )
 
         if len(recent_messages_list) >= 1:
+            # for message in recent_messages_list:
+                # print(message.processed_plain_text)
             # !处理no_reply_until_call逻辑
             if self.no_reply_until_call:
                 for message in recent_messages_list:
@@ -185,6 +189,7 @@ class HeartFChatting:
                         or time.time() - self.last_read_time > 600
                     ):
                         self.no_reply_until_call = False
+                        self.last_read_time = time.time()
                         break
                 # 没有提到，继续保持沉默
                 if self.no_reply_until_call:
@@ -333,7 +338,7 @@ class HeartFChatting:
                 prompt_info = (modified_message.llm_prompt, prompt_info[1])
 
             with Timer("规划器", cycle_timers):
-                action_to_use_info, _ = await self.action_planner.plan(
+                action_to_use_info = await self.action_planner.plan(
                     loop_start_time=self.last_read_time,
                     available_actions=available_actions,
                 )
@@ -450,7 +455,7 @@ class HeartFChatting:
     async def _handle_action(
         self,
         action: str,
-        reasoning: str,
+        action_reasoning: str,
         action_data: dict,
         cycle_timers: Dict[str, float],
         thinking_id: str,
@@ -461,11 +466,11 @@ class HeartFChatting:
 
         参数:
             action: 动作类型
-            reasoning: 决策理由
+            action_reasoning: 决策理由
             action_data: 动作数据，包含不同动作需要的参数
             cycle_timers: 计时器字典
             thinking_id: 思考ID
-
+            action_message: 消息数据
         返回:
             tuple[bool, str, str]: (是否执行了动作, 思考消息ID, 命令)
         """
@@ -475,11 +480,11 @@ class HeartFChatting:
                 action_handler = self.action_manager.create_action(
                     action_name=action,
                     action_data=action_data,
-                    reasoning=reasoning,
                     cycle_timers=cycle_timers,
                     thinking_id=thinking_id,
                     chat_stream=self.chat_stream,
                     log_prefix=self.log_prefix,
+                    action_reasoning=action_reasoning,
                     action_message=action_message,
                 )
             except Exception as e:
@@ -491,7 +496,7 @@ class HeartFChatting:
                 logger.warning(f"{self.log_prefix} 未能创建动作处理器: {action}")
                 return False, "", ""
 
-            # 处理动作并获取结果
+            # 处理动作并获取结果（固定记录一次动作信息）
             result = await action_handler.execute()
             success, action_text = result
             command = ""
@@ -558,42 +563,67 @@ class HeartFChatting:
         """执行单个动作的通用函数"""
         try:
             with Timer(f"动作{action_planner_info.action_type}", cycle_timers):
+                # 直接当场执行no_reply逻辑
                 if action_planner_info.action_type == "no_reply":
-                    # 直接处理no_action逻辑，不再通过动作系统
+                    # 直接处理no_reply逻辑，不再通过动作系统
                     reason = action_planner_info.reasoning or "选择不回复"
                     # logger.info(f"{self.log_prefix} 选择不回复，原因: {reason}")
 
-                    # 存储no_action信息到数据库
                     await database_api.store_action_info(
                         chat_stream=self.chat_stream,
                         action_build_into_prompt=False,
                         action_prompt_display=reason,
                         action_done=True,
                         thinking_id=thinking_id,
-                        action_data={"reason": reason},
-                        action_name="no_action",
+                        action_data={},
+                        action_name="no_reply",
+                        action_reasoning=reason,
                     )
-                    return {"action_type": "no_action", "success": True, "reply_text": "", "command": ""}
 
-                elif action_planner_info.action_type == "wait_time":
-                    action_planner_info.action_data = action_planner_info.action_data or {}
-                    logger.info(f"{self.log_prefix} 等待{action_planner_info.action_data['time']}秒后回复")
-                    await asyncio.sleep(action_planner_info.action_data["time"])
-                    return {"action_type": "wait_time", "success": True, "reply_text": "", "command": ""}
+
+                    return {"action_type": "no_reply", "success": True, "reply_text": "", "command": ""}
 
                 elif action_planner_info.action_type == "no_reply_until_call":
+                    # 直接当场执行no_reply_until_call逻辑
                     logger.info(f"{self.log_prefix} 保持沉默，直到有人直接叫的名字")
+                    reason = action_planner_info.reasoning or "选择不回复"
+
                     self.no_reply_until_call = True
+                    await database_api.store_action_info(
+                        chat_stream=self.chat_stream,
+                        action_build_into_prompt=False,
+                        action_prompt_display=reason,
+                        action_done=True,
+                        thinking_id=thinking_id,
+                        action_data={},
+                        action_name="no_reply_until_call",
+                        action_reasoning=reason,
+                    )
+
+
                     return {"action_type": "no_reply_until_call", "success": True, "reply_text": "", "command": ""}
 
                 elif action_planner_info.action_type == "reply":
+                    # 直接当场执行reply逻辑
                     try:
+                        reason = action_planner_info.reasoning or "选择回复"
+                        await database_api.store_action_info(
+                            chat_stream=self.chat_stream,
+                            action_build_into_prompt=False,
+                            action_prompt_display=reason,
+                            action_done=True,
+                            thinking_id=thinking_id,
+                            action_data={},
+                            action_name="reply",
+                            action_reasoning=reason,
+                        )
+
                         success, llm_response = await generator_api.generate_reply(
                             chat_stream=self.chat_stream,
                             reply_message=action_planner_info.action_message,
                             available_actions=available_actions,
                             chosen_actions=chosen_action_plan_infos,
-                            reply_reason=action_planner_info.reasoning or "",
+                            reply_reason=reason,
                             enable_tool=global_config.tool.enable_tool,
                             request_type="replyer",
                             from_plugin=False,
@@ -627,18 +657,16 @@ class HeartFChatting:
                         "reply_text": reply_text,
                         "loop_info": loop_info,
                     }
-
-                # 其他动作
                 else:
                     # 执行普通动作
                     with Timer("动作执行", cycle_timers):
                         success, reply_text, command = await self._handle_action(
-                            action_planner_info.action_type,
-                            action_planner_info.reasoning or "",
-                            action_planner_info.action_data or {},
-                            cycle_timers,
-                            thinking_id,
-                            action_planner_info.action_message,
+                            action = action_planner_info.action_type,
+                            action_reasoning = action_planner_info.action_reasoning or "",
+                            action_data = action_planner_info.action_data or {},
+                            cycle_timers = cycle_timers,
+                            thinking_id = thinking_id,
+                            action_message= action_planner_info.action_message,
                         )
                     return {
                         "action_type": action_planner_info.action_type,

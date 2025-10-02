@@ -282,7 +282,7 @@ class BrainChatting:
                 prompt_info = (modified_message.llm_prompt, prompt_info[1])
 
             with Timer("规划器", cycle_timers):
-                action_to_use_info, _ = await self.action_planner.plan(
+                action_to_use_info = await self.action_planner.plan(
                     loop_start_time=self.last_read_time,
                     available_actions=available_actions,
                 )
@@ -413,8 +413,8 @@ class BrainChatting:
                 logger.warning(f"{self.log_prefix} 未能创建动作处理器: {action}")
                 return False, "", ""
 
-            # 处理动作并获取结果
-            result = await action_handler.execute()
+            # 处理动作并获取结果（固定记录一次动作信息）
+            result = await action_handler.run()
             success, action_text = result
             command = ""
 
@@ -481,11 +481,11 @@ class BrainChatting:
         try:
             with Timer(f"动作{action_planner_info.action_type}", cycle_timers):
                 if action_planner_info.action_type == "no_reply":
-                    # 直接处理no_action逻辑，不再通过动作系统
+                    # 直接处理no_reply逻辑，不再通过动作系统
                     reason = action_planner_info.reasoning or "选择不回复"
                     # logger.info(f"{self.log_prefix} 选择不回复，原因: {reason}")
 
-                    # 存储no_action信息到数据库
+                    # 存储no_reply信息到数据库
                     await database_api.store_action_info(
                         chat_stream=self.chat_stream,
                         action_build_into_prompt=False,
@@ -493,9 +493,9 @@ class BrainChatting:
                         action_done=True,
                         thinking_id=thinking_id,
                         action_data={"reason": reason},
-                        action_name="no_action",
+                        action_name="no_reply",
                     )
-                    return {"action_type": "no_action", "success": True, "reply_text": "", "command": ""}
+                    return {"action_type": "no_reply", "success": True, "reply_text": "", "command": ""}
 
                 elif action_planner_info.action_type == "reply":
                     try:

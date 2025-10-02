@@ -35,7 +35,7 @@ class CuriousAction(BaseAction):
 
     # 动作参数定义
     action_parameters = {
-        "question": "对存在疑问的信息提出一个问题，描述全面，使用无人称陈述句",
+        "question": "对存在疑问的信息提出一个问题，描述全面",
     }
 
     # 动作使用场景
@@ -64,7 +64,7 @@ class CuriousAction(BaseAction):
                 logger.info(f"已存储问题到冲突追踪器: {question}")
                 await self.store_action_info(
                     action_build_into_prompt=True,
-                    action_prompt_display=f"你产生了一个问题：{question}，尝试向其他人提问或回忆吧",
+                    action_prompt_display=f"你产生了一个问题：{question}，尝试向其他人提问或回忆",
                     action_done=True,
                 )
             return True, "问题已记录"

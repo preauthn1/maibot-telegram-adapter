@@ -48,7 +48,7 @@ class MemoryBuildPlugin(BasePlugin):
 
         # --- 根据配置注册组件 ---
         components = []
-        components.append((GetMemoryAction.get_action_info(), GetMemoryAction))
+        # components.append((GetMemoryAction.get_action_info(), GetMemoryAction))
         components.append((GetMemoryTool.get_tool_info(), GetMemoryTool))
 
         return components

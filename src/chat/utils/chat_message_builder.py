@@ -216,6 +216,7 @@ def get_actions_by_timestamp_with_chat(
             chat_id=action.chat_id,
             chat_info_stream_id=action.chat_info_stream_id,
             chat_info_platform=action.chat_info_platform,
+            action_reasoning=action.action_reasoning,
         )
         for action in actions
     ]
@@ -559,14 +560,12 @@ def build_readable_actions(actions: List[DatabaseActionRecords], mode: str = "re
     output_lines = []
     current_time = time.time()
 
-    # The get functions return actions sorted ascending by time. Let's reverse it to show newest first.
-    # sorted_actions = sorted(actions, key=lambda x: x.get("time", 0), reverse=True)
 
     for action in actions:
         action_time = action.time or current_time
         action_name = action.action_name or "未知动作"
         # action_reason = action.get(action_data")
-        if action_name in ["no_action", "no_action"]:
+        if action_name in ["no_reply", "no_reply"]:
             continue
 
         action_prompt_display = action.action_prompt_display or "无具体内容"
@@ -588,6 +587,7 @@ def build_readable_actions(actions: List[DatabaseActionRecords], mode: str = "re
 
         line = f"{time_ago_str}，你使用了“{action_name}”，具体内容是：“{action_prompt_display}”"
         output_lines.append(line)
+ 
 
     return "\n".join(output_lines)
 
