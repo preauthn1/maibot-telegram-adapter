@@ -191,18 +191,22 @@ class HeartFChatting:
             question_probability = 0.005
         else:
             question_probability = 0.001
+
+        question_probability = question_probability * global_config.chat.auto_chat_value
         
-        if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) > 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
+        if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) == 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
+            logger.info(f"{self.log_prefix} 长久没有回复，可以试试主动发言，概率: {question_probability}")
             if random.random() < question_probability: # 30%概率主动发言
-                print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
+                self.questioned = True
                 self.last_active_time = time.time()
+                print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
                 cycle_timers, thinking_id = self.start_cycle()
                 question_maker = QuestionMaker(self.stream_id)
                 question, conflict_context = await question_maker.make_question()
                 if question and conflict_context:
                     await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
                     await self._lift_question_reply(question,cycle_timers,thinking_id)
-                self.end_cycle(cycle_timers, thinking_id)
+                # self.end_cycle(cycle_timers, thinking_id)
 
 
         if len(recent_messages_list) >= 1:
@@ -740,6 +744,7 @@ class HeartFChatting:
                         enable_tool=global_config.tool.enable_tool,
                         request_type="replyer",
                         from_plugin=False,
+                        reply_time_point = action_planner_info.action_data.get("loop_start_time", time.time()),
                     )
 
                     if not success or not llm_response or not llm_response.reply_set:

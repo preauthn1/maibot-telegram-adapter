@@ -71,6 +71,7 @@ class DefaultReplyer:
         from_plugin: bool = True,
         stream_id: Optional[str] = None,
         reply_message: Optional[DatabaseMessages] = None,
+        reply_time_point: Optional[float] = time.time(),
     ) -> Tuple[bool, LLMGenerationDataModel]:
         # sourcery skip: merge-nested-ifs
         """
@@ -104,6 +105,7 @@ class DefaultReplyer:
                     enable_tool=enable_tool,
                     reply_message=reply_message,
                     reply_reason=reply_reason,
+                    reply_time_point=reply_time_point,
                 )
             llm_response.prompt = prompt
             llm_response.selected_expressions = selected_expressions
@@ -544,6 +546,7 @@ class DefaultReplyer:
         available_actions: Optional[Dict[str, ActionInfo]] = None,
         chosen_actions: Optional[List[ActionPlannerInfo]] = None,
         enable_tool: bool = True,
+        reply_time_point: Optional[float] = time.time(),
     ) -> Tuple[str, List[int]]:
         """
         构建回复器上下文
@@ -583,13 +586,13 @@ class DefaultReplyer:
 
         message_list_before_now_long = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,
-            timestamp=time.time(),
+            timestamp=reply_time_point,
             limit=global_config.chat.max_context_size * 1,
         )
 
         message_list_before_short = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,
-            timestamp=time.time(),
+            timestamp=reply_time_point,
             limit=int(global_config.chat.max_context_size * 0.33),
         )
 

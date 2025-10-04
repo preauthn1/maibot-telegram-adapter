@@ -79,6 +79,9 @@ class ChatConfig(ConfigBase):
     mentioned_bot_reply: bool = True
     """是否启用提及必回复"""
 
+    auto_chat_value: float = 1
+    """自动聊天，越小，麦麦主动聊天的概率越低"""
+
     at_bot_inevitable_reply: float = 1
     """@bot 必然回复，1为100%回复，0为不额外增幅"""
 
