@@ -53,7 +53,7 @@ class CuriousAction(BaseAction):
         """执行频率调节动作"""
         try:
             if len(global_conflict_tracker.question_tracker_list) > 1:
-                return False, "当前有太多问题，请先解答完再提问，不要再使用make_question动作"
+                return False, "当前已有问题，请先解答完再提问，不要再使用make_question动作"
             
             question = self.action_data.get("question", "")
 

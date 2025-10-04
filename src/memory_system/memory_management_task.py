@@ -112,7 +112,7 @@ class MemoryManagementTask(AsyncTask):
             logger.info(f"为 [{selected_title}] 找到 {len(related_contents)} 条相关记忆:{related_titles}")
             
             # 执行merge_memory合并记忆
-            merged_title, merged_content = await global_memory_chest.merge_memory(related_contents)
+            merged_title, merged_content = await global_memory_chest.merge_memory(related_contents,selected_chat_id)
             if not merged_title or not merged_content:
                 logger.warning("[记忆管理] 记忆合并失败，跳过删除")
                 return
