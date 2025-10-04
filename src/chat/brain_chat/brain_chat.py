@@ -397,7 +397,7 @@ class BrainChatting:
                 action_handler = self.action_manager.create_action(
                     action_name=action,
                     action_data=action_data,
-                    reasoning=reasoning,
+                    action_reasoning=reasoning,
                     cycle_timers=cycle_timers,
                     thinking_id=thinking_id,
                     chat_stream=self.chat_stream,
