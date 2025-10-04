@@ -194,7 +194,7 @@ class HeartFChatting:
 
         question_probability = question_probability * global_config.chat.auto_chat_value
         
-        print(f"{self.log_prefix}  questioned: {self.questioned},len: {len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id))}")
+        # print(f"{self.log_prefix}  questioned: {self.questioned},len: {len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id))}")
         if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) == 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
             logger.info(f"{self.log_prefix} 长久没有回复，可以试试主动发言，概率: {question_probability}")
             if random.random() < question_probability: # 30%概率主动发言
