@@ -67,6 +67,7 @@ class QuestionTracker:
             判定类型: "ANSWERED", "END", "CONTINUE"
         """
 
+        end_prompt = ""
         if chat_len > 20:
             end_prompt = "\n- 如果最新20条聊天记录内容与问题无关，话题已转向其他方向，请只输出：END"
 
