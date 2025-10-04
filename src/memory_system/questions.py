@@ -56,7 +56,7 @@ class QuestionTracker:
         """为对象提供哈希值，支持集合操作"""
         return hash((self.question, self.chat_id))
 
-    async def judge_answer(self, conversation_text: str) -> tuple[bool, str, str]:
+    async def judge_answer(self, conversation_text: str,chat_len: int) -> tuple[bool, str, str]:
         """
         使用模型判定问题是否已得到解答。
         
@@ -66,13 +66,16 @@ class QuestionTracker:
             - False: 继续跟踪
             判定类型: "ANSWERED", "END", "CONTINUE"
         """
+
+        if chat_len > 20:
+            end_prompt = "\n- 如果最新20条聊天记录内容与问题无关，话题已转向其他方向，请只输出：END"
+
         prompt = f"""你是一个严谨的判定器。下面给出聊天记录以及一个问题。
 任务：判断在这段聊天中，该问题是否已经得到明确解答。
 **你必须严格按照聊天记录的内容，不要添加额外的信息**
 
 输出规则：
-- 如果聊天记录内容的信息已解答问题，请只输出：YES: <简短答案>
-- 如果最新20条聊天记录内容与问题无关，话题已转向其他方向，请只输出：END
+- 如果聊天记录内容的信息已解答问题，请只输出：YES: <简短答案>{end_prompt}
 - 如果问题尚未解答但聊天仍在相关话题上，请只输出：NO
 
 **问题**
@@ -233,9 +236,9 @@ class ConflictTracker:
                         show_pic=False,
                         remove_emoji_stickers=True,
                     )
-
+                    chat_len = len(all_msgs)
                     # 让小模型判断是否有答案
-                    answered, answer_text, judge_type = await tracker.judge_answer(chat_text)
+                    answered, answer_text, judge_type = await tracker.judge_answer(chat_text,chat_len)
                     
                     if judge_type == "ANSWERED":
                         # 问题已解答，直接结束跟踪
