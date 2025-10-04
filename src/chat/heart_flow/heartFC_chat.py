@@ -171,7 +171,7 @@ class HeartFChatting:
             + (f"详情: {'; '.join(timer_strings)}" if timer_strings else "")
         )
 
-    async def _loopbody(self):  # sourcery skip: hoist-if-from-if
+    async def _loopbody(self):  
         recent_messages_list = message_api.get_messages_by_time_in_chat(
             chat_id=self.stream_id,
             start_time=self.last_read_time,
