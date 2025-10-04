@@ -181,9 +181,9 @@ class HeartFChatting:
         )
 
         force_reply = False
-        if time.time() - self.last_active_time > 1: #长久没有回复，可以试试主动发言
+        if time.time() - self.last_active_time > 300: #长久没有回复，可以试试主动发言
             print(f"{self.log_prefix} 长久没有回复，可以试试主动发言")
-            if random.random() < 0.01: # 30%概率主动发言
+            if random.random() < 0.02: # 30%概率主动发言
                 print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
                 cycle_timers, thinking_id = self.start_cycle()
                 question_maker = QuestionMaker(self.stream_id)
