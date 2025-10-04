@@ -194,19 +194,25 @@ class HeartFChatting:
 
         question_probability = question_probability * global_config.chat.auto_chat_value
         
+        print(f"{self.log_prefix}  questioned: {self.questioned},len: {len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id))}")
         if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) == 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
             logger.info(f"{self.log_prefix} 长久没有回复，可以试试主动发言，概率: {question_probability}")
             if random.random() < question_probability: # 30%概率主动发言
-                self.questioned = True
-                self.last_active_time = time.time()
-                print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
-                cycle_timers, thinking_id = self.start_cycle()
-                question_maker = QuestionMaker(self.stream_id)
-                question, conflict_context = await question_maker.make_question()
-                if question and conflict_context:
-                    await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
-                    await self._lift_question_reply(question,cycle_timers,thinking_id)
-                # self.end_cycle(cycle_timers, thinking_id)
+                try:
+                    self.questioned = True
+                    self.last_active_time = time.time()
+                    print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
+                    cycle_timers, thinking_id = self.start_cycle()
+                    question_maker = QuestionMaker(self.stream_id)
+                    question, conflict_context = await question_maker.make_question()
+                    logger.info(f"{self.log_prefix} 问题: {question}")
+                    if question:
+                        await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
+                        await self._lift_question_reply(question,cycle_timers,thinking_id)
+                    # self.end_cycle(cycle_timers, thinking_id)
+                except Exception as e:
+                    logger.error(f"{self.log_prefix} 主动提问失败: {e}")
+                    print(traceback.format_exc())
 
 
         if len(recent_messages_list) >= 1:
