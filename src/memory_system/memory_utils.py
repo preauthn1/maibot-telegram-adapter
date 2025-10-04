@@ -218,3 +218,89 @@ def check_title_exists_fuzzy(target_title: str, similarity_threshold: float = 0.
     except Exception as e:
         logger.error(f"检查标题是否存在时出错: {e}")
         return False
+
+
+def get_memories_by_chat_id_weighted(target_chat_id: str, same_chat_weight: float = 0.95, other_chat_weight: float = 0.05) -> List[Tuple[str, str, str]]:
+    """
+    根据chat_id进行加权抽样获取记忆列表
+    
+    Args:
+        target_chat_id: 目标聊天ID
+        same_chat_weight: 同chat_id记忆的权重，默认0.95（95%概率）
+        other_chat_weight: 其他chat_id记忆的权重，默认0.05（5%概率）
+        
+    Returns:
+        List[Tuple[str, str, str]]: 选中的记忆列表，每个元素为(title, content, chat_id)
+    """
+    try:
+        # 获取所有记忆
+        all_memories = MemoryChestModel.select()
+        
+        # 按chat_id分组
+        same_chat_memories = []
+        other_chat_memories = []
+        
+        for memory in all_memories:
+            if memory.title and not memory.locked:  # 排除锁定的记忆
+                if memory.chat_id == target_chat_id:
+                    same_chat_memories.append((memory.title, memory.content, memory.chat_id))
+                else:
+                    other_chat_memories.append((memory.title, memory.content, memory.chat_id))
+        
+        # 如果没有同chat_id的记忆，返回空列表
+        if not same_chat_memories:
+            logger.warning(f"未找到chat_id为 '{target_chat_id}' 的记忆")
+            return []
+        
+        # 计算抽样数量
+        total_same = len(same_chat_memories)
+        total_other = len(other_chat_memories)
+        
+        # 根据权重计算抽样数量
+        if total_other > 0:
+            # 计算其他chat_id记忆的抽样数量（至少1个，最多不超过总数的10%）
+            other_sample_count = max(1, min(total_other, int(total_same * other_chat_weight / same_chat_weight)))
+        else:
+            other_sample_count = 0
+        
+        # 随机抽样
+        selected_memories = []
+        
+        # 选择同chat_id的记忆（全部选择，因为权重很高）
+        selected_memories.extend(same_chat_memories)
+        
+        # 随机选择其他chat_id的记忆
+        if other_sample_count > 0 and total_other > 0:
+            import random
+            other_selected = random.sample(other_chat_memories, min(other_sample_count, total_other))
+            selected_memories.extend(other_selected)
+        
+        logger.info(f"加权抽样结果: 同chat_id记忆 {len(same_chat_memories)} 条，其他chat_id记忆 {min(other_sample_count, total_other)} 条")
+        
+        return selected_memories
+        
+    except Exception as e:
+        logger.error(f"按chat_id加权抽样记忆时出错: {e}")
+        return []
+
+
+def get_memory_titles_by_chat_id_weighted(target_chat_id: str, same_chat_weight: float = 0.95, other_chat_weight: float = 0.05) -> List[str]:
+    """
+    根据chat_id进行加权抽样获取记忆标题列表（用于合并选择）
+    
+    Args:
+        target_chat_id: 目标聊天ID
+        same_chat_weight: 同chat_id记忆的权重，默认0.95（95%概率）
+        other_chat_weight: 其他chat_id记忆的权重，默认0.05（5%概率）
+        
+    Returns:
+        List[str]: 选中的记忆标题列表
+    """
+    try:
+        memories = get_memories_by_chat_id_weighted(target_chat_id, same_chat_weight, other_chat_weight)
+        titles = [memory[0] for memory in memories]  # 提取标题
+        return titles
+        
+    except Exception as e:
+        logger.error(f"按chat_id加权抽样记忆标题时出错: {e}")
+        return []

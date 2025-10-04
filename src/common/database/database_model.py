@@ -324,6 +324,7 @@ class MemoryChest(BaseModel):
 
     title = TextField()  # 标题
     content = TextField()  # 内容
+    chat_id = TextField(null=True)  # 聊天ID
     locked = BooleanField(default=False)  # 是否锁定
 
     class Meta:
@@ -339,6 +340,7 @@ class MemoryConflict(BaseModel):
     create_time = FloatField()  # 创建时间
     update_time = FloatField()  # 更新时间
     context = TextField(null=True)  # 上下文
+    chat_id = TextField(null=True)  # 聊天ID
 
     class Meta:
         table_name = "memory_conflicts"

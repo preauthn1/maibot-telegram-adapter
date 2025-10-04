@@ -104,6 +104,8 @@ class HeartFChatting:
         self.is_mute = False
 
         self.last_active_time = time.time() # 记录上一次非noreply时间
+
+        self.questioned = False
         
 
     async def start(self):
@@ -180,16 +182,27 @@ class HeartFChatting:
             filter_command=True,
         )
 
-        force_reply = False
-        if time.time() - self.last_active_time > 300: #长久没有回复，可以试试主动发言
-            print(f"{self.log_prefix} 长久没有回复，可以试试主动发言")
-            if random.random() < 0.02: # 30%概率主动发言
+        question_probability = 0
+        if time.time() - self.last_active_time > 1200:
+            question_probability = 0.04
+        elif time.time() - self.last_active_time > 600:
+            question_probability = 0.02
+        elif time.time() - self.last_active_time > 300:
+            question_probability = 0.005
+        else:
+            question_probability = 0.001
+        
+        if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) > 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
+            if random.random() < question_probability: # 30%概率主动发言
                 print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
+                self.last_active_time = time.time()
                 cycle_timers, thinking_id = self.start_cycle()
                 question_maker = QuestionMaker(self.stream_id)
                 question, conflict_context = await question_maker.make_question()
-                await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
-                await self._lift_question_reply(question,cycle_timers,thinking_id)
+                if question and conflict_context:
+                    await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
+                    await self._lift_question_reply(question,cycle_timers,thinking_id)
+                self.end_cycle(cycle_timers, thinking_id)
 
 
         if len(recent_messages_list) >= 1:
@@ -703,6 +716,8 @@ class HeartFChatting:
 
                 elif action_planner_info.action_type == "reply":
                     # 直接当场执行reply逻辑
+                    self.questioned = False
+                    # 刷新主动发言状态
 
                     reason = action_planner_info.reasoning or "选择回复"
                     await database_api.store_action_info(

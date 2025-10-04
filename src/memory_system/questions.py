@@ -165,6 +165,7 @@ class ConflictTracker:
                 create_time=time.time(),
                 update_time=time.time(),
                 answer="",
+                chat_id=chat_id,
             )
 
             logger.info(f"记录冲突内容: {len(conflict_content)} 字符")
@@ -278,6 +279,7 @@ class ConflictTracker:
                 create_time=time.time(),
                 update_time=time.time(),
                 answer="",
+                chat_id=tracker.chat_id,
             )
             logger.info(f"记录冲突内容(未解答): {len(original_question)} 字符")
             logger.info(f"问题跟踪结束：{original_question}")
@@ -304,7 +306,15 @@ class ConflictTracker:
         except Exception as e:
             logger.error(f"移除追踪器时出错: {e}")
 
-    async def add_or_update_conflict(self,conflict_content: str,create_time: float,update_time: float,answer: str = "",context: str = "") -> bool:
+    async def add_or_update_conflict(
+        self,
+        conflict_content: str,
+        create_time: float,
+        update_time: float,
+        answer: str = "",
+        context: str = "",
+        chat_id: str = None
+    ) -> bool:
         """
         根据conflict_content匹配数据库内容，如果找到相同的就更新update_time和answer，
         如果没有相同的，就新建一条保存全部内容
@@ -312,7 +322,8 @@ class ConflictTracker:
         try:
             # 尝试根据conflict_content查找现有记录
             existing_conflict = MemoryConflict.get_or_none(
-                MemoryConflict.conflict_content == conflict_content
+                MemoryConflict.conflict_content == conflict_content,
+                MemoryConflict.chat_id == chat_id
             )
             
             if existing_conflict:
@@ -329,6 +340,7 @@ class ConflictTracker:
                     update_time=update_time,
                     answer=answer,
                     context=context,
+                    chat_id=chat_id,
                 )
                 return True
         except Exception as e:
@@ -336,7 +348,7 @@ class ConflictTracker:
             logger.error(f"添加或更新冲突记录时出错: {e}")
             return False
 
-    async def record_memory_merge_conflict(self, part2_content: str) -> bool:
+    async def record_memory_merge_conflict(self, part2_content: str, chat_id: str = None) -> bool:
         """
         记录记忆整合过程中的冲突内容（part2）
 
@@ -386,6 +398,7 @@ class ConflictTracker:
                 conflict_content=question["question"], 
                 context=reasoning_content, 
                 start_following=False,
+                chat_id=chat_id,
             )
         return True
 

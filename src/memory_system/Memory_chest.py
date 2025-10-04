@@ -13,10 +13,12 @@ from src.plugin_system.apis.message_api import build_readable_messages
 from src.plugin_system.apis.message_api import get_raw_msg_by_timestamp_with_chat
 from json_repair import repair_json
 from src.memory_system.questions import global_conflict_tracker
+
 from .memory_utils import (
     find_best_matching_memory,
     check_title_exists_fuzzy,
     get_all_titles,
+    get_memory_titles_by_chat_id_weighted,
 
 )
 
@@ -306,7 +308,6 @@ class MemoryChest:
         title, (reasoning_content, model_name, tool_calls) = await self.LLMRequest.generate_response_async(prompt)
 
         # 根据 title 获取 titles 里的对应项
-        titles = get_all_titles()
         selected_title = None
 
         # 使用模糊查找匹配标题
@@ -379,7 +380,8 @@ class MemoryChest:
                 # 保存到数据库
                 MemoryChestModel.create(
                     title=title.strip(),
-                    content=content
+                    content=content,
+                    chat_id=chat_id
                 )
                 logger.info(f"已保存记忆仓库内容，标题: {title.strip()}, chat_id: {chat_id}")
 
@@ -393,24 +395,26 @@ class MemoryChest:
         except Exception as e:
             logger.error(f"保存记忆仓库内容时出错: {e}")
     
-    async def choose_merge_target(self, memory_title: str) -> list[str]:
+    async def choose_merge_target(self, memory_title: str, chat_id: str = None) -> list[str]:
         """
         选择与给定记忆标题相关的记忆目标
 
         Args:
             memory_title: 要匹配的记忆标题
+            chat_id: 聊天ID，用于加权抽样
 
         Returns:
             list[str]: 选中的记忆内容列表
         """
         try:
-            all_titles = get_all_titles(exclude_locked=True)
+        # 如果提供了chat_id，使用加权抽样
+            all_titles = get_memory_titles_by_chat_id_weighted(chat_id)
+            # 剔除掉输入的 memory_title 本身
+            all_titles = [title for title in all_titles if title and title.strip() != (memory_title or "").strip()]
+            
             content = ""
             display_index = 1
             for title in all_titles:
-                # 剔除掉输入的 memory_title 本身
-                if title and title.strip() == (memory_title or "").strip():
-                    continue
                 content += f"{display_index}. {title}\n"
                 display_index += 1
             
@@ -615,7 +619,7 @@ class MemoryChest:
             logger.error(f"解析合并目标JSON时出错: {e}")
             return []
             
-    async def merge_memory(self,memory_list: list[str]) -> tuple[str, str]:
+    async def merge_memory(self,memory_list: list[str], chat_id: str = None) -> tuple[str, str]:
         """
         合并记忆
         """
@@ -670,7 +674,7 @@ class MemoryChest:
             if part2_content and part2_content.strip() != "none":
                 logger.info(f"合并记忆part2记录冲突内容: {len(part2_content)} 字符")
                 # 记录冲突到数据库
-                await global_conflict_tracker.record_memory_merge_conflict(part2_content)
+                await global_conflict_tracker.record_memory_merge_conflict(part2_content,chat_id)
 
             # 处理part1：生成标题并保存
             if part1_content and part1_content.strip() != "none":
@@ -679,7 +683,8 @@ class MemoryChest:
                 # 保存part1到数据库
                 MemoryChestModel.create(
                     title=merged_title,
-                    content=part1_content
+                    content=part1_content,
+                    chat_id=chat_id
                 )
 
                 logger.info(f"合并记忆part1已保存: {merged_title}")

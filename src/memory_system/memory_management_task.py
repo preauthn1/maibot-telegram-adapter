@@ -97,14 +97,14 @@ class MemoryManagementTask(AsyncTask):
             if current_count < 10:
                 return
             
-            # 随机选择一个记忆标题
-            selected_title = self._get_random_memory_title()
+            # 随机选择一个记忆标题和chat_id
+            selected_title, selected_chat_id = self._get_random_memory_title()
             if not selected_title:
                 logger.warning("无法获取随机记忆标题，跳过执行")
                 return
             
             # 执行choose_merge_target获取相关记忆（标题与内容）
-            related_titles, related_contents = await global_memory_chest.choose_merge_target(selected_title)
+            related_titles, related_contents = await global_memory_chest.choose_merge_target(selected_title, selected_chat_id)
             if not related_titles or not related_contents:
                 logger.info("无合适合并内容，跳过本次合并")
                 return
@@ -127,21 +127,21 @@ class MemoryManagementTask(AsyncTask):
         except Exception as e:
             logger.error(f"[记忆管理] 执行记忆管理任务时发生错误: {e}", exc_info=True)
     
-    def _get_random_memory_title(self) -> str:
-        """随机获取一个记忆标题"""
+    def _get_random_memory_title(self) -> tuple[str, str]:
+        """随机获取一个记忆标题和对应的chat_id"""
         try:
-            # 获取所有记忆标题
-            all_titles = get_all_titles()
-            if not all_titles:
-                return ""
+            # 获取所有记忆记录
+            all_memories = MemoryChestModel.select()
+            if not all_memories:
+                return "", ""
             
-            # 随机选择一个标题
-            selected_title = random.choice(all_titles)
-            return selected_title
+            # 随机选择一个记忆
+            selected_memory = random.choice(list(all_memories))
+            return selected_memory.title, selected_memory.chat_id or ""
             
         except Exception as e:
             logger.error(f"[记忆管理] 获取随机记忆标题时发生错误: {e}")
-            return ""
+            return "", ""
     
     def _delete_original_memories(self, related_titles: List[str]) -> int:
         """按标题删除原始记忆"""

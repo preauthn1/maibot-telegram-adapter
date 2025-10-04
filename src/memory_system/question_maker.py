@@ -26,7 +26,7 @@ class QuestionMaker:
 
 
     async def get_all_conflicts(self):
-        conflicts = list(MemoryConflict.select())
+        conflicts = list(MemoryConflict.select().where(MemoryConflict.chat_id == self.chat_id))
         return conflicts
     
     async def get_un_answered_conflict(self):
@@ -35,10 +35,14 @@ class QuestionMaker:
 
     async def get_random_unanswered_conflict(self):
         conflicts = await self.get_un_answered_conflict()
+        if not conflicts:
+            return None
         return random.choice(conflicts)
 
     async def make_question(self):
         conflict = await self.get_random_unanswered_conflict()
+        if not conflict:
+            return None, None
         question = conflict.conflict_content
         conflict_context = conflict.context
         chat_context = self.get_context()
