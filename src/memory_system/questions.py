@@ -245,6 +245,7 @@ class ConflictTracker:
                             create_time=tracker.start_time,
                             update_time=time.time(),
                             answer=answer_text or "",
+                            chat_id=tracker.chat_id,
                         )
                         return
                     elif judge_type == "END":
