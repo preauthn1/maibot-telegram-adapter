@@ -7,6 +7,7 @@ import re
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 from src.memory_system.Memory_chest import global_memory_chest
+from src.memory_system.questions import global_conflict_tracker
 from src.common.logger import get_logger
 from src.common.data_models.database_data_model import DatabaseMessages
 from src.common.data_models.info_data_model import ActionPlannerInfo
@@ -276,6 +277,20 @@ class DefaultReplyer:
             return f"你有以下记忆：\n{global_memory_chest.get_chat_memories_as_string(self.chat_stream.stream_id)}"
         else:
             return ""
+
+    async def build_question_block(self) -> str:
+        """构建问题块"""
+        # if not global_config.question.enable_question:
+            # return ""
+        questions = global_conflict_tracker.get_questions_by_chat_id(self.chat_stream.stream_id)
+        questions_str = ""
+        for question in questions:
+            questions_str += f"- {question.question}\n"
+        if questions_str:
+            return f"你在聊天中，有以下问题想要得到解答：\n{questions_str}"
+        else:
+            return ""
+    
 
     async def build_tool_info(self, chat_history: str, sender: str, target: str, enable_tool: bool = True) -> str:
         """构建工具信息块
@@ -619,6 +634,7 @@ class DefaultReplyer:
             self._time_and_run_task(self.build_actions_prompt(available_actions, chosen_actions), "actions_info"),
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
             self._time_and_run_task(self.build_mood_state_prompt(), "mood_state_prompt"),
+            self._time_and_run_task(self.build_question_block(), "question_block"),
         )
 
         # 任务名称中英文映射
@@ -632,6 +648,7 @@ class DefaultReplyer:
             "actions_info": "动作信息",
             "personality_prompt": "人格信息",
             "mood_state_prompt": "情绪状态",
+            "question_block": "问题",
         }
 
         # 处理结果
@@ -661,6 +678,7 @@ class DefaultReplyer:
         prompt_info: str = results_dict["prompt_info"]  # 直接使用格式化后的结果
         actions_info: str = results_dict["actions_info"]
         personality_prompt: str = results_dict["personality_prompt"]
+        question_block: str = results_dict["question_block"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
         mood_state_prompt: str = results_dict["mood_state_prompt"]
 
@@ -704,6 +722,7 @@ class DefaultReplyer:
                 target=target,
                 reason=reply_reason,
                 reply_style=global_config.personality.reply_style,
+                question_block=question_block,
                 keywords_reaction_prompt=keywords_reaction_prompt,
                 moderation_prompt=moderation_prompt_block,
             ), selected_expressions
@@ -728,6 +747,7 @@ class DefaultReplyer:
                 reply_style=global_config.personality.reply_style,
                 keywords_reaction_prompt=keywords_reaction_prompt,
                 moderation_prompt=moderation_prompt_block,
+                question_block=question_block,
             ), selected_expressions
 
     async def build_prompt_rewrite_context(
@@ -760,7 +780,6 @@ class DefaultReplyer:
         # 并行执行2个构建任务
         (expression_habits_block, _), personality_prompt = await asyncio.gather(
             self.build_expression_habits(chat_talking_prompt_half, target),
-            # self.build_relation_info(chat_talking_prompt_half, sender, []),
             self.build_personality_prompt(),
         )
 

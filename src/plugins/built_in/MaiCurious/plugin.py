@@ -16,7 +16,7 @@ from src.plugin_system.base.component_types import ActionActivationType
 from src.plugin_system.apis import config_api
 from src.plugin_system.apis import frequency_api
 from src.plugin_system.apis import generator_api
-from src.curiousity.questions import global_conflict_tracker
+from src.memory_system.questions import global_conflict_tracker
 
 logger = get_logger("question_actions")
 
@@ -25,7 +25,7 @@ logger = get_logger("question_actions")
 class CuriousAction(BaseAction):
     """频率调节动作 - 调整聊天发言频率"""
 
-    activation_type = ActionActivationType.LLM_JUDGE
+    activation_type = ActionActivationType.ALWAYS
     parallel_action = True
 
     # 动作基本信息
@@ -37,10 +37,6 @@ class CuriousAction(BaseAction):
     action_parameters = {
         "question": "对存在疑问的信息提出一个问题，描述全面",
     }
-
-    # 动作使用场景
-    bot_name = config_api.get_global_config("bot.nickname")
-    
     
     action_require = [
         f"当聊天记录中的信息存在逻辑上的矛盾时使用",
@@ -56,6 +52,9 @@ class CuriousAction(BaseAction):
     async def execute(self) -> Tuple[bool, str]:
         """执行频率调节动作"""
         try:
+            if len(global_conflict_tracker.question_tracker_list) > 3:
+                return False, "当前有太多问题，请先解答完再提问，不要再使用make_question动作"
+            
             question = self.action_data.get("question", "")
 
             # 存储问题到冲突追踪器
@@ -64,10 +63,10 @@ class CuriousAction(BaseAction):
                 logger.info(f"已存储问题到冲突追踪器: {question}")
                 await self.store_action_info(
                     action_build_into_prompt=True,
-                    action_prompt_display=f"你产生了一个问题：{question}，尝试向其他人提问或回忆",
+                    action_prompt_display=f"你产生了一个问题：{question}",
                     action_done=True,
                 )
-            return True, "问题已记录"
+            return True, f"问题{question}已记录，不要重复提问该问题"
         except Exception as e:
             error_msg = f"问题生成失败: {str(e)}"
             logger.error(f"{self.log_prefix} {error_msg}", exc_info=True)
@@ -103,7 +102,7 @@ class CuriousPlugin(BasePlugin):
     # 配置Schema定义
     config_schema: dict = {
         "plugin": {
-            "enabled": ConfigField(type=bool, default=False, description="是否启用插件"),
+            "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
             "config_version": ConfigField(type=str, default="3.0.0", description="配置文件版本"),
         }
     }

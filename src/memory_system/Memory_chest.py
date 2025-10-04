@@ -12,9 +12,12 @@ from src.config.config import global_config
 from src.plugin_system.apis.message_api import build_readable_messages
 from src.plugin_system.apis.message_api import get_raw_msg_by_timestamp_with_chat
 from json_repair import repair_json
+from src.memory_system.questions import global_conflict_tracker
 from .memory_utils import (
     find_best_matching_memory,
-    check_title_exists_fuzzy
+    check_title_exists_fuzzy,
+    get_all_titles,
+
 )
 
 logger = get_logger("memory")
@@ -186,32 +189,6 @@ class MemoryChest:
             return running_content
         
         
-    
-
-    def get_all_titles(self, exclude_locked: bool = False) -> list[str]:
-        """
-        获取记忆仓库中的所有标题
-
-        Args:
-            exclude_locked: 是否排除锁定的记忆，默认为 False
-
-        Returns:
-            list: 包含所有标题的列表
-        """
-        try:
-            # 查询所有记忆记录的标题
-            titles = []
-            for memory in MemoryChestModel.select():
-                if memory.title:
-                    # 如果 exclude_locked 为 True 且记忆已锁定，则跳过
-                    if exclude_locked and memory.locked:
-                        continue
-                    titles.append(memory.title)
-            return titles
-        except Exception as e:
-            print(f"获取记忆标题时出错: {e}")
-            return []
-        
     async def get_answer_by_question(self, chat_id: str = "", question: str = "") -> str:
         """
         根据问题获取答案
@@ -306,7 +283,7 @@ class MemoryChest:
             str: 选择的标题
         """
         # 获取所有标题并构建格式化字符串（排除锁定的记忆）
-        titles = self.get_all_titles(exclude_locked=True)
+        titles = get_all_titles(exclude_locked=True)
         formatted_titles = ""
         for title in titles:
             formatted_titles += f"{title}\n"
@@ -329,7 +306,7 @@ class MemoryChest:
         title, (reasoning_content, model_name, tool_calls) = await self.LLMRequest.generate_response_async(prompt)
 
         # 根据 title 获取 titles 里的对应项
-        titles = self.get_all_titles()
+        titles = get_all_titles()
         selected_title = None
 
         # 使用模糊查找匹配标题
@@ -427,7 +404,7 @@ class MemoryChest:
             list[str]: 选中的记忆内容列表
         """
         try:
-            all_titles = self.get_all_titles(exclude_locked=True)
+            all_titles = get_all_titles(exclude_locked=True)
             content = ""
             display_index = 1
             for title in all_titles:
@@ -462,7 +439,7 @@ class MemoryChest:
 请输出JSON格式，不要输出其他内容：
 """
 
-            logger.info(f"选择合并目标 prompt: {prompt}")
+            # logger.info(f"选择合并目标 prompt: {prompt}")
 
             if global_config.debug.show_prompt:
                 logger.info(f"选择合并目标 prompt: {prompt}")
@@ -692,8 +669,6 @@ class MemoryChest:
             # 处理part2：独立记录冲突内容（无论part1是否为空）
             if part2_content and part2_content.strip() != "none":
                 logger.info(f"合并记忆part2记录冲突内容: {len(part2_content)} 字符")
-                # 导入冲突追踪器
-                from src.curiousity.questions import global_conflict_tracker
                 # 记录冲突到数据库
                 await global_conflict_tracker.record_memory_merge_conflict(part2_content)
 

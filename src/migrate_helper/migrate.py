@@ -1,7 +1,6 @@
 import json
 import os
 import asyncio
-from src.common.database.database_model import GraphNodes
 from src.common.logger import get_logger
 
 logger = get_logger("migrate")

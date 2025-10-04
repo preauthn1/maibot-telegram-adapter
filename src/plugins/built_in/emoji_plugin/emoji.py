@@ -138,7 +138,7 @@ class EmojiAction(BaseAction):
                     action_prompt_display=f"你发送了表情包，原因：{reason}",
                     action_done=True,
                 )
-                return True, f"成功发送表情包:{emoji_description}"
+                return True, f"成功发送表情包:[表情包：{chosen_emotion}]"
             else:
                 error_msg = "发送表情包失败"
                 logger.error(f"{self.log_prefix} {error_msg}")

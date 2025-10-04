@@ -3,15 +3,79 @@
 记忆系统工具函数
 包含模糊查找、相似度计算等工具函数
 """
+import json
 import re
 from difflib import SequenceMatcher
 from typing import List, Tuple, Optional
 
 from src.common.database.database_model import MemoryChest as MemoryChestModel
 from src.common.logger import get_logger
+from json_repair import repair_json
+
 
 logger = get_logger("memory_utils")
 
+def get_all_titles(exclude_locked: bool = False) -> list[str]:
+    """
+    获取记忆仓库中的所有标题
+
+    Args:
+        exclude_locked: 是否排除锁定的记忆，默认为 False
+
+    Returns:
+        list: 包含所有标题的列表
+    """
+    try:
+        # 查询所有记忆记录的标题
+        titles = []
+        for memory in MemoryChestModel.select():
+            if memory.title:
+                # 如果 exclude_locked 为 True 且记忆已锁定，则跳过
+                if exclude_locked and memory.locked:
+                    continue
+                titles.append(memory.title)
+        return titles
+    except Exception as e:
+        print(f"获取记忆标题时出错: {e}")
+        return []
+
+def parse_md_json(json_text: str) -> list[str]:
+    """从Markdown格式的内容中提取JSON对象和推理内容"""
+    json_objects = []
+    reasoning_content = ""
+
+    # 使用正则表达式查找```json包裹的JSON内容
+    json_pattern = r"```json\s*(.*?)\s*```"
+    matches = re.findall(json_pattern, json_text, re.DOTALL)
+
+    # 提取JSON之前的内容作为推理文本
+    if matches:
+        # 找到第一个```json的位置
+        first_json_pos = json_text.find("```json")
+        if first_json_pos > 0:
+            reasoning_content = json_text[:first_json_pos].strip()
+            # 清理推理内容中的注释标记
+            reasoning_content = re.sub(r"^//\s*", "", reasoning_content, flags=re.MULTILINE)
+            reasoning_content = reasoning_content.strip()
+
+    for match in matches:
+        try:
+            # 清理可能的注释和格式问题
+            json_str = re.sub(r"//.*?\n", "\n", match)  # 移除单行注释
+            json_str = re.sub(r"/\*.*?\*/", "", json_str, flags=re.DOTALL)  # 移除多行注释
+            if json_str := json_str.strip():
+                json_obj = json.loads(json_str)
+                if isinstance(json_obj, dict):
+                    json_objects.append(json_obj)
+                elif isinstance(json_obj, list):
+                    for item in json_obj:
+                        if isinstance(item, dict):
+                            json_objects.append(item)
+        except Exception as e:
+            logger.warning(f"解析JSON块失败: {e}, 块内容: {match[:100]}...")
+            continue
+
+    return json_objects, reasoning_content
 
 def calculate_similarity(text1: str, text2: str) -> float:
     """

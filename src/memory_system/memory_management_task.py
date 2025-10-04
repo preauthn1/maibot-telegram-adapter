@@ -8,6 +8,7 @@ from src.memory_system.Memory_chest import global_memory_chest
 from src.common.logger import get_logger
 from src.common.database.database_model import MemoryChest as MemoryChestModel
 from src.config.config import global_config
+from src.memory_system.memory_utils import get_all_titles
 
 logger = get_logger("memory")
 
@@ -130,7 +131,7 @@ class MemoryManagementTask(AsyncTask):
         """随机获取一个记忆标题"""
         try:
             # 获取所有记忆标题
-            all_titles = global_memory_chest.get_all_titles()
+            all_titles = get_all_titles()
             if not all_titles:
                 return ""
             

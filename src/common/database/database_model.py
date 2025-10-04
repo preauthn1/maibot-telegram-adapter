@@ -338,43 +338,11 @@ class MemoryConflict(BaseModel):
     answer = TextField(null=True)  # 回答内容
     create_time = FloatField()  # 创建时间
     update_time = FloatField()  # 更新时间
+    context = TextField(null=True)  # 上下文
 
     class Meta:
         table_name = "memory_conflicts"
-    
-    
 
-
-class GraphNodes(BaseModel):
-    """
-    用于存储记忆图节点的模型
-    """
-
-    concept = TextField(unique=True, index=True)  # 节点概念
-    memory_items = TextField()  # JSON格式存储的记忆列表
-    weight = FloatField(default=0.0)  # 节点权重
-    hash = TextField()  # 节点哈希值
-    created_time = FloatField()  # 创建时间戳
-    last_modified = FloatField()  # 最后修改时间戳
-
-    class Meta:
-        table_name = "graph_nodes"
-
-
-class GraphEdges(BaseModel):
-    """
-    用于存储记忆图边的模型
-    """
-
-    source = TextField(index=True)  # 源节点
-    target = TextField(index=True)  # 目标节点
-    strength = IntegerField()  # 连接强度
-    hash = TextField()  # 边哈希值
-    created_time = FloatField()  # 创建时间戳
-    last_modified = FloatField()  # 最后修改时间戳
-
-    class Meta:
-        table_name = "graph_edges"
 
 
 def create_tables():
@@ -393,8 +361,6 @@ def create_tables():
                 OnlineTime,
                 PersonInfo,
                 Expression,
-                GraphNodes,  # 添加图节点表
-                GraphEdges,  # 添加图边表
                 ActionRecords,  # 添加 ActionRecords 到初始化列表
                 MemoryChest,
                 MemoryConflict,  # 添加记忆冲突表
@@ -422,8 +388,6 @@ def initialize_database(sync_constraints=False):
         OnlineTime,
         PersonInfo,
         Expression,
-        GraphNodes,
-        GraphEdges,
         ActionRecords,  # 添加 ActionRecords 到初始化列表
         MemoryChest,
         MemoryConflict,
@@ -521,8 +485,6 @@ def sync_field_constraints():
         OnlineTime,
         PersonInfo,
         Expression,
-        GraphNodes,
-        GraphEdges,
         ActionRecords,
         MemoryChest,
         MemoryConflict,

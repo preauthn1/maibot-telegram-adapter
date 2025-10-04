@@ -288,7 +288,7 @@ class PrivateReplyer:
         mood_state = await mood_manager.get_mood_by_chat_id(self.chat_stream.stream_id).get_mood()
         return f"你现在的心情是：{mood_state}"
 
-    
+
     async def build_memory_block(self) -> str:
         """构建记忆块
         """
