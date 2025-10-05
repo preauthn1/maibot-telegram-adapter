@@ -500,8 +500,8 @@ def filter_mai_messages(messages: List[DatabaseMessages]) -> List[DatabaseMessag
 def translate_pid_to_description(pid: str) -> str:
     image = Images.get_or_none(Images.image_id == pid)
     description = ""
-    if image and image.description:
-        description = image.description
+    if image and image.description and image.description.strip():
+        description = image.description.strip()
     else:
         description = "[图片]"
     return description

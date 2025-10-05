@@ -405,9 +405,14 @@ class DefaultReplyer:
         if picid_matches:
             pic_descriptions = []
             for picid_match in picid_matches:
-                pic_id = picid_match[6:-1]  # 提取picid:xxx中的xxx部分
+                pic_id = picid_match[7:-1]  # 提取picid:xxx中的xxx部分（从第7个字符开始）
                 description = translate_pid_to_description(pic_id)
-                pic_descriptions.append(f"[图片:{description}]")
+                logger.info(f"图片ID: {pic_id}, 描述: {description}")
+                # 如果description已经是[图片]格式，直接使用；否则包装为[图片:描述]格式
+                if description == "[图片]":
+                    pic_descriptions.append(description)
+                else:
+                    pic_descriptions.append(f"[图片:{description}]")
             pic_part = "".join(pic_descriptions)
         
         return has_only_pics, has_text, pic_part, text_without_picids

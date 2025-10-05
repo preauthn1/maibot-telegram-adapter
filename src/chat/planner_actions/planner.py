@@ -49,6 +49,8 @@ reply
 动作描述：
 1.你可以选择呼叫了你的名字，但是你没有做出回应的消息进行回复
 2.你可以自然的顺着正在进行的聊天内容进行回复或自然的提出一个问题
+3.不要回复你自己发送的消息
+4.不要单独对表情包进行回复
 {{
     "action": "reply",
     "target_message_id":"想要回复的消息id",
@@ -77,6 +79,7 @@ no_reply_until_call
 {actions_before_now_block}
 
 请选择**可选的**且符合使用条件的action，并说明触发action的消息id(消息id格式:m+数字)
+不要回复你自己发送的消息
 先输出你的选择思考理由，再输出你选择的action，理由是一段平文本，不要分点，精简。
 **动作选择要求**
 请你根据聊天内容,用户的最新消息和以下标准选择合适的动作:
@@ -469,8 +472,8 @@ class ActionPlanner:
             # 调用LLM
             llm_content, (reasoning_content, _, _) = await self.planner_llm.generate_response_async(prompt=prompt)
 
-            logger.info(f"{self.log_prefix}规划器原始提示词: {prompt}")
-            logger.info(f"{self.log_prefix}规划器原始响应: {llm_content}")
+            # logger.info(f"{self.log_prefix}规划器原始提示词: {prompt}")
+            # logger.info(f"{self.log_prefix}规划器原始响应: {llm_content}")
 
             if global_config.debug.show_prompt:
                 logger.info(f"{self.log_prefix}规划器原始提示词: {prompt}")
