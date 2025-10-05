@@ -290,6 +290,8 @@ class ActionPlanner:
             loop_start_time=loop_start_time,
         )
 
+        logger.info(f"{self.log_prefix}Planner:{reasoning}。选择了{len(actions)}个动作: {' '.join([a.action_type for a in actions])}")
+
         self.add_plan_log(reasoning, actions)
 
         return actions

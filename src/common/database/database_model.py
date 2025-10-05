@@ -341,6 +341,7 @@ class MemoryConflict(BaseModel):
     update_time = FloatField()  # 更新时间
     context = TextField(null=True)  # 上下文
     chat_id = TextField(null=True)  # 聊天ID
+    raise_time = FloatField(null=True)  # 触发次数
 
     class Meta:
         table_name = "memory_conflicts"
