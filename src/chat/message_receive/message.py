@@ -138,7 +138,7 @@ class MessageRecv(Message):
 
         这个方法必须在创建实例后显式调用，因为它包含异步操作。
         """
-        print(f"self.message_segment: {self.message_segment}")
+        # print(f"self.message_segment: {self.message_segment}")
         self.processed_plain_text = await self._process_message_segments(self.message_segment)
 
     async def _process_single_segment(self, segment: Seg) -> str:
