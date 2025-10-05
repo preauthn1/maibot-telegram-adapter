@@ -10,10 +10,10 @@ class QuestionMaker:
         self.chat_id = chat_id
         self.context = context
 
-    def get_context(self):
+    def get_context(self,timestamp: float = time.time()):
         latest_30_msgs = get_raw_msg_before_timestamp_with_chat(
             chat_id=self.chat_id,
-            timestamp=time.time(),
+            timestamp=timestamp,
             limit=30,
         )   
 
@@ -42,9 +42,10 @@ class QuestionMaker:
     async def make_question(self):
         conflict = await self.get_random_unanswered_conflict()
         if not conflict:
-            return None, None
+            return None, None, None
         question = conflict.conflict_content
         conflict_context = conflict.context
-        chat_context = self.get_context()
+        create_time = conflict.create_time
+        chat_context = self.get_context(create_time)
 
-        return question, conflict_context
+        return question, chat_context, conflict_context

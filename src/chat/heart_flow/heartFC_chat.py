@@ -1,4 +1,5 @@
 import asyncio
+from multiprocessing import context
 import time
 import traceback
 import random
@@ -196,19 +197,22 @@ class HeartFChatting:
         
         # print(f"{self.log_prefix}  questioned: {self.questioned},len: {len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id))}")
         if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) == 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
-            logger.info(f"{self.log_prefix} 长久没有回复，可以试试主动发言，概率: {question_probability}")
+            # logger.info(f"{self.log_prefix} 长久没有回复，可以试试主动发言，概率: {question_probability}")
             if random.random() < question_probability: # 30%概率主动发言
                 try:
                     self.questioned = True
                     self.last_active_time = time.time()
-                    print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
+                    # print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
+                    logger.info(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
                     cycle_timers, thinking_id = self.start_cycle()
                     question_maker = QuestionMaker(self.stream_id)
-                    question, conflict_context = await question_maker.make_question()
-                    logger.info(f"{self.log_prefix} 问题: {question}")
+                    question, context,conflict_context = await question_maker.make_question()
                     if question:
+                        logger.info(f"{self.log_prefix} 问题: {question}")
                         await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
-                        await self._lift_question_reply(question,cycle_timers,thinking_id)
+                        await self._lift_question_reply(question,context,cycle_timers,thinking_id)
+                    else:
+                        logger.info(f"{self.log_prefix} 无问题")
                     # self.end_cycle(cycle_timers, thinking_id)
                 except Exception as e:
                     logger.error(f"{self.log_prefix} 主动提问失败: {e}")
@@ -548,8 +552,8 @@ class HeartFChatting:
             traceback.print_exc()
             return False, ""
 
-    async def _lift_question_reply(self, question: str, cycle_timers: Dict[str, float], thinking_id: str):
-        reason = f"你对问题\"{question}\"感到好奇，想要和群友讨论"
+    async def _lift_question_reply(self, question: str, context: str, cycle_timers: Dict[str, float], thinking_id: str):
+        reason = f"在聊天中：\n{context}\n你对问题\"{question}\"感到好奇，想要和群友讨论"
         new_msg = get_raw_msg_before_timestamp_with_chat(
             chat_id=self.stream_id,
             timestamp=time.time(),
@@ -564,19 +568,8 @@ class HeartFChatting:
             available_actions=None,
             loop_start_time=time.time(),
             action_reasoning=reason)
-        self.action_planner.add_plan_log(reasoning=reason, actions=[reply_action_info])
+        self.action_planner.add_plan_log(reasoning=f"你对问题\"{question}\"感到好奇，想要和群友讨论", actions=[reply_action_info])
         
-        await database_api.store_action_info(
-            chat_stream=self.chat_stream,
-            action_build_into_prompt=False,
-            action_prompt_display=reason,
-            action_done=True,
-            thinking_id=thinking_id,
-            action_data=reply_action_info.action_data,
-            action_name="reply",
-            action_reasoning=reason,
-        )
-
         success, llm_response = await generator_api.rewrite_reply(
             chat_stream=self.chat_stream,
             reply_data={
