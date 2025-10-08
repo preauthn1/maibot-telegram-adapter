@@ -15,7 +15,6 @@ from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
 from src.memory_system.memory_management_task import MemoryManagementTask
 from rich.traceback import install
-from src.migrate_helper.migrate import check_and_run_migrations
 # from src.api.main import start_api_server
 
 # 导入新的插件管理器
@@ -104,7 +103,6 @@ class MainSystem:
         self.app.register_message_handler(chat_bot.message_process)
         self.app.register_custom_message_handler("message_id_echo", chat_bot.echo_message_process)
 
-        await check_and_run_migrations()
 
         # 触发 ON_START 事件
         from src.plugin_system.core.events_manager import events_manager

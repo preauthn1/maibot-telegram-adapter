@@ -501,6 +501,7 @@ class ActionPlanner:
             ]
 
         # 解析LLM响应
+        extracted_reasoning = ""
         if llm_content:
             try:
                 json_objects, extracted_reasoning = self._extract_json_from_markdown(llm_content)
@@ -512,13 +513,16 @@ class ActionPlanner:
                 else:
                     # 尝试解析为直接的JSON
                     logger.warning(f"{self.log_prefix}LLM没有返回可用动作: {llm_content}")
+                    extracted_reasoning = "LLM没有返回可用动作"
                     actions = self._create_no_reply("LLM没有返回可用动作", available_actions)
 
             except Exception as json_e:
                 logger.warning(f"{self.log_prefix}解析LLM响应JSON失败 {json_e}. LLM原始输出: '{llm_content}'")
+                extracted_reasoning = f"解析LLM响应JSON失败: {json_e}"
                 actions = self._create_no_reply(f"解析LLM响应JSON失败: {json_e}", available_actions)
                 traceback.print_exc()
         else:
+            extracted_reasoning = "规划器没有获得LLM响应"
             actions = self._create_no_reply("规划器没有获得LLM响应", available_actions)
 
         # 添加循环开始时间到所有非no_reply动作

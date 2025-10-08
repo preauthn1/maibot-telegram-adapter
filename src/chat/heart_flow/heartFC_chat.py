@@ -335,6 +335,7 @@ class HeartFChatting:
             
             await global_memory_chest.build_running_content(chat_id=self.stream_id)   
             
+            
             cycle_timers, thinking_id = self.start_cycle()
             logger.info(f"{self.log_prefix} 开始第{self._cycle_counter}次思考")
 
