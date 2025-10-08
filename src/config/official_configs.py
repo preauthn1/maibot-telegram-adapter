@@ -108,6 +108,23 @@ class ChatConfig(ConfigBase):
     时间区间支持跨夜，例如 "23:00-02:00"。
     """
 
+    auto_chat_value_rules: list[dict] = field(default_factory=lambda: [])
+    """
+    自动聊天频率规则列表，支持按聊天流/按日内时段配置。
+    规则格式：{ target="platform:id:type" 或 "", time="HH:MM-HH:MM", value=0.5 }
+
+    示例:
+    [
+        ["", "00:00-08:59", 0.2],                 # 全局规则：凌晨到早上更安静
+        ["", "09:00-22:59", 1.0],                 # 全局规则：白天正常
+        ["qq:1919810:group", "20:00-23:59", 0.6], # 指定群在晚高峰降低发言
+        ["qq:114514:private", "00:00-23:59", 0.3],# 指定私聊全时段较安静
+    ]
+
+    匹配优先级: 先匹配指定 chat 流规则，再匹配全局规则(\"\").
+    时间区间支持跨夜，例如 "23:00-02:00"。
+    """
+
     def _parse_stream_config_to_chat_id(self, stream_config_str: str) -> Optional[str]:
         """与 ChatStream.get_stream_id 一致地从 "platform:id:type" 生成 chat_id。"""
         try:
@@ -213,6 +230,61 @@ class ChatConfig(ConfigBase):
         # 3) 未命中规则返回基础值
         return self.talk_value
 
+    def get_auto_chat_value(self, chat_id: Optional[str]) -> float:
+        """根据规则返回当前 chat 的动态 auto_chat_value，未匹配则回退到基础值。"""
+        if not self.auto_chat_value_rules:
+            return self.auto_chat_value
+
+        now_min = self._now_minutes()
+
+        # 1) 先尝试匹配指定 chat 的规则
+        if chat_id:
+            for rule in self.auto_chat_value_rules:
+                if not isinstance(rule, dict):
+                    continue
+                target = rule.get("target", "")
+                time_range = rule.get("time", "")
+                value = rule.get("value", None)
+                if not isinstance(time_range, str):
+                    continue
+                # 跳过全局
+                if target == "":
+                    continue
+                config_chat_id = self._parse_stream_config_to_chat_id(str(target))
+                if config_chat_id is None or config_chat_id != chat_id:
+                    continue
+                parsed = self._parse_range(time_range)
+                if not parsed:
+                    continue
+                start_min, end_min = parsed
+                if self._in_range(now_min, start_min, end_min):
+                    try:
+                        return float(value)
+                    except Exception:
+                        continue
+
+        # 2) 再匹配全局规则("")
+        for rule in self.auto_chat_value_rules:
+            if not isinstance(rule, dict):
+                continue
+            target = rule.get("target", None)
+            time_range = rule.get("time", "")
+            value = rule.get("value", None)
+            if target != "" or not isinstance(time_range, str):
+                continue
+            parsed = self._parse_range(time_range)
+            if not parsed:
+                continue
+            start_min, end_min = parsed
+            if self._in_range(now_min, start_min, end_min):
+                try:
+                    return float(value)
+                except Exception:
+                    continue
+
+        # 3) 未命中规则返回基础值
+        return self.auto_chat_value
+
 
 @dataclass
 class MessageReceiveConfig(ConfigBase):
@@ -231,8 +303,8 @@ class MemoryConfig(ConfigBase):
     max_memory_number: int = 100
     """记忆最大数量"""
     
-    max_memory_size: int = 2048
-    """记忆最大大小"""
+    memory_build_frequency: int = 1
+    """记忆构建频率"""
 
 @dataclass
 class ExpressionConfig(ConfigBase):

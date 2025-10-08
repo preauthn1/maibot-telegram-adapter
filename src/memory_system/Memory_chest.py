@@ -37,8 +37,6 @@ class MemoryChest:
             request_type="memory_chest_build",
         )
         
-        self.memory_build_threshold = 20
-        self.memory_size_limit = global_config.memory.max_memory_size
   
         self.running_content_list = {}  # {chat_id: {"content": running_content, "last_update_time": timestamp, "create_time": timestamp}}
         self.fetched_memory_list = []  # [(chat_id, (question, answer, timestamp)), ...]
@@ -54,7 +52,19 @@ class MemoryChest:
         Returns:
             str: 构建后的运行内容
         """
-        # 检查是否需要更新：上次更新时间和现在时间的消息数量大于30
+        # 检查是否需要更新：基于消息数量和最新消息时间差的智能更新机制
+        # 
+        # 更新机制说明：
+        # 1. 消息数量 > 100：直接触发更新（高频消息场景）
+        # 2. 消息数量 > 70 且最新消息时间差 > 30秒：触发更新（中高频消息场景）
+        # 3. 消息数量 > 50 且最新消息时间差 > 60秒：触发更新（中频消息场景）
+        # 4. 消息数量 > 30 且最新消息时间差 > 300秒：触发更新（低频消息场景）
+        # 
+        # 设计理念：
+        # - 消息越密集，时间阈值越短，确保及时更新记忆
+        # - 消息越稀疏，时间阈值越长，避免频繁无意义的更新
+        # - 通过最新消息时间差判断消息活跃度，而非简单的总时间差
+        # - 平衡更新频率与性能，在保证记忆及时性的同时减少计算开销
         if chat_id not in self.running_content_list:
             self.running_content_list[chat_id] = {
                 "content": "",
@@ -75,16 +85,51 @@ class MemoryChest:
             )
 
             new_messages_count = len(message_list)
-            time_diff_minutes = (current_time - last_update_time) / 60
-
-            # 检查是否满足强制构建条件：超过15分钟且至少有5条新消息
-            forced_update = time_diff_minutes > 15 and new_messages_count >= 5
-            should_update = new_messages_count > self.memory_build_threshold or forced_update
-
-            if forced_update:
-                logger.debug(f"chat_id {chat_id} 距离上次更新已 {time_diff_minutes:.1f} 分钟，有 {new_messages_count} 条新消息，强制构建")
-            else:
-                logger.debug(f"chat_id {chat_id} 自上次更新后有 {new_messages_count} 条新消息，{'需要' if should_update else '不需要'}更新")
+            
+            # 获取最新消息的时间戳
+            latest_message_time = last_update_time
+            if message_list:
+                # 假设消息列表按时间排序，取最后一条消息的时间戳
+                latest_message = message_list[-1]
+                if hasattr(latest_message, 'timestamp'):
+                    latest_message_time = latest_message.timestamp
+                elif isinstance(latest_message, dict) and 'timestamp' in latest_message:
+                    latest_message_time = latest_message['timestamp']
+            
+            # 计算最新消息时间与现在时间的差（秒）
+            latest_message_time_diff = current_time - latest_message_time
+            
+            # 智能更新条件判断 - 按优先级从高到低检查
+            should_update = False
+            update_reason = ""
+            
+            if global_config.memory.memory_build_frequency > 0:
+                if new_messages_count > 100/global_config.memory.memory_build_frequency:
+                    # 条件1：消息数量 > 100，直接触发更新
+                    # 适用场景：群聊刷屏、高频讨论等消息密集场景
+                    # 无需时间限制，确保重要信息不被遗漏
+                    should_update = True
+                    update_reason = f"消息数量 {new_messages_count} > 100，直接触发更新"
+                elif new_messages_count > 70/global_config.memory.memory_build_frequency and latest_message_time_diff > 30:
+                    # 条件2：消息数量 > 70 且最新消息时间差 > 30秒
+                    # 适用场景：中高频讨论，但需要确保消息流已稳定
+                    # 30秒的时间差确保不是正在进行的实时对话
+                    should_update = True
+                    update_reason = f"消息数量 {new_messages_count} > 70 且最新消息时间差 {latest_message_time_diff:.1f}s > 30s"
+                elif new_messages_count > 50/global_config.memory.memory_build_frequency and latest_message_time_diff > 60:
+                    # 条件3：消息数量 > 50 且最新消息时间差 > 60秒
+                    # 适用场景：中等频率讨论，等待1分钟确保对话告一段落
+                    # 平衡及时性与稳定性
+                    should_update = True
+                    update_reason = f"消息数量 {new_messages_count} > 50 且最新消息时间差 {latest_message_time_diff:.1f}s > 60s"
+                elif new_messages_count > 30/global_config.memory.memory_build_frequency and latest_message_time_diff > 300:
+                    # 条件4：消息数量 > 30 且最新消息时间差 > 300秒（5分钟）
+                    # 适用场景：低频但有一定信息量的讨论
+                    # 5分钟的时间差确保对话完全结束，避免频繁更新
+                    should_update = True
+                    update_reason = f"消息数量 {new_messages_count} > 30 且最新消息时间差 {latest_message_time_diff:.1f}s > 300s"
+                
+                logger.debug(f"chat_id {chat_id} 更新检查: {update_reason if should_update else f'消息数量 {new_messages_count}，最新消息时间差 {latest_message_time_diff:.1f}s，不满足更新条件'}")
 
 
         if should_update:
@@ -98,11 +143,6 @@ class MemoryChest:
                 remove_emoji_stickers=True,
             )
             
-            
-            current_running_content = ""
-            if chat_id and chat_id in self.running_content_list:
-                current_running_content = self.running_content_list[chat_id]["content"]
-
             # 随机从格式示例列表中选取若干行用于提示
             format_candidates = [
                 "[概念] 是 [概念的含义(简短描述，不超过十个字)]",
@@ -129,18 +169,13 @@ class MemoryChest:
             format_section = "\n".join(selected_lines) + "\n......(不要包含中括号)"
 
             prompt = f"""
-以下是你的记忆内容和新的聊天记录，请你将他们整合和修改：
-记忆内容：
-<memory_content>
-{current_running_content}
-</memory_content>
+以下是一段你参与的聊天记录，请你在其中总结出记忆：
 
 <聊天记录>
 {message_str}
 </聊天记录>
-聊天记录中可能包含有效信息，也可能信息密度很低，请你根据聊天记录中的信息，修改<part1>中的内容与<part2>中的内容
+聊天记录中可能包含有效信息，也可能信息密度很低，请你根据聊天记录中的信息，总结出记忆内容
 --------------------------------
-请将上面的新聊天记录内的有用的信息进行整合到现有的记忆中
 对[图片]的处理：
 1.除非与文本有关，不要将[图片]的内容整合到记忆中
 2.如果图片与某个概念相关，将图片中的关键内容也整合到记忆中，不要写入图片原文，例如：
@@ -178,29 +213,9 @@ class MemoryChest:
 
             print(f"prompt: {prompt}\n记忆仓库构建运行内容: {running_content}")
 
-            # 如果有chat_id，更新对应的running_content
+            # 直接保存：每次构建后立即入库，并刷新时间戳窗口
             if chat_id and running_content:
-                current_time = time.time()
-
-                # 保留原有的create_time，如果没有则使用当前时间
-                create_time = self.running_content_list[chat_id].get("create_time", current_time)
-
-                self.running_content_list[chat_id] = {
-                    "content": running_content,
-                    "last_update_time": current_time,
-                    "create_time": create_time
-                }
-
-                # 检查running_content长度是否大于限制
-                if len(running_content) > self.memory_size_limit:
-                    await self._save_to_database_and_clear(chat_id, running_content)
-
-                # 检查是否需要强制保存：create_time超过1800秒且内容大小达到max_memory_size的30%
-                elif (current_time - create_time > 1800 and
-                      len(running_content) >= self.memory_size_limit * 0.3):
-                    logger.info(f"chat_id {chat_id} 内容创建时间已超过 {(current_time - create_time)/60:.1f} 分钟，"
-                               f"内容大小 {len(running_content)} 达到限制的 {int(self.memory_size_limit * 0.3)} 字符，强制保存")
-                    await self._save_to_database_and_clear(chat_id, running_content)
+                await self._save_to_database_and_clear(chat_id, running_content)
 
 
             return running_content
@@ -400,10 +415,15 @@ class MemoryChest:
                 )
                 logger.info(f"已保存记忆仓库内容，标题: {title.strip()}, chat_id: {chat_id}")
 
-                # 清空对应chat_id的running_content
+                # 清空内容并刷新时间戳，但保留条目用于增量计算
                 if chat_id in self.running_content_list:
-                    del self.running_content_list[chat_id]
-                    logger.info(f"已清空chat_id {chat_id} 的running_content")
+                    current_time = time.time()
+                    self.running_content_list[chat_id] = {
+                        "content": "",
+                        "last_update_time": current_time,
+                        "create_time": current_time
+                    }
+                    logger.info(f"已保存并刷新chat_id {chat_id} 的时间戳，准备下一次增量构建")
             else:
                 logger.warning(f"生成标题失败，chat_id: {chat_id}")
 

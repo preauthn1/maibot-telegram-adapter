@@ -184,16 +184,16 @@ class HeartFChatting:
         )
 
         question_probability = 0
-        if time.time() - self.last_active_time > 1200:
-            question_probability = 0.04
-        elif time.time() - self.last_active_time > 600:
-            question_probability = 0.02
-        elif time.time() - self.last_active_time > 300:
+        if time.time() - self.last_active_time > 3600:
+            question_probability = 0.01
+        elif time.time() - self.last_active_time > 1200:
             question_probability = 0.005
-        else:
+        elif time.time() - self.last_active_time > 600:
             question_probability = 0.001
+        else:
+            question_probability = 0.0003
 
-        question_probability = question_probability * global_config.chat.auto_chat_value
+        question_probability = question_probability * global_config.chat.get_auto_chat_value(self.stream_id)
         
         # print(f"{self.log_prefix}  questioned: {self.questioned},len: {len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id))}")
         if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) == 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
@@ -335,8 +335,6 @@ class HeartFChatting:
             
             await global_memory_chest.build_running_content(chat_id=self.stream_id)   
             
-            
-
             cycle_timers, thinking_id = self.start_cycle()
             logger.info(f"{self.log_prefix} 开始第{self._cycle_counter}次思考")
 
