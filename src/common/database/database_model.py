@@ -672,8 +672,6 @@ def check_field_constraints():
         OnlineTime,
         PersonInfo,
         Expression,
-        GraphNodes,
-        GraphEdges,
         ActionRecords,
         MemoryChest,
         MemoryConflict,
