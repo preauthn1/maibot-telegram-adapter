@@ -18,8 +18,6 @@ from src.config.official_configs import (
     ExpressionConfig,
     ChatConfig,
     EmojiConfig,
-    MemoryConfig,
-    MoodConfig,
     KeywordReactionConfig,
     ChineseTypoConfig,
     ResponsePostProcessConfig,
@@ -32,8 +30,9 @@ from src.config.official_configs import (
     RelationshipConfig,
     ToolConfig,
     VoiceConfig,
+    MoodConfig,
+    MemoryConfig,
     DebugConfig,
-    CustomPromptConfig,
 )
 
 from .api_ada_configs import (
@@ -56,7 +55,7 @@ TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "template")
 
 # 考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
 # 对该字段的更新，请严格参照语义化版本规范：https://semver.org/lang/zh-CN/
-MMC_VERSION = "0.10.2-snapshot.3"
+MMC_VERSION = "0.11.0-snapshot.3"
 
 
 def get_key_comment(toml_table, key):
@@ -114,7 +113,7 @@ def set_value_by_path(d, path, value):
         if k not in d or not isinstance(d[k], dict):
             d[k] = {}
         d = d[k]
-    
+
     # 使用 tomlkit.item 来保持 TOML 格式
     try:
         d[path[-1]] = tomlkit.item(value)
@@ -175,13 +174,8 @@ def _update_dict(target: TOMLDocument | dict | Table, source: TOMLDocument | dic
                 _update_dict(target_value, value)
             else:
                 try:
-                    # 对数组类型进行特殊处理
-                    if isinstance(value, list):
-                        # 如果是空数组，确保它保持为空数组
-                        target[key] = tomlkit.array(str(value)) if value else tomlkit.array()
-                    else:
-                        # 其他类型使用item方法创建新值
-                        target[key] = tomlkit.item(value)
+                    # 统一使用 tomlkit.item 来保持原生类型与转义，不对列表做字符串化处理
+                    target[key] = tomlkit.item(value)
                 except (TypeError, ValueError):
                     # 如果转换失败，直接赋值
                     target[key] = value
@@ -253,7 +247,7 @@ def _update_config_generic(config_name: str, template_name: str):
                         f"已自动将{config_name}配置 {'.'.join(path)} 的值从旧默认值 {old_default} 更新为新默认值 {new_default}"
                     )
                     config_updated = True
-            
+
             # 如果配置有更新，立即保存到文件
             if config_updated:
                 with open(old_config_path, "w", encoding="utf-8") as f:
@@ -347,8 +341,6 @@ class Config(ConfigBase):
     message_receive: MessageReceiveConfig
     emoji: EmojiConfig
     expression: ExpressionConfig
-    memory: MemoryConfig
-    mood: MoodConfig
     keyword_reaction: KeywordReactionConfig
     chinese_typo: ChineseTypoConfig
     response_post_process: ResponsePostProcessConfig
@@ -358,8 +350,9 @@ class Config(ConfigBase):
     maim_message: MaimMessageConfig
     lpmm_knowledge: LPMMKnowledgeConfig
     tool: ToolConfig
+    memory: MemoryConfig
     debug: DebugConfig
-    custom_prompt: CustomPromptConfig
+    mood: MoodConfig
     voice: VoiceConfig
 
 

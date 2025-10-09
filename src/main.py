@@ -13,8 +13,8 @@ from src.common.logger import get_logger
 from src.common.server import get_global_server, Server
 from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
+from src.memory_system.memory_management_task import MemoryManagementTask
 from rich.traceback import install
-from src.migrate_helper.migrate import check_and_run_migrations
 # from src.api.main import start_api_server
 
 # 导入新的插件管理器
@@ -22,10 +22,6 @@ from src.plugin_system.core.plugin_manager import plugin_manager
 
 # 导入消息API和traceback模块
 from src.common.message import get_global_api
-
-# 条件导入记忆系统
-if global_config.memory.enable_memory:
-    from src.chat.memory_system.Hippocampus import hippocampus_manager
 
 # 插件系统现在使用统一的插件加载器
 
@@ -36,11 +32,6 @@ logger = get_logger("main")
 
 class MainSystem:
     def __init__(self):
-        # 根据配置条件性地初始化记忆系统
-        self.hippocampus_manager = None
-        if global_config.memory.enable_memory:
-            self.hippocampus_manager = hippocampus_manager
-
         # 使用消息API替代直接的FastAPI实例
         self.app: MessageServer = get_global_api()
         self.server: Server = get_global_server()
@@ -92,29 +83,26 @@ class MainSystem:
         logger.info("表情包管理器初始化成功")
 
         # 启动情绪管理器
-        await mood_manager.start()
-        logger.info("情绪管理器初始化成功")
+        if global_config.mood.enable_mood:
+            await mood_manager.start()
+            logger.info("情绪管理器初始化成功")
 
         # 初始化聊天管理器
         await get_chat_manager()._initialize()
         asyncio.create_task(get_chat_manager()._auto_save_task())
 
         logger.info("聊天管理器初始化成功")
-
-        # 根据配置条件性地初始化记忆系统
-        if global_config.memory.enable_memory:
-            if self.hippocampus_manager:
-                self.hippocampus_manager.initialize()
-                logger.info("记忆系统初始化成功")
-        else:
-            logger.info("记忆系统已禁用，跳过初始化")
+        
+        # 添加记忆管理任务
+        await async_task_manager.add_task(MemoryManagementTask())
+        logger.info("记忆管理任务已启动")
 
         # await asyncio.sleep(0.5) #防止logger输出飞了
 
         # 将bot.py中的chat_bot.message_process消息处理函数注册到api.py的消息处理基类中
         self.app.register_message_handler(chat_bot.message_process)
+        self.app.register_custom_message_handler("message_id_echo", chat_bot.echo_message_process)
 
-        await check_and_run_migrations()
 
         # 触发 ON_START 事件
         from src.plugin_system.core.events_manager import events_manager
@@ -138,25 +126,15 @@ class MainSystem:
                 self.server.run(),
             ]
 
-            # 根据配置条件性地添加记忆系统相关任务
-            if global_config.memory.enable_memory and self.hippocampus_manager:
-                tasks.extend(
-                    [
-                        # 移除记忆构建的定期调用，改为在heartFC_chat.py中调用
-                        # self.build_memory_task(),
-                        self.forget_memory_task(),
-                    ]
-                )
-
             await asyncio.gather(*tasks)
 
-    async def forget_memory_task(self):
-        """记忆遗忘任务"""
-        while True:
-            await asyncio.sleep(global_config.memory.forget_memory_interval)
-            logger.info("[记忆遗忘] 开始遗忘记忆...")
-            await self.hippocampus_manager.forget_memory(percentage=global_config.memory.memory_forget_percentage)  # type: ignore
-            logger.info("[记忆遗忘] 记忆遗忘完成")
+    # async def forget_memory_task(self):
+    #     """记忆遗忘任务"""
+    #     while True:
+    #         await asyncio.sleep(global_config.memory.forget_memory_interval)
+    #         logger.info("[记忆遗忘] 开始遗忘记忆...")
+    #         await self.hippocampus_manager.forget_memory(percentage=global_config.memory.memory_forget_percentage)  # type: ignore
+    #         logger.info("[记忆遗忘] 记忆遗忘完成")
 
 
 async def main():

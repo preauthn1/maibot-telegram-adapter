@@ -98,11 +98,19 @@ def get_messages_by_time_in_chat(
         raise ValueError("chat_id 不能为空")
     if not isinstance(chat_id, str):
         raise ValueError("chat_id 必须是字符串类型")
-    if filter_mai:
-        return filter_mai_messages(
-            get_raw_msg_by_timestamp_with_chat(chat_id, start_time, end_time, limit, limit_mode, filter_command)
-        )
-    return get_raw_msg_by_timestamp_with_chat(chat_id, start_time, end_time, limit, limit_mode, filter_command)
+    # if filter_mai:
+    #     return filter_mai_messages(
+    #         get_raw_msg_by_timestamp_with_chat(chat_id, start_time, end_time, limit, limit_mode, filter_command)
+    #     )
+    return get_raw_msg_by_timestamp_with_chat(
+        chat_id=chat_id,
+        timestamp_start=start_time,
+        timestamp_end=end_time,
+        limit=limit,
+        limit_mode=limit_mode,
+        filter_bot=filter_mai,
+        filter_command=filter_command
+    )
 
 
 def get_messages_by_time_in_chat_inclusive(
@@ -435,9 +443,7 @@ def build_readable_messages_to_str(
     Returns:
         格式化后的可读字符串
     """
-    return build_readable_messages(
-        messages, replace_bot_name, timestamp_mode, read_mark, truncate, show_actions
-    )
+    return build_readable_messages(messages, replace_bot_name, timestamp_mode, read_mark, truncate, show_actions)
 
 
 async def build_readable_messages_with_details(
@@ -491,13 +497,11 @@ def filter_mai_messages(messages: List[DatabaseMessages]) -> List[DatabaseMessag
     return [msg for msg in messages if msg.user_info.user_id != str(global_config.bot.qq_account)]
 
 
-
-
 def translate_pid_to_description(pid: str) -> str:
     image = Images.get_or_none(Images.image_id == pid)
     description = ""
-    if image and image.description:
-        description = image.description
+    if image and image.description and image.description.strip():
+        description = image.description.strip()
     else:
         description = "[图片]"
     return description

@@ -91,9 +91,10 @@ class ImageManager:
                 desc_obj.save()
         except Exception as e:
             logger.error(f"保存描述到数据库失败 (Peewee): {str(e)}")
-            
+
     async def get_emoji_tag(self, image_base64: str) -> str:
         from src.chat.emoji_system.emoji_manager import get_emoji_manager
+
         emoji_manager = get_emoji_manager()
         if isinstance(image_base64, str):
             image_base64 = image_base64.encode("ascii", errors="ignore").decode("ascii")
@@ -120,6 +121,7 @@ class ImageManager:
             # 优先使用EmojiManager查询已注册表情包的描述
             try:
                 from src.chat.emoji_system.emoji_manager import get_emoji_manager
+
                 emoji_manager = get_emoji_manager()
                 tags = await emoji_manager.get_emoji_tag_by_hash(image_hash)
                 if tags:
@@ -144,14 +146,14 @@ class ImageManager:
                     return "[表情包(GIF处理失败)]"
                 vlm_prompt = "这是一个动态图表情包，每一张图代表了动态图的某一帧，黑色背景代表透明，描述一下表情包表达的情感和内容，描述细节，从互联网梗,meme的角度去分析"
                 detailed_description, _ = await self.vlm.generate_response_for_image(
-                    vlm_prompt, image_base64_processed, "jpg", temperature=0.4, max_tokens=300
+                    vlm_prompt, image_base64_processed, "jpg", temperature=0.4
                 )
             else:
                 vlm_prompt = (
                     "这是一个表情包，请详细描述一下表情包所表达的情感和内容，描述细节，从互联网梗,meme的角度去分析"
                 )
                 detailed_description, _ = await self.vlm.generate_response_for_image(
-                    vlm_prompt, image_base64, image_format, temperature=0.4, max_tokens=300
+                    vlm_prompt, image_base64, image_format, temperature=0.4
                 )
 
             if detailed_description is None:
@@ -172,9 +174,7 @@ class ImageManager:
 
             # 使用较低温度确保输出稳定
             emotion_llm = LLMRequest(model_set=model_config.model_task_config.utils, request_type="emoji")
-            emotion_result, _ = await emotion_llm.generate_response_async(
-                emotion_prompt, temperature=0.3, max_tokens=50
-            )
+            emotion_result, _ = await emotion_llm.generate_response_async(emotion_prompt, temperature=0.3)
 
             if not emotion_result:
                 logger.warning("LLM未能生成情感标签，使用详细描述的前几个词")
@@ -220,11 +220,13 @@ class ImageManager:
                     img_obj.save()
                 except Images.DoesNotExist:  # type: ignore
                     Images.create(
+                        image_id=str(uuid.uuid4()),
                         emoji_hash=image_hash,
                         path=file_path,
                         type="emoji",
                         description=detailed_description,  # 保存详细描述
                         timestamp=current_timestamp,
+                        vlm_processed=True,
                     )
             except Exception as e:
                 logger.error(f"保存表情包文件或元数据失败: {str(e)}")
@@ -268,7 +270,7 @@ class ImageManager:
 
             # 调用AI获取描述
             image_format = Image.open(io.BytesIO(image_bytes)).format.lower()  # type: ignore
-            prompt = global_config.custom_prompt.image_prompt
+            prompt = global_config.personality.visual_style
             logger.info(f"[VLM调用] 为图片生成新描述 (Hash: {image_hash[:8]}...)")
             description, _ = await self.vlm.generate_response_for_image(
                 prompt, image_base64, image_format, temperature=0.4, max_tokens=300
@@ -564,7 +566,7 @@ class ImageManager:
             image_format = Image.open(io.BytesIO(image_bytes)).format.lower()  # type: ignore
 
             # 构建prompt
-            prompt = global_config.custom_prompt.image_prompt
+            prompt = global_config.personality.visual_style
 
             # 获取VLM描述
             description, _ = await self.vlm.generate_response_for_image(
@@ -621,3 +623,41 @@ def image_path_to_base64(image_path: str) -> str:
             return base64.b64encode(image_data).decode("utf-8")
         else:
             raise IOError(f"读取图片文件失败: {image_path}")
+
+
+def base64_to_image(image_base64: str, output_path: str) -> bool:
+    """将base64编码的图片保存为文件
+
+    Args:
+        image_base64: 图片的base64编码
+        output_path: 输出文件路径
+
+    Returns:
+        bool: 是否成功保存
+
+    Raises:
+        ValueError: 当base64编码无效时
+        IOError: 当保存文件失败时
+    """
+    try:
+        # 确保base64字符串只包含ASCII字符
+        if isinstance(image_base64, str):
+            image_base64 = image_base64.encode("ascii", errors="ignore").decode("ascii")
+
+        # 解码base64
+        image_bytes = base64.b64decode(image_base64)
+
+        # 确保输出目录存在
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+
+        # 保存文件
+        with open(output_path, "wb") as f:
+            f.write(image_bytes)
+
+        return True
+
+    except Exception as e:
+        logger.error(f"保存base64图片失败: {e}")
+        return False

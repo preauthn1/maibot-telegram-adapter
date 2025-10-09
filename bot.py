@@ -5,16 +5,29 @@ import sys
 import time
 import platform
 import traceback
+import shutil
 from dotenv import load_dotenv
 from pathlib import Path
 from rich.traceback import install
 
-if os.path.exists(".env"):
-    load_dotenv(".env", override=True)
+env_path = Path(__file__).parent / ".env"
+template_env_path = Path(__file__).parent / "template" / "template.env"
+
+if env_path.exists():
+    load_dotenv(str(env_path), override=True)
     print("成功加载环境变量配置")
 else:
-    print("未找到.env文件，请确保程序所需的环境变量被正确设置")
-    raise FileNotFoundError(".env 文件不存在，请创建并配置所需的环境变量")
+    try:
+        if template_env_path.exists():
+            shutil.copyfile(template_env_path, env_path)
+            print("未找到.env，已从 template/template.env 自动创建")
+            load_dotenv(str(env_path), override=True)
+        else:
+            print("未找到.env文件，也未找到模板 template/template.env")
+            raise FileNotFoundError(".env 文件不存在，请创建并配置所需的环境变量")
+    except Exception as e:
+        print(f"自动创建 .env 失败: {e}")
+        raise
 
 # 最早期初始化日志系统，确保所有后续模块都使用正确的日志格式
 from src.common.logger import initialize_logging, get_logger, shutdown_logging
@@ -62,9 +75,10 @@ def easter_egg():
 async def graceful_shutdown():  # sourcery skip: use-named-expression
     try:
         logger.info("正在优雅关闭麦麦...")
-        
+
         from src.plugin_system.core.events_manager import events_manager
         from src.plugin_system.base.component_types import EventType
+
         # 触发 ON_STOP 事件
         await events_manager.handle_mai_events(event_type=EventType.ON_STOP)
 

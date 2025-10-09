@@ -66,19 +66,22 @@ async def generate_with_model(
         Tuple[bool, str, str, str]: (是否成功, 生成的内容, 推理过程, 模型名称)
     """
     try:
-        model_name_list = model_config.model_list
-        logger.info(f"[LLMAPI] 使用模型集合 {model_name_list} 生成内容")
+        # model_name_list = model_config.model_list
+        # logger.info(f"[LLMAPI] 使用模型集合 {model_name_list} 生成内容")
         logger.debug(f"[LLMAPI] 完整提示词: {prompt}")
 
         llm_request = LLMRequest(model_set=model_config, request_type=request_type)
 
-        response, (reasoning_content, model_name, _) = await llm_request.generate_response_async(prompt, temperature=temperature, max_tokens=max_tokens)
+        response, (reasoning_content, model_name, _) = await llm_request.generate_response_async(
+            prompt, temperature=temperature, max_tokens=max_tokens
+        )
         return True, response, reasoning_content, model_name
 
     except Exception as e:
         error_msg = f"生成内容时出错: {str(e)}"
         logger.error(f"[LLMAPI] {error_msg}")
         return False, error_msg, "", ""
+
 
 async def generate_with_model_with_tools(
     prompt: str,
@@ -109,10 +112,7 @@ async def generate_with_model_with_tools(
         llm_request = LLMRequest(model_set=model_config, request_type=request_type)
 
         response, (reasoning_content, model_name, tool_call) = await llm_request.generate_response_async(
-            prompt,
-            tools=tool_options,
-            temperature=temperature,
-            max_tokens=max_tokens
+            prompt, tools=tool_options, temperature=temperature, max_tokens=max_tokens
         )
         return True, response, reasoning_content, model_name, tool_call
 

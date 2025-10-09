@@ -26,6 +26,10 @@ from .base import (
     MaiMessages,
     ToolParamType,
     CustomEventHandlerResult,
+    ReplyContentType,
+    ReplyContent,
+    ForwardNode,
+    ReplySetModel,
 )
 
 # 导入工具模块
@@ -101,6 +105,10 @@ __all__ = [
     "EventType",
     "ToolParamType",
     # 消息
+    "ReplyContentType",
+    "ReplyContent",
+    "ForwardNode",
+    "ReplySetModel",
     "MaiMessages",
     "CustomEventHandlerResult",
     # 装饰器
@@ -119,5 +127,5 @@ __all__ = [
     "DatabaseChatInfo",
     "TargetPersonInfo",
     "ActionPlannerInfo",
-    "LLMGenerationDataModel"
+    "LLMGenerationDataModel",
 ]

@@ -72,8 +72,8 @@ class BaseClient(ABC):
         model_info: ModelInfo,
         message_list: list[Message],
         tool_options: list[ToolOption] | None = None,
-        max_tokens: int = 1024,
-        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
         response_format: RespFormat | None = None,
         stream_response_handler: Optional[
             Callable[[Any, asyncio.Event | None], tuple[APIResponse, tuple[int, int, int]]]
@@ -117,6 +117,7 @@ class BaseClient(ABC):
         self,
         model_info: ModelInfo,
         audio_base64: str,
+        max_tokens: Optional[int] = None,
         extra_params: dict[str, Any] | None = None,
     ) -> APIResponse:
         """
@@ -174,7 +175,7 @@ class ClientRegistry:
                 return client_class(api_provider)
             else:
                 raise KeyError(f"'{api_provider.client_type}' 类型的 Client 未注册")
-        
+
         # 正常的缓存逻辑
         if api_provider.name not in self.client_instance_cache:
             if client_class := self.client_registry.get(api_provider.client_type):

@@ -49,9 +49,9 @@ def is_mentioned_bot_in_message(message: MessageRecv) -> tuple[bool, bool, float
     reply_probability = 0.0
     is_at = False
     is_mentioned = False
-    
+
     # 这部分怎么处理啊啊啊啊
-    #我觉得可以给消息加一个 reply_probability_boost字段
+    # 我觉得可以给消息加一个 reply_probability_boost字段
     if (
         message.message_info.additional_config is not None
         and message.message_info.additional_config.get("is_mentioned") is not None
@@ -339,7 +339,7 @@ def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese
     else:
         split_sentences = [cleaned_text]
 
-    sentences = []
+    sentences: List[str] = []
     for sentence in split_sentences:
         if global_config.chinese_typo.enable and enable_chinese_typo:
             typoed_text, typo_corrections = typo_generator.create_typo_sentence(sentence)
@@ -383,10 +383,6 @@ def calculate_typing_time(
     - 在所有输入结束后，额外加上回车时间0.3秒
     - 如果is_emoji为True，将使用固定1秒的输入时间
     """
-    # # 将0-1的唤醒度映射到-1到1
-    # mood_arousal = mood_manager.current_mood.arousal
-    # # 映射到0.5到2倍的速度系数
-    # typing_speed_multiplier = 1.5**mood_arousal  # 唤醒度为1时速度翻倍,为-1时速度减半
     # chinese_time *= 1 / typing_speed_multiplier
     # english_time *= 1 / typing_speed_multiplier
     # 计算中文字符数
@@ -826,20 +822,48 @@ def parse_keywords_string(keywords_input) -> list[str]:
     return [keywords_str] if keywords_str else []
 
 
-
-
 def cut_key_words(concept_name: str) -> list[str]:
     """对概念名称进行jieba分词，并过滤掉关键词列表中的关键词"""
     concept_name_tokens = list(jieba.cut(concept_name))
 
     # 定义常见连词、停用词与标点
-    conjunctions = {
-        "和", "与", "及", "跟", "以及", "并且", "而且", "或", "或者", "并"
-    }
+    conjunctions = {"和", "与", "及", "跟", "以及", "并且", "而且", "或", "或者", "并"}
     stop_words = {
-        "的", "了", "呢", "吗", "吧", "啊", "哦", "恩", "嗯", "呀", "嘛", "哇",
-        "在", "是", "很", "也", "又", "就", "都", "还", "更", "最", "被", "把",
-        "给", "对", "和", "与", "及", "跟", "并", "而且", "或者", "或", "以及"
+        "的",
+        "了",
+        "呢",
+        "吗",
+        "吧",
+        "啊",
+        "哦",
+        "恩",
+        "嗯",
+        "呀",
+        "嘛",
+        "哇",
+        "在",
+        "是",
+        "很",
+        "也",
+        "又",
+        "就",
+        "都",
+        "还",
+        "更",
+        "最",
+        "被",
+        "把",
+        "给",
+        "对",
+        "和",
+        "与",
+        "及",
+        "跟",
+        "并",
+        "而且",
+        "或者",
+        "或",
+        "以及",
     }
     chinese_punctuations = set("，。！？、；：（）【】《》“”‘’—…·-——,.!?;:()[]<>'\"/\\")
 
@@ -864,11 +888,16 @@ def cut_key_words(concept_name: str) -> list[str]:
             left = merged_tokens[-1]
             right = cleaned_tokens[i + 1]
             # 左右都需要是有效词
-            if left and right \
-                and left not in conjunctions and right not in conjunctions \
-                and left not in stop_words and right not in stop_words \
-                and not all(ch in chinese_punctuations for ch in left) \
-                and not all(ch in chinese_punctuations for ch in right):
+            if (
+                left
+                and right
+                and left not in conjunctions
+                and right not in conjunctions
+                and left not in stop_words
+                and right not in stop_words
+                and not all(ch in chinese_punctuations for ch in left)
+                and not all(ch in chinese_punctuations for ch in right)
+            ):
                 # 合并为一个新词，并替换掉左侧与跳过右侧
                 combined = f"{left}{tok}{right}"
                 merged_tokens[-1] = combined
@@ -889,7 +918,7 @@ def cut_key_words(concept_name: str) -> list[str]:
         if tok in stop_words:
             continue
         # if tok in ban_words:
-            # continue
+        # continue
         if all(ch in chinese_punctuations for ch in tok):
             continue
         if tok.strip() == "":

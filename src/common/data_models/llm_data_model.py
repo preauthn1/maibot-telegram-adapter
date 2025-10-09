@@ -1,9 +1,12 @@
 from dataclasses import dataclass
-from typing import Optional, List, Tuple, TYPE_CHECKING, Any
+from typing import Optional, List, TYPE_CHECKING
 
 from . import BaseDataModel
+
 if TYPE_CHECKING:
+    from src.common.data_models.message_data_model import ReplySetModel
     from src.llm_models.payload_content.tool_option import ToolCall
+
 
 @dataclass
 class LLMGenerationDataModel(BaseDataModel):
@@ -13,4 +16,4 @@ class LLMGenerationDataModel(BaseDataModel):
     tool_calls: Optional[List["ToolCall"]] = None
     prompt: Optional[str] = None
     selected_expressions: Optional[List[int]] = None
-    reply_set: Optional[List[Tuple[str, Any]]] = None
+    reply_set: Optional["ReplySetModel"] = None

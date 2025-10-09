@@ -1,5 +1,5 @@
 [inner]
-version = "6.9.0"
+version = "6.18.3"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -13,22 +13,42 @@ version = "6.9.0"
 
 [bot]
 platform = "qq" 
-qq_account = 1145141919810 # 麦麦的QQ账号
+qq_account = "1145141919810" # 麦麦的QQ账号
 nickname = "麦麦" # 麦麦的昵称
 alias_names = ["麦叠", "牢麦"] # 麦麦的别名
 
 [personality]
 # 建议120字以内，描述人格特质 和 身份特征
-personality = "是一个女大学生，现在在读大二，会刷贴吧。有时候说话不过脑子,有时候会喜欢说一些奇怪的话。年龄为19岁,有黑色的短发。" 
+personality = "是一个女大学生，现在在读大二，会刷贴吧。" 
 #アイデンティティがない 生まれないらららら
 # 描述麦麦说话的表达风格，表达习惯，如要修改，可以酌情新增内容
-reply_style = "回复可以简短一些。可以参考贴吧，知乎和微博的回复风格，回复不要浮夸，不要用夸张修辞，平淡一些。不要浮夸，不要夸张修辞。"
-# 情感特征，影响情绪的变化情况
-emotion_style = "情绪较为稳定，但遭遇特定事件的时候起伏较大"
+reply_style = "请回复的平淡一些，简短一些，说中文，不要刻意突出自身学科背景。可以参考贴吧，知乎和微博的回复风格。"
+
 # 麦麦的兴趣，会影响麦麦对什么话题进行回复
 interest = "对技术相关话题，游戏和动漫相关话题感兴趣，也对日常话题感兴趣，不喜欢太过沉重严肃的话题"
 
+# 麦麦的说话规则，行为风格:
+plan_style = """
+1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
+2.如果相同的内容已经被执行，请不要重复执行
+3.请控制你的发言频率，不要太过频繁的发言
+4.如果有人对你感到厌烦，请减少回复
+5.如果有人对你进行攻击，或者情绪激动，请你以合适的方法应对"""
+
+# 麦麦识图规则，不建议修改
+visual_style = "请用中文描述这张图片的内容。如果有文字，请把文字描述概括出来，请留意其主题，直观感受，输出为一段平文本，最多30字，请注意不要分点，就输出一段文本"
+
+# 麦麦私聊的说话规则，行为风格:
+private_plan_style = """
+1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
+2.如果相同的内容已经被执行，请不要重复执行
+3.某句话如果已经被回复过，不要重复回复"""
+
 [expression]
+# 表达方式模式（此选项暂未使用）
+mode = "context"
+# 可选：llm模式，context上下文模式
+
 # 表达学习配置
 learning_list = [ # 表达学习配置列表，支持按聊天流配置
     ["", "enable", "enable", "1.0"],  # 全局配置：使用表达，启用学习，学习强度1.0
@@ -43,68 +63,63 @@ learning_list = [ # 表达学习配置列表，支持按聊天流配置
 ]
 
 expression_groups = [
-    ["qq:1919810:private","qq:114514:private","qq:1111111:group"], # 在这里设置互通组，相同组的chat_id会共享学习到的表达方式
-    # 格式：["qq:123456:private","qq:654321:group"]
+    # ["*"], # 全局共享组：所有chat_id共享学习到的表达方式（取消注释以启用全局共享）
+    ["qq:1919810:private","qq:114514:private","qq:1111111:group"], # 特定互通组，相同组的chat_id会共享学习到的表达方式
+    # 格式说明：
+    # ["*"] - 启用全局共享，所有聊天流共享表达方式
+    # ["qq:123456:private","qq:654321:group"] - 特定互通组，组内chat_id共享表达方式
     # 注意：如果为群聊，则需要设置为group，如果设置为私聊，则需要设置为private
 ]
 
 
 [chat] #麦麦的聊天设置
-talk_frequency = 0.5
-# 麦麦活跃度，越高，麦麦越容易回复，范围0-1
-focus_value = 0.5 
-# 麦麦的专注度，越高越容易持续连续对话，可能消耗更多token, 范围0-1
+talk_value = 1 #聊天频率，越小越沉默，范围0-1
+mentioned_bot_reply = true # 是否启用提及必回复
+max_context_size = 30 # 上下文长度
+auto_chat_value = 1 # 自动聊天，越小，麦麦主动聊天的概率越低
+planner_smooth = 5 #规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐2-8，0为关闭，必须大于等于0
 
-mentioned_bot_reply = 1 # 提及时,回复概率增幅，1为100%回复，0为不额外增幅
-at_bot_inevitable_reply = 1 # at时,回复概率增幅，1为100%回复，0为不额外增幅
-
-max_context_size = 20 # 上下文长度
-
-planner_size = 3.5 # 副规划器大小，越小，麦麦的动作执行能力越精细，但是消耗更多token，调大可以缓解429类错误
-
-focus_value_adjust = [
-    ["", "8:00,1", "12:00,0.8", "18:00,1", "01:00,0.3"],
-    ["qq:114514:group", "12:20,0.6", "16:10,0.5", "20:10,0.8", "00:10,0.3"],
-    ["qq:1919810:private", "8:20,0.5", "12:10,0.8", "20:10,1", "00:10,0.2"]
+# 动态发言频率规则：按时段/按chat_id调整 talk_value（优先匹配具体chat，再匹配全局）
+# 推荐格式（对象数组）：{ target="platform:id:type" 或 "", time="HH:MM-HH:MM", value=0.5 }
+# 说明:
+# - target 为空字符串表示全局；type 为 group/private，例如："qq:1919810:group" 或 "qq:114514:private"；
+# - 支持跨夜区间，例如 "23:00-02:00"；数值范围建议 0-1。
+talk_value_rules = [
+    { target = "", time = "00:00-08:59", value = 0.8 },
+    { target = "", time = "09:00-22:59", value = 1.0 },
+    { target = "qq:1919810:group", time = "20:00-23:59", value = 0.6 },
+    { target = "qq:114514:private", time = "00:00-23:59", value = 0.3 },
 ]
 
-talk_frequency_adjust = [
-    ["", "8:00,0.5", "12:00,0.6", "18:00,0.8", "01:00,0.3"],
-    ["qq:114514:group", "12:20,0.3", "16:10,0.5", "20:10,0.4", "00:10,0.1"],
-    ["qq:1919810:private", "8:20,0.3", "12:10,0.4", "20:10,0.5", "00:10,0.1"]
+# 动态自动聊天频率规则：按时段/按chat_id调整 auto_chat_value（优先匹配具体chat，再匹配全局）
+# 推荐格式（对象数组）：{ target="platform:id:type" 或 "", time="HH:MM-HH:MM", value=0.5 }
+# 说明:
+# - target 为空字符串表示全局；type 为 group/private，例如："qq:1919810:group" 或 "qq:114514:private"；
+# - 支持跨夜区间，例如 "23:00-02:00"；数值范围建议 0-1。
+auto_chat_value_rules = [
+    { target = "", time = "00:00-08:59", value = 0.3 },
+    { target = "", time = "09:00-22:59", value = 1.0 },
+    { target = "qq:1919810:group", time = "20:00-23:59", value = 0.8 },
+    { target = "qq:114514:private", time = "00:00-23:59", value = 0.5 },
 ]
-# 基于聊天流的个性化活跃度和专注度配置
-# 格式：[["platform:chat_id:type", "HH:MM,frequency", "HH:MM,frequency", ...], ...]
 
-# 全局配置示例：
-# [["", "8:00,1", "12:00,2", "18:00,1.5", "00:00,0.5"]]
+[memory]
+max_memory_number = 100 # 记忆最大数量
+max_memory_size = 2048 # 记忆最大大小
+memory_build_frequency = 1 # 记忆构建频率
 
-# 特定聊天流配置示例：
-# [
-#     ["", "8:00,1", "12:00,1.2", "18:00,1.5", "01:00,0.6"],  # 全局默认配置
-#     ["qq:123456784:group", "12:20,1", "16:10,2", "20:10,1", "00:10,0.3"],  # 特定群聊配置
-#     ["qq:729957033:private", "8:20,1", "12:10,2", "20:10,1.5", "00:10,0.2"]  # 特定私聊配置
-# ]
-
-# 说明：
-# - 当第一个元素为空字符串""时，表示全局默认配置
-# - 当第一个元素为"platform:id:type"格式时，表示特定聊天流配置
-# - 后续元素是"时间,频率"格式，表示从该时间开始使用该活跃度，直到下一个时间点
-# - 优先级：特定聊天流配置 > 全局配置 > 默认 talk_frequency
-
-[relationship]
-enable_relationship = true # 是否启用关系系统
 
 [tool]
-enable_tool = false # 是否启用回复工具
+enable_tool = true # 是否启用工具
 
 [mood]
-enable_mood = true # 是否启用情绪系统
+enable_mood = false # 是否启用情绪系统
 mood_update_threshold = 1 # 情绪更新阈值,越高，更新越慢
+# 情感特征，影响情绪的变化情况
+emotion_style = "情绪较为稳定，但遭遇特定事件的时候起伏较大"
 
 [emoji]
-emoji_chance = 0.6 # 麦麦激活表情包动作的概率
-
+emoji_chance = 0.4 # 麦麦激活表情包动作的概率
 max_reg_num = 100 # 表情包最大注册数量
 do_replace = true # 开启则在达到最大数量时删除（替换）表情包，关闭则达到最大数量时不会继续收集表情包
 check_interval = 10 # 检查表情包（注册，破损，删除）的时间间隔(分钟)
@@ -112,17 +127,8 @@ steal_emoji = true # 是否偷取表情包，让麦麦可以将一些表情包�
 content_filtration = false  # 是否启用表情包过滤，只有符合该要求的表情包才会被保存
 filtration_prompt = "符合公序良俗" # 表情包过滤要求，只有符合该要求的表情包才会被保存
 
-[memory]
-enable_memory = true # 是否启用记忆系统
-forget_memory_interval = 1500 # 记忆遗忘间隔 单位秒   间隔越低，麦麦遗忘越频繁，记忆更精简，但更难学习
-memory_forget_time = 48 #多长时间后的记忆会被遗忘 单位小时
-memory_forget_percentage = 0.008 # 记忆遗忘比例 控制记忆遗忘程度 越大遗忘越多 建议保持默认
-
-#不希望记忆的词，已经记忆的不会受到影响，需要手动清理
-memory_ban_words = [ "表情包", "图片", "回复", "聊天记录" ]
-
 [voice]
-enable_asr = false # 是否启用语音识别，启用后麦麦可以识别语音消息，启用该功能需要配置语音识别模型[model.voice]s
+enable_asr = false # 是否启用语音识别，启用后麦麦可以识别语音消息，启用该功能需要配置语音识别模型[model_task_config.voice]
 
 [message_receive]
 # 以下是消息过滤，可以根据规则过滤特定消息，将不会读取这些消息
@@ -165,12 +171,9 @@ keyword_rules = [
 ]
 
 regex_rules = [
-    { regex = ["^(?P<n>\\S{1,20})是这样的$"], reaction = "请按照以下模板造句：[n]是这样的，xx只要xx就可以，可是[n]要考虑的事情就很多了，比如什么时候xx，什么时候xx，什么时候xx。（请自由发挥替换xx部分，只需保持句式结构，同时表达一种将[n]过度重视的反讽意味）" }
+    { regex = ["^(?P<n>\\S{1,20})是这样的$"], reaction = "请按照以下模板造句：[n]是这样的，xx只要xx就可以，可是[n]要考虑的事情就很多了，比如什么时候xx，什么时候xx，什么时候xx。（请自由发挥替换xx部分，只需保持句式结构，同时表达一种将[n]过度重视的反讽意味）" },
+    { regex = ["(?:[^，。.\\s]+，\\s*)?我(?:也)?[没沒]要求你\\s*(?P<action>.+?)[.。,，]?$"],reaction = "进行一次“八岐大蛇定型文”补完。暂时忽略回复风格，进入“粉絲吐槽”模式。请严格按照以下“填空模板”，围绕“[action]”进行创作，使其充满滑稽的夸张感和天马行空的联想：我没要求你[action]，我不是(与action关联的、宽容的角色)。可是，(与action相关的具体负面行为)是什么意思？你的(与action相关的某种观念)怎么了？你才(与action相关的某个状态或时间点)吧？再这样下去，你(一个中期的、等比级数式的滑稽推演)，(一个后期的、等比级数式的滑稽推演)，最后就变成(一个与主题相关的、夸张的最终形态)了。作为(与最终形态相关的、克星或权威身份)，我可能得(对你执行一个天罚般的行动)。真的。"}
 ]
-
-# 可以自定义部分提示词
-[custom_prompt]
-image_prompt = "请用中文描述这张图片的内容。如果有文字，请把文字描述概括出来，请留意其主题，直观感受，输出为一段平文本，最多30字，请注意不要分点，就输出一段文本"
 
 [response_post_process]
 enable_response_post_process = true # 是否启用回复后处理，包括错别字生成器，回复分割器
@@ -198,7 +201,7 @@ file_log_level = "DEBUG" # 文件日志级别，可选: DEBUG, INFO, WARNING, ER
 
 # 第三方库日志控制
 suppress_libraries = ["faiss","httpx", "urllib3", "asyncio", "websockets", "httpcore", "requests", "peewee", "openai","uvicorn","jieba"] # 完全屏蔽的库
-library_log_levels = { "aiohttp" = "WARNING"} # 设置特定库的日志级别
+library_log_levels = { aiohttp = "WARNING"} # 设置特定库的日志级别
 
 [debug]
 show_prompt = false # 是否显示prompt
@@ -218,4 +221,9 @@ key_file = "" # SSL密钥文件路径，仅在use_wss=true时有效
 enable = true
 
 [experimental] #实验性功能
-enable_friend_chat = false # 是否启用好友聊天
+none = false # 暂无
+
+
+#此系统暂时移除，无效配置
+[relationship]
+enable_relationship = true # 是否启用关系系统

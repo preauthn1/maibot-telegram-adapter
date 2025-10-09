@@ -3,19 +3,18 @@ import os
 import re
 
 from typing import Dict, Any, Optional
-from maim_message import UserInfo
+from maim_message import UserInfo, Seg, GroupInfo
 
 from src.common.logger import get_logger
 from src.config.config import global_config
 from src.mood.mood_manager import mood_manager  # 导入情绪管理器
-from src.chat.message_receive.chat_stream import get_chat_manager, ChatStream
-from src.chat.message_receive.message import MessageRecv, MessageRecvS4U
+from src.chat.message_receive.chat_stream import get_chat_manager
+from src.chat.message_receive.message import MessageRecv
 from src.chat.message_receive.storage import MessageStorage
 from src.chat.heart_flow.heartflow_message_processor import HeartFCMessageReceiver
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugin_system.core import component_registry, events_manager, global_announcement_manager
 from src.plugin_system.base import BaseCommand, EventType
-from src.mais4u.mais4u_chat.s4u_msg_processor import S4UMessageProcessor
 from src.person_info.person_info import Person
 
 # 定义日志配置
@@ -27,7 +26,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..
 logger = get_logger("chat")
 
 
-def _check_ban_words(text: str, chat: ChatStream, userinfo: UserInfo) -> bool:
+def _check_ban_words(text: str, userinfo: UserInfo, group_info: Optional[GroupInfo] = None) -> bool:
     """检查消息是否包含过滤词
 
     Args:
@@ -40,14 +39,14 @@ def _check_ban_words(text: str, chat: ChatStream, userinfo: UserInfo) -> bool:
     """
     for word in global_config.message_receive.ban_words:
         if word in text:
-            chat_name = chat.group_info.group_name if chat.group_info else "私聊"
+            chat_name = group_info.group_name if group_info else "私聊"
             logger.info(f"[{chat_name}]{userinfo.user_nickname}:{text}")
             logger.info(f"[过滤词识别]消息中含有{word}，filtered")
             return True
     return False
 
 
-def _check_ban_regex(text: str, chat: ChatStream, userinfo: UserInfo) -> bool:
+def _check_ban_regex(text: str, userinfo: UserInfo, group_info: Optional[GroupInfo] = None) -> bool:
     """检查消息是否匹配过滤正则表达式
 
     Args:
@@ -58,9 +57,13 @@ def _check_ban_regex(text: str, chat: ChatStream, userinfo: UserInfo) -> bool:
     Returns:
         bool: 是否匹配过滤正则
     """
+    # 检查text是否为None或空字符串
+    if text is None or not text:
+        return False
+
     for pattern in global_config.message_receive.ban_msgs_regex:
         if re.search(pattern, text):
-            chat_name = chat.group_info.group_name if chat.group_info else "私聊"
+            chat_name = group_info.group_name if group_info else "私聊"
             logger.info(f"[{chat_name}]{userinfo.user_nickname}:{text}")
             logger.info(f"[正则表达式过滤]消息匹配到{pattern}，filtered")
             return True
@@ -73,8 +76,6 @@ class ChatBot:
         self._started = False
         self.mood_manager = mood_manager  # 获取情绪管理器单例
         self.heartflow_message_receiver = HeartFCMessageReceiver()  # 新增
-
-        self.s4u_message_processor = S4UMessageProcessor()
 
     async def _ensure_started(self):
         """确保所有任务已启动"""
@@ -149,32 +150,28 @@ class ChatBot:
         if message.message_info.message_id == "notice":
             message.is_notify = True
             logger.info("notice消息")
-            # print(message)
+            print(message)
 
             return True
 
-    async def do_s4u(self, message_data: Dict[str, Any]):
-        message = MessageRecvS4U(message_data)
-        group_info = message.message_info.group_info
-        user_info = message.message_info.user_info
-
-        get_chat_manager().register_message(message)
-        chat = await get_chat_manager().get_or_create_stream(
-            platform=message.message_info.platform,  # type: ignore
-            user_info=user_info,  # type: ignore
-            group_info=group_info,
-        )
-
-        message.update_chat_stream(chat)
-
-        # 处理消息内容
-        await message.process()
-        
-        _ = Person.register_person(platform=message.message_info.platform, user_id=message.message_info.user_info.user_id,nickname=user_info.user_nickname) # type: ignore
-
-        await self.s4u_message_processor.process_message(message)
-
         return
+
+    async def echo_message_process(self, raw_data: Dict[str, Any]) -> None:
+        """
+        用于专门处理回送消息ID的函数
+        """
+        message_data: Dict[str, Any] = raw_data.get("content", {})
+        if not message_data:
+            return
+        message_type = message_data.get("type")
+        if message_type != "echo":
+            return
+        mmc_message_id = message_data.get("echo")
+        actual_message_id = message_data.get("actual_id")
+        if MessageStorage.update_message(mmc_message_id, actual_message_id):
+            logger.debug(f"更新消息ID成功: {mmc_message_id} -> {actual_message_id}")
+        else:
+            logger.warning(f"更新消息ID失败: {mmc_message_id} -> {actual_message_id}")
 
     async def message_process(self, message_data: Dict[str, Any]) -> None:
         """处理转化后的统一格式消息
@@ -194,11 +191,6 @@ class ChatBot:
             # 确保所有任务已启动
             await self._ensure_started()
 
-            platform = message_data["message_info"].get("platform")
-
-            if platform == "amaidesu_default":
-                await self.do_s4u(message_data)
-                return
 
             if message_data["message_info"].get("group_info") is not None:
                 message_data["message_info"]["group_info"]["group_id"] = str(
@@ -211,18 +203,35 @@ class ChatBot:
             # print(message_data)
             # logger.debug(str(message_data))
             message = MessageRecv(message_data)
+            group_info = message.message_info.group_info
+            user_info = message.message_info.user_info
+
+            continue_flag, modified_message = await events_manager.handle_mai_events(
+                EventType.ON_MESSAGE_PRE_PROCESS, message
+            )
+            if not continue_flag:
+                return
+            if modified_message and modified_message._modify_flags.modify_message_segments:
+                message.message_segment = Seg(type="seglist", data=modified_message.message_segments)
 
             if await self.handle_notice_message(message):
                 # return
                 pass
 
-            group_info = message.message_info.group_info
-            user_info = message.message_info.user_info
-            if message.message_info.additional_config:
-                sent_message = message.message_info.additional_config.get("echo", False)
-                if sent_message:  # 这一段只是为了在一切处理前劫持上报的自身消息，用于更新message_id，需要ada支持上报事件，实际测试中不会对正常使用造成任何问题
-                    await MessageStorage.update_message(message)
-                    return
+            # 处理消息内容，生成纯文本
+            await message.process()
+
+            # 过滤检查
+            if _check_ban_words(
+                message.processed_plain_text,
+                user_info,  # type: ignore
+                group_info,
+            ) or _check_ban_regex(
+                message.raw_message,  # type: ignore
+                user_info,  # type: ignore
+                group_info,
+            ):
+                return
 
             get_chat_manager().register_message(message)
 
@@ -234,20 +243,9 @@ class ChatBot:
 
             message.update_chat_stream(chat)
 
-            # 处理消息内容，生成纯文本
-            await message.process()
-
             # if await self.check_ban_content(message):
             #     logger.warning(f"检测到消息中含有违法，色情，暴力，反动，敏感内容，消息内容：{message.processed_plain_text}，发送者：{message.message_info.user_info.user_nickname}")
             #     return
-
-            # 过滤检查
-            if _check_ban_words(message.processed_plain_text, chat, user_info) or _check_ban_regex(  # type: ignore
-                message.raw_message,  # type: ignore
-                chat,
-                user_info,  # type: ignore
-            ):
-                return
 
             # 命令处理 - 使用新插件系统检查并处理命令
             is_command, cmd_result, continue_process = await self._process_commands_with_new_system(message)
@@ -258,8 +256,11 @@ class ChatBot:
                 logger.info(f"命令处理完成，跳过后续消息处理: {cmd_result}")
                 return
 
-            if not await events_manager.handle_mai_events(EventType.ON_MESSAGE, message):
+            continue_flag, modified_message = await events_manager.handle_mai_events(EventType.ON_MESSAGE, message)
+            if not continue_flag:
                 return
+            if modified_message and modified_message._modify_flags.modify_plain_text:
+                message.processed_plain_text = modified_message.plain_text
 
             # 确认从接口发来的message是否有自定义的prompt模板信息
             if message.message_info.template_info and not message.message_info.template_info.template_default:

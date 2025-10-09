@@ -1,7 +1,7 @@
 """
 核心动作插件
 
-将系统核心动作（reply、no_action、emoji）转换为新插件系统格式
+将系统核心动作（reply、no_reply、emoji）转换为新插件系统格式
 这是系统的内置插件，提供基础的聊天交互功能
 """
 
@@ -62,6 +62,5 @@ class CoreActionsPlugin(BasePlugin):
         components = []
         if self.get_config("components.enable_emoji", True):
             components.append((EmojiAction.get_action_info(), EmojiAction))
-
 
         return components
