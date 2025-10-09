@@ -61,7 +61,7 @@ class QuestionMaker:
         # 如果没有 raise_time==0 的项，则仅有 5% 概率抽样一个
         conflicts_with_zero = [c for c in conflicts if (getattr(c, "raise_time", 0) or 0) == 0]
         if not conflicts_with_zero:
-            if random.random() >= 0.05:
+            if random.random() >= 0.01:
                 return None
             # 以均匀概率选择一个（此时权重都等同于 0.05，无需再按权重）
             chosen_conflict = random.choice(conflicts)
@@ -70,7 +70,7 @@ class QuestionMaker:
             weights = []
             for conflict in conflicts:
                 current_raise_time = getattr(conflict, "raise_time", 0) or 0
-                weight = 1.0 if current_raise_time == 0 else 0.05
+                weight = 1.0 if current_raise_time == 0 else 0.01
                 weights.append(weight)
 
             # 按权重随机选择

@@ -278,15 +278,41 @@ class ConflictTracker:
                 # 无新消息时稍作等待
                 await asyncio.sleep(poll_interval)
 
-            # 未获取到答案，仅存储问题
-            await self.add_or_update_conflict(
-                conflict_content=original_question,
-                create_time=time.time(),
-                update_time=time.time(),
-                answer="",
-                chat_id=tracker.chat_id,
+            # 未获取到答案，检查是否需要删除记录
+            # 查找现有的冲突记录
+            existing_conflict = MemoryConflict.get_or_none(
+                MemoryConflict.conflict_content == original_question,
+                MemoryConflict.chat_id == tracker.chat_id
             )
-            logger.info(f"记录冲突内容(未解答): {len(original_question)} 字符")
+            
+            if existing_conflict:
+                # 检查raise_time是否大于3且没有答案
+                current_raise_time = getattr(existing_conflict, "raise_time", 0) or 0
+                if current_raise_time > 1 and not existing_conflict.answer:
+                    # 删除该条目
+                    await self.delete_conflict(original_question, tracker.chat_id)
+                    logger.info(f"追踪结束后删除条目(raise_time={current_raise_time}且无答案): {original_question}")
+                else:
+                    # 更新记录但不删除
+                    await self.add_or_update_conflict(
+                        conflict_content=original_question,
+                        create_time=existing_conflict.create_time,
+                        update_time=time.time(),
+                        answer="",
+                        chat_id=tracker.chat_id,
+                    )
+                    logger.info(f"记录冲突内容(未解答): {len(original_question)} 字符")
+            else:
+                # 如果没有现有记录，创建新记录
+                await self.add_or_update_conflict(
+                    conflict_content=original_question,
+                    create_time=time.time(),
+                    update_time=time.time(),
+                    answer="",
+                    chat_id=tracker.chat_id,
+                )
+                logger.info(f"记录冲突内容(未解答): {len(original_question)} 字符")
+            
             logger.info(f"问题跟踪结束：{original_question}")
         except Exception as e:
             logger.error(f"后台问题跟踪任务异常: {e}")
@@ -419,6 +445,34 @@ class ConflictTracker:
         except Exception as e:
             logger.error(f"获取冲突记录数量时出错: {e}")
             return 0
+
+    async def delete_conflict(self, conflict_content: str, chat_id: str) -> bool:
+        """
+        删除指定的冲突记录
+
+        Args:
+            conflict_content: 冲突内容
+            chat_id: 聊天ID
+
+        Returns:
+            bool: 是否成功删除
+        """
+        try:
+            conflict = MemoryConflict.get_or_none(
+                MemoryConflict.conflict_content == conflict_content,
+                MemoryConflict.chat_id == chat_id
+            )
+            
+            if conflict:
+                conflict.delete_instance()
+                logger.info(f"已删除冲突记录: {conflict_content}")
+                return True
+            else:
+                logger.warning(f"未找到要删除的冲突记录: {conflict_content}")
+                return False
+        except Exception as e:
+            logger.error(f"删除冲突记录时出错: {e}")
+            return False
 
 # 全局冲突追踪器实例
 global_conflict_tracker = ConflictTracker()
