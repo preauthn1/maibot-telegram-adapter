@@ -18,7 +18,7 @@ from src.chat.planner_actions.action_modifier import ActionModifier
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
 from src.chat.heart_flow.hfc_utils import send_typing, stop_typing
-from src.chat.express.expression_learner import expression_learner_manager
+from src.express.expression_learner import expression_learner_manager
 from src.chat.frequency_control.frequency_control import frequency_control_manager
 from src.memory_system.question_maker import QuestionMaker
 from src.memory_system.questions import global_conflict_tracker
@@ -331,9 +331,8 @@ class HeartFChatting:
 
 
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
-            await self.expression_learner.trigger_learning_for_chat()
-            
-            await global_memory_chest.build_running_content(chat_id=self.stream_id)   
+            asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
+            asyncio.create_task(global_memory_chest.build_running_content(chat_id=self.stream_id))   
             
             
             cycle_timers, thinking_id = self.start_cycle()

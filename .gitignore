@@ -323,7 +323,7 @@ run_pet.bat
 !/plugins/emoji_manage_plugin
 !/plugins/take_picture_plugin
 !/plugins/deep_think
-!/plugins/MaiFrequencyControl
+!/plugins/BetterFrequency
 !/plugins/__init__.py
 
 config.toml

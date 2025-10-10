@@ -45,9 +45,9 @@ private_plan_style = """
 3.某句话如果已经被回复过，不要重复回复"""
 
 [expression]
-# 表达方式模式（此选项暂未使用）
-mode = "context"
-# 可选：llm模式，context上下文模式
+# 表达方式模式
+mode = "classic"
+# 可选：classic经典模式，exp_model 表达模型模式
 
 # 表达学习配置
 learning_list = [ # 表达学习配置列表，支持按聊天流配置
