@@ -415,20 +415,8 @@ class ExpressionLearner:
         matched_expressions: List[Tuple[str, str, str]] = await self.match_expression_context(
             expressions, random_msg_match_str
         )
-        # 为每条消息构建与 build_bare_messages 相同规则的精简文本列表，保留到原消息索引的映射
-        # 这里有待斟酌，需要进一步处理图片和表情包
-        bare_lines: List[Tuple[int, str]] = []  # (original_index, bare_content)
-        pic_pattern = r"\[picid:[^\]]+\]"
-        reply_pattern = r"回复<[^:<>]+:[^:<>]+>"
-        at_pattern = r"@<[^:<>]+:[^:<>]+>"
-        for idx, msg in enumerate(random_msg):
-            content = msg.processed_plain_text or ""
-            content = re.sub(pic_pattern, "[图片]", content)
-            content = re.sub(reply_pattern, "回复[某人]", content)
-            content = re.sub(at_pattern, "@[某人]", content)
-            content = content.strip()
-            if content:
-                bare_lines.append((idx, content))
+        # 为每条消息构建精简文本列表，保留到原消息索引的映射
+        bare_lines: List[Tuple[int, str]] = self._build_bare_lines(random_msg)
         # 将 matched_expressions 结合上一句 up_content（若不存在上一句则跳过）
         filtered_with_up: List[Tuple[str, str, str, str]] = []  # (situation, style, context, up_content)
         for situation, style, context in matched_expressions:
@@ -441,11 +429,19 @@ class ExpressionLearner:
                     break
             
             if pos is None or pos == 0:
-                # 没有匹配到或没有上一句，跳过该表达
+                # 没有匹配到目标句或没有上一句，跳过该表达
                 continue
+            
+            # 检查目标句是否为空
+            target_content = bare_lines[pos][1]
+            if not target_content:
+                # 目标句为空，跳过该表达
+                continue
+            
             prev_original_idx = bare_lines[pos - 1][0]
             up_content = (random_msg[prev_original_idx].processed_plain_text or "").strip()
             if not up_content:
+                # 上一句为空，跳过该表达
                 continue
             filtered_with_up.append((situation, style, context, up_content))
 
@@ -484,6 +480,34 @@ class ExpressionLearner:
             style = line[idx_quote3 + 1 : idx_quote4]
             expressions.append((situation, style))
         return expressions
+
+    def _build_bare_lines(self, messages: List) -> List[Tuple[int, str]]:
+        """
+        为每条消息构建精简文本列表，保留到原消息索引的映射
+        
+        Args:
+            messages: 消息列表
+            
+        Returns:
+            List[Tuple[int, str]]: (original_index, bare_content) 元组列表
+        """
+        bare_lines: List[Tuple[int, str]] = []
+        
+        for idx, msg in enumerate(messages):
+            content = msg.processed_plain_text or ""
+            
+            # 移除以[回复开头、]结尾的部分
+            content = re.sub(r'\[回复[^\]]*\]', '', content)
+            # 移除@<...>格式的内容
+            content = re.sub(r'@<[^>]*>', '', content)
+            # 移除[picid:...]格式的图片ID
+            content = re.sub(r'\[picid:[^\]]*\]', '', content)
+            
+            content = content.strip()
+            # 即使content为空也要记录，防止错位
+            bare_lines.append((idx, content))
+                
+        return bare_lines
 
 
 init_prompt()
