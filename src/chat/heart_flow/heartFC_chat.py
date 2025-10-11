@@ -185,13 +185,11 @@ class HeartFChatting:
 
         question_probability = 0
         if time.time() - self.last_active_time > 3600:
-            question_probability = 0.01
-        elif time.time() - self.last_active_time > 1200:
-            question_probability = 0.005
-        elif time.time() - self.last_active_time > 600:
             question_probability = 0.001
-        else:
+        elif time.time() - self.last_active_time > 1200:
             question_probability = 0.0003
+        else:
+            question_probability = 0.0001
 
         question_probability = question_probability * global_config.chat.get_auto_chat_value(self.stream_id)
         
@@ -210,7 +208,7 @@ class HeartFChatting:
                     if question:
                         logger.info(f"{self.log_prefix} 问题: {question}")
                         await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
-                        await self._lift_question_reply(question,context,cycle_timers,thinking_id)
+                        await self._lift_question_reply(question,context,thinking_id)
                     else:
                         logger.info(f"{self.log_prefix} 无问题")
                     # self.end_cycle(cycle_timers, thinking_id)
@@ -550,8 +548,8 @@ class HeartFChatting:
             traceback.print_exc()
             return False, ""
 
-    async def _lift_question_reply(self, question: str, context: str, cycle_timers: Dict[str, float], thinking_id: str):
-        reason = f"在聊天中：\n{context}\n你对问题\"{question}\"感到好奇，想要和群友讨论"
+    async def _lift_question_reply(self, question: str, question_context: str, thinking_id: str):
+        reason = f"在聊天中：\n{question_context}\n你对问题\"{question}\"感到好奇，想要和群友讨论"
         new_msg = get_raw_msg_before_timestamp_with_chat(
             chat_id=self.stream_id,
             timestamp=time.time(),

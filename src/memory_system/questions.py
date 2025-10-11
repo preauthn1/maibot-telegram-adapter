@@ -288,7 +288,7 @@ class ConflictTracker:
             if existing_conflict:
                 # 检查raise_time是否大于3且没有答案
                 current_raise_time = getattr(existing_conflict, "raise_time", 0) or 0
-                if current_raise_time > 1 and not existing_conflict.answer:
+                if current_raise_time > 0 and not existing_conflict.answer:
                     # 删除该条目
                     await self.delete_conflict(original_question, tracker.chat_id)
                     logger.info(f"追踪结束后删除条目(raise_time={current_raise_time}且无答案): {original_question}")

@@ -310,7 +310,6 @@ class Expression(BaseModel):
 
     last_active_time = FloatField()
     chat_id = TextField(index=True)
-    type = TextField()
     create_date = FloatField(null=True)  # 创建日期，允许为空以兼容老数据
 
     class Meta:

@@ -60,13 +60,8 @@ class QuestionMaker:
 
         # 如果没有 raise_time==0 的项，则仅有 5% 概率抽样一个
         conflicts_with_zero = [c for c in conflicts if (getattr(c, "raise_time", 0) or 0) == 0]
-        if not conflicts_with_zero:
-            if random.random() >= 0.01:
-                return None
-            # 以均匀概率选择一个（此时权重都等同于 0.05，无需再按权重）
-            chosen_conflict = random.choice(conflicts)
-        else:
-            # 权重规则：raise_time == 0 -> 1.0；raise_time >= 1 -> 0.05
+        if conflicts_with_zero:
+            # 权重规则：raise_time == 0 -> 1.0；raise_time >= 1 -> 0.01
             weights = []
             for conflict in conflicts:
                 current_raise_time = getattr(conflict, "raise_time", 0) or 0
@@ -77,12 +72,9 @@ class QuestionMaker:
             chosen_conflict = random.choices(conflicts, weights=weights, k=1)[0]
 
         # 选中后，自增 raise_time 并保存
-        try:
             chosen_conflict.raise_time = (getattr(chosen_conflict, "raise_time", 0) or 0) + 1
             chosen_conflict.save()
-        except Exception:
-            # 静默失败不影响流程
-            pass
+
 
         return chosen_conflict
 

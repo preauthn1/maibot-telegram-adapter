@@ -58,8 +58,18 @@ class ExpressorModel:
         # 取最高分
         if not scores:
             return None, {}
-        best = max(scores.items(), key=lambda x: x[1])[0]
-        return best, scores
+        
+        # 根据k参数限制返回的候选数量
+        if k is not None and k > 0:
+            # 按分数降序排序，取前k个
+            sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            limited_scores = dict(sorted_scores[:k])
+            best = sorted_scores[0][0] if sorted_scores else None
+            return best, limited_scores
+        else:
+            # 如果没有指定k，返回所有分数
+            best = max(scores.items(), key=lambda x: x[1])[0]
+            return best, scores
 
     def update_positive(self, text: str, cid: str):
         """更新正反馈学习"""
