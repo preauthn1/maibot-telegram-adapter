@@ -227,12 +227,10 @@ class ExpressionSelector:
                 return ""
             
             # 取最后3行作为预测输入
-            recent_lines = lines[-3:]
+            recent_lines = lines[-1:]
             prediction_input = ' '.join(recent_lines).strip()
-            
-            # 如果内容太长，截取前100个字符
-            if len(prediction_input) > 100:
-                prediction_input = prediction_input[:100]
+
+            logger.info(f"提取预测输入: {prediction_input}")
             
             return prediction_input
             
@@ -347,9 +345,6 @@ class ExpressionSelector:
             # 使用模型预测最合适的表达方式
             style_exprs = self.get_model_predicted_expressions(chat_id, chat_info, max_num * 2)
             
-            # if len(style_exprs) < 5:
-                # logger.info(f"聊天流 {chat_id} 表达方式正在积累中")
-                # return [], []
             
             # 直接取前max_num个预测结果
             selected_expressions = style_exprs[:max_num]
