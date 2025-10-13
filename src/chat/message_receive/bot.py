@@ -221,6 +221,8 @@ class ChatBot:
             # 处理消息内容，生成纯文本
             await message.process()
 
+            # 平台层的 @ 检测由底层 is_mentioned_bot_in_message 统一处理；此处不做用户名硬编码匹配
+
             # 过滤检查
             if _check_ban_words(
                 message.processed_plain_text,

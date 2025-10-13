@@ -31,6 +31,9 @@ async def _calculate_interest(message: MessageRecv) -> Tuple[float, list[str]]:
         return 0.0, []
 
     is_mentioned, is_at, reply_probability_boost = is_mentioned_bot_in_message(message)
+    # 保留适配器/上游直接标记的提及信号，避免被覆盖
+    if getattr(message, "is_mentioned", False):
+        is_mentioned = True
     # interested_rate = 0.0
     keywords = []
 

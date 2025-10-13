@@ -112,8 +112,8 @@ class ExpressionLearner:
         _, self.enable_learning, self.learning_intensity = global_config.expression.get_expression_config_for_chat(
             self.chat_id
         )
-        self.min_messages_for_learning = 30 / self.learning_intensity  # 触发学习所需的最少消息数
-        self.min_learning_interval = 300 / self.learning_intensity
+        self.min_messages_for_learning = 15 / self.learning_intensity  # 触发学习所需的最少消息数
+        self.min_learning_interval = 150 / self.learning_intensity
 
     def should_trigger_learning(self) -> bool:
         """
@@ -343,44 +343,26 @@ class ExpressionLearner:
             logger.error(f"解析匹配响应JSON失败: {e}, 响应内容: \n{response}")
             return []
 
-        # 确保 match_responses 是一个列表
-        if not isinstance(match_responses, list):
-            if isinstance(match_responses, dict):
-                match_responses = [match_responses]
-            else:
-                logger.error(f"match_responses 不是列表或字典类型: {type(match_responses)}, 内容: {match_responses}")
-                return []
-
         matched_expressions = []
         used_pair_indices = set()  # 用于跟踪已经使用的expression_pair索引
         
-        logger.debug(f"match_responses 类型: {type(match_responses)}, 长度: {len(match_responses)}")
-        logger.debug(f"match_responses 内容: {match_responses}")
+        print(f"match_responses: {match_responses}")
 
         for match_response in match_responses:
             try:
-                # 检查 match_response 的类型
-                if not isinstance(match_response, dict):
-                    logger.error(f"match_response 不是字典类型: {type(match_response)}, 内容: {match_response}")
-                    continue
-                
                 # 获取表达方式序号
-                if "expression_pair" not in match_response:
-                    logger.error(f"match_response 缺少 'expression_pair' 字段: {match_response}")
-                    continue
-                    
                 pair_index = int(match_response["expression_pair"]) - 1  # 转换为0-based索引
 
                 # 检查索引是否有效且未被使用过
                 if 0 <= pair_index < len(expression_pairs) and pair_index not in used_pair_indices:
                     situation, style = expression_pairs[pair_index]
-                    context = match_response.get("context", "")
+                    context = match_response["context"]
                     matched_expressions.append((situation, style, context))
                     used_pair_indices.add(pair_index)  # 标记该索引已使用
                     logger.debug(f"成功匹配表达方式 {pair_index + 1}: {situation} -> {style}")
                 elif pair_index in used_pair_indices:
                     logger.debug(f"跳过重复的表达方式 {pair_index + 1}")
-            except (ValueError, KeyError, IndexError, TypeError) as e:
+            except (ValueError, KeyError, IndexError) as e:
                 logger.error(f"解析匹配条目失败: {e}, 条目: {match_response}")
                 continue
 
@@ -457,7 +439,7 @@ class ExpressionLearner:
                 continue
             
             prev_original_idx = bare_lines[pos - 1][0]
-            up_content = self._filter_message_content(random_msg[prev_original_idx].processed_plain_text or "")
+            up_content = (random_msg[prev_original_idx].processed_plain_text or "").strip()
             if not up_content:
                 # 上一句为空，跳过该表达
                 continue
@@ -499,30 +481,6 @@ class ExpressionLearner:
             expressions.append((situation, style))
         return expressions
 
-    def _filter_message_content(self, content: str) -> str:
-        """
-        过滤消息内容，移除回复、@、图片等格式
-        
-        Args:
-            content: 原始消息内容
-            
-        Returns:
-            str: 过滤后的内容
-        """
-        if not content:
-            return ""
-            
-        # 移除以[回复开头、]结尾的部分，包括后面的"，说："部分
-        content = re.sub(r'\[回复.*?\]，说：\s*', '', content)
-        # 移除@<...>格式的内容
-        content = re.sub(r'@<[^>]*>', '', content)
-        # 移除[picid:...]格式的图片ID
-        content = re.sub(r'\[picid:[^\]]*\]', '', content)
-        # 移除[表情包：...]格式的内容
-        content = re.sub(r'\[表情包：[^\]]*\]', '', content)
-        
-        return content.strip()
-
     def _build_bare_lines(self, messages: List) -> List[Tuple[int, str]]:
         """
         为每条消息构建精简文本列表，保留到原消息索引的映射
@@ -537,7 +495,15 @@ class ExpressionLearner:
         
         for idx, msg in enumerate(messages):
             content = msg.processed_plain_text or ""
-            content = self._filter_message_content(content)
+            
+            # 移除以[回复开头、]结尾的部分
+            content = re.sub(r'\[回复[^\]]*\]', '', content)
+            # 移除@<...>格式的内容
+            content = re.sub(r'@<[^>]*>', '', content)
+            # 移除[picid:...]格式的图片ID
+            content = re.sub(r'\[picid:[^\]]*\]', '', content)
+            
+            content = content.strip()
             # 即使content为空也要记录，防止错位
             bare_lines.append((idx, content))
                 

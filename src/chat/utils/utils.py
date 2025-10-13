@@ -44,62 +44,104 @@ def db_message_to_str(message_dict: dict) -> str:
 
 
 def is_mentioned_bot_in_message(message: MessageRecv) -> tuple[bool, bool, float]:
-    """检查消息是否提到了机器人"""
-    keywords = [global_config.bot.nickname] + list(global_config.bot.alias_names)
+    """检查消息是否提到了机器人（多平台实现）"""
+    text = message.processed_plain_text or ""
+    platform = getattr(message.message_info, "platform", "") or ""
+    qq_id = str(getattr(global_config.bot, "qq_account", "") or "")
+    tg_id = str(getattr(global_config.bot, "telegram_account", "") or "")
+    tg_uname = str(getattr(global_config.bot, "telegram_username", "") or "")
+
+    nickname = str(global_config.bot.nickname or "")
+    alias_names = list(getattr(global_config.bot, "alias_names", []) or [])
+    keywords = [nickname] + alias_names
+
     reply_probability = 0.0
     is_at = False
     is_mentioned = False
 
-    # 这部分怎么处理啊啊啊啊
-    # 我觉得可以给消息加一个 reply_probability_boost字段
-    if (
-        message.message_info.additional_config is not None
-        and message.message_info.additional_config.get("is_mentioned") is not None
-    ):
+    # 1) 直接的 additional_config 标记
+    add_cfg = getattr(message.message_info, "additional_config", None) or {}
+    if isinstance(add_cfg, dict):
+        if add_cfg.get("at_bot") or add_cfg.get("is_mentioned"):
+            is_mentioned = True
+            # 当提供数值型 is_mentioned 时，当作概率提升
+            try:
+                if add_cfg.get("is_mentioned") not in (None, ""):
+                    reply_probability = float(add_cfg.get("is_mentioned"))  # type: ignore
+            except Exception:
+                pass
+
+    # 2) 已经在上游设置过的 message.is_mentioned
+    if getattr(message, "is_mentioned", False):
+        is_mentioned = True
+
+    # 3) 扫描分段：是否包含 mention_bot（适配器插入）
+    def _has_mention_bot(seg) -> bool:
         try:
-            reply_probability = float(message.message_info.additional_config.get("is_mentioned"))  # type: ignore
-            is_mentioned = True
-            return is_mentioned, is_at, reply_probability
-        except Exception as e:
-            logger.warning(str(e))
-            logger.warning(
-                f"消息中包含不合理的设置 is_mentioned: {message.message_info.additional_config.get('is_mentioned')}"
-            )
+            if seg is None:
+                return False
+            if getattr(seg, "type", None) == "mention_bot":
+                return True
+            if getattr(seg, "type", None) == "seglist":
+                for s in getattr(seg, "data", []) or []:
+                    if _has_mention_bot(s):
+                        return True
+            return False
+        except Exception:
+            return False
 
-    for keyword in keywords:
-        if keyword in message.processed_plain_text:
-            is_mentioned = True
-
-    # 判断是否被@
-    if re.search(rf"@<(.+?):{global_config.bot.qq_account}>", message.processed_plain_text):
+    if _has_mention_bot(getattr(message, "message_segment", None)):
         is_at = True
         is_mentioned = True
 
-    if is_at and global_config.chat.at_bot_inevitable_reply:
+    # 4) 文本层面的 @ 检测（多平台）
+    # QQ: @<name:qq_id>
+    if qq_id and re.search(rf"@<(.+?):{re.escape(qq_id)}>", text):
+        is_at = True
+        is_mentioned = True
+    # Telegram: @username
+    if platform == "telegram" and tg_uname:
+        if re.search(rf"@{re.escape(tg_uname)}(\b|$)", text, flags=re.IGNORECASE):
+            is_at = True
+            is_mentioned = True
+
+    # 5) 回复机器人检测：
+    # a) 通用显示文本：包含 “(你)” 或 “（你）” 的回复格式
+    if re.search(r"\[回复 .*?\(你\)：", text) or re.search(r"\[回复 .*?（你）：", text):
+        is_mentioned = True
+    # b) 兼容 ID 形式（QQ与Telegram）
+    if qq_id and (
+        re.search(rf"\[回复 (.+?)\({re.escape(qq_id)}\)：(.+?)\]，说：", text)
+        or re.search(rf"\[回复<(.+?)(?=:{re.escape(qq_id)}>)\:{re.escape(qq_id)}>：(.+?)\]，说：", text)
+    ):
+        is_mentioned = True
+    if tg_id and (
+        re.search(rf"\[回复 (.+?)\({re.escape(tg_id)}\)：(.+?)\]，说：", text)
+        or re.search(rf"\[回复<(.+?)(?=:{re.escape(tg_id)}>)\:{re.escape(tg_id)}>：(.+?)\]，说：", text)
+    ):
+        is_mentioned = True
+
+    # 6) 名称/别名 提及（去除 @/回复标记后再匹配）
+    if not is_mentioned and keywords:
+        msg_content = text
+        # 去除各种 @ 与 回复标记，避免误判
+        msg_content = re.sub(r"@(.+?)（(\d+)）", "", msg_content)
+        msg_content = re.sub(r"@<(.+?)(?=:(\d+))\:(\d+)>", "", msg_content)
+        msg_content = re.sub(r"\[回复 (.+?)\(((\d+)|未知id|你)\)：(.+?)\]，说：", "", msg_content)
+        msg_content = re.sub(r"\[回复<(.+?)(?=:(\d+))\:(\d+)>：(.+?)\]，说：", "", msg_content)
+        for kw in keywords:
+            if kw and kw in msg_content:
+                is_mentioned = True
+                break
+
+    # 7) 概率设置
+    if is_at and getattr(global_config.chat, "at_bot_inevitable_reply", 1):
         reply_probability = 1.0
         logger.debug("被@，回复概率设置为100%")
-    else:
-        if not is_mentioned:
-            # 判断是否被回复
-            if re.match(
-                rf"\[回复 (.+?)\({str(global_config.bot.qq_account)}\)：(.+?)\]，说：", message.processed_plain_text
-            ) or re.match(
-                rf"\[回复<(.+?)(?=:{str(global_config.bot.qq_account)}>)\:{str(global_config.bot.qq_account)}>：(.+?)\]，说：",
-                message.processed_plain_text,
-            ):
-                is_mentioned = True
-            else:
-                # 判断内容中是否被提及
-                message_content = re.sub(r"@(.+?)（(\d+)）", "", message.processed_plain_text)
-                message_content = re.sub(r"@<(.+?)(?=:(\d+))\:(\d+)>", "", message_content)
-                message_content = re.sub(r"\[回复 (.+?)\(((\d+)|未知id)\)：(.+?)\]，说：", "", message_content)
-                message_content = re.sub(r"\[回复<(.+?)(?=:(\d+))\:(\d+)>：(.+?)\]，说：", "", message_content)
-                for keyword in keywords:
-                    if keyword in message_content:
-                        is_mentioned = True
-        if is_mentioned and global_config.chat.mentioned_bot_reply:
-            reply_probability = 1.0
-            logger.debug("被提及，回复概率设置为100%")
+    elif is_mentioned and getattr(global_config.chat, "mentioned_bot_reply", 1):
+        reply_probability = max(reply_probability, 1.0)
+        logger.debug("被提及，回复概率设置为100%")
+
     return is_mentioned, is_at, reply_probability
 
 
