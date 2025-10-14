@@ -43,9 +43,12 @@ def replace_user_references(
     if name_resolver is None:
 
         def default_resolver(platform: str, user_id: str) -> str:
-            # 检查是否是机器人自己
-            if replace_bot_name and user_id == global_config.bot.qq_account:
-                return f"{global_config.bot.nickname}(你)"
+            # 检查是否是机器人自己（支持多平台）
+            if replace_bot_name:
+                if platform == "qq" and user_id == global_config.bot.qq_account:
+                    return f"{global_config.bot.nickname}(你)"
+                if platform == "telegram" and user_id == getattr(global_config.bot, "telegram_account", ""):
+                    return f"{global_config.bot.nickname}(你)"
             person = Person(platform=platform, user_id=user_id)
             return person.person_name or user_id  # type: ignore
 
@@ -91,6 +94,8 @@ def replace_user_references(
             last_end = m.end()
         new_content += content[last_end:]
         content = new_content
+
+    # Telegram 文本 @username 的显示映射交由适配器或平台层处理；此处不做硬编码替换
 
     return content
 
@@ -432,7 +437,10 @@ def _build_readable_messages_internal(
         person_name = (
             person.person_name or f"{user_nickname}" or (f"昵称：{user_cardname}" if user_cardname else "某人")
         )
-        if replace_bot_name and user_id == global_config.bot.qq_account:
+        if replace_bot_name and (
+            (platform == global_config.bot.platform and user_id == global_config.bot.qq_account)
+            or (platform == "telegram" and user_id == getattr(global_config.bot, "telegram_account", ""))
+        ):
             person_name = f"{global_config.bot.nickname}(你)"
 
         # 使用独立函数处理用户引用格式
@@ -866,7 +874,9 @@ async def build_anonymous_messages(messages: List[DatabaseMessages]) -> str:
         # print(f"get_anon_name: platform:{platform}, user_id:{user_id}")
         # print(f"global_config.bot.qq_account:{global_config.bot.qq_account}")
 
-        if user_id == global_config.bot.qq_account:
+        if (platform == "qq" and user_id == global_config.bot.qq_account) or (
+            platform == "telegram" and user_id == getattr(global_config.bot, "telegram_account", "")
+        ):
             # print("SELF11111111111111")
             return "SELF"
         try:

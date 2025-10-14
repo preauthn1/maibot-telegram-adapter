@@ -27,6 +27,9 @@ class BotConfig(ConfigBase):
 
     nickname: str
     """昵称"""
+    
+    platforms: list[str] = field(default_factory=lambda: [])
+    """其他平台列表"""
 
     alias_names: list[str] = field(default_factory=lambda: [])
     """别名列表"""
