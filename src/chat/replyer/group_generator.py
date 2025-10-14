@@ -529,7 +529,7 @@ class DefaultReplyer:
                     show_actions=True,
                 )
                 core_dialogue_prompt = f"""--------------------------------
-这是你和{sender}的对话，你们正在交流中：
+这是上述中你和{sender}的对话摘要，内容从上面的对话中截取，便于你理解：
 {core_dialogue_prompt_str}
 --------------------------------
 """
