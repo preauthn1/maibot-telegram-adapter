@@ -50,15 +50,14 @@ class QuestionMaker:
         """按权重随机选取一个未回答的冲突并自增 raise_time。
 
         选择规则：
-        - 若存在 `raise_time == 0` 的项：按权重抽样（0 次权重 1.0，≥1 次权重 0.05）。
-        - 若不存在 `raise_time == 0` 的项：仅 5% 概率返回其中任意一条，否则返回 None。
+        - 若存在 `raise_time == 0` 的项：按权重抽样（0 次权重 1.0，≥1 次权重 0.01）。
+        - 若不存在，返回 None。
         - 每次成功选中后，将该条目的 `raise_time` 自增 1 并保存。
         """
         conflicts = await self.get_un_answered_conflict()
         if not conflicts:
             return None
 
-        # 如果没有 raise_time==0 的项，则仅有 5% 概率抽样一个
         conflicts_with_zero = [c for c in conflicts if (getattr(c, "raise_time", 0) or 0) == 0]
         if conflicts_with_zero:
             # 权重规则：raise_time == 0 -> 1.0；raise_time >= 1 -> 0.01
@@ -71,12 +70,14 @@ class QuestionMaker:
             # 按权重随机选择
             chosen_conflict = random.choices(conflicts, weights=weights, k=1)[0]
 
-        # 选中后，自增 raise_time 并保存
+            # 选中后，自增 raise_time 并保存
             chosen_conflict.raise_time = (getattr(chosen_conflict, "raise_time", 0) or 0) + 1
             chosen_conflict.save()
 
-
-        return chosen_conflict
+            return chosen_conflict
+        else:
+            # 如果没有 raise_time == 0 的冲突，返回 None
+            return None
 
     async def make_question(self) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """生成一条用于询问用户的冲突问题与上下文。
