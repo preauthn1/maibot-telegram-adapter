@@ -130,6 +130,16 @@ class MessageRecv(Message):
         self.key_words = []
         self.key_words_lite = []
 
+        # 兼容适配器通过 additional_config 传入的 @ 标记
+        try:
+            msg_info_dict = message_dict.get("message_info", {})
+            add_cfg = msg_info_dict.get("additional_config") or {}
+            if isinstance(add_cfg, dict) and add_cfg.get("at_bot"):
+                # 标记为被提及，提高后续回复优先级
+                self.is_mentioned = True  # type: ignore
+        except Exception:
+            pass
+
     def update_chat_stream(self, chat_stream: "ChatStream"):
         self.chat_stream = chat_stream
 

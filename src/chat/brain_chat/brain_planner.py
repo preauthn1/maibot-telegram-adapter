@@ -249,6 +249,8 @@ class BrainPlanner:
         # 获取必要信息
         is_group_chat, chat_target_info, current_available_actions = self.get_necessary_info()
 
+        # 提及/被@ 的处理由心流或统一判定模块驱动；Planner 不再做硬编码强制回复
+
         # 应用激活类型过滤
         filtered_actions = self._filter_actions_by_activation_type(available_actions, chat_content_block_short)
 

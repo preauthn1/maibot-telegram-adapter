@@ -1,7 +1,7 @@
 import re
 import traceback
 
-from typing import Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from src.chat.message_receive.message import MessageRecv
 from src.chat.message_receive.storage import MessageStorage
@@ -16,31 +16,6 @@ if TYPE_CHECKING:
     from src.chat.heart_flow.heartFC_chat import HeartFChatting
 
 logger = get_logger("chat")
-
-
-async def _calculate_interest(message: MessageRecv) -> Tuple[float, list[str]]:
-    """计算消息的兴趣度
-
-    Args:
-        message: 待处理的消息对象
-
-    Returns:
-        Tuple[float, bool, list[str]]: (兴趣度, 是否被提及, 关键词)
-    """
-    if message.is_picid or message.is_emoji:
-        return 0.0, []
-
-    is_mentioned, is_at, reply_probability_boost = is_mentioned_bot_in_message(message)
-    # interested_rate = 0.0
-    keywords = []
-
-    message.interest_value = 1
-    message.is_mentioned = is_mentioned
-    message.is_at = is_at
-    message.reply_probability_boost = reply_probability_boost
-
-    return 1, keywords
-
 
 class HeartFCMessageReceiver:
     """心流处理器，负责处理接收到的消息并计算兴趣度"""
@@ -67,12 +42,16 @@ class HeartFCMessageReceiver:
             userinfo = message.message_info.user_info
             chat = message.chat_stream
 
-            # 2. 兴趣度计算与更新
-            _, keywords = await _calculate_interest(message)
+            # 2. 计算at信息
+            is_mentioned, is_at, reply_probability_boost = is_mentioned_bot_in_message(message)
+            print(f"is_mentioned: {is_mentioned}, is_at: {is_at}, reply_probability_boost: {reply_probability_boost}")
+            message.is_mentioned = is_mentioned
+            message.is_at = is_at
+            message.reply_probability_boost = reply_probability_boost
 
             await self.storage.store_message(message, chat)
 
-            _heartflow_chat: HeartFChatting = await heartflow.get_or_create_heartflow_chat(chat.stream_id)  # type: ignore
+            await heartflow.get_or_create_heartflow_chat(chat.stream_id)  # type: ignore
 
             # 3. 日志记录
             mes_name = chat.group_info.group_name if chat.group_info else "私聊"
