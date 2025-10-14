@@ -16,7 +16,7 @@ from src.chat.utils.chat_message_builder import (
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
 from src.express.style_learner import style_learner_manager
-from src.express.express_utils import filter_message_content, calculate_similarity, format_create_date
+from src.express.express_utils import filter_message_content, calculate_similarity
 from json_repair import repair_json
 
 
