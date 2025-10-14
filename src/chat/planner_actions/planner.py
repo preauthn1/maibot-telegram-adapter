@@ -67,6 +67,7 @@ no_reply_until_call
 动作描述：
 保持沉默，直到有人直接叫你的名字
 当前话题不感兴趣时使用，或有人不喜欢你的发言时使用
+当你频繁选择no_reply时使用，表示话题暂时与你无关
 {{
     "action": "no_reply_until_call",
 }}
