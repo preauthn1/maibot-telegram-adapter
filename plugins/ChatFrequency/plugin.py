@@ -112,26 +112,40 @@ class BetterFrequencyPlugin(BasePlugin):
     # 配置节描述
     config_section_descriptions = {
         "plugin": "插件基本信息",
-        "frequency": "频率控制配置"
+        "frequency": "频率控制配置",
+        "features": "功能开关配置"
     }
 
     # 配置Schema定义
     config_schema: dict = {
         "plugin": {
             "name": ConfigField(type=str, default="better_frequency_plugin", description="插件名称"),
-            "version": ConfigField(type=str, default="1.0.0", description="插件版本"),
+            "version": ConfigField(type=str, default="1.0.1", description="插件版本"),
             "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
         },
         "frequency": {
             "default_talk_adjust": ConfigField(type=float, default=1.0, description="默认talk_frequency调整值"),
             "max_adjust_value": ConfigField(type=float, default=1.0, description="最大调整值"),
             "min_adjust_value": ConfigField(type=float, default=0.0, description="最小调整值"),
+        },
+        "features": {
+            "enable_frequency_adjust_action": ConfigField(type=bool, default=False, description="是否启用频率调节动作（FrequencyAdjustAction）"),
+            "enable_commands": ConfigField(type=bool, default=True, description="是否启用命令功能（/chat命令）"),
         }
     }
 
     def get_plugin_components(self) -> List[Tuple[ComponentInfo, Type]]:
-        return [
-            (SetTalkFrequencyCommand.get_command_info(), SetTalkFrequencyCommand),
-            (ShowFrequencyCommand.get_command_info(), ShowFrequencyCommand),
-            (FrequencyAdjustAction.get_action_info(), FrequencyAdjustAction),
-        ]
+        components = []
+        
+        # 根据配置决定是否注册命令组件
+        if self.config.get("features", {}).get("enable_commands", True):
+            components.extend([
+                (SetTalkFrequencyCommand.get_command_info(), SetTalkFrequencyCommand),
+                (ShowFrequencyCommand.get_command_info(), ShowFrequencyCommand),
+            ])
+        
+        # 根据配置决定是否注册频率调节动作组件
+        if self.config.get("features", {}).get("enable_frequency_adjust_action", True):
+            components.append((FrequencyAdjustAction.get_action_info(), FrequencyAdjustAction))
+        
+        return components

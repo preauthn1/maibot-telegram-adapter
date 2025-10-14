@@ -18,30 +18,13 @@ from src.chat.utils.chat_message_builder import (
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
 from src.express.style_learner import style_learner_manager
+from src.express.express_utils import filter_message_content, calculate_similarity, format_create_date
 from json_repair import repair_json
 
 
 # MAX_EXPRESSION_COUNT = 300
 
 logger = get_logger("expressor")
-
-
-def calculate_similarity(text1: str, text2: str) -> float:
-    """
-    计算两个文本的相似度，返回0-1之间的值
-    使用SequenceMatcher计算相似度
-    """
-    return difflib.SequenceMatcher(None, text1, text2).ratio()
-
-
-def format_create_date(timestamp: float) -> str:
-    """
-    将时间戳格式化为可读的日期字符串
-    """
-    try:
-        return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-    except (ValueError, OSError):
-        return "未知时间"
 
 
 def init_prompt() -> None:
@@ -457,7 +440,7 @@ class ExpressionLearner:
                 continue
             
             prev_original_idx = bare_lines[pos - 1][0]
-            up_content = self._filter_message_content(random_msg[prev_original_idx].processed_plain_text or "")
+            up_content = filter_message_content(random_msg[prev_original_idx].processed_plain_text or "")
             if not up_content:
                 # 上一句为空，跳过该表达
                 continue
@@ -499,30 +482,6 @@ class ExpressionLearner:
             expressions.append((situation, style))
         return expressions
 
-    def _filter_message_content(self, content: str) -> str:
-        """
-        过滤消息内容，移除回复、@、图片等格式
-        
-        Args:
-            content: 原始消息内容
-            
-        Returns:
-            str: 过滤后的内容
-        """
-        if not content:
-            return ""
-            
-        # 移除以[回复开头、]结尾的部分，包括后面的"，说："部分
-        content = re.sub(r'\[回复.*?\]，说：\s*', '', content)
-        # 移除@<...>格式的内容
-        content = re.sub(r'@<[^>]*>', '', content)
-        # 移除[picid:...]格式的图片ID
-        content = re.sub(r'\[picid:[^\]]*\]', '', content)
-        # 移除[表情包：...]格式的内容
-        content = re.sub(r'\[表情包：[^\]]*\]', '', content)
-        
-        return content.strip()
-
     def _build_bare_lines(self, messages: List) -> List[Tuple[int, str]]:
         """
         为每条消息构建精简文本列表，保留到原消息索引的映射
@@ -537,7 +496,7 @@ class ExpressionLearner:
         
         for idx, msg in enumerate(messages):
             content = msg.processed_plain_text or ""
-            content = self._filter_message_content(content)
+            content = filter_message_content(content)
             # 即使content为空也要记录，防止错位
             bare_lines.append((idx, content))
                 
