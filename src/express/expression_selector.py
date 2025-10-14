@@ -131,6 +131,8 @@ class ExpressionSelector:
             # 过滤目标消息内容，移除回复、表情包等特殊格式
             filtered_target_message = filter_message_content(target_message)
             
+            logger.info(f"为{chat_id} 预测表达方式，过滤后的目标消息内容: {filtered_target_message}")
+            
             # 支持多chat_id合并预测
             related_chat_ids = self.get_related_chat_ids(chat_id)
             
@@ -181,7 +183,7 @@ class ExpressionSelector:
             predicted_expressions.sort(key=lambda x: x.get("prediction_score", 0.0), reverse=True)
             selected_expressions = predicted_expressions[:total_num]
             
-            logger.info(f"为聊天室 {chat_id} 预测到 {len(selected_expressions)} 个表达方式")
+            logger.info(f"为{chat_id} 预测到 {len(selected_expressions)} 个表达方式")
             return selected_expressions
             
         except Exception as e:

@@ -44,7 +44,7 @@ class HeartFCMessageReceiver:
 
             # 2. 计算at信息
             is_mentioned, is_at, reply_probability_boost = is_mentioned_bot_in_message(message)
-            print(f"is_mentioned: {is_mentioned}, is_at: {is_at}, reply_probability_boost: {reply_probability_boost}")
+            # print(f"is_mentioned: {is_mentioned}, is_at: {is_at}, reply_probability_boost: {reply_probability_boost}")
             message.is_mentioned = is_mentioned
             message.is_at = is_at
             message.reply_probability_boost = reply_probability_boost

@@ -330,7 +330,8 @@ class HeartFChatting:
 
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
-            asyncio.create_task(global_memory_chest.build_running_content(chat_id=self.stream_id))   
+            asyncio.create_task(global_memory_chest.build_running_content(chat_id=self.stream_id))  
+            asyncio.create_task(frequency_control_manager.get_or_create_frequency_control(self.stream_id).trigger_frequency_adjust())  
             
             
             cycle_timers, thinking_id = self.start_cycle()

@@ -55,7 +55,7 @@ class FrequencyAdjustAction(BaseAction):
                 return False, error_msg
 
             # 2. 获取当前频率值
-            current_frequency = frequency_api.get_current_talk_frequency(self.chat_id)
+            current_frequency = frequency_api.get_current_talk_value(self.chat_id)
 
             # 3. 计算新的频率值（使用比率而不是绝对值）
             # calculated_frequency = current_frequency * multiply

@@ -14,8 +14,6 @@ from src.common.logger import get_logger
 from src.common.data_models.info_data_model import ActionPlannerInfo
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.utils.chat_message_builder import (
-    build_readable_actions,
-    get_actions_by_timestamp_with_chat,
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
 )
@@ -418,7 +416,6 @@ class ActionPlanner:
         return filtered_actions
 
     async def _build_action_options_block(self, current_available_actions: Dict[str, ActionInfo]) -> str:
-        # sourcery skip: use-join
         """构建动作选项块"""
         if not current_available_actions:
             return ""
@@ -474,8 +471,8 @@ class ActionPlanner:
             # 调用LLM
             llm_content, (reasoning_content, _, _) = await self.planner_llm.generate_response_async(prompt=prompt)
 
-            # logger.info(f"{self.log_prefix}规划器原始提示词: {prompt}")
-            # logger.info(f"{self.log_prefix}规划器原始响应: {llm_content}")
+            logger.info(f"{self.log_prefix}规划器原始提示词: {prompt}")
+            logger.info(f"{self.log_prefix}规划器原始响应: {llm_content}")
 
             if global_config.debug.show_prompt:
                 logger.info(f"{self.log_prefix}规划器原始提示词: {prompt}")
