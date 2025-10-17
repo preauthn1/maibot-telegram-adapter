@@ -249,16 +249,29 @@ def _build_stream_api_resp(
             if fr:
                 reason = str(fr)
                 break
-    
+
     if str(reason).endswith("MAX_TOKENS"):
+        warn_target = "max_tokens"
+        try:
+            usage_meta = getattr(last_resp, "usage_metadata", None)
+            if usage_meta and getattr(usage_meta, "prompt_tokens_details", None):
+                for detail in usage_meta.prompt_tokens_details:
+                    modality = str(getattr(detail, "modality", "")).upper()
+                    token_count = getattr(detail, "token_count", 0)
+                    if "IMAGE" in modality and token_count > 0:
+                        warn_target = "img_tokens"
+                        break
+        except Exception as ee:
+            logger.debug(f"检测 img_tokens 信息失败: {ee}")
+
         has_visible_output = bool(resp.content and resp.content.strip())
         if has_visible_output:
             logger.warning(
-                "⚠ Gemini 响应因达到 max_tokens 限制被部分截断，\n"
-                "    可能会对回复内容造成影响，建议修改模型 max_tokens 配置！"
+                f"⚠ Gemini 响应因达到 {warn_target} 限制被部分截断，\n"
+                f"    可能会对回复内容造成影响，建议修改模型 {warn_target} 配置！"
             )
         else:
-            logger.warning("⚠ Gemini 响应因达到 max_tokens 限制被截断，\n    请修改模型 max_tokens 配置！")
+            logger.warning(f"⚠ Gemini 响应因达到 {warn_target} 限制被截断，\n请修改模型 {warn_target} 配置！")
 
     if not resp.content and not resp.tool_calls:
         if not getattr(resp, "reasoning_content", None):
@@ -379,6 +392,19 @@ def _default_normal_response_parser(
             c0 = resp.candidates[0]
             reason = getattr(c0, "finish_reason", None) or getattr(c0, "finishReason", None)
             if reason and "MAX_TOKENS" in str(reason):
+                warn_target = "max_tokens"
+                try:
+                    usage_meta = getattr(resp, "usage_metadata", None)
+                    if usage_meta and getattr(usage_meta, "prompt_tokens_details", None):
+                        for detail in usage_meta.prompt_tokens_details:
+                            modality = str(getattr(detail, "modality", "")).upper()
+                            token_count = getattr(detail, "token_count", 0)
+                            if "IMAGE" in modality and token_count > 0:
+                                warn_target = "img_tokens"
+                                break
+                except Exception as ee:
+                    logger.debug(f"检测 img_tokens 信息失败: {ee}")
+
                 # 检查第二个及之后的 parts 是否有内容
                 has_real_output = False
                 if getattr(c0, "content", None) and getattr(c0.content, "parts", None):
@@ -392,11 +418,11 @@ def _default_normal_response_parser(
 
                 if has_real_output:
                     logger.warning(
-                        "⚠ Gemini 响应因达到 max_tokens 限制被部分截断，\n"
-                        "    可能会对回复内容造成影响，建议修改模型 max_tokens 配置！"
+                        f"⚠ Gemini 响应因达到 {warn_target} 限制被部分截断，\n"
+                        f"    可能会对回复内容造成影响，建议修改模型 {warn_target} 配置！"
                     )
                 else:
-                    logger.warning("⚠ Gemini 响应因达到 max_tokens 限制被截断，\n    请修改模型 max_tokens 配置！")
+                    logger.warning(f"⚠ Gemini 响应因达到 {warn_target} 限制被截断，\n请修改模型 {warn_target} 配置！")
 
                 return api_response, _usage_record
     except Exception as e:
