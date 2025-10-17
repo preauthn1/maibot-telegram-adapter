@@ -271,7 +271,7 @@ def _build_stream_api_resp(
                 f"    可能会对回复内容造成影响，建议修改模型 {warn_target} 配置！"
             )
         else:
-            logger.warning(f"⚠ Gemini 响应因达到 {warn_target} 限制被截断，\n请修改模型 {warn_target} 配置！")
+            logger.warning(f"⚠ Gemini 响应因达到 {warn_target} 限制被截断，\n    请修改模型 {warn_target} 配置！")
 
     if not resp.content and not resp.tool_calls:
         if not getattr(resp, "reasoning_content", None):
@@ -422,7 +422,7 @@ def _default_normal_response_parser(
                         f"    可能会对回复内容造成影响，建议修改模型 {warn_target} 配置！"
                     )
                 else:
-                    logger.warning(f"⚠ Gemini 响应因达到 {warn_target} 限制被截断，\n请修改模型 {warn_target} 配置！")
+                    logger.warning(f"⚠ Gemini 响应因达到 {warn_target} 限制被截断，\n    请修改模型 {warn_target} 配置！")
 
                 return api_response, _usage_record
     except Exception as e:
