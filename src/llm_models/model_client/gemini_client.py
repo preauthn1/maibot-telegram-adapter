@@ -13,6 +13,7 @@ from google.genai.types import (
     ContentUnion,
     ThinkingConfig,
     Tool,
+    GoogleSearch,
     GenerateContentConfig,
     EmbedContentResponse,
     EmbedContentConfig,
@@ -564,6 +565,15 @@ class GeminiClient(BaseClient):
         tools = _convert_tool_options(tool_options) if tool_options else None
         # 解析并裁剪 thinking_budget
         tb = self.clamp_thinking_budget(extra_params, model_info.model_identifier)
+        # 检测是否为带 -search 的模型
+        enable_google_search = False
+        model_identifier = model_info.model_identifier
+        if model_identifier.endswith("-search"):
+            enable_google_search = True
+            # 去掉后缀并更新模型ID
+            model_identifier = model_identifier.removesuffix("-search")
+            model_info.model_identifier = model_identifier
+            logger.info(f"模型已启用 GoogleSearch 功能：{model_identifier}")
 
         # 将response_format转换为Gemini API所需的格式
         generation_config_dict = {
@@ -586,6 +596,17 @@ class GeminiClient(BaseClient):
         elif response_format and response_format.format_type in (RespFormatType.JSON_OBJ, RespFormatType.JSON_SCHEMA):
             generation_config_dict["response_mime_type"] = "application/json"
             generation_config_dict["response_schema"] = response_format.to_dict()
+        # 自动启用 GoogleSearch grounding_tool
+        if enable_google_search:
+            grounding_tool = Tool(google_search=GoogleSearch())
+            if "tools" in generation_config_dict:
+                existing = generation_config_dict["tools"]
+                if isinstance(existing, list):
+                    existing.append(grounding_tool)
+                else:
+                    generation_config_dict["tools"] = [existing, grounding_tool]
+            else:
+                generation_config_dict["tools"] = [grounding_tool]
 
         generation_config = GenerateContentConfig(**generation_config_dict)
 
