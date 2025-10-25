@@ -24,7 +24,7 @@ def init_rewrite_prompt():
 你可以完全重组回复，保留最基本的表达含义就好，但重组后保持语意通顺。
 {keywords_reaction_prompt}
 {moderation_prompt}
-不要输出多余内容(包括冒号和引号，表情包，emoji,at或 @等 )，只输出一条回复就好。
+不要输出多余内容(包括冒号和引号，表情包，emoji,at或 @等 )，只输出一条回复就好。不要思考的太长。
 改写后的回复：
 """,
         "default_expressor_prompt",

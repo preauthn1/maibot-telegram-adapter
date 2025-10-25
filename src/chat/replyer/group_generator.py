@@ -492,6 +492,31 @@ class DefaultReplyer:
         Returns:
             Tuple[str, str]: (核心对话prompt, 背景对话prompt)
         """
+        # 构建背景对话 prompt
+        all_dialogue_prompt = ""
+        if message_list_before_now:
+            latest_msgs = message_list_before_now[-int(global_config.chat.max_context_size) :]
+            all_dialogue_prompt = build_readable_messages(
+                latest_msgs,
+                replace_bot_name=True,
+                timestamp_mode="normal_no_YMD",
+                truncate=True,
+            )
+
+        return all_dialogue_prompt
+    
+    def core_background_build_chat_history_prompts(
+        self, message_list_before_now: List[DatabaseMessages], target_user_id: str, sender: str
+    ) -> Tuple[str, str]:
+        """
+
+        Args:
+            message_list_before_now: 历史消息列表
+            target_user_id: 目标用户ID（当前对话对象）
+
+        Returns:
+            Tuple[str, str]: (核心对话prompt, 背景对话prompt)
+        """
         core_dialogue_list: List[DatabaseMessages] = []
         bot_id = str(global_config.bot.qq_account)
 
@@ -792,9 +817,7 @@ class DefaultReplyer:
             reply_target_block = ""
 
         # 构建分离的对话 prompt
-        core_dialogue_prompt, background_dialogue_prompt = self.build_chat_history_prompts(
-            message_list_before_now_long, user_id, sender
-        )
+        dialogue_prompt = self.build_chat_history_prompts(message_list_before_now_long, user_id, sender)
 
         return await global_prompt_manager.format_prompt(
             "replyer_prompt",
@@ -809,9 +832,8 @@ class DefaultReplyer:
             identity=personality_prompt,
             action_descriptions=actions_info,
             sender_name=sender,
-            background_dialogue_prompt=background_dialogue_prompt,
+            dialogue_prompt=dialogue_prompt,
             time_block=time_block,
-            core_dialogue_prompt=core_dialogue_prompt,
             reply_target_block=reply_target_block,
             reply_style=global_config.personality.reply_style,
             keywords_reaction_prompt=keywords_reaction_prompt,

@@ -130,12 +130,15 @@ class GetMemoryTool(BaseTool):
         if memory_answer:
             content_parts.append(f"记忆仓库答案：{memory_answer}")
         else:
-            content_parts.append("记忆仓库：没有找到相关记忆")
+            content_parts.append(f"记忆仓库：对问题'{question}'，没有什么印象")
         
         if chat_answer:
-            content_parts.append(f"聊天记录答案：{chat_answer}")
+            content_parts.append(f"对问题'{question}'，基于聊天记录的回答：{chat_answer}")
         elif has_time_params:
-            content_parts.append("聊天记录：没有找到相关记录")
+            if time_point:
+                content_parts.append(f"在 {time_point} 的时间点，你没有参与聊天")
+            elif time_range:
+                content_parts.append(f"在 {time_range} 的时间范围内，你没有参与聊天")
         
         return {"content": "\n".join(content_parts)}
     
@@ -191,35 +194,37 @@ class GetMemoryTool(BaseTool):
                     request_type="chat_history_analysis"
                 )
                 
-                analysis_prompt = f"""请根据以下聊天记录内容，回答用户的问题。
-
+                analysis_prompt = f"""请根据以下聊天记录内容，回答用户的问题。请输出一段平文本，不要有特殊格式。
 聊天记录：
 {chat_content}
 
 用户问题：{question}
 
-请仔细分析聊天记录，提取与问题相关的信息，并给出准确的答案。如果聊天记录中没有相关信息，请说明"聊天记录中没有找到相关信息"。
+请仔细分析聊天记录，提取与问题相关的信息，并给出准确的答案。如果聊天记录中没有相关信息，无法回答问题，输出"无有效信息"即可，不要输出其他内容。
 
 答案："""
                 
                 response, (reasoning, model_name, tool_calls) = await llm_request.generate_response_async(
                     prompt=analysis_prompt,
                     temperature=0.3,
-                    max_tokens=500
+                    max_tokens=256
                 )
                 
-                return f"基于聊天记录分析：{response}"
+                if "无有效信息" in response:
+                    return ""
+                
+                return response
                 
             except Exception as llm_error:
                 logger.error(f"LLM分析聊天记录失败: {llm_error}")
                 # 如果LLM分析失败，返回聊天内容的摘要
                 if len(chat_content) > 300:
                     chat_content = chat_content[:300] + "..."
-                return f"聊天记录摘要：{chat_content}"
+                return chat_content
             
         except Exception as e:
             logger.error(f"从聊天记录获取答案失败: {e}")
-            return f"聊天记录分析失败: {str(e)}"
+            return ""
 
 class GetMemoryAction(BaseAction):
     """关系动作 - 获取记忆"""

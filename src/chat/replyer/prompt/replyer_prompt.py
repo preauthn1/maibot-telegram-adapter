@@ -17,8 +17,7 @@ def init_replyer_prompt():
 
 你正在qq群里聊天，下面是群里正在聊的内容:
 {time_block}
-{background_dialogue_prompt}
-{core_dialogue_prompt}
+{dialogue_prompt}
 
 {reply_target_block}。
 {identity}
