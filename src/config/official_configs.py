@@ -57,6 +57,12 @@ class PersonalityConfig(ConfigBase):
     private_plan_style: str = ""
     """私聊说话规则，行为风格"""
 
+    states: list[str] = field(default_factory=lambda: [])
+    """状态列表，用于随机替换personality"""
+
+    state_probability: float = 0.0
+    """状态概率，每次构建人格时替换personality的概率"""
+
 
 @dataclass
 class RelationshipConfig(ConfigBase):

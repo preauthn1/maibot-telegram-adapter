@@ -522,7 +522,18 @@ class PrivateReplyer:
         else:
             bot_nickname = ""
 
-        prompt_personality = f"{global_config.personality.personality};"
+        # 获取基础personality
+        prompt_personality = global_config.personality.personality
+        
+        # 检查是否需要随机替换为状态
+        if (global_config.personality.states and 
+            global_config.personality.state_probability > 0 and 
+            random.random() < global_config.personality.state_probability):
+            # 随机选择一个状态替换personality
+            selected_state = random.choice(global_config.personality.states)
+            prompt_personality = selected_state
+        
+        prompt_personality = f"{prompt_personality};"
         return f"你的名字是{bot_name}{bot_nickname}，你{prompt_personality}"
 
     async def build_prompt_reply_context(
