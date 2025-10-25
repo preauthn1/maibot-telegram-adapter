@@ -1,5 +1,5 @@
 [inner]
-version = "6.18.4"
+version = "6.19.0"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -81,6 +81,9 @@ mentioned_bot_reply = true # 是否启用提及必回复
 max_context_size = 30 # 上下文长度
 auto_chat_value = 1 # 自动聊天，越小，麦麦主动聊天的概率越低
 planner_smooth = 5 #规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐2-8，0为关闭，必须大于等于0
+
+enable_talk_value_rules = true # 是否启用动态发言频率规则
+enable_auto_chat_value_rules = false # 是否启用动态自动聊天频率规则
 
 # 动态发言频率规则：按时段/按chat_id调整 talk_value（优先匹配具体chat，再匹配全局）
 # 推荐格式（对象数组）：{ target="platform:id:type" 或 "", time="HH:MM-HH:MM", value=0.5 }

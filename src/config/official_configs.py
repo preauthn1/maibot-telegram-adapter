@@ -85,6 +85,9 @@ class ChatConfig(ConfigBase):
     auto_chat_value: float = 1
     """自动聊天，越小，麦麦主动聊天的概率越低"""
 
+    enable_auto_chat_value_rules: bool = True
+    """是否启用动态自动聊天频率规则"""
+
     at_bot_inevitable_reply: float = 1
     """@bot 必然回复，1为100%回复，0为不额外增幅"""
 
@@ -93,6 +96,9 @@ class ChatConfig(ConfigBase):
 
     talk_value: float = 1
     """思考频率"""
+
+    enable_talk_value_rules: bool = True
+    """是否启用动态发言频率规则"""
 
     talk_value_rules: list[dict] = field(default_factory=lambda: [])
     """
@@ -180,7 +186,7 @@ class ChatConfig(ConfigBase):
 
     def get_talk_value(self, chat_id: Optional[str]) -> float:
         """根据规则返回当前 chat 的动态 talk_value，未匹配则回退到基础值。"""
-        if not self.talk_value_rules:
+        if not self.enable_talk_value_rules or not self.talk_value_rules:
             return self.talk_value
 
         now_min = self._now_minutes()
@@ -235,7 +241,7 @@ class ChatConfig(ConfigBase):
 
     def get_auto_chat_value(self, chat_id: Optional[str]) -> float:
         """根据规则返回当前 chat 的动态 auto_chat_value，未匹配则回退到基础值。"""
-        if not self.auto_chat_value_rules:
+        if not self.enable_auto_chat_value_rules or not self.auto_chat_value_rules:
             return self.auto_chat_value
 
         now_min = self._now_minutes()
