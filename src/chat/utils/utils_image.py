@@ -98,28 +98,19 @@ class ImageManager:
             logger.error(f"保存描述到数据库失败 (Peewee): {str(e)}")
 
     @staticmethod
-    def _cleanup_invalid_descriptions(self):
+    def _cleanup_invalid_descriptions():
         """清理数据库中 description 为空或为 'None' 的记录"""
-        invalid_exact = ["", "None"]
-
-        deleted_images = 0
-        deleted_descriptions = 0
+        invalid_values = ["", "None"]
 
         # 清理 Images 表
-        for img in Images.select():
-            desc = (img.description or "").strip()  
-            if desc in invalid_exact:
-                logger.warning(f"[清理] 删除无效图片描述: {img.image_id} -> {desc}")
-                img.delete_instance()
-                deleted_images += 1
+        deleted_images = Images.delete().where(
+            (Images.description >> None) | (Images.description << invalid_values)
+        ).execute()
 
         # 清理 ImageDescriptions 表
-        for desc_row in ImageDescriptions.select():
-            desc = (desc_row.description or "").strip()   
-            if desc in invalid_exact:
-                logger.warning(f"[清理] 删除无效缓存描述: {desc_row.image_description_hash} -> {desc}")
-                desc_row.delete_instance()
-                deleted_descriptions += 1
+        deleted_descriptions = ImageDescriptions.delete().where(
+            (ImageDescriptions.description >> None) | (ImageDescriptions.description << invalid_values)
+        ).execute()
 
         if deleted_images or deleted_descriptions:
             logger.info(f"[清理完成] 删除 Images: {deleted_images} 条, ImageDescriptions: {deleted_descriptions} 条")
