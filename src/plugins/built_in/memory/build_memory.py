@@ -1,4 +1,6 @@
 from typing import Tuple
+import asyncio
+from datetime import datetime
 
 from src.common.logger import get_logger
 from src.config.config import global_config
@@ -8,22 +10,73 @@ from src.plugin_system import BaseAction, ActionActivationType
 from src.chat.utils.utils import cut_key_words
 from src.memory_system.Memory_chest import global_memory_chest
 from src.plugin_system.base.base_tool import BaseTool
+from src.plugin_system.apis.message_api import get_messages_by_time_in_chat, build_readable_messages
+from src.llm_models.utils_model import LLMRequest
+from src.config.config import model_config
 from typing import Any
 
 logger = get_logger("memory")
+
+def parse_datetime_to_timestamp(value: str) -> float:
+    """
+    接受多种常见格式并转换为时间戳（秒）
+    支持示例：
+    - 2025-09-29
+    - 2025-09-29 00:00:00
+    - 2025/09/29 00:00
+    - 2025-09-29T00:00:00
+    """
+    value = value.strip()
+    fmts = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+    ]
+    last_err = None
+    for fmt in fmts:
+        try:
+            dt = datetime.strptime(value, fmt)
+            return dt.timestamp()
+        except Exception as e:
+            last_err = e
+    raise ValueError(f"无法解析时间: {value} ({last_err})")
+
+def parse_time_range(time_range: str) -> tuple[float, float]:
+    """
+    解析时间范围字符串，返回开始和结束时间戳
+    格式: "YYYY-MM-DD HH:MM:SS - YYYY-MM-DD HH:MM:SS"
+    """
+    if " - " not in time_range:
+        raise ValueError("时间范围格式错误，应使用 ' - ' 分隔开始和结束时间")
+    
+    start_str, end_str = time_range.split(" - ", 1)
+    start_timestamp = parse_datetime_to_timestamp(start_str.strip())
+    end_timestamp = parse_datetime_to_timestamp(end_str.strip())
+    
+    if start_timestamp > end_timestamp:
+        raise ValueError("开始时间不能晚于结束时间")
+    
+    return start_timestamp, end_timestamp
 class GetMemoryTool(BaseTool):
     """获取用户信息"""
 
     name = "get_memory"
-    description = "在记忆中搜索，获取某个问题的答案"
+    description = "在记忆中搜索，获取某个问题的答案，可以指定搜索的时间范围或时间点"
     parameters = [
-        ("question", ToolParamType.STRING, "需要获取答案的问题", True, None)
+        ("question", ToolParamType.STRING, "需要获取答案的问题", True, None),
+        ("time_point", ToolParamType.STRING, "需要获取记忆的时间点，格式为YYYY-MM-DD HH:MM:SS", False, None),
+        ("time_range", ToolParamType.STRING, "需要获取记忆的时间范围，格式为YYYY-MM-DD HH:MM:SS - YYYY-MM-DD HH:MM:SS", False, None)
     ]
     
     available_for_llm = True
 
     async def execute(self, function_args: dict[str, Any]) -> dict[str, Any]:
-        """执行比较两个数的大小
+        """执行记忆搜索
 
         Args:
             function_args: 工具参数
@@ -32,12 +85,141 @@ class GetMemoryTool(BaseTool):
             dict: 工具执行结果
         """
         question: str = function_args.get("question")  # type: ignore
+        time_point: str = function_args.get("time_point")  # type: ignore
+        time_range: str = function_args.get("time_range")  # type: ignore
 
-        answer = await global_memory_chest.get_answer_by_question(question=question)
-        if not answer:
-            return {"content": f"问题：{question}，没有找到相关记忆"}
+        # 检查是否指定了时间参数
+        has_time_params = bool(time_point or time_range)
         
-        return {"content": f"问题：{question}，答案：{answer}"}
+        if has_time_params and not self.chat_id:
+            return {"content": f"问题：{question}，无法获取聊天记录：缺少chat_id"}
+        
+        # 创建并行任务
+        tasks = []
+        
+        # 原任务：从记忆仓库获取答案
+        memory_task = asyncio.create_task(
+            global_memory_chest.get_answer_by_question(question=question)
+        )
+        tasks.append(("memory", memory_task))
+        
+        # 新任务：从聊天记录获取答案（如果指定了时间参数）
+        chat_task = None
+        if has_time_params:
+            chat_task = asyncio.create_task(
+                self._get_answer_from_chat_history(question, time_point, time_range)
+            )
+            tasks.append(("chat", chat_task))
+        
+        # 等待所有任务完成
+        results = {}
+        for task_name, task in tasks:
+            try:
+                results[task_name] = await task
+            except Exception as e:
+                logger.error(f"任务 {task_name} 执行失败: {e}")
+                results[task_name] = None
+        
+        # 处理结果
+        memory_answer = results.get("memory")
+        chat_answer = results.get("chat")
+        
+        # 构建返回内容
+        content_parts = [f"问题：{question}"]
+        
+        if memory_answer:
+            content_parts.append(f"记忆仓库答案：{memory_answer}")
+        else:
+            content_parts.append("记忆仓库：没有找到相关记忆")
+        
+        if chat_answer:
+            content_parts.append(f"聊天记录答案：{chat_answer}")
+        elif has_time_params:
+            content_parts.append("聊天记录：没有找到相关记录")
+        
+        return {"content": "\n".join(content_parts)}
+    
+    async def _get_answer_from_chat_history(self, question: str, time_point: str = None, time_range: str = None) -> str:
+        """从聊天记录中获取问题的答案"""
+        try:
+            # 确定时间范围
+            if time_point:
+                # 时间点：搜索前后25条记录
+                target_timestamp = parse_datetime_to_timestamp(time_point)
+                # 获取前后各25条记录，总共50条
+                messages_before = get_messages_by_time_in_chat(
+                    chat_id=self.chat_id,
+                    start_time=0,
+                    end_time=target_timestamp,
+                    limit=25,
+                    limit_mode="latest"
+                )
+                messages_after = get_messages_by_time_in_chat(
+                    chat_id=self.chat_id,
+                    start_time=target_timestamp,
+                    end_time=float('inf'),
+                    limit=25,
+                    limit_mode="earliest"
+                )
+                messages = messages_before + messages_after
+            elif time_range:
+                # 时间范围：搜索范围内最多50条记录
+                start_timestamp, end_timestamp = parse_time_range(time_range)
+                messages = get_messages_by_time_in_chat(
+                    chat_id=self.chat_id,
+                    start_time=start_timestamp,
+                    end_time=end_timestamp,
+                    limit=50,
+                    limit_mode="latest"
+                )
+            else:
+                return "未指定时间参数"
+            
+            if not messages:
+                return "没有找到相关聊天记录"
+            
+            # 将消息转换为可读格式
+            chat_content = build_readable_messages(messages, timestamp_mode="relative")
+            
+            if not chat_content.strip():
+                return "聊天记录为空"
+            
+            # 使用LLM分析聊天内容并回答问题
+            try:
+                llm_request = LLMRequest(
+                    model_set=model_config.model_task_config.utils_small,
+                    request_type="chat_history_analysis"
+                )
+                
+                analysis_prompt = f"""请根据以下聊天记录内容，回答用户的问题。
+
+聊天记录：
+{chat_content}
+
+用户问题：{question}
+
+请仔细分析聊天记录，提取与问题相关的信息，并给出准确的答案。如果聊天记录中没有相关信息，请说明"聊天记录中没有找到相关信息"。
+
+答案："""
+                
+                response, (reasoning, model_name, tool_calls) = await llm_request.generate_response_async(
+                    prompt=analysis_prompt,
+                    temperature=0.3,
+                    max_tokens=500
+                )
+                
+                return f"基于聊天记录分析：{response}"
+                
+            except Exception as llm_error:
+                logger.error(f"LLM分析聊天记录失败: {llm_error}")
+                # 如果LLM分析失败，返回聊天内容的摘要
+                if len(chat_content) > 300:
+                    chat_content = chat_content[:300] + "..."
+                return f"聊天记录摘要：{chat_content}"
+            
+        except Exception as e:
+            logger.error(f"从聊天记录获取答案失败: {e}")
+            return f"聊天记录分析失败: {str(e)}"
 
 class GetMemoryAction(BaseAction):
     """关系动作 - 获取记忆"""
@@ -45,7 +227,7 @@ class GetMemoryAction(BaseAction):
     activation_type = ActionActivationType.LLM_JUDGE
     parallel_action = True
     
-        # 动作基本信息
+    # 动作基本信息
     action_name = "get_memory"
     action_description = (
         "在记忆中搜寻某个问题的答案"
@@ -60,7 +242,7 @@ class GetMemoryAction(BaseAction):
     action_require = [
         "在记忆中搜寻某个问题的答案",
         "有你不了解的概念",
-        "有人提问关于过去的事情"
+        "有人提问关于过去的事情",
         "你需要根据记忆回答某个问题",
     ]
     

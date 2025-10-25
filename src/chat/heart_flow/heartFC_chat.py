@@ -22,6 +22,7 @@ from src.express.expression_learner import expression_learner_manager
 from src.chat.frequency_control.frequency_control import frequency_control_manager
 from src.memory_system.question_maker import QuestionMaker
 from src.memory_system.questions import global_conflict_tracker
+from src.memory_system.curious import check_and_make_question
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
 from src.plugin_system.core import events_manager
@@ -184,12 +185,12 @@ class HeartFChatting:
         )
 
         question_probability = 0
-        if time.time() - self.last_active_time > 3600:
-            question_probability = 0.001
-        elif time.time() - self.last_active_time > 1200:
+        if time.time() - self.last_active_time > 7200:
             question_probability = 0.0003
-        else:
+        elif time.time() - self.last_active_time > 3600:
             question_probability = 0.0001
+        else:
+            question_probability = 0.00003
 
         question_probability = question_probability * global_config.chat.get_auto_chat_value(self.stream_id)
         
@@ -332,6 +333,9 @@ class HeartFChatting:
             asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
             asyncio.create_task(global_memory_chest.build_running_content(chat_id=self.stream_id))  
             asyncio.create_task(frequency_control_manager.get_or_create_frequency_control(self.stream_id).trigger_frequency_adjust())  
+            
+            # 添加curious检测任务 - 检测聊天记录中的矛盾、冲突或需要提问的内容
+            asyncio.create_task(check_and_make_question(self.stream_id, recent_messages_list))
             
             
             cycle_timers, thinking_id = self.start_cycle()
