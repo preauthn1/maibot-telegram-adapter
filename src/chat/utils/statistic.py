@@ -334,7 +334,7 @@ class StatisticOutputTask(AsyncTask):
 
                         request_type = record.request_type or "unknown"
                         user_id = record.user_id or "unknown"  # user_id is TextField, already string
-                        model_name = record.model_name or "unknown"
+                        model_name = record.model_assign_name or record.model_name or "unknown"
 
                         # 提取模块名：如果请求类型包含"."，取第一个"."之前的部分
                         module_name = request_type.split(".")[0] if "." in request_type else request_type
@@ -1266,7 +1266,7 @@ class StatisticOutputTask(AsyncTask):
                 total_cost_data[interval_index] += cost  # type: ignore
 
                 # 累加按模型分类的花费
-                model_name = record.model_name or "unknown"
+                model_name = record.model_assign_name or record.model_name or "unknown"
                 if model_name not in cost_by_model:
                     cost_by_model[model_name] = [0] * len(time_points)
                 cost_by_model[model_name][interval_index] += cost

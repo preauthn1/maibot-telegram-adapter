@@ -134,6 +134,11 @@ class DefaultReplyer:
             try:
                 content, reasoning_content, model_name, tool_call = await self.llm_generate_content(prompt)
                 logger.debug(f"replyer生成内容: {content}")
+                
+                logger.info(f"replyer生成内容: {content}")
+                logger.info(f"replyer生成推理: {reasoning_content}")
+                logger.info(f"replyer生成模型: {model_name}")
+                
                 llm_response.content = content
                 llm_response.reasoning = reasoning_content
                 llm_response.model = model_name
