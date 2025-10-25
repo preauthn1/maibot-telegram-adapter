@@ -50,7 +50,7 @@ private_plan_style = """
 [expression]
 # 表达方式模式
 mode = "classic"
-# 可选：classic经典模式，exp_model 表达模型模式
+# 可选：classic经典模式，exp_model 表达模型模式，这个模式需要一定时间学习才会有比较好的效果
 
 # 表达学习配置
 learning_list = [ # 表达学习配置列表，支持按聊天流配置
