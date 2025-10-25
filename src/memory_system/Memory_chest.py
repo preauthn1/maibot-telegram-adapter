@@ -18,7 +18,7 @@ from .memory_utils import (
     find_best_matching_memory,
     check_title_exists_fuzzy,
     get_all_titles,
-    get_memory_titles_by_chat_id_weighted,
+    find_most_similar_memory_by_chat_id,
 
 )
 
@@ -430,75 +430,40 @@ class MemoryChest:
         except Exception as e:
             logger.error(f"保存记忆仓库内容时出错: {e}")
     
-    async def choose_merge_target(self, memory_title: str, chat_id: str = None) -> list[str]:
+    async def choose_merge_target(self, memory_title: str, chat_id: str = None) -> tuple[list[str], list[str]]:
         """
-        选择与给定记忆标题相关的记忆目标
+        选择与给定记忆标题相关的记忆目标（基于文本相似度）
 
         Args:
             memory_title: 要匹配的记忆标题
-            chat_id: 聊天ID，用于加权抽样
+            chat_id: 聊天ID，用于筛选同chat_id的记忆
 
         Returns:
-            list[str]: 选中的记忆内容列表
+            tuple[list[str], list[str]]: (选中的记忆标题列表, 选中的记忆内容列表)
         """
         try:
-        # 如果提供了chat_id，使用加权抽样
-            all_titles = get_memory_titles_by_chat_id_weighted(chat_id)
-            # 剔除掉输入的 memory_title 本身
-            all_titles = [title for title in all_titles if title and title.strip() != (memory_title or "").strip()]
+            if not chat_id:
+                logger.warning("未提供chat_id，无法进行记忆匹配")
+                return [], []
             
-            content = ""
-            display_index = 1
-            for title in all_titles:
-                content += f"{display_index}. {title}\n"
-                display_index += 1
+            # 使用相似度匹配查找最相似的记忆
+            similar_memory = find_most_similar_memory_by_chat_id(
+                target_title=memory_title,
+                target_chat_id=chat_id,
+                similarity_threshold=0.5  # 相似度阈值
+            )
             
-            prompt = f"""
-所有记忆列表
-{content}
-
-请根据以上记忆列表，选择一个与"{memory_title}"相关的记忆，用json输出：
-如果没有相关记忆，输出:
-{{
-    "selected_title": ""
-}}
-可以选择多个相关的记忆，但最多不超过5个
-例如：
-{{
-    "selected_title": "选择的相关记忆标题"
-}},
-{{
-    "selected_title": "选择的相关记忆标题"
-}},
-{{
-    "selected_title": "选择的相关记忆标题"
-}}
-...
-注意：请返回原始标题本身作为 selected_title，不要包含前面的序号或多余字符。
-请输出JSON格式，不要输出其他内容：
-"""
-
-            # logger.info(f"选择合并目标 prompt: {prompt}")
-
-            if global_config.debug.show_prompt:
-                logger.info(f"选择合并目标 prompt: {prompt}")
+            if similar_memory:
+                selected_title, selected_content, similarity = similar_memory
+                logger.info(f"为 '{memory_title}' 找到相似记忆: '{selected_title}' (相似度: {similarity:.3f})")
+                return [selected_title], [selected_content]
             else:
-                logger.debug(f"选择合并目标 prompt: {prompt}")
-                
-            merge_target_response, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
-            
-            # 解析JSON响应
-            selected_titles = self._parse_merge_target_json(merge_target_response)
-            
-            # 根据标题查找对应的内容
-            selected_contents = self._get_memories_by_titles(selected_titles)
-            
-            logger.info(f"选择合并目标结果: {len(selected_contents)} 条记忆:{selected_titles}")
-            return selected_titles,selected_contents
+                logger.info(f"为 '{memory_title}' 未找到相似度 >= 0.7 的记忆")
+                return [], []
             
         except Exception as e:
             logger.error(f"选择合并目标时出错: {e}")
-            return []
+            return [], []
     
     def _get_memories_by_titles(self, titles: list[str]) -> list[str]:
         """
@@ -659,6 +624,11 @@ class MemoryChest:
         合并记忆
         """
         try:
+            # 在记忆整合前先清理空chat_id的记忆
+            cleaned_count = self.cleanup_empty_chat_id_memories()
+            if cleaned_count > 0:
+                logger.info(f"记忆整合前清理了 {cleaned_count} 条空chat_id记忆")
+            
             content = ""
             for memory in memory_list:
                 content += f"{memory}\n"
@@ -792,6 +762,38 @@ MutePlugin 是禁言插件的名称
         except Exception as e:
             logger.error(f"生成合并记忆标题时出错: {e}")
             return f"合并记忆_{int(time.time())}"
+    
+    def cleanup_empty_chat_id_memories(self) -> int:
+        """
+        清理chat_id为空的记忆记录
+        
+        Returns:
+            int: 被清理的记忆数量
+        """
+        try:
+            # 查找所有chat_id为空的记忆
+            empty_chat_id_memories = MemoryChestModel.select().where(
+                (MemoryChestModel.chat_id.is_null()) | 
+                (MemoryChestModel.chat_id == "") |
+                (MemoryChestModel.chat_id == "None")
+            )
+            
+            count = 0
+            for memory in empty_chat_id_memories:
+                logger.info(f"清理空chat_id记忆: 标题='{memory.title}', ID={memory.id}")
+                memory.delete_instance()
+                count += 1
+            
+            if count > 0:
+                logger.info(f"已清理 {count} 条chat_id为空的记忆记录")
+            else:
+                logger.debug("未发现需要清理的空chat_id记忆记录")
+                
+            return count
+            
+        except Exception as e:
+            logger.error(f"清理空chat_id记忆时出错: {e}")
+            return 0
     
     
 global_memory_chest = MemoryChest()

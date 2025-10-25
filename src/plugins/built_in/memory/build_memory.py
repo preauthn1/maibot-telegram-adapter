@@ -146,6 +146,20 @@ class GetMemoryTool(BaseTool):
         """从聊天记录中获取问题的答案"""
         try:
             # 确定时间范围
+            print(f"time_point: {time_point}, time_range: {time_range}")
+            
+            # 检查time_range的两个时间值是否相同，如果相同则按照time_point处理
+            if time_range and not time_point:
+                try:
+                    start_timestamp, end_timestamp = parse_time_range(time_range)
+                    if start_timestamp == end_timestamp:
+                        # 两个时间值相同，按照time_point处理
+                        time_point = time_range.split(" - ")[0].strip()
+                        time_range = None
+                        print(f"time_range两个值相同，按照time_point处理: {time_point}")
+                except Exception as e:
+                    logger.warning(f"解析time_range失败: {e}")
+            
             if time_point:
                 # 时间点：搜索前后25条记录
                 target_timestamp = parse_datetime_to_timestamp(time_point)
@@ -204,11 +218,17 @@ class GetMemoryTool(BaseTool):
 
 答案："""
                 
+                print(f"analysis_prompt: {analysis_prompt}")
+                
+                
                 response, (reasoning, model_name, tool_calls) = await llm_request.generate_response_async(
                     prompt=analysis_prompt,
                     temperature=0.3,
                     max_tokens=256
                 )
+                
+                
+                print(f"response: {response}")
                 
                 if "无有效信息" in response:
                     return ""

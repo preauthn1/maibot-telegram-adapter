@@ -304,3 +304,54 @@ def get_memory_titles_by_chat_id_weighted(target_chat_id: str, same_chat_weight:
     except Exception as e:
         logger.error(f"按chat_id加权抽样记忆标题时出错: {e}")
         return []
+
+
+def find_most_similar_memory_by_chat_id(target_title: str, target_chat_id: str, similarity_threshold: float = 0.5) -> Optional[Tuple[str, str, float]]:
+    """
+    在指定chat_id的记忆中查找最相似的记忆
+    
+    Args:
+        target_title: 目标标题
+        target_chat_id: 目标聊天ID
+        similarity_threshold: 相似度阈值，默认0.7
+        
+    Returns:
+        Optional[Tuple[str, str, float]]: 最相似的记忆(title, content, similarity)或None
+    """
+    try:
+        # 获取指定chat_id的所有记忆
+        same_chat_memories = []
+        for memory in MemoryChestModel.select():
+            if memory.title and not memory.locked and memory.chat_id == target_chat_id:
+                same_chat_memories.append((memory.title, memory.content))
+        
+        if not same_chat_memories:
+            logger.warning(f"未找到chat_id为 '{target_chat_id}' 的记忆")
+            return None
+        
+        # 计算相似度并找到最佳匹配
+        best_match = None
+        best_similarity = 0.0
+        
+        for title, content in same_chat_memories:
+            # 跳过目标标题本身
+            if title.strip() == target_title.strip():
+                continue
+                
+            similarity = calculate_similarity(target_title, title)
+            
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_match = (title, content, similarity)
+        
+        # 检查是否超过阈值
+        if best_match and best_similarity >= similarity_threshold:
+            logger.info(f"找到最相似记忆: '{best_match[0]}' (相似度: {best_similarity:.3f})")
+            return best_match
+        else:
+            logger.info(f"未找到相似度 >= {similarity_threshold} 的记忆，最高相似度: {best_similarity:.3f}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"查找最相似记忆时出错: {e}")
+        return None

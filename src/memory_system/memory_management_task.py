@@ -109,7 +109,7 @@ class MemoryManagementTask(AsyncTask):
                 logger.info("无合适合并内容，跳过本次合并")
                 return
             
-            logger.info(f"为 [{selected_title}] 找到 {len(related_contents)} 条相关记忆:{related_titles}")
+            logger.info(f"{selected_chat_id} 为 [{selected_title}] 找到 {len(related_contents)} 条相关记忆:{related_titles}")
             
             # 执行merge_memory合并记忆
             merged_title, merged_content = await global_memory_chest.merge_memory(related_contents,selected_chat_id)
