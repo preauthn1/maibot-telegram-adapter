@@ -21,6 +21,10 @@ def init_prompt():
 
 如果用户觉得你的发言过于频繁，请输出"过于频繁"，否则输出"正常"
 如果用户觉得你的发言过少，请输出"过少"，否则输出"正常"
+**你只能输出以下三个词之一，不要输出任何其他文字、解释或标点：**
+- 正常
+- 过于频繁
+- 过少
 """,
         "frequency_adjust_prompt",
     )
@@ -103,13 +107,18 @@ class FrequencyControl:
                 logger.info(f"频率调整 reasoning_content: {reasoning_content}")
             
             final_value_by_api = frequency_api.get_current_talk_value(self.chat_id)
-            if "过于频繁" in response:
-                logger.info(f"频率调整: 过于频繁，调整值到{final_value_by_api}")
-                self.talk_frequency_adjust = max(0.1, min(3.0, self.talk_frequency_adjust * 0.8))
-            elif "过少" in response:
-                logger.info(f"频率调整: 过少，调整值到{final_value_by_api}")
-                self.talk_frequency_adjust = max(0.1, min(3.0, self.talk_frequency_adjust * 1.2))
-            self.last_frequency_adjust_time = time.time()
+
+            # LLM依然输出过多内容时取消本次调整。合法最多4个字，但有的模型可能会输出一些markdown换行符等，需要长度宽限
+            if len(response) < 20:
+                if "过于频繁" in response:
+                    logger.info(f"频率调整: 过于频繁，调整值到{final_value_by_api}")
+                    self.talk_frequency_adjust = max(0.1, min(3.0, self.talk_frequency_adjust * 0.8))
+                elif "过少" in response:
+                    logger.info(f"频率调整: 过少，调整值到{final_value_by_api}")
+                    self.talk_frequency_adjust = max(0.1, min(3.0, self.talk_frequency_adjust * 1.2))
+                self.last_frequency_adjust_time = time.time()
+            else:
+                logger.info(f"频率调整：response不符合要求，取消本次调整")    
 
 class FrequencyControlManager:
     """频率控制管理器，管理多个聊天流的频率控制实例"""
