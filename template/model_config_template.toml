@@ -1,5 +1,5 @@
 [inner]
-version = "1.7.5"
+version = "1.7.6"
 
 # 配置文件版本号迭代规则同bot_config.toml
 
@@ -56,6 +56,14 @@ price_in = 2.0
 price_out = 8.0
 
 [[models]]
+model_identifier = "deepseek-ai/DeepSeek-R1"
+name = "siliconflow-deepseek-r1"
+api_provider = "SiliconFlow"
+price_in = 4.0
+price_out = 16.0
+
+
+[[models]]
 model_identifier = "Qwen/Qwen3-8B"
 name = "qwen3-8b"
 api_provider = "SiliconFlow"
@@ -109,7 +117,7 @@ temperature = 0.7
 max_tokens = 800
 
 [model_task_config.replyer] # 首要回复模型，还用于表达器和表达方式学习
-model_list = ["siliconflow-deepseek-v3"]
+model_list = ["siliconflow-deepseek-v3","siliconflow-deepseek-r1"]
 temperature = 0.3                        # 模型温度，新V3建议0.1-0.3
 max_tokens = 800
 
