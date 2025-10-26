@@ -1009,6 +1009,9 @@ class DefaultReplyer:
                 prompt
             )
 
+            # 移除 content 前后的换行符和空格
+            content = content.strip()
+
             logger.info(f"使用 {model_name} 生成回复内容: {content}")
         return content, reasoning_content, model_name, tool_calls
 
