@@ -1,14 +1,25 @@
-from typing import Optional, Type
+from typing import Optional, Type, TYPE_CHECKING
 from src.plugin_system.base.base_tool import BaseTool
 from src.plugin_system.base.component_types import ComponentType
 
 from src.common.logger import get_logger
 
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
+
 logger = get_logger("tool_api")
 
 
-def get_tool_instance(tool_name: str) -> Optional[BaseTool]:
-    """获取公开工具实例"""
+def get_tool_instance(tool_name: str, chat_stream: Optional["ChatStream"] = None) -> Optional[BaseTool]:
+    """获取公开工具实例
+    
+    Args:
+        tool_name: 工具名称
+        chat_stream: 聊天流对象，用于传递聊天上下文信息
+        
+    Returns:
+        Optional[BaseTool]: 工具实例，如果未找到则返回None
+    """
     from src.plugin_system.core import component_registry
 
     # 获取插件配置
@@ -19,7 +30,7 @@ def get_tool_instance(tool_name: str) -> Optional[BaseTool]:
         plugin_config = None
 
     tool_class: Type[BaseTool] = component_registry.get_component_class(tool_name, ComponentType.TOOL)  # type: ignore
-    return tool_class(plugin_config) if tool_class else None
+    return tool_class(plugin_config, chat_stream) if tool_class else None
 
 
 def get_llm_available_tool_definitions():

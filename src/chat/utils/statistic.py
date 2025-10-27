@@ -334,7 +334,7 @@ class StatisticOutputTask(AsyncTask):
 
                         request_type = record.request_type or "unknown"
                         user_id = record.user_id or "unknown"  # user_id is TextField, already string
-                        model_name = record.model_name or "unknown"
+                        model_name = record.model_assign_name or record.model_name or "unknown"
 
                         # 提取模块名：如果请求类型包含"."，取第一个"."之前的部分
                         module_name = request_type.split(".")[0] if "." in request_type else request_type
@@ -492,10 +492,15 @@ class StatisticOutputTask(AsyncTask):
                 continue
 
             # Update name_mapping
-            if chat_id in self.name_mapping:
-                if chat_name != self.name_mapping[chat_id][0] and message_time_ts > self.name_mapping[chat_id][1]:
+            try:
+                if chat_id in self.name_mapping:
+                    if chat_name != self.name_mapping[chat_id][0] and message_time_ts > self.name_mapping[chat_id][1]:
+                        self.name_mapping[chat_id] = (chat_name, message_time_ts)
+                else:
                     self.name_mapping[chat_id] = (chat_name, message_time_ts)
-            else:
+            except (IndexError, TypeError) as e:
+                logger.warning(f"更新 name_mapping 时发生错误，chat_id: {chat_id}, 错误: {e}")
+                # 重置为正确的格式
                 self.name_mapping[chat_id] = (chat_name, message_time_ts)
 
             for idx, (_, period_start_dt) in enumerate(collect_period):
@@ -514,15 +519,32 @@ class StatisticOutputTask(AsyncTask):
 
         last_all_time_stat = None
 
-        if "last_full_statistics" in local_storage:
-            # 如果存在上次完整统计数据，则使用该数据进行增量统计
-            last_stat: Dict[str, Any] = local_storage["last_full_statistics"]  # 上次完整统计数据 # type: ignore
+        try:
+            if "last_full_statistics" in local_storage:
+                # 如果存在上次完整统计数据，则使用该数据进行增量统计
+                last_stat: Dict[str, Any] = local_storage["last_full_statistics"]  # 上次完整统计数据 # type: ignore
 
-            self.name_mapping = last_stat["name_mapping"]  # 上次完整统计数据的名称映射
-            last_all_time_stat = last_stat["stat_data"]  # 上次完整统计的统计数据
-            last_stat_timestamp = datetime.fromtimestamp(last_stat["timestamp"])  # 上次完整统计数据的时间戳
-            self.stat_period = [item for item in self.stat_period if item[0] != "all_time"]  # 删除"所有时间"的统计时段
-            self.stat_period.append(("all_time", now - last_stat_timestamp, "自部署以来的"))
+                # 修复 name_mapping 数据类型不匹配问题
+                # JSON 中存储为列表，但代码期望为元组
+                raw_name_mapping = last_stat["name_mapping"]
+                self.name_mapping = {}
+                for chat_id, value in raw_name_mapping.items():
+                    if isinstance(value, list) and len(value) == 2:
+                        # 将列表转换为元组
+                        self.name_mapping[chat_id] = (value[0], value[1])
+                    elif isinstance(value, tuple) and len(value) == 2:
+                        # 已经是元组，直接使用
+                        self.name_mapping[chat_id] = value
+                    else:
+                        # 数据格式不正确，跳过或使用默认值
+                        logger.warning(f"name_mapping 中 chat_id {chat_id} 的数据格式不正确: {value}")
+                        continue
+                last_all_time_stat = last_stat["stat_data"]  # 上次完整统计的统计数据
+                last_stat_timestamp = datetime.fromtimestamp(last_stat["timestamp"])  # 上次完整统计数据的时间戳
+                self.stat_period = [item for item in self.stat_period if item[0] != "all_time"]  # 删除"所有时间"的统计时段
+                self.stat_period.append(("all_time", now - last_stat_timestamp, "自部署以来的"))
+        except Exception as e:
+            logger.warning(f"加载上次完整统计数据失败，进行全量统计，错误信息：{e}")
 
         stat_start_timestamp = [(period[0], now - period[1]) for period in self.stat_period]
 
@@ -571,8 +593,14 @@ class StatisticOutputTask(AsyncTask):
         # 更新上次完整统计数据的时间戳
         # 将所有defaultdict转换为普通dict以避免类型冲突
         clean_stat_data = self._convert_defaultdict_to_dict(stat["all_time"])
+        
+        # 将 name_mapping 中的元组转换为列表，因为JSON不支持元组
+        json_safe_name_mapping = {}
+        for chat_id, (chat_name, timestamp) in self.name_mapping.items():
+            json_safe_name_mapping[chat_id] = [chat_name, timestamp]
+        
         local_storage["last_full_statistics"] = {
-            "name_mapping": self.name_mapping,
+            "name_mapping": json_safe_name_mapping,
             "stat_data": clean_stat_data,
             "timestamp": now.timestamp(),
         }
@@ -651,10 +679,13 @@ class StatisticOutputTask(AsyncTask):
         if stats[TOTAL_MSG_CNT] <= 0:
             return ""
         output = ["聊天消息统计:", " 联系人/群组名称                  消息数量"]
-        output.extend(
-            f"{self.name_mapping[chat_id][0][:32]:<32}  {count:>10}"
-            for chat_id, count in sorted(stats[MSG_CNT_BY_CHAT].items())
-        )
+        for chat_id, count in sorted(stats[MSG_CNT_BY_CHAT].items()):
+            try:
+                chat_name = self.name_mapping.get(chat_id, ("未知聊天", 0))[0]
+                output.append(f"{chat_name[:32]:<32}  {count:>10}")
+            except (IndexError, TypeError) as e:
+                logger.warning(f"格式化聊天统计时发生错误，chat_id: {chat_id}, 错误: {e}")
+                output.append(f"{'未知聊天':<32}  {count:>10}")
         output.append("")
         return "\n".join(output)
 
@@ -770,14 +801,16 @@ class StatisticOutputTask(AsyncTask):
             )
 
             # 聊天消息统计
-            chat_rows = "\n".join(
-                [
-                    f"<tr><td>{self.name_mapping[chat_id][0]}</td><td>{count}</td></tr>"
-                    for chat_id, count in sorted(stat_data[MSG_CNT_BY_CHAT].items())
-                ]
-                if stat_data[MSG_CNT_BY_CHAT]
-                else ["<tr><td colspan='2' style='text-align: center; color: #999;'>暂无数据</td></tr>"]
-            )
+            chat_rows = []
+            for chat_id, count in sorted(stat_data[MSG_CNT_BY_CHAT].items()):
+                try:
+                    chat_name = self.name_mapping.get(chat_id, ("未知聊天", 0))[0]
+                    chat_rows.append(f"<tr><td>{chat_name}</td><td>{count}</td></tr>")
+                except (IndexError, TypeError) as e:
+                    logger.warning(f"生成HTML聊天统计时发生错误，chat_id: {chat_id}, 错误: {e}")
+                    chat_rows.append(f"<tr><td>未知聊天</td><td>{count}</td></tr>")
+            
+            chat_rows_html = "\n".join(chat_rows) if chat_rows else "<tr><td colspan='2' style='text-align: center; color: #999;'>暂无数据</td></tr>"
             # 生成HTML
             return f"""
             <div id=\"{div_id}\" class=\"tab-content\">
@@ -824,7 +857,7 @@ class StatisticOutputTask(AsyncTask):
                         <tr><th>联系人/群组名称</th><th>消息数量</th></tr>
                     </thead>
                     <tbody>
-                    {chat_rows}
+                    {chat_rows_html}
                     </tbody>
                 </table>
                 
@@ -975,7 +1008,7 @@ class StatisticOutputTask(AsyncTask):
                         }}
                         
                         // 聊天消息分布饼图
-                        const chatLabels = {[self.name_mapping[chat_id][0] for chat_id in sorted(stat_data[MSG_CNT_BY_CHAT].keys())] if stat_data[MSG_CNT_BY_CHAT] else []};
+                        const chatLabels = {[self.name_mapping.get(chat_id, ("未知聊天", 0))[0] for chat_id in sorted(stat_data[MSG_CNT_BY_CHAT].keys())] if stat_data[MSG_CNT_BY_CHAT] else []};
                         if (chatLabels.length > 0) {{
                             const chatData = {{
                                 labels: chatLabels,
@@ -1233,7 +1266,7 @@ class StatisticOutputTask(AsyncTask):
                 total_cost_data[interval_index] += cost  # type: ignore
 
                 # 累加按模型分类的花费
-                model_name = record.model_name or "unknown"
+                model_name = record.model_assign_name or record.model_name or "unknown"
                 if model_name not in cost_by_model:
                     cost_by_model[model_name] = [0] * len(time_points)
                 cost_by_model[model_name][interval_index] += cost
