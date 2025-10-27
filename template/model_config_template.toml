@@ -1,5 +1,5 @@
 [inner]
-version = "1.7.6"
+version = "1.7.7"
 
 # 配置文件版本号迭代规则同bot_config.toml
 
@@ -121,7 +121,7 @@ max_tokens = 800
 [model_task_config.replyer] # 首要回复模型，还用于表达器和表达方式学习
 model_list = ["siliconflow-deepseek-v3.2-think","siliconflow-deepseek-r1","siliconflow-deepseek-v3.2"]
 temperature = 0.3                        # 模型温度，新V3建议0.1-0.3
-max_tokens = 800
+max_tokens = 2048
 
 [model_task_config.planner] #决策：负责决定麦麦该什么时候回复的模型
 model_list = ["siliconflow-deepseek-v3.2"]
