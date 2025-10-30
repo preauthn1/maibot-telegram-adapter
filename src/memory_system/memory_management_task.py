@@ -8,7 +8,6 @@ from src.memory_system.Memory_chest import global_memory_chest
 from src.common.logger import get_logger
 from src.common.database.database_model import MemoryChest as MemoryChestModel
 from src.config.config import global_config
-from src.memory_system.memory_utils import get_all_titles
 
 logger = get_logger("memory")
 
@@ -56,14 +55,14 @@ class MemoryManagementTask(AsyncTask):
             current_count = self._get_memory_count()
             percentage = current_count / self.max_memory_number
             
-            if percentage < 0.5:
+            if percentage < 0.6:
                 # 小于50%，每600秒执行一次
                 return 3600
-            elif percentage < 0.7:
+            elif percentage < 0.8:
                 # 大于等于50%，每300秒执行一次
                 return 1800
-            elif percentage < 0.9:
-                # 大于等于70%，每120秒执行一次
+            elif percentage < 1.0:
+                # 大于等于100%，每120秒执行一次
                 return 300
             elif percentage < 1.2:
                 return 30
@@ -93,6 +92,22 @@ class MemoryManagementTask(AsyncTask):
             percentage = current_count / self.max_memory_number
             logger.info(f"当前记忆数量: {current_count}/{self.max_memory_number} ({percentage:.1%})")
             
+            # 当占比 > 1.6 时，持续删除直到占比 <= 1.6（越老/越新更易被删）
+            if percentage > 1.6:
+                logger.info("记忆过多，开始遗忘记忆")
+                while True:
+                    if percentage <= 1.6:
+                        break
+                    removed = global_memory_chest.remove_one_memory_by_age_weight()
+                    if not removed:
+                        logger.warning("没有可删除的记忆，停止连续删除")
+                        break
+                    # 重新计算占比
+                    current_count = self._get_memory_count()
+                    percentage = current_count / self.max_memory_number
+                    logger.info(f"遗忘进度: 当前 {current_count}/{self.max_memory_number} ({percentage:.1%})")
+                logger.info("遗忘记忆结束")
+
             # 如果记忆数量为0，跳过执行
             if current_count < 10:
                 return
