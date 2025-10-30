@@ -105,10 +105,12 @@ class MemoryChest:
                 return 0.60
             elif percentage < 1.0:
                 return 0.50
-            elif percentage < 1.2:
+            elif percentage < 1.5:
                 return 0.40
+            elif percentage < 2:
+                return 0.30
             else:
-                return 0.35
+                return 0.25
         except Exception:
             # 发生异常时使用保守阈值
             return 0.70

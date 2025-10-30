@@ -58,16 +58,16 @@ class MemoryManagementTask(AsyncTask):
             if percentage < 0.6:
                 # 小于50%，每600秒执行一次
                 return 3600
-            elif percentage < 0.8:
+            elif percentage < 1:
                 # 大于等于50%，每300秒执行一次
                 return 1800
-            elif percentage < 1.0:
+            elif percentage < 1.5:
                 # 大于等于100%，每120秒执行一次
-                return 300
-            elif percentage < 1.2:
-                return 30
+                return 600
+            elif percentage < 1.8:
+                return 120
             else:
-                return 10
+                return 30
             
         except Exception as e:
             logger.error(f"[记忆管理] 计算执行间隔时出错: {e}")
@@ -93,10 +93,10 @@ class MemoryManagementTask(AsyncTask):
             logger.info(f"当前记忆数量: {current_count}/{self.max_memory_number} ({percentage:.1%})")
             
             # 当占比 > 1.6 时，持续删除直到占比 <= 1.6（越老/越新更易被删）
-            if percentage > 1.6:
+            if percentage > 2:
                 logger.info("记忆过多，开始遗忘记忆")
                 while True:
-                    if percentage <= 1.6:
+                    if percentage <= 1.8:
                         break
                     removed = global_memory_chest.remove_one_memory_by_age_weight()
                     if not removed:
