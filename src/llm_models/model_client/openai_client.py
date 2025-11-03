@@ -370,9 +370,32 @@ def _default_normal_response_parser(
     """
     api_response = APIResponse()
 
-    if not hasattr(resp, "choices") or len(resp.choices) == 0:
-        raise EmptyResponseException("响应解析失败，缺失choices字段或choices列表为空")
-    message_part = resp.choices[0].message
+    # 兼容部分 OpenAI 兼容服务在空回复时返回 choices=None 的情况
+    choices = getattr(resp, "choices", None)
+    if not choices:
+        try:
+            model_dbg = getattr(resp, "model", None)
+            id_dbg = getattr(resp, "id", None)
+            usage_dbg = None
+            if hasattr(resp, "usage") and resp.usage:
+                usage_dbg = {
+                    "prompt": getattr(resp.usage, "prompt_tokens", None),
+                    "completion": getattr(resp.usage, "completion_tokens", None),
+                    "total": getattr(resp.usage, "total_tokens", None),
+                }
+            try:
+                raw_snippet = str(resp)[:300]
+            except Exception:
+                raw_snippet = "<unserializable>"
+            logger.debug(
+                f"empty choices: model={model_dbg} id={id_dbg} usage={usage_dbg} raw≈{raw_snippet}"
+            )
+        except Exception:
+            # 日志采集失败不应影响控制流
+            pass
+        # 统一抛出可重试的 EmptyResponseException，触发上层重试逻辑
+        raise EmptyResponseException("响应解析失败，choices 为空或缺失")
+    message_part = choices[0].message
 
     if hasattr(message_part, "reasoning_content") and message_part.reasoning_content:  # type: ignore
         # 有有效的推理字段

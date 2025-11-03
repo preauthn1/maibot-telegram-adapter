@@ -384,8 +384,8 @@ class LLMRequest:
                 failed_models_this_request.add(model_info.name)
 
                 if isinstance(last_exception, RespNotOkException) and last_exception.status_code == 400:
-                    logger.error("收到不可恢复的客户端错误 (400)，中止所有尝试。")
-                    raise last_exception from e
+                    logger.warning("收到客户端错误 (400)，跳过当前模型并继续尝试其他模型。")
+                    continue
 
         logger.error(f"所有 {max_attempts} 个模型均尝试失败。")
         if last_exception:
