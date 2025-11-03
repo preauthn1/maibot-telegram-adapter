@@ -136,7 +136,8 @@ class DefaultReplyer:
                 # logger.debug(f"replyer生成内容: {content}")
                 
                 logger.info(f"replyer生成内容: {content}")
-                logger.info(f"replyer生成推理: {reasoning_content}")
+                if global_config.debug.show_replyer_reasoning:
+                    logger.info(f"replyer生成推理:\n{reasoning_content}")
                 logger.info(f"replyer生成模型: {model_name}")
                 
                 llm_response.content = content
@@ -1000,7 +1001,7 @@ class DefaultReplyer:
             # 直接使用已初始化的模型实例
             # logger.info(f"\n{prompt}\n")
 
-            if global_config.debug.show_prompt:
+            if global_config.debug.show_replyer_prompt:
                 logger.info(f"\n{prompt}\n")
             else:
                 logger.debug(f"\nreplyer_Prompt:{prompt}\n")

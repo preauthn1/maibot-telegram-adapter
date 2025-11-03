@@ -922,7 +922,7 @@ class PrivateReplyer:
             # 直接使用已初始化的模型实例
             logger.info(f"\n{prompt}\n")
 
-            if global_config.debug.show_prompt:
+            if global_config.debug.show_replyer_prompt:
                 logger.info(f"\n{prompt}\n")
             else:
                 logger.debug(f"\n{prompt}\n")
@@ -934,6 +934,8 @@ class PrivateReplyer:
             content = content.strip()
 
             logger.info(f"使用 {model_name} 生成回复内容: {content}")
+            if global_config.debug.show_replyer_reasoning:
+                logger.info(f"使用 {model_name} 生成回复推理:\n{reasoning_content}")
         return content, reasoning_content, model_name, tool_calls
 
     async def get_prompt_info(self, message: str, sender: str, target: str):
