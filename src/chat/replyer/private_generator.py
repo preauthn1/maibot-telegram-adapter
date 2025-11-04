@@ -536,6 +536,83 @@ class PrivateReplyer:
         prompt_personality = f"{prompt_personality};"
         return f"你的名字是{bot_name}{bot_nickname}，你{prompt_personality}"
 
+    def _parse_chat_prompt_config_to_chat_id(self, chat_prompt_str: str) -> Optional[tuple[str, str]]:
+        """
+        解析聊天prompt配置字符串并生成对应的 chat_id 和 prompt内容
+        
+        Args:
+            chat_prompt_str: 格式为 "platform:id:type:prompt内容" 的字符串
+        
+        Returns:
+            tuple: (chat_id, prompt_content)，如果解析失败则返回 None
+        """
+        try:
+            # 使用 split 分割，但限制分割次数为3，因为prompt内容可能包含冒号
+            parts = chat_prompt_str.split(":", 3)
+            if len(parts) != 4:
+                return None
+
+            platform = parts[0]
+            id_str = parts[1]
+            stream_type = parts[2]
+            prompt_content = parts[3]
+
+            # 判断是否为群聊
+            is_group = stream_type == "group"
+
+            # 使用与 ChatStream.get_stream_id 相同的逻辑生成 chat_id
+            import hashlib
+
+            if is_group:
+                components = [platform, str(id_str)]
+            else:
+                components = [platform, str(id_str), "private"]
+            key = "_".join(components)
+            chat_id = hashlib.md5(key.encode()).hexdigest()
+
+            return chat_id, prompt_content
+
+        except (ValueError, IndexError):
+            return None
+
+    def get_chat_prompt_for_chat(self, chat_id: str) -> str:
+        """
+        根据聊天流ID获取匹配的额外prompt（仅匹配private类型）
+        
+        Args:
+            chat_id: 聊天流ID（哈希值）
+        
+        Returns:
+            str: 匹配的额外prompt内容，如果没有匹配则返回空字符串
+        """
+        if not global_config.experimental.chat_prompts:
+            return ""
+
+        for chat_prompt_str in global_config.experimental.chat_prompts:
+            if not isinstance(chat_prompt_str, str):
+                continue
+            
+            # 解析配置字符串，检查类型是否为private
+            parts = chat_prompt_str.split(":", 3)
+            if len(parts) != 4:
+                continue
+            
+            stream_type = parts[2]
+            # 只匹配private类型
+            if stream_type != "private":
+                continue
+            
+            result = self._parse_chat_prompt_config_to_chat_id(chat_prompt_str)
+            if result is None:
+                continue
+            
+            config_chat_id, prompt_content = result
+            if config_chat_id == chat_id:
+                logger.debug(f"匹配到私聊prompt配置，chat_id: {chat_id}, prompt: {prompt_content[:50]}...")
+                return prompt_content
+
+        return ""
+
     async def build_prompt_reply_context(
         self,
         reply_message: Optional[DatabaseMessages] = None,
@@ -718,6 +795,10 @@ class PrivateReplyer:
             # 其他情况（空内容等）
             reply_target_block = f"现在对方说的:{target}。引起了你的注意"
 
+        # 获取匹配的额外prompt
+        chat_prompt_content = self.get_chat_prompt_for_chat(chat_id)
+        chat_prompt_block = f"{chat_prompt_content}\n" if chat_prompt_content else ""
+
         if global_config.bot.qq_account == user_id and platform == global_config.bot.platform:
             return await global_prompt_manager.format_prompt(
                 "private_replyer_self_prompt",
@@ -738,6 +819,7 @@ class PrivateReplyer:
                 reply_style=global_config.personality.reply_style,
                 keywords_reaction_prompt=keywords_reaction_prompt,
                 moderation_prompt=moderation_prompt_block,
+                chat_prompt=chat_prompt_block,
             ), selected_expressions
         else:
             return await global_prompt_manager.format_prompt(
@@ -758,6 +840,7 @@ class PrivateReplyer:
                 keywords_reaction_prompt=keywords_reaction_prompt,
                 moderation_prompt=moderation_prompt_block,
                 sender_name=sender,
+                chat_prompt=chat_prompt_block,
             ), selected_expressions
 
     async def build_prompt_rewrite_context(
