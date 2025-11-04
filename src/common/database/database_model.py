@@ -20,6 +20,8 @@ logger = get_logger("database_model")
 
 # 定义一个基础模型是一个好习惯，所有其他模型都应继承自它。
 # 这允许您在一个地方为所有模型指定数据库。
+
+
 class BaseModel(Model):
     class Meta:
         # 将下面的 'db' 替换为您实际的数据库实例变量名。
@@ -343,30 +345,45 @@ class MemoryConflict(BaseModel):
 
     class Meta:
         table_name = "memory_conflicts"
+        
+class Jargon(BaseModel):
+    """
+    用于存储俚语的模型
+    """
+    content = TextField()
+    raw_content = TextField(null=True)
+    type = TextField(null=True)
+    translation = TextField(null=True)
+    meaning = TextField(null=True)
+    chat_id = TextField(index=True)
+    is_global = BooleanField(default=False)
+    count = IntegerField(default=0)
+    
+    class Meta:
+        table_name = "jargon"
 
-
+MODELS = [
+    ChatStreams,
+    LLMUsage,
+    Emoji,
+    Messages,
+    Images,
+    ImageDescriptions,
+    OnlineTime,
+    PersonInfo,
+    Expression,
+    ActionRecords,
+    MemoryChest,
+    MemoryConflict,
+    Jargon,
+]
 
 def create_tables():
     """
     创建所有在模型中定义的数据库表。
     """
     with db:
-        db.create_tables(
-            [
-                ChatStreams,
-                LLMUsage,
-                Emoji,
-                Messages,
-                Images,
-                ImageDescriptions,
-                OnlineTime,
-                PersonInfo,
-                Expression,
-                ActionRecords,  # 添加 ActionRecords 到初始化列表
-                MemoryChest,
-                MemoryConflict,  # 添加记忆冲突表
-            ]
-        )
+        db.create_tables(MODELS)
 
 
 def initialize_database(sync_constraints=False):
@@ -379,24 +396,9 @@ def initialize_database(sync_constraints=False):
                                如果为 True，会检查并修复字段的 NULL 约束不一致问题。
     """
 
-    models = [
-        ChatStreams,
-        LLMUsage,
-        Emoji,
-        Messages,
-        Images,
-        ImageDescriptions,
-        OnlineTime,
-        PersonInfo,
-        Expression,
-        ActionRecords,  # 添加 ActionRecords 到初始化列表
-        MemoryChest,
-        MemoryConflict,
-    ]
-
     try:
         with db:  # 管理 table_exists 检查的连接
-            for model in models:
+            for model in MODELS:
                 table_name = model._meta.table_name
                 if not db.table_exists(model):
                     logger.warning(f"表 '{table_name}' 未找到，正在创建...")
@@ -476,24 +478,9 @@ def sync_field_constraints():
     如果发现不一致，会自动修复字段约束。
     """
 
-    models = [
-        ChatStreams,
-        LLMUsage,
-        Emoji,
-        Messages,
-        Images,
-        ImageDescriptions,
-        OnlineTime,
-        PersonInfo,
-        Expression,
-        ActionRecords,
-        MemoryChest,
-        MemoryConflict,
-    ]
-
     try:
         with db:
-            for model in models:
+            for model in MODELS:
                 table_name = model._meta.table_name
                 if not db.table_exists(model):
                     logger.warning(f"表 '{table_name}' 不存在，跳过约束检查")
@@ -660,26 +647,11 @@ def check_field_constraints():
     用于在修复前预览需要修复的内容。
     """
 
-    models = [
-        ChatStreams,
-        LLMUsage,
-        Emoji,
-        Messages,
-        Images,
-        ImageDescriptions,
-        OnlineTime,
-        PersonInfo,
-        Expression,
-        ActionRecords,
-        MemoryChest,
-        MemoryConflict,
-    ]
-
     inconsistencies = {}
 
     try:
         with db:
-            for model in models:
+            for model in MODELS:
                 table_name = model._meta.table_name
                 if not db.table_exists(model):
                     continue

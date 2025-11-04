@@ -1,9 +1,8 @@
 import time
-import asyncio
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from src.common.logger import get_logger
 from src.chat.utils.chat_message_builder import (
-    get_raw_msg_before_timestamp_with_chat,
+    get_raw_msg_by_timestamp_with_chat_inclusive,
     build_readable_messages_with_id,
 )
 from src.llm_models.utils_model import LLMRequest
@@ -25,7 +24,21 @@ class CuriousDetector:
             model_set=model_config.model_task_config.utils,
             request_type="curious_detector",
         )
+        # 触发控制
+        self.last_detection_time: float = time.time()
+        self.min_interval_seconds: float = 60.0
+        self.min_messages: int = 20
     
+    def should_trigger(self) -> bool:
+        if time.time() - self.last_detection_time < self.min_interval_seconds:
+            return False
+        recent_messages = get_raw_msg_by_timestamp_with_chat_inclusive(
+            chat_id=self.chat_id,
+            timestamp_start=self.last_detection_time,
+            timestamp_end=time.time(),
+        )
+        return bool(recent_messages and len(recent_messages) >= self.min_messages)
+
     async def detect_questions(self, recent_messages: List) -> Optional[str]:
         """
         检测最近消息中是否有需要提问的内容
@@ -91,6 +104,9 @@ class CuriousDetector:
 
             result_text, _ = await self.llm_request.generate_response_async(prompt, temperature=0.3)
             
+            logger.info(f"好奇心检测提示词: {prompt}")
+            logger.info(f"好奇心检测结果: {result_text}")
+            
             if not result_text:
                 return None
             
@@ -154,7 +170,20 @@ class CuriousDetector:
             return False
 
 
-async def check_and_make_question(chat_id: str, recent_messages: List) -> bool:
+class CuriousManager:
+    def __init__(self) -> None:
+        self._detectors: dict[str, CuriousDetector] = {}
+
+    def get_detector(self, chat_id: str) -> CuriousDetector:
+        if chat_id not in self._detectors:
+            self._detectors[chat_id] = CuriousDetector(chat_id)
+        return self._detectors[chat_id]
+
+
+curious_manager = CuriousManager()
+
+
+async def check_and_make_question(chat_id: str) -> bool:
     """
     检查聊天记录并生成问题（如果检测到需要提问的内容）
     
@@ -166,8 +195,20 @@ async def check_and_make_question(chat_id: str, recent_messages: List) -> bool:
         bool: 是否检测到并记录了问题
     """
     try:
-        detector = CuriousDetector(chat_id)
-        
+        detector = curious_manager.get_detector(chat_id)
+        if not detector.should_trigger():
+            return False
+
+        # 拉取窗口内消息
+        recent_messages = get_raw_msg_by_timestamp_with_chat_inclusive(
+            chat_id=chat_id,
+            timestamp_start=detector.last_detection_time,
+            timestamp_end=time.time(),
+            limit=80,
+        )
+        if not recent_messages:
+            return False
+
         # 检测是否需要提问
         question = await detector.detect_questions(recent_messages)
         
@@ -176,6 +217,7 @@ async def check_and_make_question(chat_id: str, recent_messages: List) -> bool:
             success = await detector.make_question_from_detection(question)
             if success:
                 logger.info(f"成功检测并记录问题: {question}")
+                detector.last_detection_time = time.time()
                 return True
         
         return False

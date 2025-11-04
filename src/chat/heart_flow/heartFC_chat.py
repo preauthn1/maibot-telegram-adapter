@@ -17,12 +17,12 @@ from src.chat.planner_actions.planner import ActionPlanner
 from src.chat.planner_actions.action_modifier import ActionModifier
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
-from src.chat.heart_flow.hfc_utils import send_typing, stop_typing
 from src.express.expression_learner import expression_learner_manager
 from src.chat.frequency_control.frequency_control import frequency_control_manager
 from src.memory_system.question_maker import QuestionMaker
 from src.memory_system.questions import global_conflict_tracker
 from src.memory_system.curious import check_and_make_question
+from src.jargon import extract_and_store_jargon
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
 from src.plugin_system.core import events_manager
@@ -336,7 +336,9 @@ class HeartFChatting:
             asyncio.create_task(frequency_control_manager.get_or_create_frequency_control(self.stream_id).trigger_frequency_adjust())  
             
             # 添加curious检测任务 - 检测聊天记录中的矛盾、冲突或需要提问的内容
-            asyncio.create_task(check_and_make_question(self.stream_id, recent_messages_list))
+            asyncio.create_task(check_and_make_question(self.stream_id))
+            # 添加jargon提取任务 - 提取聊天中的黑话/俚语并入库（内部自行取消息并带冷却）
+            asyncio.create_task(extract_and_store_jargon(self.stream_id))
             
             
             cycle_timers, thinking_id = self.start_cycle()
