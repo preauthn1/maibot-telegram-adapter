@@ -107,6 +107,7 @@ class HeartFChatting:
 
         self.last_active_time = time.time() # 记录上一次非noreply时间
 
+        self.question_probability_multiplier = 1
         self.questioned = False
         
 
@@ -192,7 +193,7 @@ class HeartFChatting:
         else:
             question_probability = 0.00003
 
-        question_probability = question_probability * global_config.chat.get_auto_chat_value(self.stream_id)
+        question_probability = question_probability * global_config.chat.get_auto_chat_value(self.stream_id) * self.question_probability_multiplier
         
         # print(f"{self.log_prefix}  questioned: {self.questioned},len: {len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id))}")
         if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) == 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
