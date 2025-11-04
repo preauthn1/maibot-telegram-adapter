@@ -1,6 +1,4 @@
 from src.common.logger import get_logger
-from src.chat.heart_flow.heartFC_chat import HeartFChatting
-from src.chat.heart_flow.heartflow import heartflow
 
 logger = get_logger("auto_talk_api")
 
@@ -18,13 +16,17 @@ def set_question_probability_multiplier(chat_id: str, multiplier: float) -> bool
         if not isinstance(multiplier, (int, float)):
             raise TypeError("multiplier 必须是数值类型")
 
-        chat = heartflow.heartflow_chat_list.get(chat_id)
+        # 延迟导入以避免循环依赖
+        from src.chat.heart_flow.heartflow import heartflow as _heartflow
+
+        chat = _heartflow.heartflow_chat_list.get(chat_id)
         if chat is None:
             logger.warning(f"未找到 chat_id={chat_id} 的心流实例，无法设置乘数")
             return False
 
-        if not isinstance(chat, HeartFChatting):
-            logger.warning(f"chat_id={chat_id} 非群聊(HeartFChatting)，不支持设置主动发言乘数")
+        # 仅对拥有该属性的群聊心流生效（鸭子类型，避免导入类）
+        if not hasattr(chat, "question_probability_multiplier"):
+            logger.warning(f"chat_id={chat_id} 实例不支持主动发言乘数设置")
             return False
 
         # 约束：不允许负值
@@ -43,9 +45,12 @@ def set_question_probability_multiplier(chat_id: str, multiplier: float) -> bool
 def get_question_probability_multiplier(chat_id: str) -> float:
     """获取指定 chat_id 的主动发言概率乘数，未找到则返回 0。"""
     try:
-        chat = heartflow.heartflow_chat_list.get(chat_id)
-        if isinstance(chat, HeartFChatting):
-            return float(getattr(chat, "question_probability_multiplier", 0.0))
-        return 0.0
+        # 延迟导入以避免循环依赖
+        from src.chat.heart_flow.heartflow import heartflow as _heartflow
+
+        chat = _heartflow.heartflow_chat_list.get(chat_id)
+        if chat is None:
+            return 0.0
+        return float(getattr(chat, "question_probability_multiplier", 0.0))
     except Exception:
         return 0.0
