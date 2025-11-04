@@ -17,8 +17,7 @@ def init_replyer_prompt():
 
 你正在qq群里聊天，下面是群里正在聊的内容:
 {time_block}
-{background_dialogue_prompt}
-{core_dialogue_prompt}
+{dialogue_prompt}
 
 {reply_target_block}。
 {identity}
@@ -26,7 +25,7 @@ def init_replyer_prompt():
 尽量简短一些。{keywords_reaction_prompt}请注意把握聊天内容，不要回复的太有条理，可以有个性。
 {reply_style}
 请注意不要输出多余内容(包括前后缀，冒号和引号，括号，表情等)，只输出一句回复内容就好。
-{moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。
+{moderation_prompt}不要输出多余内容(包括前后缀，冒号和引号，括号，表情包，at或 @等 )。请不要思考太长
 现在，你说：""",
         "replyer_prompt",
     )

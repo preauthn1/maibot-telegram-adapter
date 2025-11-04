@@ -1,10 +1,8 @@
 import time
-import random
 import json
 import os
 from datetime import datetime
-import jieba
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Optional, Tuple
 import traceback
 from src.common.logger import get_logger
 from src.common.database.database_model import Expression
@@ -17,24 +15,14 @@ from src.chat.utils.chat_message_builder import (
 )
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
+from src.express.style_learner import style_learner_manager
+from src.express.express_utils import filter_message_content, calculate_similarity
 from json_repair import repair_json
 
 
-MAX_EXPRESSION_COUNT = 300
-DECAY_DAYS = 15  # 30天衰减到0.01
-DECAY_MIN = 0.01  # 最小衰减值
+# MAX_EXPRESSION_COUNT = 300
 
 logger = get_logger("expressor")
-
-
-def format_create_date(timestamp: float) -> str:
-    """
-    将时间戳格式化为可读的日期字符串
-    """
-    try:
-        return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-    except (ValueError, OSError):
-        return "未知时间"
 
 
 def init_prompt() -> None:
@@ -105,8 +93,8 @@ class ExpressionLearner:
         _, self.enable_learning, self.learning_intensity = global_config.expression.get_expression_config_for_chat(
             self.chat_id
         )
-        self.min_messages_for_learning = 15 / self.learning_intensity  # 触发学习所需的最少消息数
-        self.min_learning_interval = 150 / self.learning_intensity
+        self.min_messages_for_learning = 30 / self.learning_intensity  # 触发学习所需的最少消息数
+        self.min_learning_interval = 300 / self.learning_intensity
 
     def should_trigger_learning(self) -> bool:
         """
@@ -139,7 +127,7 @@ class ExpressionLearner:
 
         return True
 
-    async def trigger_learning_for_chat(self) -> bool:
+    async def trigger_learning_for_chat(self):
         """
         为指定聊天流触发学习
 
@@ -150,11 +138,10 @@ class ExpressionLearner:
             bool: 是否成功触发学习
         """
         if not self.should_trigger_learning():
-            return False
+            return
 
         try:
-            logger.info(f"为聊天流 {self.chat_name} 触发表达学习")
-
+            logger.info(f"在聊天流 {self.chat_name} 学习表达方式")
             # 学习语言风格
             learnt_style = await self.learn_and_store(num=25)
 
@@ -163,161 +150,105 @@ class ExpressionLearner:
 
             if learnt_style:
                 logger.info(f"聊天流 {self.chat_name} 表达学习完成")
-                return True
             else:
                 logger.warning(f"聊天流 {self.chat_name} 表达学习未获得有效结果")
-                return False
 
         except Exception as e:
             logger.error(f"为聊天流 {self.chat_name} 触发学习失败: {e}")
             traceback.print_exc()
-            return False
+            return
 
-    def _apply_global_decay_to_database(self, current_time: float) -> None:
-        """
-        对数据库中的所有表达方式应用全局衰减
-        """
-        try:
-            # 获取所有表达方式
-            all_expressions = Expression.select()
 
-            updated_count = 0
-            deleted_count = 0
-
-            for expr in all_expressions:
-                # 计算时间差
-                last_active = expr.last_active_time
-                time_diff_days = (current_time - last_active) / (24 * 3600)  # 转换为天
-
-                # 计算衰减值
-                decay_value = self.calculate_decay_factor(time_diff_days)
-                new_count = max(0.01, expr.count - decay_value)
-
-                if new_count <= 0.01:
-                    # 如果count太小，删除这个表达方式
-                    expr.delete_instance()
-                    deleted_count += 1
-                else:
-                    # 更新count
-                    expr.count = new_count
-                    expr.save()
-                    updated_count += 1
-
-            if updated_count > 0 or deleted_count > 0:
-                logger.info(f"全局衰减完成：更新了 {updated_count} 个表达方式，删除了 {deleted_count} 个表达方式")
-
-        except Exception as e:
-            logger.error(f"数据库全局衰减失败: {e}")
-
-    def calculate_decay_factor(self, time_diff_days: float) -> float:
-        """
-        计算衰减值
-        当时间差为0天时，衰减值为0（最近活跃的不衰减）
-        当时间差为7天时，衰减值为0.002（中等衰减）
-        当时间差为30天或更长时，衰减值为0.01（高衰减）
-        使用二次函数进行曲线插值
-        """
-        if time_diff_days <= 0:
-            return 0.0  # 刚激活的表达式不衰减
-
-        if time_diff_days >= DECAY_DAYS:
-            return 0.01  # 长时间未活跃的表达式大幅衰减
-
-        # 使用二次函数插值：在0-30天之间从0衰减到0.01
-        # 使用简单的二次函数：y = a * x^2
-        # 当x=30时，y=0.01，所以 a = 0.01 / (30^2) = 0.01 / 900
-        a = 0.01 / (DECAY_DAYS**2)
-        decay = a * (time_diff_days**2)
-
-        return min(0.01, decay)
 
     async def learn_and_store(self, num: int = 10) -> List[Tuple[str, str, str]]:
         """
         学习并存储表达方式
         """
-        res = await self.learn_expression(num)
+        learnt_expressions = await self.learn_expression(num)
 
-        if res is None:
+        if learnt_expressions is None:
             logger.info("没有学习到表达风格")
             return []
-        learnt_expressions = res
+        
+        # 展示学到的表达方式
         learnt_expressions_str = ""
         for (
-            _chat_id,
             situation,
             style,
             _context,
-            _context_words,
+            _up_content,
         ) in learnt_expressions:
             learnt_expressions_str += f"{situation}->{style}\n"
-
         logger.info(f"在 {self.chat_name} 学习到表达风格:\n{learnt_expressions_str}")
-
-        # 按chat_id分组
-        chat_dict: Dict[str, List[Dict[str, Any]]] = {}
-        for (
-            chat_id,
-            situation,
-            style,
-            context,
-            context_words,
-        ) in learnt_expressions:
-            if chat_id not in chat_dict:
-                chat_dict[chat_id] = []
-            chat_dict[chat_id].append(
-                {
-                    "situation": situation,
-                    "style": style,
-                    "context": context,
-                    "context_words": context_words,
-                }
-            )
 
         current_time = time.time()
 
-        # 存储到数据库 Expression 表
-        for chat_id, expr_list in chat_dict.items():
-            for new_expr in expr_list:
-                # 查找是否已存在相似表达方式
-                query = Expression.select().where(
-                    (Expression.chat_id == chat_id)
-                    & (Expression.type == "style")
-                    & (Expression.situation == new_expr["situation"])
-                    & (Expression.style == new_expr["style"])
-                )
-                if query.exists():
-                    expr_obj = query.get()
-                    # 50%概率替换内容
-                    if random.random() < 0.5:
-                        expr_obj.situation = new_expr["situation"]
-                        expr_obj.style = new_expr["style"]
-                        expr_obj.context = new_expr["context"]
-                        expr_obj.context_words = new_expr["context_words"]
-                    expr_obj.count = expr_obj.count + 1
-                    expr_obj.last_active_time = current_time
-                    expr_obj.save()
-                else:
-                    Expression.create(
-                        situation=new_expr["situation"],
-                        style=new_expr["style"],
-                        count=1,
-                        last_active_time=current_time,
-                        chat_id=chat_id,
-                        type="style",
-                        create_date=current_time,  # 手动设置创建日期
-                        context=new_expr["context"],
-                        context_words=new_expr["context_words"],
-                    )
-            # 限制最大数量
-            exprs = list(
-                Expression.select()
-                .where((Expression.chat_id == chat_id) & (Expression.type == "style"))
-                .order_by(Expression.count.asc())
+        # 存储到数据库 Expression 表并训练 style_learner
+        has_new_expressions = False  # 记录是否有新的表达方式
+        learner = style_learner_manager.get_learner(self.chat_id)  # 获取 learner 实例
+        
+        for (
+            situation,
+            style,
+            context,
+            up_content,
+        ) in learnt_expressions:
+            # 查找是否已存在相似表达方式
+            query = Expression.select().where(
+                (Expression.chat_id == self.chat_id)
+                & (Expression.situation == situation)
+                & (Expression.style == style)
             )
-            if len(exprs) > MAX_EXPRESSION_COUNT:
-                # 删除count最小的多余表达方式
-                for expr in exprs[: len(exprs) - MAX_EXPRESSION_COUNT]:
-                    expr.delete_instance()
+            if query.exists():
+                # 表达方式完全相同，只更新时间戳
+                expr_obj = query.get()
+                expr_obj.last_active_time = current_time
+                expr_obj.save()
+                continue
+            else:
+                Expression.create(
+                    situation=situation,
+                    style=style,
+                    last_active_time=current_time,
+                    chat_id=self.chat_id,
+                    create_date=current_time,  # 手动设置创建日期
+                    context=context,
+                    up_content=up_content,
+                )
+                has_new_expressions = True
+            
+            # 训练 style_learner（up_content 和 style 必定存在）
+            try:
+                learner.add_style(style, situation)
+                
+                # 学习映射关系
+                success = style_learner_manager.learn_mapping(
+                    self.chat_id, 
+                    up_content, 
+                    style
+                )
+                if success:
+                    logger.debug(f"StyleLearner学习成功: {self.chat_id} - {up_content} -> {style}" + (f" (situation: {situation})" if situation else ""))
+                else:
+                    logger.warning(f"StyleLearner学习失败: {self.chat_id} - {up_content} -> {style}")
+            except Exception as e:
+                logger.error(f"StyleLearner学习异常: {self.chat_id} - {e}")
+            
+        
+        # 保存当前聊天室的 style_learner 模型
+        if has_new_expressions:
+            try:
+                logger.info(f"开始保存聊天室 {self.chat_id} 的 StyleLearner 模型...")
+                save_success = learner.save(style_learner_manager.model_save_path)
+                
+                if save_success:
+                    logger.info(f"StyleLearner 模型保存成功，聊天室: {self.chat_id}")
+                else:
+                    logger.warning(f"StyleLearner 模型保存失败，聊天室: {self.chat_id}")
+                    
+            except Exception as e:
+                logger.error(f"StyleLearner 模型保存异常: {e}")
+        
         return learnt_expressions
 
     async def match_expression_context(
@@ -339,8 +270,8 @@ class ExpressionLearner:
 
         response, _ = await self.express_learn_model.generate_response_async(prompt, temperature=0.3)
 
-        print(f"match_expression_context_prompt: {prompt}")
-        print(f"random_msg_match_str: {response}")
+        # print(f"match_expression_context_prompt: {prompt}")
+        # print(f"{response}")
 
         # 解析JSON响应
         match_responses = []
@@ -393,24 +324,44 @@ class ExpressionLearner:
             logger.error(f"解析匹配响应JSON失败: {e}, 响应内容: \n{response}")
             return []
 
+        # 确保 match_responses 是一个列表
+        if not isinstance(match_responses, list):
+            if isinstance(match_responses, dict):
+                match_responses = [match_responses]
+            else:
+                logger.error(f"match_responses 不是列表或字典类型: {type(match_responses)}, 内容: {match_responses}")
+                return []
+
         matched_expressions = []
         used_pair_indices = set()  # 用于跟踪已经使用的expression_pair索引
+        
+        logger.debug(f"match_responses 类型: {type(match_responses)}, 长度: {len(match_responses)}")
+        logger.debug(f"match_responses 内容: {match_responses}")
 
         for match_response in match_responses:
             try:
+                # 检查 match_response 的类型
+                if not isinstance(match_response, dict):
+                    logger.error(f"match_response 不是字典类型: {type(match_response)}, 内容: {match_response}")
+                    continue
+                
                 # 获取表达方式序号
+                if "expression_pair" not in match_response:
+                    logger.error(f"match_response 缺少 'expression_pair' 字段: {match_response}")
+                    continue
+                    
                 pair_index = int(match_response["expression_pair"]) - 1  # 转换为0-based索引
 
                 # 检查索引是否有效且未被使用过
                 if 0 <= pair_index < len(expression_pairs) and pair_index not in used_pair_indices:
                     situation, style = expression_pairs[pair_index]
-                    context = match_response["context"]
+                    context = match_response.get("context", "")
                     matched_expressions.append((situation, style, context))
                     used_pair_indices.add(pair_index)  # 标记该索引已使用
                     logger.debug(f"成功匹配表达方式 {pair_index + 1}: {situation} -> {style}")
                 elif pair_index in used_pair_indices:
                     logger.debug(f"跳过重复的表达方式 {pair_index + 1}")
-            except (ValueError, KeyError, IndexError) as e:
+            except (ValueError, KeyError, IndexError, TypeError) as e:
                 logger.error(f"解析匹配条目失败: {e}, 条目: {match_response}")
                 continue
 
@@ -418,15 +369,12 @@ class ExpressionLearner:
 
     async def learn_expression(
         self, num: int = 10
-    ) -> Optional[List[Tuple[str, str, str, List[str]]]]:
+    ) -> Optional[List[Tuple[str, str, str, str]]]:
         """从指定聊天流学习表达方式
 
         Args:
             num: 学习数量
         """
-        type_str = "语言风格"
-        prompt = "learn_style_prompt"
-
         current_time = time.time()
 
         # 获取上次学习之后的消息
@@ -439,14 +387,14 @@ class ExpressionLearner:
         # print(random_msg)
         if not random_msg or random_msg == []:
             return None
-        # 转化成str
-        _chat_id: str = random_msg[0].chat_id
-        # random_msg_str: str = build_readable_messages(random_msg, timestamp_mode="normal")
+
+        # 学习用
         random_msg_str: str = await build_anonymous_messages(random_msg)
+        # 溯源用
         random_msg_match_str: str = await build_bare_messages(random_msg)
 
         prompt: str = await global_prompt_manager.format_prompt(
-            prompt,
+            "learn_style_prompt",
             chat_str=random_msg_str,
         )
 
@@ -456,49 +404,51 @@ class ExpressionLearner:
         try:
             response, _ = await self.express_learn_model.generate_response_async(prompt, temperature=0.3)
         except Exception as e:
-            logger.error(f"学习{type_str}失败: {e}")
+            logger.error(f"学习表达方式失败,模型生成出错: {e}")
             return None
-
+        expressions: List[Tuple[str, str]] = self.parse_expression_response(response)
         # logger.debug(f"学习{type_str}的response: {response}")
 
-        expressions: List[Tuple[str, str]] = self.parse_expression_response(response)
-
+        
+        # 对表达方式溯源
         matched_expressions: List[Tuple[str, str, str]] = await self.match_expression_context(
             expressions, random_msg_match_str
         )
-
-        split_matched_expressions: List[Tuple[str, str, str, List[str]]] = self.split_expression_context(
-            matched_expressions
-        )
-
-        split_matched_expressions_w_emb = []
-
-        for situation, style, context, context_words in split_matched_expressions:
-            split_matched_expressions_w_emb.append(
-                (self.chat_id, situation, style, context, context_words)
-            )
-
-        return split_matched_expressions_w_emb
-
-    def split_expression_context(
-        self, matched_expressions: List[Tuple[str, str, str]]
-    ) -> List[Tuple[str, str, str, List[str]]]:
-        """
-        对matched_expressions中的context部分进行jieba分词
-
-        Args:
-            matched_expressions: 匹配到的表达方式列表，每个元素为(situation, style, context)
-
-        Returns:
-            添加了分词结果的表达方式列表，每个元素为(situation, style, context, context_words)
-        """
-        result = []
+        # 为每条消息构建精简文本列表，保留到原消息索引的映射
+        bare_lines: List[Tuple[int, str]] = self._build_bare_lines(random_msg)
+        # 将 matched_expressions 结合上一句 up_content（若不存在上一句则跳过）
+        filtered_with_up: List[Tuple[str, str, str, str]] = []  # (situation, style, context, up_content)
         for situation, style, context in matched_expressions:
-            # 使用jieba进行分词
-            context_words = list(jieba.cut(context))
-            result.append((situation, style, context, context_words))
+            # 在 bare_lines 中找到第一处相似度达到85%的行
+            pos = None
+            for i, (_, c) in enumerate(bare_lines):
+                similarity = calculate_similarity(c, context)
+                if similarity >= 0.85:  # 85%相似度阈值
+                    pos = i
+                    break
+            
+            if pos is None or pos == 0:
+                # 没有匹配到目标句或没有上一句，跳过该表达
+                continue
+            
+            # 检查目标句是否为空
+            target_content = bare_lines[pos][1]
+            if not target_content:
+                # 目标句为空，跳过该表达
+                continue
+            
+            prev_original_idx = bare_lines[pos - 1][0]
+            up_content = filter_message_content(random_msg[prev_original_idx].processed_plain_text or "")
+            if not up_content:
+                # 上一句为空，跳过该表达
+                continue
+            filtered_with_up.append((situation, style, context, up_content))
 
-        return result
+        if not filtered_with_up:
+            return None
+
+        return filtered_with_up
+
 
     def parse_expression_response(self, response: str) -> List[Tuple[str, str, str]]:
         """
@@ -529,6 +479,26 @@ class ExpressionLearner:
             style = line[idx_quote3 + 1 : idx_quote4]
             expressions.append((situation, style))
         return expressions
+
+    def _build_bare_lines(self, messages: List) -> List[Tuple[int, str]]:
+        """
+        为每条消息构建精简文本列表，保留到原消息索引的映射
+        
+        Args:
+            messages: 消息列表
+            
+        Returns:
+            List[Tuple[int, str]]: (original_index, bare_content) 元组列表
+        """
+        bare_lines: List[Tuple[int, str]] = []
+        
+        for idx, msg in enumerate(messages):
+            content = msg.processed_plain_text or ""
+            content = filter_message_content(content)
+            # 即使content为空也要记录，防止错位
+            bare_lines.append((idx, content))
+                
+        return bare_lines
 
 
 init_prompt()

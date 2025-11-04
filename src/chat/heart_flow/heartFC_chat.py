@@ -18,10 +18,11 @@ from src.chat.planner_actions.action_modifier import ActionModifier
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
 from src.chat.heart_flow.hfc_utils import send_typing, stop_typing
-from src.chat.express.expression_learner import expression_learner_manager
+from src.express.expression_learner import expression_learner_manager
 from src.chat.frequency_control.frequency_control import frequency_control_manager
 from src.memory_system.question_maker import QuestionMaker
 from src.memory_system.questions import global_conflict_tracker
+from src.memory_system.curious import check_and_make_question
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
 from src.plugin_system.core import events_manager
@@ -184,14 +185,12 @@ class HeartFChatting:
         )
 
         question_probability = 0
-        if time.time() - self.last_active_time > 3600:
-            question_probability = 0.01
-        elif time.time() - self.last_active_time > 1200:
-            question_probability = 0.005
-        elif time.time() - self.last_active_time > 600:
-            question_probability = 0.001
-        else:
+        if time.time() - self.last_active_time > 7200:
             question_probability = 0.0003
+        elif time.time() - self.last_active_time > 3600:
+            question_probability = 0.0001
+        else:
+            question_probability = 0.00003
 
         question_probability = question_probability * global_config.chat.get_auto_chat_value(self.stream_id)
         
@@ -210,7 +209,7 @@ class HeartFChatting:
                     if question:
                         logger.info(f"{self.log_prefix} 问题: {question}")
                         await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
-                        await self._lift_question_reply(question,context,cycle_timers,thinking_id)
+                        await self._lift_question_reply(question,context,thinking_id)
                     else:
                         logger.info(f"{self.log_prefix} 无问题")
                     # self.end_cycle(cycle_timers, thinking_id)
@@ -331,9 +330,12 @@ class HeartFChatting:
 
 
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
-            await self.expression_learner.trigger_learning_for_chat()
+            asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
+            asyncio.create_task(global_memory_chest.build_running_content(chat_id=self.stream_id))  
+            asyncio.create_task(frequency_control_manager.get_or_create_frequency_control(self.stream_id).trigger_frequency_adjust())  
             
-            await global_memory_chest.build_running_content(chat_id=self.stream_id)   
+            # 添加curious检测任务 - 检测聊天记录中的矛盾、冲突或需要提问的内容
+            asyncio.create_task(check_and_make_question(self.stream_id, recent_messages_list))
             
             
             cycle_timers, thinking_id = self.start_cycle()
@@ -551,8 +553,8 @@ class HeartFChatting:
             traceback.print_exc()
             return False, ""
 
-    async def _lift_question_reply(self, question: str, context: str, cycle_timers: Dict[str, float], thinking_id: str):
-        reason = f"在聊天中：\n{context}\n你对问题\"{question}\"感到好奇，想要和群友讨论"
+    async def _lift_question_reply(self, question: str, question_context: str, thinking_id: str):
+        reason = f"在聊天中：\n{question_context}\n你对问题\"{question}\"感到好奇，想要和群友讨论"
         new_msg = get_raw_msg_before_timestamp_with_chat(
             chat_id=self.stream_id,
             timestamp=time.time(),

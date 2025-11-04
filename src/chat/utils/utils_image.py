@@ -44,6 +44,11 @@ class ImageManager:
             except Exception as e:
                 logger.error(f"数据库连接或表创建失败: {e}")
 
+            try:
+                self._cleanup_invalid_descriptions()
+            except Exception as e:
+                logger.warning(f"数据库清理失败: {e}")
+
             self._initialized = True
 
     def _ensure_image_dir(self):
@@ -91,6 +96,26 @@ class ImageManager:
                 desc_obj.save()
         except Exception as e:
             logger.error(f"保存描述到数据库失败 (Peewee): {str(e)}")
+
+    @staticmethod
+    def _cleanup_invalid_descriptions():
+        """清理数据库中 description 为空或为 'None' 的记录"""
+        invalid_values = ["", "None"]
+
+        # 清理 Images 表
+        deleted_images = Images.delete().where(
+            (Images.description >> None) | (Images.description << invalid_values)
+        ).execute()
+
+        # 清理 ImageDescriptions 表
+        deleted_descriptions = ImageDescriptions.delete().where(
+            (ImageDescriptions.description >> None) | (ImageDescriptions.description << invalid_values)
+        ).execute()
+
+        if deleted_images or deleted_descriptions:
+            logger.info(f"[清理完成] 删除 Images: {deleted_images} 条, ImageDescriptions: {deleted_descriptions} 条")
+        else:
+            logger.info("[清理完成] 未发现无效描述记录")
 
     async def get_emoji_tag(self, image_base64: str) -> str:
         from src.chat.emoji_system.emoji_manager import get_emoji_manager
@@ -273,7 +298,7 @@ class ImageManager:
             prompt = global_config.personality.visual_style
             logger.info(f"[VLM调用] 为图片生成新描述 (Hash: {image_hash[:8]}...)")
             description, _ = await self.vlm.generate_response_for_image(
-                prompt, image_base64, image_format, temperature=0.4, max_tokens=300
+                prompt, image_base64, image_format, temperature=0.4
             )
 
             if description is None:
@@ -570,7 +595,7 @@ class ImageManager:
 
             # 获取VLM描述
             description, _ = await self.vlm.generate_response_for_image(
-                prompt, image_base64, image_format, temperature=0.4, max_tokens=300
+                prompt, image_base64, image_format, temperature=0.4
             )
 
             if description is None:

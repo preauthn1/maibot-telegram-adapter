@@ -1,9 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, TYPE_CHECKING
 from rich.traceback import install
 
 from src.common.logger import get_logger
 from src.plugin_system.base.component_types import ComponentType, ToolInfo, ToolParamType
+
+if TYPE_CHECKING:
+    from src.chat.message_receive.chat_stream import ChatStream
 
 install(extra_lines=3)
 
@@ -29,8 +32,23 @@ class BaseTool(ABC):
     available_for_llm: bool = False
     """是否可供LLM使用"""
 
-    def __init__(self, plugin_config: Optional[dict] = None):
+    def __init__(self, plugin_config: Optional[dict] = None, chat_stream: Optional["ChatStream"] = None):
+        """初始化工具基类
+        
+        Args:
+            plugin_config: 插件配置字典
+            chat_stream: 聊天流对象，用于获取聊天上下文信息
+        """
         self.plugin_config = plugin_config or {}  # 直接存储插件配置字典
+        
+        # =============================================================================
+        # 便捷属性 - 直接在初始化时获取常用聊天信息（与BaseAction保持一致）
+        # =============================================================================
+        
+        # 获取聊天流对象
+        self.chat_stream = chat_stream
+        self.chat_id = self.chat_stream.stream_id if self.chat_stream else None
+        self.platform = getattr(self.chat_stream, "platform", None) if self.chat_stream else None
 
     @classmethod
     def get_tool_definition(cls) -> dict[str, Any]:

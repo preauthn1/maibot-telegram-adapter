@@ -26,7 +26,7 @@ from src.chat.utils.chat_message_builder import (
     get_raw_msg_before_timestamp_with_chat,
     replace_user_references,
 )
-from src.chat.express.expression_selector import expression_selector
+from src.express.expression_selector import expression_selector
 from src.plugin_system.apis.message_api import translate_pid_to_description
 
 # from src.memory_system.memory_activator import MemoryActivator
@@ -133,7 +133,13 @@ class DefaultReplyer:
 
             try:
                 content, reasoning_content, model_name, tool_call = await self.llm_generate_content(prompt)
-                logger.debug(f"replyer生成内容: {content}")
+                # logger.debug(f"replyer生成内容: {content}")
+                
+                logger.info(f"replyer生成内容: {content}")
+                if global_config.debug.show_replyer_reasoning:
+                    logger.info(f"replyer生成推理:\n{reasoning_content}")
+                logger.info(f"replyer生成模型: {model_name}")
+                
                 llm_response.content = content
                 llm_response.reasoning = reasoning_content
                 llm_response.model = model_name
@@ -238,8 +244,8 @@ class DefaultReplyer:
             return "", []
         style_habits = []
         # 使用从处理器传来的选中表达方式
-        # LLM模式：调用LLM选择5-10个，然后随机选5个
-        selected_expressions, selected_ids = await expression_selector.select_suitable_expressions_llm(
+        # 根据配置模式选择表达方式：exp_model模式直接使用模型预测，classic模式使用LLM选择
+        selected_expressions, selected_ids = await expression_selector.select_suitable_expressions(
             self.chat_stream.stream_id, chat_history, max_num=8, target_message=target
         )
 
@@ -487,6 +493,31 @@ class DefaultReplyer:
         Returns:
             Tuple[str, str]: (核心对话prompt, 背景对话prompt)
         """
+        # 构建背景对话 prompt
+        all_dialogue_prompt = ""
+        if message_list_before_now:
+            latest_msgs = message_list_before_now[-int(global_config.chat.max_context_size) :]
+            all_dialogue_prompt = build_readable_messages(
+                latest_msgs,
+                replace_bot_name=True,
+                timestamp_mode="normal_no_YMD",
+                truncate=True,
+            )
+
+        return all_dialogue_prompt
+    
+    def core_background_build_chat_history_prompts(
+        self, message_list_before_now: List[DatabaseMessages], target_user_id: str, sender: str
+    ) -> Tuple[str, str]:
+        """
+
+        Args:
+            message_list_before_now: 历史消息列表
+            target_user_id: 目标用户ID（当前对话对象）
+
+        Returns:
+            Tuple[str, str]: (核心对话prompt, 背景对话prompt)
+        """
         core_dialogue_list: List[DatabaseMessages] = []
         bot_id = str(global_config.bot.qq_account)
 
@@ -529,7 +560,7 @@ class DefaultReplyer:
                     show_actions=True,
                 )
                 core_dialogue_prompt = f"""--------------------------------
-这是你和{sender}的对话，你们正在交流中：
+这是上述中你和{sender}的对话摘要，内容从上面的对话中截取，便于你理解：
 {core_dialogue_prompt_str}
 --------------------------------
 """
@@ -594,7 +625,18 @@ class DefaultReplyer:
         else:
             bot_nickname = ""
 
-        prompt_personality = f"{global_config.personality.personality};"
+        # 获取基础personality
+        prompt_personality = global_config.personality.personality
+        
+        # 检查是否需要随机替换为状态
+        if (global_config.personality.states and 
+            global_config.personality.state_probability > 0 and 
+            random.random() < global_config.personality.state_probability):
+            # 随机选择一个状态替换personality
+            selected_state = random.choice(global_config.personality.states)
+            prompt_personality = selected_state
+        
+        prompt_personality = f"{prompt_personality};"
         return f"你的名字是{bot_name}{bot_nickname}，你{prompt_personality}"
 
     async def build_prompt_reply_context(
@@ -731,7 +773,7 @@ class DefaultReplyer:
                 continue
 
             timing_logs.append(f"{chinese_name}: {duration:.1f}s")
-            if duration > 8:
+            if duration > 12:
                 logger.warning(f"回复生成前信息获取耗时过长: {chinese_name} 耗时: {duration:.1f}s，请使用更快的模型")
         logger.info(f"回复准备: {'; '.join(timing_logs)}; {almost_zero_str} <0.1s")
 
@@ -776,9 +818,7 @@ class DefaultReplyer:
             reply_target_block = ""
 
         # 构建分离的对话 prompt
-        core_dialogue_prompt, background_dialogue_prompt = self.build_chat_history_prompts(
-            message_list_before_now_long, user_id, sender
-        )
+        dialogue_prompt = self.build_chat_history_prompts(message_list_before_now_long, user_id, sender)
 
         return await global_prompt_manager.format_prompt(
             "replyer_prompt",
@@ -793,9 +833,8 @@ class DefaultReplyer:
             identity=personality_prompt,
             action_descriptions=actions_info,
             sender_name=sender,
-            background_dialogue_prompt=background_dialogue_prompt,
+            dialogue_prompt=dialogue_prompt,
             time_block=time_block,
-            core_dialogue_prompt=core_dialogue_prompt,
             reply_target_block=reply_target_block,
             reply_style=global_config.personality.reply_style,
             keywords_reaction_prompt=keywords_reaction_prompt,
@@ -960,9 +999,9 @@ class DefaultReplyer:
     async def llm_generate_content(self, prompt: str):
         with Timer("LLM生成", {}):  # 内部计时器，可选保留
             # 直接使用已初始化的模型实例
-            logger.info(f"\n{prompt}\n")
+            # logger.info(f"\n{prompt}\n")
 
-            if global_config.debug.show_prompt:
+            if global_config.debug.show_replyer_prompt:
                 logger.info(f"\n{prompt}\n")
             else:
                 logger.debug(f"\nreplyer_Prompt:{prompt}\n")
@@ -970,6 +1009,9 @@ class DefaultReplyer:
             content, (reasoning_content, model_name, tool_calls) = await self.express_model.generate_response_async(
                 prompt
             )
+
+            # 移除 content 前后的换行符和空格
+            content = content.strip()
 
             logger.info(f"使用 {model_name} 生成回复内容: {content}")
         return content, reasoning_content, model_name, tool_calls

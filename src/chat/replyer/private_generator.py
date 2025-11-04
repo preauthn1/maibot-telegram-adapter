@@ -24,7 +24,7 @@ from src.chat.utils.chat_message_builder import (
     get_raw_msg_before_timestamp_with_chat,
     replace_user_references,
 )
-from src.chat.express.expression_selector import expression_selector
+from src.express.expression_selector import expression_selector
 from src.plugin_system.apis.message_api import translate_pid_to_description
 from src.mood.mood_manager import mood_manager
 
@@ -256,8 +256,8 @@ class PrivateReplyer:
             return "", []
         style_habits = []
         # 使用从处理器传来的选中表达方式
-        # LLM模式：调用LLM选择5-10个，然后随机选5个
-        selected_expressions, selected_ids = await expression_selector.select_suitable_expressions_llm(
+        # 根据配置模式选择表达方式：exp_model模式直接使用模型预测，classic模式使用LLM选择
+        selected_expressions, selected_ids = await expression_selector.select_suitable_expressions(
             self.chat_stream.stream_id, chat_history, max_num=8, target_message=target
         )
 
@@ -522,7 +522,18 @@ class PrivateReplyer:
         else:
             bot_nickname = ""
 
-        prompt_personality = f"{global_config.personality.personality};"
+        # 获取基础personality
+        prompt_personality = global_config.personality.personality
+        
+        # 检查是否需要随机替换为状态
+        if (global_config.personality.states and 
+            global_config.personality.state_probability > 0 and 
+            random.random() < global_config.personality.state_probability):
+            # 随机选择一个状态替换personality
+            selected_state = random.choice(global_config.personality.states)
+            prompt_personality = selected_state
+        
+        prompt_personality = f"{prompt_personality};"
         return f"你的名字是{bot_name}{bot_nickname}，你{prompt_personality}"
 
     async def build_prompt_reply_context(
@@ -668,7 +679,7 @@ class PrivateReplyer:
                 continue
 
             timing_logs.append(f"{chinese_name}: {duration:.1f}s")
-            if duration > 8:
+            if duration > 12:
                 logger.warning(f"回复生成前信息获取耗时过长: {chinese_name} 耗时: {duration:.1f}s，请使用更快的模型")
         logger.info(f"回复准备: {'; '.join(timing_logs)}; {almost_zero_str} <0.1s")
 
@@ -911,7 +922,7 @@ class PrivateReplyer:
             # 直接使用已初始化的模型实例
             logger.info(f"\n{prompt}\n")
 
-            if global_config.debug.show_prompt:
+            if global_config.debug.show_replyer_prompt:
                 logger.info(f"\n{prompt}\n")
             else:
                 logger.debug(f"\n{prompt}\n")
@@ -919,8 +930,12 @@ class PrivateReplyer:
             content, (reasoning_content, model_name, tool_calls) = await self.express_model.generate_response_async(
                 prompt
             )
+            
+            content = content.strip()
 
             logger.info(f"使用 {model_name} 生成回复内容: {content}")
+            if global_config.debug.show_replyer_reasoning:
+                logger.info(f"使用 {model_name} 生成回复推理:\n{reasoning_content}")
         return content, reasoning_content, model_name, tool_calls
 
     async def get_prompt_info(self, message: str, sender: str, target: str):

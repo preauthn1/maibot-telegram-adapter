@@ -14,8 +14,6 @@ from src.common.logger import get_logger
 from src.common.data_models.info_data_model import ActionPlannerInfo
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.utils.chat_message_builder import (
-    build_readable_actions,
-    get_actions_by_timestamp_with_chat,
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
 )
@@ -69,6 +67,7 @@ no_reply_until_call
 动作描述：
 保持沉默，直到有人直接叫你的名字
 当前话题不感兴趣时使用，或有人不喜欢你的发言时使用
+当你频繁选择no_reply时使用，表示话题暂时与你无关
 {{
     "action": "no_reply_until_call",
 }}
@@ -418,7 +417,6 @@ class ActionPlanner:
         return filtered_actions
 
     async def _build_action_options_block(self, current_available_actions: Dict[str, ActionInfo]) -> str:
-        # sourcery skip: use-join
         """构建动作选项块"""
         if not current_available_actions:
             return ""

@@ -27,6 +27,9 @@ class BotConfig(ConfigBase):
 
     nickname: str
     """昵称"""
+    
+    platforms: list[str] = field(default_factory=lambda: [])
+    """其他平台列表"""
 
     alias_names: list[str] = field(default_factory=lambda: [])
     """别名列表"""
@@ -53,6 +56,12 @@ class PersonalityConfig(ConfigBase):
 
     private_plan_style: str = ""
     """私聊说话规则，行为风格"""
+
+    states: list[str] = field(default_factory=lambda: [])
+    """状态列表，用于随机替换personality"""
+
+    state_probability: float = 0.0
+    """状态概率，每次构建人格时替换personality的概率"""
 
 
 @dataclass
@@ -82,6 +91,9 @@ class ChatConfig(ConfigBase):
     auto_chat_value: float = 1
     """自动聊天，越小，麦麦主动聊天的概率越低"""
 
+    enable_auto_chat_value_rules: bool = True
+    """是否启用动态自动聊天频率规则"""
+
     at_bot_inevitable_reply: float = 1
     """@bot 必然回复，1为100%回复，0为不额外增幅"""
 
@@ -90,6 +102,9 @@ class ChatConfig(ConfigBase):
 
     talk_value: float = 1
     """思考频率"""
+
+    enable_talk_value_rules: bool = True
+    """是否启用动态发言频率规则"""
 
     talk_value_rules: list[dict] = field(default_factory=lambda: [])
     """
@@ -177,7 +192,7 @@ class ChatConfig(ConfigBase):
 
     def get_talk_value(self, chat_id: Optional[str]) -> float:
         """根据规则返回当前 chat 的动态 talk_value，未匹配则回退到基础值。"""
-        if not self.talk_value_rules:
+        if not self.enable_talk_value_rules or not self.talk_value_rules:
             return self.talk_value
 
         now_min = self._now_minutes()
@@ -232,7 +247,7 @@ class ChatConfig(ConfigBase):
 
     def get_auto_chat_value(self, chat_id: Optional[str]) -> float:
         """根据规则返回当前 chat 的动态 auto_chat_value，未匹配则回退到基础值。"""
-        if not self.auto_chat_value_rules:
+        if not self.enable_auto_chat_value_rules or not self.auto_chat_value_rules:
             return self.auto_chat_value
 
         now_min = self._now_minutes()
@@ -310,8 +325,8 @@ class MemoryConfig(ConfigBase):
 class ExpressionConfig(ConfigBase):
     """表达配置类"""
 
-    mode: Literal["llm", "context", "full-context"] = "context"
-    """表达方式模式，可选：llm模式，context上下文模式，full-context 完整上下文嵌入模式"""
+    mode: str = "classic"
+    """表达方式模式，可选：classic经典模式，exp_model 表达模型模式"""
 
     learning_list: list[list] = field(default_factory=lambda: [])
     """
@@ -626,6 +641,12 @@ class DebugConfig(ConfigBase):
 
     show_prompt: bool = False
     """是否显示prompt"""
+    
+    show_replyer_prompt: bool = True
+    """是否显示回复器prompt"""
+    
+    show_replyer_reasoning: bool = True
+    """是否显示回复器推理"""
 
 
 @dataclass

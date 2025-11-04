@@ -223,7 +223,7 @@ class ToolExecutor:
             function_args["llm_called"] = True  # 标记为LLM调用
 
             # 获取对应工具实例
-            tool_instance = tool_instance or get_tool_instance(function_name)
+            tool_instance = tool_instance or get_tool_instance(function_name, self.chat_stream)
             if not tool_instance:
                 logger.warning(f"未知工具名称: {function_name}")
                 return None

@@ -303,15 +303,13 @@ class Expression(BaseModel):
 
     situation = TextField()
     style = TextField()
-    count = FloatField()
 
     # new mode fields
     context = TextField(null=True)
-    context_words = TextField(null=True)
+    up_content = TextField(null=True)
 
     last_active_time = FloatField()
     chat_id = TextField(index=True)
-    type = TextField()
     create_date = FloatField(null=True)  # 创建日期，允许为空以兼容老数据
 
     class Meta:

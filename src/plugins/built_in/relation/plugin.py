@@ -78,7 +78,7 @@ class RelationActionsPlugin(BasePlugin):
     config_schema: dict = {
         "plugin": {
             "enabled": ConfigField(type=bool, default=False, description="是否启用插件"),
-            "config_version": ConfigField(type=str, default="1.0.1", description="配置文件版本"),
+            "config_version": ConfigField(type=str, default="1.0.2", description="配置文件版本"),
         },
         "components": {
             "relation_max_memory_num": ConfigField(type=int, default=10, description="关系记忆最大数量"),
@@ -90,7 +90,7 @@ class RelationActionsPlugin(BasePlugin):
 
         # --- 根据配置注册组件 ---
         components = []
-        components.append((BuildRelationAction.get_action_info(), BuildRelationAction))
-        components.append((GetPersonInfoTool.get_tool_info(), GetPersonInfoTool))
+        # components.append((BuildRelationAction.get_action_info(), BuildRelationAction))
+        # components.append((GetPersonInfoTool.get_tool_info(), GetPersonInfoTool))
 
         return components
