@@ -358,6 +358,9 @@ class Jargon(BaseModel):
     chat_id = TextField(index=True)
     is_global = BooleanField(default=False)
     count = IntegerField(default=0)
+    is_jargon = BooleanField(null=True)  # None表示未判定，True表示是黑话，False表示不是黑话
+    last_inference_count = IntegerField(null=True)  # 最后一次判定的count值，用于避免重启后重复判定
+    is_complete = BooleanField(default=False)  # 是否已完成所有推断（count>=100后不再推断）
     
     class Meta:
         table_name = "jargon"
