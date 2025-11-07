@@ -30,6 +30,7 @@ COPY requirements.txt .
 COPY --from=lpmm-builder /usr/local/lib/python3.13/site-packages/ /usr/local/lib/python3.13/site-packages/
 
 # 安装运行时依赖
+RUN uv pip install --system --upgrade pip
 RUN uv pip install --system -r requirements.txt
 
 # 复制项目代码
