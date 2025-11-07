@@ -20,7 +20,7 @@ class StyleLearner:
     """
     单个聊天室的表达风格学习器
     学习从up_content到style的映射关系
-    支持动态管理风格集合（最多2000个）
+    支持动态管理风格集合（无数量上限）
     """
     
     def __init__(self, chat_id: str, model_config: Optional[Dict] = None):
@@ -37,7 +37,6 @@ class StyleLearner:
         self.expressor = ExpressorModel(**self.model_config)
         
         # 动态风格管理
-        self.max_styles = 2000  # 每个chat_id最多2000个风格
         self.style_to_id: Dict[str, str] = {}  # style文本 -> style_id
         self.id_to_style: Dict[str, str] = {}  # style_id -> style文本
         self.id_to_situation: Dict[str, str] = {}  # style_id -> situation文本
@@ -67,11 +66,6 @@ class StyleLearner:
             if style in self.style_to_id:
                 logger.debug(f"[{self.chat_id}] 风格 '{style}' 已存在")
                 return True
-            
-            # 检查是否超过最大限制
-            if len(self.style_to_id) >= self.max_styles:
-                logger.warning(f"[{self.chat_id}] 已达到最大风格数量限制 ({self.max_styles})")
-                return False
             
             # 生成新的style_id
             style_id = f"style_{self.next_style_id}"
@@ -344,7 +338,6 @@ class StyleLearner:
             "chat_id": self.chat_id,
             "total_samples": self.learning_stats["total_samples"],
             "style_count": len(self.style_to_id),
-            "max_styles": self.max_styles,
             "style_counts": dict(self.learning_stats["style_counts"]),
             "style_usage_frequency": dict(self.learning_stats["style_usage_frequency"]),
             "last_update": self.learning_stats["last_update"],
@@ -369,7 +362,6 @@ class StyleLearner:
                 "id_to_style": self.id_to_style,
                 "id_to_situation": self.id_to_situation,
                 "next_style_id": self.next_style_id,
-                "max_styles": self.max_styles,
                 "learning_stats": self.learning_stats
             }
             
@@ -413,7 +405,6 @@ class StyleLearner:
             self.id_to_style = save_data["id_to_style"]
             self.id_to_situation = save_data.get("id_to_situation", {})  # 兼容旧版本
             self.next_style_id = save_data["next_style_id"]
-            self.max_styles = save_data.get("max_styles", 2000)
             self.learning_stats = save_data["learning_stats"]
             
             # 重新创建expressor并加载
@@ -432,7 +423,7 @@ class StyleLearnerManager:
     """
     多聊天室表达风格学习管理器
     为每个chat_id维护独立的StyleLearner实例
-    每个chat_id可以动态管理自己的风格集合（最多2000个）
+    每个chat_id可以动态管理自己的风格集合（无数量上限）
     """
     
     def __init__(self, model_save_path: str = "data/style_models"):

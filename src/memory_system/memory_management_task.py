@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import random
+import time
 from typing import List
 
 from src.manager.async_task_manager import AsyncTask
 from src.memory_system.Memory_chest import global_memory_chest
 from src.common.logger import get_logger
-from src.common.database.database_model import MemoryChest as MemoryChestModel
+from src.common.database.database_model import MemoryChest as MemoryChestModel, MemoryConflict
 from src.config.config import global_config
 
 logger = get_logger("memory")
@@ -180,3 +181,61 @@ class MemoryManagementTask(AsyncTask):
         except Exception as e:
             logger.error(f"[记忆管理] 删除原始记忆时发生错误: {e}")
             return 0
+
+
+class MemoryConflictCleanupTask(AsyncTask):
+    """记忆冲突清理定时任务
+    
+    定期清理 memory_conflicts 表中 create_time 较早（7天前）且 answer 为空的项目
+    默认每小时执行一次
+    """
+    
+    def __init__(self, cleanup_days: int = 7, run_interval: int = 3600):
+        """
+        初始化清理任务
+        
+        Args:
+            cleanup_days: 清理多少天前的记录，默认7天
+            run_interval: 执行间隔（秒），默认3600秒（1小时）
+        """
+        super().__init__(
+            task_name="Memory Conflict Cleanup Task",
+            wait_before_start=60,  # 启动后等待60秒再开始
+            run_interval=run_interval
+        )
+        self.cleanup_days = cleanup_days
+    
+    async def run(self):
+        """执行清理任务"""
+        try:
+            current_time = time.time()
+            # 计算7天前的时间戳
+            cutoff_time = current_time - (self.cleanup_days * 24 * 60 * 60)
+            
+            logger.info(f"[冲突清理] 开始清理 {self.cleanup_days} 天前且 answer 为空的冲突记录（截止时间: {cutoff_time}）")
+            
+            # 查询需要清理的记录：create_time < cutoff_time 且 answer 为空
+            # answer 为空的条件：answer IS NULL 或 answer == ''
+            query = MemoryConflict.select().where(
+                (MemoryConflict.create_time < cutoff_time) &
+                ((MemoryConflict.answer.is_null()) | (MemoryConflict.answer == ''))
+            )
+            
+            # 先统计要删除的数量
+            deleted_count = query.count()
+            
+            # 批量删除
+            if deleted_count > 0:
+                deleted = MemoryConflict.delete().where(
+                    (MemoryConflict.create_time < cutoff_time) &
+                    ((MemoryConflict.answer.is_null()) | (MemoryConflict.answer == ''))
+                ).execute()
+                deleted_count = deleted
+            
+            if deleted_count > 0:
+                logger.info(f"[冲突清理] 成功清理 {deleted_count} 条过期且未回答的冲突记录")
+            else:
+                logger.debug("[冲突清理] 没有需要清理的记录")
+                
+        except Exception as e:
+            logger.error(f"[冲突清理] 执行清理任务时发生错误: {e}", exc_info=True)
