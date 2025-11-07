@@ -11,7 +11,6 @@ COPY MaiMBot-LPMM /MaiMBot-LPMM
 RUN apt-get update && apt-get install -y build-essential
 RUN uv pip install --system --upgrade pip
 RUN cd /MaiMBot-LPMM && uv pip install --system -r requirements.txt
-RUN uv pip install --system Cython py-cpuinfo setuptools
 
 # 编译 LPMM
 RUN cd /MaiMBot-LPMM/lib/quick_algo && python build_lib.py --cleanup --cythonize --install
