@@ -1,0 +1,36 @@
+{
+  "manifest_version": 1,
+  "name": "Jargon插件",
+  "version": "1.0.0",
+  "description": "记录和管理jargon（黑话/俚语）的解释",
+  "author": {
+    "name": "Mai",
+    "url": "https://github.com/MaiM-with-u"
+  },
+  "license": "GPL-v3.0-or-later",
+  
+  "host_application": {
+    "min_version": "0.10.4"
+  },
+  "homepage_url": "https://github.com/MaiM-with-u/maibot",
+  "repository_url": "https://github.com/MaiM-with-u/maibot",
+  "keywords": ["jargon", "slang", "built-in"],
+  "categories": ["Jargon"],
+  
+  "default_locale": "zh-CN",
+  "locales_path": "_locales",
+  
+  "plugin_info": {
+    "is_built_in": true,
+    "plugin_type": "tool_provider",
+    "components": [
+      {
+        "type": "record_jargon_explanation",
+        "name": "record_jargon_explanation", 
+        "description": "记录聊天中明确解释的jargon词义"
+      }
+    ]
+  }
+}
+
+

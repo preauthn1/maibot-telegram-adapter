@@ -444,7 +444,7 @@ def _default_normal_response_parser(
         choice0 = resp.choices[0]
         reason = getattr(choice0, "finish_reason", None)
         if reason and reason == "length":
-            print(resp)
+            # print(resp)
             _model_name = resp.model
             # 统一日志格式
             logger.info(

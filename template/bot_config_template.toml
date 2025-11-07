@@ -1,5 +1,5 @@
 [inner]
-version = "6.19.2"
+version = "6.20.1"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -239,7 +239,15 @@ key_file = "" # SSL密钥文件路径，仅在use_wss=true时有效
 enable = true
 
 [experimental] #实验性功能
-none = false # 暂无
+# 为指定聊天添加额外的prompt配置
+# 格式: ["platform:id:type:prompt内容", ...]
+# 示例:
+# chat_prompts = [
+#     "qq:114514:group:这是一个摄影群，你精通摄影知识",
+#     "qq:19198:group:这是一个二次元交流群",
+#     "qq:114514:private:这是你与好朋友的私聊"
+# ]
+chat_prompts = []
 
 
 #此系统暂时移除，无效配置

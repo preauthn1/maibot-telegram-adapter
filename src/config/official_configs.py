@@ -656,6 +656,25 @@ class ExperimentalConfig(ConfigBase):
     enable_friend_chat: bool = False
     """是否启用好友聊天"""
 
+    chat_prompts: list[str] = field(default_factory=lambda: [])
+    """
+    为指定聊天添加额外的prompt配置列表
+    格式: ["platform:id:type:prompt内容", ...]
+    
+    示例:
+    [
+        "qq:114514:group:这是一个摄影群，你精通摄影知识",
+        "qq:19198:group:这是一个二次元交流群",
+        "qq:114514:private:这是你与好朋友的私聊"
+    ]
+    
+    说明:
+    - platform: 平台名称，如 "qq"
+    - id: 群ID或用户ID
+    - type: "group" 或 "private"
+    - prompt内容: 要添加的额外prompt文本
+    """
+
 
 @dataclass
 class MaimMessageConfig(ConfigBase):
