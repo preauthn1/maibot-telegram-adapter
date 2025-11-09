@@ -647,6 +647,9 @@ class DebugConfig(ConfigBase):
     
     show_replyer_reasoning: bool = True
     """是否显示回复器推理"""
+    
+    show_jargon_prompt: bool = False
+    """是否显示jargon相关提示词"""
 
 
 @dataclass

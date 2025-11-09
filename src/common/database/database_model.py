@@ -365,6 +365,39 @@ class Jargon(BaseModel):
     class Meta:
         table_name = "jargon"
 
+class ChatHistory(BaseModel):
+    """
+    用于存储聊天历史概括的模型
+    """
+    chat_id = TextField(index=True)  # 聊天ID
+    start_time = DoubleField()  # 起始时间
+    end_time = DoubleField()  # 结束时间
+    original_text = TextField()  # 对话原文
+    participants = TextField()  # 参与的所有人的昵称，JSON格式存储
+    theme = TextField()  # 主题：这段对话的主要内容，一个简短的标题
+    keywords = TextField()  # 关键词：这段对话的关键词，JSON格式存储
+    summary = TextField()  # 概括：对这段话的平文本概括
+    
+    class Meta:
+        table_name = "chat_history"
+
+
+class ThinkingBack(BaseModel):
+    """
+    用于存储记忆检索思考过程的模型
+    """
+    chat_id = TextField(index=True)  # 聊天ID
+    question = TextField()  # 提出的问题
+    context = TextField(null=True)  # 上下文信息
+    found_answer = BooleanField(default=False)  # 是否找到答案
+    answer = TextField(null=True)  # 答案内容
+    thinking_steps = TextField(null=True)  # 思考步骤（JSON格式）
+    create_time = DoubleField()  # 创建时间
+    update_time = DoubleField()  # 更新时间
+    
+    class Meta:
+        table_name = "thinking_back"
+
 MODELS = [
     ChatStreams,
     LLMUsage,
@@ -379,6 +412,8 @@ MODELS = [
     MemoryChest,
     MemoryConflict,
     Jargon,
+    ChatHistory,
+    ThinkingBack,
 ]
 
 def create_tables():

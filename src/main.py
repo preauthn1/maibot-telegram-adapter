@@ -13,7 +13,6 @@ from src.common.logger import get_logger
 from src.common.server import get_global_server, Server
 from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
-from src.memory_system.memory_management_task import MemoryManagementTask, MemoryConflictCleanupTask
 from rich.traceback import install
 # from src.api.main import start_api_server
 
@@ -92,14 +91,6 @@ class MainSystem:
         asyncio.create_task(get_chat_manager()._auto_save_task())
 
         logger.info("聊天管理器初始化成功")
-        
-        # 添加记忆管理任务
-        await async_task_manager.add_task(MemoryManagementTask())
-        logger.info("记忆管理任务已启动")
-        
-        # 添加记忆冲突清理任务
-        await async_task_manager.add_task(MemoryConflictCleanupTask())
-        logger.info("记忆冲突清理任务已启动")
 
         # await asyncio.sleep(0.5) #防止logger输出飞了
 
