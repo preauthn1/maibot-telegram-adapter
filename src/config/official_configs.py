@@ -650,6 +650,9 @@ class DebugConfig(ConfigBase):
     
     show_jargon_prompt: bool = False
     """是否显示jargon相关提示词"""
+    
+    show_planner_prompt: bool = False
+    """是否显示planner相关提示词"""
 
 
 @dataclass

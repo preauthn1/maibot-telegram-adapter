@@ -11,7 +11,7 @@ def init_replyer_prompt():
     
     Prompt(
 """{knowledge_prompt}{tool_info_block}{extra_info_block}
-{expression_habits_block}{memory_block}{question_block}{memory_retrieval}
+{expression_habits_block}{memory_retrieval}
 
 你正在qq群里聊天，下面是群里正在聊的内容，其中包含聊天记录和聊天中的图片:
 {time_block}
@@ -31,7 +31,7 @@ def init_replyer_prompt():
     
     Prompt(
 """{knowledge_prompt}{tool_info_block}{extra_info_block}
-{expression_habits_block}{memory_block}
+{expression_habits_block}{memory_retrieval}
 
 你正在和{sender_name}聊天，这是你们之前聊的内容:
 {time_block}
@@ -50,7 +50,7 @@ def init_replyer_prompt():
     
     Prompt(
     """{knowledge_prompt}{tool_info_block}{extra_info_block}
-{expression_habits_block}{memory_block}
+{expression_habits_block}{memory_retrieval}
 
 你正在和{sender_name}聊天，这是你们之前聊的内容:
 {time_block}
