@@ -6,7 +6,6 @@ import re
 
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
-from src.memory_system.Memory_chest import global_memory_chest
 from src.common.logger import get_logger
 from src.common.data_models.database_data_model import DatabaseMessages
 from src.common.data_models.info_data_model import ActionPlannerInfo
@@ -37,10 +36,12 @@ from src.plugin_system.apis import llm_api
 from src.chat.replyer.prompt.lpmm_prompt import init_lpmm_prompt
 from src.chat.replyer.prompt.replyer_prompt import init_replyer_prompt
 from src.chat.replyer.prompt.rewrite_prompt import init_rewrite_prompt
+from src.memory_system.memory_retrieval import init_memory_retrieval_prompt, build_memory_retrieval_prompt
 
 init_lpmm_prompt()
 init_replyer_prompt()
 init_rewrite_prompt()
+init_memory_retrieval_prompt()
 
 
 logger = get_logger("replyer")
@@ -291,14 +292,6 @@ class PrivateReplyer:
         return f"你现在的心情是：{mood_state}"
 
 
-    async def build_memory_block(self) -> str:
-        """构建记忆块
-        """
-        if global_memory_chest.get_chat_memories_as_string(self.chat_stream.stream_id):
-            return f"你有以下记忆：\n{global_memory_chest.get_chat_memories_as_string(self.chat_stream.stream_id)}"
-        else:
-            return ""
-    
     async def build_tool_info(self, chat_history: str, sender: str, target: str, enable_tool: bool = True) -> str:
         """构建工具信息块
 
@@ -712,7 +705,7 @@ class PrivateReplyer:
             show_actions=True,
         )
 
-        # 并行执行五个构建任务
+        # 并行执行八个构建任务
         task_results = await asyncio.gather(
             self._time_and_run_task(
                 self.build_expression_habits(chat_talking_prompt_short, target), "expression_habits"
@@ -720,8 +713,6 @@ class PrivateReplyer:
             self._time_and_run_task(
                 self.build_relation_info(chat_talking_prompt_short, sender), "relation_info"
             ),
-            self._time_and_run_task(self.build_memory_block(), "memory_block"),
-            # self._time_and_run_task(self.build_memory_block(message_list_before_short, target), "memory_block"),
             self._time_and_run_task(
                 self.build_tool_info(chat_talking_prompt_short, sender, target, enable_tool=enable_tool), "tool_info"
             ),
@@ -729,18 +720,24 @@ class PrivateReplyer:
             self._time_and_run_task(self.build_actions_prompt(available_actions, chosen_actions), "actions_info"),
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
             self._time_and_run_task(self.build_mood_state_prompt(), "mood_state_prompt"),
+            self._time_and_run_task(
+                build_memory_retrieval_prompt(
+                    chat_talking_prompt_short, sender, target, self.chat_stream, self.tool_executor
+                ),
+                "memory_retrieval",
+            ),
         )
 
         # 任务名称中英文映射
         task_name_mapping = {
             "expression_habits": "选取表达方式",
             "relation_info": "感受关系",
-            "memory_block": "回忆",
             "tool_info": "使用工具",
             "prompt_info": "获取知识",
             "actions_info": "动作信息",
             "personality_prompt": "人格信息",
             "mood_state_prompt": "情绪状态",
+            "memory_retrieval": "记忆检索",
         }
 
         # 处理结果
@@ -764,12 +761,12 @@ class PrivateReplyer:
         expression_habits_block: str
         selected_expressions: List[int]
         relation_info: str = results_dict["relation_info"]
-        memory_block: str = results_dict["memory_block"]
         tool_info: str = results_dict["tool_info"]
         prompt_info: str = results_dict["prompt_info"]  # 直接使用格式化后的结果
         actions_info: str = results_dict["actions_info"]
         personality_prompt: str = results_dict["personality_prompt"]
         mood_state_prompt: str = results_dict["mood_state_prompt"]
+        memory_retrieval: str = results_dict["memory_retrieval"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
 
         if extra_info:
@@ -806,7 +803,6 @@ class PrivateReplyer:
                 tool_info_block=tool_info,
                 knowledge_prompt=prompt_info,
                 mood_state=mood_state_prompt,
-                memory_block=memory_block,
                 relation_info_block=relation_info,
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
@@ -819,6 +815,7 @@ class PrivateReplyer:
                 reply_style=global_config.personality.reply_style,
                 keywords_reaction_prompt=keywords_reaction_prompt,
                 moderation_prompt=moderation_prompt_block,
+                memory_retrieval=memory_retrieval,
                 chat_prompt=chat_prompt_block,
             ), selected_expressions
         else:
@@ -828,7 +825,6 @@ class PrivateReplyer:
                 tool_info_block=tool_info,
                 knowledge_prompt=prompt_info,
                 mood_state=mood_state_prompt,
-                memory_block=memory_block,
                 relation_info_block=relation_info,
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
@@ -840,6 +836,7 @@ class PrivateReplyer:
                 keywords_reaction_prompt=keywords_reaction_prompt,
                 moderation_prompt=moderation_prompt_block,
                 sender_name=sender,
+                memory_retrieval=memory_retrieval,
                 chat_prompt=chat_prompt_block,
             ), selected_expressions
 
