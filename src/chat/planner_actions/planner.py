@@ -37,70 +37,41 @@ def init_prompt():
         """
 {time_block}
 {name_block}
-你的兴趣是：{interest}
-{chat_context_description}，以下是具体的聊天内容
+兴趣：{interest}。{chat_context_description}
+
 **聊天内容**
 {chat_content_block}
 
-**可选的action**
-reply
-动作描述：
-1.你可以选择呼叫了你的名字，但是你没有做出回应的消息进行回复
-2.你可以自然的顺着正在进行的聊天内容进行回复或自然的提出一个问题
-3.不要回复你自己发送的消息
-4.不要单独对表情包进行回复
+**可用动作**
+reply - 回复消息（可回复被呼叫但未回应的消息，或自然延续话题。不回复自己的消息和纯表情包）
 {{
     "action": "reply",
-    "target_message_id":"想要回复的消息id",
-    "reason":"回复的原因"
+    "target_message_id":"消息id(m+数字)",
+    "reason":"原因"
 }}
 
-no_reply
-动作描述：
-保持沉默，不回复直到有新消息
-控制聊天频率，不要太过频繁的发言
+no_reply - 保持沉默，控制发言频率
 {{
-    "action": "no_reply",
+    "action": "no_reply"
 }}
 
-no_reply_until_call
-动作描述：
-保持沉默，直到有人直接叫你的名字
-当前话题不感兴趣时使用，或有人不喜欢你的发言时使用
-当你频繁选择no_reply时使用，表示话题暂时与你无关
+no_reply_until_call - 保持沉默直到被直接呼叫（话题不相关或频繁no_reply时使用）
 {{
-    "action": "no_reply_until_call",
+    "action": "no_reply_until_call"
 }}
 
 {action_options_text}
 
-**你之前的action执行和思考记录**
+**历史记录**
 {actions_before_now_block}
 
-请选择**可选的**且符合使用条件的action，并说明触发action的消息id(消息id格式:m+数字)
-不要回复你自己发送的消息
-先输出你的选择思考理由，再输出你选择的action，理由是一段平文本，不要分点，精简。
-**动作选择要求**
-请你根据聊天内容,用户的最新消息和以下标准选择合适的动作:
+**要求**
 {plan_style}
 {moderation_prompt}
 
-请选择所有符合使用要求的action，动作用json格式输出，如果输出多个json，每个json都要单独用```json包裹，你可以重复使用同一个动作或不同动作:
-**示例**
-// 理由文本
+先输出思考理由（平文本，精简），再输出JSON格式的动作。消息id格式：m+数字。可输出多个动作：
 ```json
-{{
-    "action":"动作名",
-    "target_message_id":"触发动作的消息id",
-    //对应参数
-}}
-```
-```json
-{{
-    "action":"动作名",
-    "target_message_id":"触发动作的消息id",
-    //对应参数
-}}
+{{"action":"动作名", "target_message_id":"m123", "reason":"原因"}}
 ```""",
         "planner_prompt",
     )
