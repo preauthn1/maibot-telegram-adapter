@@ -221,13 +221,13 @@ def split_into_sentences_w_remove_punctuation(text: str) -> list[str]:
     while i < len(text):
         char = text[i]
         if char in separators:
-            # 检查分割条件：如果分隔符左右都是英文字母，则不分割
+            # 检查分割条件：如果空格左右都是英文字母，则不分割（仅对空格应用此规则）
             can_split = True
             if 0 < i < len(text) - 1:
                 prev_char = text[i - 1]
                 next_char = text[i + 1]
-                # if is_english_letter(prev_char) and is_english_letter(next_char) and char == ' ': # 原计划只对空格应用此规则，现应用于所有分隔符
-                if is_english_letter(prev_char) and is_english_letter(next_char):
+                # 只对空格应用"不分割两个英文之间的空格"规则
+                if char == ' ' and is_english_letter(prev_char) and is_english_letter(next_char):
                     can_split = False
 
             if can_split:
@@ -388,9 +388,16 @@ def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese
     for sentence in split_sentences:
         if global_config.chinese_typo.enable and enable_chinese_typo:
             typoed_text, typo_corrections = typo_generator.create_typo_sentence(sentence)
-            sentences.append(typoed_text)
             if typo_corrections:
-                sentences.append(typo_corrections)
+                # 50%概率新增正确字/词，50%概率用正确分句替换错别字分句
+                if random.random() < 0.5:
+                    sentences.append(typoed_text)
+                    sentences.append(typo_corrections)
+                else:
+                    # 用正确的分句替换错别字分句
+                    sentences.append(sentence)
+            else:
+                sentences.append(typoed_text)
         else:
             sentences.append(sentence)
 

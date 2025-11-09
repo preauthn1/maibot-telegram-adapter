@@ -1,6 +1,7 @@
 import time
 import json
 import re
+import random
 from typing import List, Dict, Any, Optional, Tuple
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
@@ -63,8 +64,7 @@ def init_memory_retrieval_prompt():
     
     # 第二步：ReAct Agent prompt（工具描述会在运行时动态生成）
     Prompt(
-        """
-你是一个记忆检索助手，需要通过思考(Think)、行动(Action)、观察(Observation)的循环来回答问题。
+        """你需要通过思考(Think)、行动(Action)、观察(Observation)的循环来回答问题。
 
 当前问题：{question}
 已收集的信息：
@@ -77,14 +77,13 @@ def init_memory_retrieval_prompt():
 ```json
 {{
   "thought": "你的思考过程，分析当前情况，决定下一步行动",
-  "action": "要执行的动作，格式为：工具名(参数)",
   "action_type": {action_types_list},
   "action_params": {{参数名: 参数值}} 或 null
 }}
 ```
 
 你可以选择以下动作：
-1. 如果已经收集到足够的信息可以回答问题，请设置action_type为"final_answer"，并在thought中说明答案。
+1. 如果已经收集到足够的信息可以回答问题，请设置action_type为"final_answer"，并在thought中说明答案。除非明确找到答案，否则不要设置为final_answer。
 2. 如果经过多次查询后，确认无法找到相关信息或答案，请设置action_type为"no_answer"，并在thought中说明原因。
 
 请只输出JSON，不要输出其他内容：
@@ -341,17 +340,18 @@ def _query_thinking_back(chat_id: str, question: str) -> Optional[Tuple[bool, st
         question: 问题
         
     Returns:
-        Optional[Tuple[bool, str]]: 如果找到答案，返回(True, answer)，否则返回None
+        Optional[Tuple[bool, str]]: 如果找到记录，返回(found_answer, answer)，否则返回None
+            found_answer: 是否找到答案（True表示found_answer=1，False表示found_answer=0）
+            answer: 答案内容
     """
     try:
-        # 查询相同chat_id和问题，且found_answer为True的记录
-        # 按更新时间倒序，获取最新的答案
+        # 查询相同chat_id和问题的所有记录（包括found_answer为0和1的）
+        # 按更新时间倒序，获取最新的记录
         records = (
             ThinkingBack.select()
             .where(
                 (ThinkingBack.chat_id == chat_id) &
-                (ThinkingBack.question == question) &
-                (ThinkingBack.found_answer == 1)
+                (ThinkingBack.question == question)
             )
             .order_by(ThinkingBack.update_time.desc())
             .limit(1)
@@ -359,8 +359,10 @@ def _query_thinking_back(chat_id: str, question: str) -> Optional[Tuple[bool, st
         
         if records.exists():
             record = records.get()
-            logger.info(f"在thinking_back中找到现成答案，问题: {question[:50]}...")
-            return True, record.answer or ""
+            found_answer = bool(record.found_answer)
+            answer = record.answer or ""
+            logger.info(f"在thinking_back中找到记录，问题: {question[:50]}...，found_answer: {found_answer}")
+            return found_answer, answer
         
         return None
         
@@ -503,34 +505,61 @@ async def build_memory_retrieval_prompt(
             
             # 先检查thinking_back数据库中是否有现成答案
             cached_result = _query_thinking_back(chat_id, question)
+            should_requery = False
+            
             if cached_result:
-                found_answer, answer = cached_result
+                cached_found_answer, cached_answer = cached_result
+                
+                # 根据found_answer的值决定是否重新查询
+                if cached_found_answer:  # found_answer == 1 (True)
+                    # found_answer == 1：20%概率重新查询
+                    if random.random() < 0.2:
+                        should_requery = True
+                        logger.info(f"found_answer=1，触发20%概率重新查询，问题: {question[:50]}...")
+                    else:
+                        # 使用缓存答案
+                        if cached_answer:
+                            logger.info(f"从thinking_back缓存中获取答案（found_answer=1），问题: {question[:50]}...")
+                            all_results.append(f"问题：{question}\n答案：{cached_answer}")
+                            continue  # 跳过ReAct Agent查询
+                else:  # found_answer == 0 (False)
+                    # found_answer == 0：40%概率重新查询
+                    if random.random() < 0.4:
+                        should_requery = True
+                        logger.info(f"found_answer=0，触发40%概率重新查询，问题: {question[:50]}...")
+                    else:
+                        # 使用缓存答案（即使found_answer=0，也可能有部分答案）
+                        if cached_answer:
+                            logger.info(f"从thinking_back缓存中获取答案（found_answer=0），问题: {question[:50]}...")
+                            all_results.append(f"问题：{question}\n答案：{cached_answer}")
+                            continue  # 跳过ReAct Agent查询
+            
+            # 如果没有缓存答案或需要重新查询，使用ReAct Agent查询
+            if not cached_result or should_requery:
+                if should_requery:
+                    logger.info(f"概率触发重新查询，使用ReAct Agent查询，问题: {question[:50]}...")
+                else:
+                    logger.info(f"未找到缓存答案，使用ReAct Agent查询，问题: {question[:50]}...")
+                
+                found_answer, answer, thinking_steps = await _react_agent_solve_question(
+                    question=question,
+                    chat_id=chat_id,
+                    max_iterations=5,
+                    timeout=30.0
+                )
+                
+                # 存储到数据库
+                _store_thinking_back(
+                    chat_id=chat_id,
+                    question=question,
+                    context=message,  # 只存储前500字符作为上下文
+                    found_answer=found_answer,
+                    answer=answer,
+                    thinking_steps=thinking_steps
+                )
+                
                 if found_answer and answer:
-                    logger.info(f"从thinking_back缓存中获取答案，问题: {question[:50]}...")
                     all_results.append(f"问题：{question}\n答案：{answer}")
-                    continue  # 跳过ReAct Agent查询
-            
-            # 如果没有缓存答案，使用ReAct Agent查询
-            logger.info(f"未找到缓存答案，使用ReAct Agent查询，问题: {question[:50]}...")
-            found_answer, answer, thinking_steps = await _react_agent_solve_question(
-                question=question,
-                chat_id=chat_id,
-                max_iterations=5,
-                timeout=30.0
-            )
-            
-            # 存储到数据库
-            _store_thinking_back(
-                chat_id=chat_id,
-                question=question,
-                context=message,  # 只存储前500字符作为上下文
-                found_answer=found_answer,
-                answer=answer,
-                thinking_steps=thinking_steps
-            )
-            
-            if found_answer and answer:
-                all_results.append(f"问题：{question}\n答案：{answer}")
         
         end_time = time.time()
         
