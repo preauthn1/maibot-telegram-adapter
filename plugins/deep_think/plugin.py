@@ -9,7 +9,7 @@ from src.plugin_system.base.base_tool import BaseTool, ToolParamType
 # 导入依赖的系统组件
 from src.common.logger import get_logger
 
-from src.plugins.built_in.relation.relation import BuildRelationAction
+# from src.plugins.built_in.relation.relation import BuildRelationAction
 from src.plugin_system.apis import llm_api
 
 logger = get_logger("relation_actions")

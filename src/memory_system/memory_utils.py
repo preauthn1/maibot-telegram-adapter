@@ -11,6 +11,7 @@ from typing import List, Tuple, Optional
 from src.common.database.database_model import MemoryChest as MemoryChestModel
 from src.common.logger import get_logger
 from json_repair import repair_json
+from src.config.config import global_config
 
 
 logger = get_logger("memory_utils")
@@ -355,3 +356,37 @@ def find_most_similar_memory_by_chat_id(target_title: str, target_chat_id: str, 
     except Exception as e:
         logger.error(f"查找最相似记忆时出错: {e}")
         return None
+    
+    
+    
+def compute_merge_similarity_threshold() -> float:
+    """
+    根据当前记忆数量占比动态计算合并相似度阈值。
+
+    规则：占比越高，阈值越低。
+    - < 60%: 0.80（更严格，避免早期误合并）
+    - < 80%: 0.70
+    - < 100%: 0.60
+    - < 120%: 0.50
+    - >= 120%: 0.45（最宽松，加速收敛）
+    """
+    try:
+        current_count = MemoryChestModel.select().count()
+        max_count = max(1, int(global_config.memory.max_memory_number))
+        percentage = current_count / max_count
+
+        if percentage < 0.6:
+            return 0.70
+        elif percentage < 0.8:
+            return 0.60
+        elif percentage < 1.0:
+            return 0.50
+        elif percentage < 1.5:
+            return 0.40
+        elif percentage < 2:
+            return 0.30
+        else:
+            return 0.25
+    except Exception:
+        # 发生异常时使用保守阈值
+        return 0.70

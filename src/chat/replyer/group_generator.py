@@ -37,10 +37,12 @@ from src.plugin_system.apis import llm_api
 from src.chat.replyer.prompt.lpmm_prompt import init_lpmm_prompt
 from src.chat.replyer.prompt.replyer_prompt import init_replyer_prompt
 from src.chat.replyer.prompt.rewrite_prompt import init_rewrite_prompt
+from src.memory_system.memory_retrieval import init_memory_retrieval_prompt, build_memory_retrieval_prompt
 
 init_lpmm_prompt()
 init_replyer_prompt()
 init_rewrite_prompt()
+init_memory_retrieval_prompt()
 
 
 logger = get_logger("replyer")
@@ -289,16 +291,8 @@ class DefaultReplyer:
 
     async def build_question_block(self) -> str:
         """构建问题块"""
-        # if not global_config.question.enable_question:
-            # return ""
-        questions = global_conflict_tracker.get_questions_by_chat_id(self.chat_stream.stream_id)
-        questions_str = ""
-        for question in questions:
-            questions_str += f"- {question.question}\n"
-        if questions_str:
-            return f"你在聊天中，有以下问题想要得到解答：\n{questions_str}"
-        else:
-            return ""
+        # 问题跟踪功能已移除，返回空字符串
+        return ""
     
 
     async def build_tool_info(self, chat_history: str, sender: str, target: str, enable_tool: bool = True) -> str:
@@ -807,7 +801,7 @@ class DefaultReplyer:
             show_actions=True,
         )
 
-        # 并行执行五个构建任务
+        # 并行执行九个构建任务
         task_results = await asyncio.gather(
             self._time_and_run_task(
                 self.build_expression_habits(chat_talking_prompt_short, target), "expression_habits"
@@ -821,6 +815,12 @@ class DefaultReplyer:
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
             self._time_and_run_task(self.build_mood_state_prompt(), "mood_state_prompt"),
             self._time_and_run_task(self.build_question_block(), "question_block"),
+            self._time_and_run_task(
+                build_memory_retrieval_prompt(
+                    chat_talking_prompt_short, sender, target, self.chat_stream, self.tool_executor
+                ),
+                "memory_retrieval",
+            ),
         )
 
         # 任务名称中英文映射
@@ -835,6 +835,7 @@ class DefaultReplyer:
             "personality_prompt": "人格信息",
             "mood_state_prompt": "情绪状态",
             "question_block": "问题",
+            "memory_retrieval": "记忆检索",
         }
 
         # 处理结果
@@ -865,6 +866,7 @@ class DefaultReplyer:
         actions_info: str = results_dict["actions_info"]
         personality_prompt: str = results_dict["personality_prompt"]
         question_block: str = results_dict["question_block"]
+        memory_retrieval: str = results_dict["memory_retrieval"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
         mood_state_prompt: str = results_dict["mood_state_prompt"]
 
@@ -922,6 +924,7 @@ class DefaultReplyer:
             keywords_reaction_prompt=keywords_reaction_prompt,
             moderation_prompt=moderation_prompt_block,
             question_block=question_block,
+            memory_retrieval=memory_retrieval,
             chat_prompt=chat_prompt_block,
         ), selected_expressions
 
@@ -1149,7 +1152,6 @@ class DefaultReplyer:
         except Exception as e:
             logger.error(f"获取知识库内容时发生异常: {str(e)}")
             return ""
-
 
 def weighted_sample_no_replacement(items, weights, k) -> list:
     """
