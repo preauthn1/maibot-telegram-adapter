@@ -328,6 +328,20 @@ def random_remove_punctuation(text: str) -> str:
     return result
 
 
+def _get_random_default_reply() -> str:
+    """获取随机默认回复"""
+    default_replies = [
+        f"{global_config.bot.nickname}不知道哦",
+        f"{global_config.bot.nickname}不知道",
+        "不知道哦",
+        "不知道",
+        "不晓得",
+        "懒得说",
+        "()"
+    ]
+    return random.choice(default_replies)
+
+
 def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese_typo: bool = True) -> list[str]:
     if not global_config.response_post_process.enable_response_post_process:
         return [text]
@@ -356,7 +370,7 @@ def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese
     # 如果基本上是中文，则进行长度过滤
     if get_western_ratio(cleaned_text) < 0.1 and len(cleaned_text) > max_length:
         logger.warning(f"回复过长 ({len(cleaned_text)} 字符)，返回默认回复")
-        return ["懒得说"]
+        return [_get_random_default_reply()]
 
     typo_generator = ChineseTypoGenerator(
         error_rate=global_config.chinese_typo.error_rate,
@@ -382,7 +396,7 @@ def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese
 
     if len(sentences) > max_sentence_num:
         logger.warning(f"分割后消息数量过多 ({len(sentences)} 条)，返回默认回复")
-        return [f"{global_config.bot.nickname}不知道哦"]
+        return [_get_random_default_reply()]
 
     # if extracted_contents:
     #     for content in extracted_contents:
