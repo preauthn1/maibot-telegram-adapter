@@ -36,7 +36,7 @@ from ..payload_content.message import Message, RoleType
 from ..payload_content.resp_format import RespFormat
 from ..payload_content.tool_option import ToolOption, ToolParam, ToolCall
 
-logger = get_logger("OpenAI客户端")
+logger = get_logger("llm_models")
 
 
 def _convert_messages(messages: list[Message]) -> list[ChatCompletionMessageParam]:

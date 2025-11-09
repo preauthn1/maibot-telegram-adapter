@@ -454,6 +454,7 @@ MODULE_ALIASES = {
     "planner": "规划器",
     "config": "配置",
     "main": "主程序",
+    "chat_history_summarizer": "聊天概括器",
 }
 
 RESET_COLOR = "\033[0m"

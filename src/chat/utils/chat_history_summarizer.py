@@ -15,6 +15,7 @@ from src.llm_models.utils_model import LLMRequest
 from src.plugin_system.apis import message_api
 from src.chat.utils.chat_message_builder import build_readable_messages
 from src.person_info.person_info import Person
+from src.chat.message_receive.chat_stream import get_chat_manager
 
 logger = get_logger("chat_history_summarizer")
 
@@ -40,7 +41,8 @@ class ChatHistorySummarizer:
             check_interval: 定期检查间隔（秒），默认60秒
         """
         self.chat_id = chat_id
-        self.log_prefix = f"[ChatHistorySummarizer-{chat_id}]"
+        self._chat_display_name = self._get_chat_display_name()
+        self.log_prefix = f"[{self._chat_display_name}]"
         
         # 记录时间点，用于计算新消息
         self.last_check_time = time.time()
@@ -59,6 +61,22 @@ class ChatHistorySummarizer:
         self._periodic_task: Optional[asyncio.Task] = None
         self._running = False
     
+    def _get_chat_display_name(self) -> str:
+        """获取聊天显示名称"""
+        try:
+            chat_name = get_chat_manager().get_stream_name(self.chat_id)
+            if chat_name:
+                return chat_name
+            # 如果获取失败，使用简化的chat_id显示
+            if len(self.chat_id) > 20:
+                return f"{self.chat_id[:8]}..."
+            return self.chat_id
+        except Exception:
+            # 如果获取失败，使用简化的chat_id显示
+            if len(self.chat_id) > 20:
+                return f"{self.chat_id[:8]}..."
+            return self.chat_id
+    
     async def process(self, current_time: Optional[float] = None):
         """
         处理聊天内容概括
@@ -71,7 +89,7 @@ class ChatHistorySummarizer:
         
         try:
             logger.info(
-                f"{self.log_prefix} 开始处理聊天概括，窗口: {self.last_check_time:.2f} -> {current_time:.2f}"
+                f"{self.log_prefix} 开始处理聊天概括，时间窗口: {self.last_check_time:.2f} -> {current_time:.2f}"
             )
             # 获取从上次检查时间到当前时间的新消息
             new_messages = message_api.get_messages_by_time_in_chat(
@@ -96,7 +114,7 @@ class ChatHistorySummarizer:
             self.last_check_time = current_time
 
             logger.info(
-                f"{self.log_prefix} 获取到 {len(new_messages)} 条新消息，最新消息时间: {new_messages[-1].time if new_messages else 'N/A'}"
+                f"{self.log_prefix} 获取到 {len(new_messages)} 条新消息，最新消息时间戳: {new_messages[-1].time if new_messages else 'N/A'}"
             )
             
             # 如果有当前批次，添加新消息
@@ -105,7 +123,7 @@ class ChatHistorySummarizer:
                 self.current_batch.messages.extend(new_messages)
                 self.current_batch.end_time = current_time
                 logger.info(
-                    f"{self.log_prefix} 扩展现有批次: {before_count} -> {len(self.current_batch.messages)} 条消息，时间范围 {self.current_batch.start_time:.2f}-{self.current_batch.end_time:.2f}"
+                    f"{self.log_prefix} 扩展现有批次: {before_count} -> {len(self.current_batch.messages)} 条消息，时间范围: {self.current_batch.start_time:.2f} - {self.current_batch.end_time:.2f}"
                 )
             else:
                 # 创建新批次
@@ -115,7 +133,7 @@ class ChatHistorySummarizer:
                     end_time=current_time,
                 )
                 logger.info(
-                    f"{self.log_prefix} 创建新批次: 消息数 {len(new_messages)}，时间范围 {self.current_batch.start_time:.2f}-{self.current_batch.end_time:.2f}"
+                    f"{self.log_prefix} 创建新批次: 消息数 {len(new_messages)}，时间范围: {self.current_batch.start_time:.2f} - {self.current_batch.end_time:.2f}"
                 )
             
             # 检查是否需要打包
@@ -136,8 +154,18 @@ class ChatHistorySummarizer:
         last_message_time = messages[-1].time if messages else current_time
         time_since_last_message = current_time - last_message_time
 
+        # 格式化时间差显示
+        if time_since_last_message < 60:
+            time_str = f"{time_since_last_message:.1f}秒"
+        elif time_since_last_message < 3600:
+            time_str = f"{time_since_last_message/60:.1f}分钟"
+        else:
+            time_str = f"{time_since_last_message/3600:.1f}小时"
+        
+        preparing_status = "是" if self.current_batch.is_preparing else "否"
+        
         logger.info(
-            f"{self.log_prefix} 批次检查: 消息数={message_count}, 距离最后消息时间={time_since_last_message:.2f}s, 准备模式={self.current_batch.is_preparing}"
+            f"{self.log_prefix} 批次状态检查 | 消息数: {message_count} | 距最后消息: {time_str} | 准备结束模式: {preparing_status}"
         )
         
         # 检查打包条件
@@ -146,23 +174,23 @@ class ChatHistorySummarizer:
         # 条件1: 消息长度超过120，直接打包
         if message_count >= 120:
             should_package = True
-            logger.info(f"{self.log_prefix} 消息数量达到120条，开始打包")
+            logger.info(f"{self.log_prefix} 触发打包条件: 消息数量达到 {message_count} 条（阈值: 120条）")
         
         # 条件2: 最后一条消息的时间和当前时间差>600秒，直接打包
         elif time_since_last_message > 600:
             should_package = True
-            logger.info(f"{self.log_prefix} 最后一条消息超过600秒，开始打包")
+            logger.info(f"{self.log_prefix} 触发打包条件: 距最后消息 {time_str}（阈值: 10分钟）")
         
         # 条件3: 消息长度超过100，进入准备结束模式
         elif message_count > 100:
             if not self.current_batch.is_preparing:
                 self.current_batch.is_preparing = True
-                logger.info(f"{self.log_prefix} 消息数量超过100条，进入准备结束模式")
+                logger.info(f"{self.log_prefix} 消息数量 {message_count} 条超过阈值（100条），进入准备结束模式")
             
             # 在准备结束模式下，如果最后一条消息的时间和当前时间差>10秒，就打包
             if time_since_last_message > 10:
                 should_package = True
-                logger.info(f"{self.log_prefix} 准备结束模式下，最后一条消息超过10秒，开始打包")
+                logger.info(f"{self.log_prefix} 触发打包条件: 准备结束模式下，距最后消息 {time_str}（阈值: 10秒）")
         
         if should_package:
             await self._package_and_store()
@@ -177,7 +205,7 @@ class ChatHistorySummarizer:
         end_time = self.current_batch.end_time
 
         logger.info(
-            f"{self.log_prefix} 开始打包批次: 消息数={len(messages)}, 时间范围={start_time:.2f}-{end_time:.2f}"
+            f"{self.log_prefix} 开始打包批次 | 消息数: {len(messages)} | 时间范围: {start_time:.2f} - {end_time:.2f}"
         )
         
         # 检查是否有bot发言
@@ -206,7 +234,7 @@ class ChatHistorySummarizer:
         
         if not has_bot_message:
             logger.info(
-                f"{self.log_prefix} 打包内没有bot发言，丢弃。检查范围: {check_start_time:.2f}-{check_end_time:.2f}"
+                f"{self.log_prefix} 批次内无Bot发言，丢弃批次 | 检查时间范围: {check_start_time:.2f} - {check_end_time:.2f}"
             )
             self.current_batch = None
             return
@@ -237,13 +265,13 @@ class ChatHistorySummarizer:
                     participants_set.add(person_name)
             participants = list(participants_set)
             logger.info(
-                f"{self.log_prefix} 批次参与者: {participants if participants else '未知'}"
+                f"{self.log_prefix} 批次参与者: {', '.join(participants) if participants else '未知'}"
             )
             
             # 使用LLM压缩聊天内容
             theme, keywords, summary = await self._compress_with_llm(original_text)
             logger.info(
-                f"{self.log_prefix} LLM 压缩完成，主题: {theme}, 关键词数量: {len(keywords)}, 概括长度: {len(summary)}"
+                f"{self.log_prefix} LLM压缩完成 | 主题: {theme} | 关键词数: {len(keywords)} | 概括长度: {len(summary)} 字"
             )
             
             # 存储到数据库
@@ -257,7 +285,7 @@ class ChatHistorySummarizer:
                 summary=summary,
             )
             
-            logger.info(f"{self.log_prefix} 成功打包并存储聊天记录，消息数: {len(messages)}, 主题: {theme}")
+            logger.info(f"{self.log_prefix} 成功打包并存储聊天记录 | 消息数: {len(messages)} | 主题: {theme}")
             
             # 清空当前批次
             self.current_batch = None
@@ -388,7 +416,7 @@ class ChatHistorySummarizer:
         
         self._running = True
         self._periodic_task = asyncio.create_task(self._periodic_check_loop())
-        logger.info(f"{self.log_prefix} 已启动后台定期检查循环，检查间隔: {self.check_interval}秒")
+        logger.info(f"{self.log_prefix} 已启动后台定期检查循环 | 检查间隔: {self.check_interval}秒")
     
     async def stop(self):
         """停止后台定期检查循环"""
