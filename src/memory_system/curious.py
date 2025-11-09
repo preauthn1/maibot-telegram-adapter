@@ -62,11 +62,7 @@ class CuriousDetector:
                 show_actions=True,
             )
             
-            # 检查是否已经有问题在跟踪中
-            existing_questions = global_conflict_tracker.get_questions_by_chat_id(self.chat_id)
-            if len(existing_questions) > 0:
-                logger.debug(f"当前已有{len(existing_questions)}个问题在跟踪中，跳过检测")
-                return None
+            # 问题跟踪功能已移除，不再检查已有问题
             
             # 构建检测提示词
             prompt = f"""你是一个严谨的聊天内容分析器。请分析以下聊天记录，检测是否存在需要提问的内容。
@@ -154,11 +150,10 @@ class CuriousDetector:
             if not question or not question.strip():
                 return False
             
-            # 记录问题到冲突追踪器，并开始跟踪
-            await global_conflict_tracker.track_conflict(
-                question=question.strip(),
+            # 记录问题到冲突追踪器
+            await global_conflict_tracker.record_conflict(
+                conflict_content=question.strip(),
                 context=context,
-                start_following=False,
                 chat_id=self.chat_id
             )
             

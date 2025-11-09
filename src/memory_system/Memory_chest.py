@@ -14,11 +14,13 @@ from src.plugin_system.apis.message_api import get_raw_msg_by_timestamp_with_cha
 from json_repair import repair_json
 from src.memory_system.questions import global_conflict_tracker
 
+
 from .memory_utils import (
     find_best_matching_memory,
     check_title_exists_fuzzy,
     get_all_titles,
     find_most_similar_memory_by_chat_id,
+    compute_merge_similarity_threshold
 
 )
 
@@ -82,218 +84,6 @@ class MemoryChest:
         except Exception as e:
             logger.error(f"[记忆管理] 按年龄权重删除记忆时出错: {e}")
             return False
-
-    def _compute_merge_similarity_threshold(self) -> float:
-        """
-        根据当前记忆数量占比动态计算合并相似度阈值。
-
-        规则：占比越高，阈值越低。
-        - < 60%: 0.80（更严格，避免早期误合并）
-        - < 80%: 0.70
-        - < 100%: 0.60
-        - < 120%: 0.50
-        - >= 120%: 0.45（最宽松，加速收敛）
-        """
-        try:
-            current_count = MemoryChestModel.select().count()
-            max_count = max(1, int(global_config.memory.max_memory_number))
-            percentage = current_count / max_count
-
-            if percentage < 0.6:
-                return 0.70
-            elif percentage < 0.8:
-                return 0.60
-            elif percentage < 1.0:
-                return 0.50
-            elif percentage < 1.5:
-                return 0.40
-            elif percentage < 2:
-                return 0.30
-            else:
-                return 0.25
-        except Exception:
-            # 发生异常时使用保守阈值
-            return 0.70
-
-    async def build_running_content(self, chat_id: str = None) -> str:
-        """
-        构建记忆仓库的运行内容
-
-        Args:
-            message_str: 消息内容
-            chat_id: 聊天ID，用于提取对应的运行内容
-
-        Returns:
-            str: 构建后的运行内容
-        """
-        # 检查是否需要更新：基于消息数量和最新消息时间差的智能更新机制
-        # 
-        # 更新机制说明：
-        # 1. 消息数量 > 100：直接触发更新（高频消息场景）
-        # 2. 消息数量 > 70 且最新消息时间差 > 30秒：触发更新（中高频消息场景）
-        # 3. 消息数量 > 50 且最新消息时间差 > 60秒：触发更新（中频消息场景）
-        # 4. 消息数量 > 30 且最新消息时间差 > 300秒：触发更新（低频消息场景）
-        # 
-        # 设计理念：
-        # - 消息越密集，时间阈值越短，确保及时更新记忆
-        # - 消息越稀疏，时间阈值越长，避免频繁无意义的更新
-        # - 通过最新消息时间差判断消息活跃度，而非简单的总时间差
-        # - 平衡更新频率与性能，在保证记忆及时性的同时减少计算开销
-        if chat_id not in self.running_content_list:
-            self.running_content_list[chat_id] = {
-                "content": "",
-                "last_update_time": time.time(),
-                "create_time": time.time()
-            }
-        
-        should_update = True
-        if chat_id and chat_id in self.running_content_list:
-            last_update_time = self.running_content_list[chat_id]["last_update_time"]
-            current_time = time.time()
-            # 使用message_api获取消息数量
-            message_list =  get_raw_msg_by_timestamp_with_chat(
-                timestamp_start=last_update_time,
-                timestamp_end=current_time,
-                chat_id=chat_id,
-                limit=global_config.chat.max_context_size * 2,
-            )
-
-            new_messages_count = len(message_list)
-            
-            # 获取最新消息的时间戳
-            latest_message_time = last_update_time
-            if message_list:
-                # 假设消息列表按时间排序，取最后一条消息的时间戳
-                latest_message = message_list[-1]
-                if hasattr(latest_message, 'timestamp'):
-                    latest_message_time = latest_message.timestamp
-                elif isinstance(latest_message, dict) and 'timestamp' in latest_message:
-                    latest_message_time = latest_message['timestamp']
-            
-            # 计算最新消息时间与现在时间的差（秒）
-            latest_message_time_diff = current_time - latest_message_time
-            
-            # 智能更新条件判断 - 按优先级从高到低检查
-            should_update = False
-            update_reason = ""
-            
-            if global_config.memory.memory_build_frequency > 0:
-                if new_messages_count > 100/global_config.memory.memory_build_frequency:
-                    # 条件1：消息数量 > 100，直接触发更新
-                    # 适用场景：群聊刷屏、高频讨论等消息密集场景
-                    # 无需时间限制，确保重要信息不被遗漏
-                    should_update = True
-                    update_reason = f"消息数量 {new_messages_count} > 100，直接触发更新"
-                elif new_messages_count > 70/global_config.memory.memory_build_frequency and latest_message_time_diff > 30:
-                    # 条件2：消息数量 > 70 且最新消息时间差 > 30秒
-                    # 适用场景：中高频讨论，但需要确保消息流已稳定
-                    # 30秒的时间差确保不是正在进行的实时对话
-                    should_update = True
-                    update_reason = f"消息数量 {new_messages_count} > 70 且最新消息时间差 {latest_message_time_diff:.1f}s > 30s"
-                elif new_messages_count > 50/global_config.memory.memory_build_frequency and latest_message_time_diff > 60:
-                    # 条件3：消息数量 > 50 且最新消息时间差 > 60秒
-                    # 适用场景：中等频率讨论，等待1分钟确保对话告一段落
-                    # 平衡及时性与稳定性
-                    should_update = True
-                    update_reason = f"消息数量 {new_messages_count} > 50 且最新消息时间差 {latest_message_time_diff:.1f}s > 60s"
-                elif new_messages_count > 30/global_config.memory.memory_build_frequency and latest_message_time_diff > 300:
-                    # 条件4：消息数量 > 30 且最新消息时间差 > 300秒（5分钟）
-                    # 适用场景：低频但有一定信息量的讨论
-                    # 5分钟的时间差确保对话完全结束，避免频繁更新
-                    should_update = True
-                    update_reason = f"消息数量 {new_messages_count} > 30 且最新消息时间差 {latest_message_time_diff:.1f}s > 300s"
-                
-                logger.debug(f"chat_id {chat_id} 更新检查: {update_reason if should_update else f'消息数量 {new_messages_count}，最新消息时间差 {latest_message_time_diff:.1f}s，不满足更新条件'}")
-
-
-        if should_update:
-            # 如果有chat_id，先提取对应的running_content
-            message_str = build_readable_messages(
-                message_list,
-                replace_bot_name=True,
-                timestamp_mode="relative",
-                read_mark=0.0,
-                show_actions=False,
-                remove_emoji_stickers=True,
-            )
-            
-            # 随机从格式示例列表中选取若干行用于提示
-            format_candidates = [
-                "[概念] 是 [概念的含义(简短描述，不超过十个字)]",
-                "[概念] 不是 [对概念的负面含义(简短描述，不超过十个字)]",
-                "[概念1] 与 [概念2] 是 [概念1和概念2的关联(简短描述，不超过二十个字)]",
-                "[概念1] 包含 [概念2] 和 [概念3]",
-                "[概念1] 属于 [概念2]",
-                "[概念1] 的例子是 [例子1] 和 [例子2]",
-                "[概念] 的特征是 [特征1]、[特征2]",
-                "[概念1] 导致 [概念2]",
-                "[概念1] 需要 [条件1] 和 [条件2]",
-                "[概念1] 的用途是 [用途1] 和 [用途2]",
-                "[概念1] 与 [概念2] 的区别是 [区别点]",
-                "[概念] 的别名是 [别名]",
-                "[概念1] 包括但不限于 [概念2]、[概念3]",
-                "[概念] 的反义是 [反义概念]",
-                "[概念] 的组成有 [部分1]、[部分2]",
-                "[概念] 出现于 [时间或场景]",
-                "[概念] 的方法有 [方法1]、[方法2]",
-            ]
-
-            selected_count = random.randint(3, 6)
-            selected_lines = random.sample(format_candidates, selected_count)
-            format_section = "\n".join(selected_lines) + "\n......(不要包含中括号)"
-
-            prompt = f"""
-以下是一段你参与的聊天记录，请你在其中总结出记忆：
-
-<聊天记录>
-{message_str}
-</聊天记录>
-聊天记录中可能包含有效信息，也可能信息密度很低，请你根据聊天记录中的信息，总结出记忆内容
---------------------------------
-对[图片]的处理：
-1.除非与文本有关，不要将[图片]的内容整合到记忆中
-2.如果图片与某个概念相关，将图片中的关键内容也整合到记忆中，不要写入图片原文，例如：
-
-聊天记录（与图片有关）：
-用户说：[图片1：这是一个黄色的龙形状玩偶，被一只手拿着。]
-用户说：这个玩偶看起来很可爱，是我新买的奶龙
-总结的记忆内容：
-黄色的龙形状玩偶 是 奶龙
-
-聊天记录（概念与图片无关）：
-用户说：[图片1：这是一个台电脑，屏幕上显示了某种游戏。]
-用户说：使命召唤今天发售了新一代，有没有人玩
-总结的记忆内容：
-使命召唤新一代 是 最新发售的游戏
-
-请主要关注概念和知识或者时效性较强的信息！！，而不是聊天的琐事
-1.不要关注诸如某个用户做了什么，说了什么，不要关注某个用户的行为，而是关注其中的概念性信息
-2.概念要求精确，不啰嗦，像科普读物或教育课本那样
-3.记忆为一段纯文本，逻辑清晰，指出概念的含义，并说明关系
-
- 记忆内容的格式，你必须仿照下面的格式，但不一定全部使用:
-{format_section}
-
-请仿照上述格式输出，每个知识点一句话。输出成一段平文本
-现在请你输出,不要输出其他内容，注意一定要直白，白话，口语化不要浮夸，修辞。：
-"""
-
-            if global_config.debug.show_prompt:
-                logger.info(f"记忆仓库构建运行内容 prompt: {prompt}")
-            else:
-                logger.debug(f"记忆仓库构建运行内容 prompt: {prompt}")
-
-            running_content, (reasoning_content, model_name, tool_calls) = await self.LLMRequest_build.generate_response_async(prompt)
-
-            print(f"prompt: {prompt}\n记忆仓库构建运行内容: {running_content}")
-
-            # 直接保存：每次构建后立即入库，并刷新时间戳窗口
-            if chat_id and running_content:
-                await self._save_to_database_and_clear(chat_id, running_content)
-
-
-            return running_content
-        
         
     async def get_answer_by_question(self, chat_id: str = "", question: str = "") -> str:
         """
@@ -521,7 +311,7 @@ class MemoryChest:
                 return [], []
             
             # 动态计算相似度阈值（占比越高阈值越低）
-            dynamic_threshold = self._compute_merge_similarity_threshold()
+            dynamic_threshold = compute_merge_similarity_threshold()
 
             # 使用相似度匹配查找最相似的记忆（基于动态阈值）
             similar_memory = find_most_similar_memory_by_chat_id(
