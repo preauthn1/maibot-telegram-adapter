@@ -165,11 +165,13 @@ class StatisticOutputTask(AsyncTask):
 
         self.stat_period: List[Tuple[str, timedelta, str]] = [
             ("all_time", now - deploy_time, "自部署以来"),  # 必须保留"all_time"
-            ("last_7_days", timedelta(days=7), "最近7天"),
-            ("last_3_days", timedelta(days=3), "最近3天"),
-            ("last_24_hours", timedelta(days=1), "最近24小时"),
-            ("last_3_hours", timedelta(hours=3), "最近3小时"),
-            ("last_hour", timedelta(hours=1), "最近1小时"),
+            ("last_30_days", timedelta(days=30), "近30天"),
+            ("last_7_days", timedelta(days=7), "近7天"),
+            ("last_3_days", timedelta(days=3), "近3天"),
+            ("last_24_hours", timedelta(days=1), "近1天"),
+            ("last_3_hours", timedelta(hours=3), "近3小时"),
+            ("last_hour", timedelta(hours=1), "近1小时"),
+            ("last_15_minutes", timedelta(minutes=15), "近15分钟"),
         ]
         """
         统计时间段 [(统计名称, 统计时间段, 统计描述), ...]

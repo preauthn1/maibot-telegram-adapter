@@ -178,6 +178,7 @@ async def _react_agent_solve_question(
         success, response, reasoning_content, model_name = await llm_api.generate_with_model(
             prompt,
             model_config=model_config.model_task_config.tool_use,
+            request_type="memory.react",
         )
         
         logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 LLM响应: {response}")
@@ -474,6 +475,7 @@ async def build_memory_retrieval_prompt(
         success, response, reasoning_content, model_name = await llm_api.generate_with_model(
             question_prompt,
             model_config=model_config.model_task_config.tool_use,
+            request_type="memory.question",
         )
         
         logger.info(f"记忆检索问题生成提示词: {question_prompt}")
