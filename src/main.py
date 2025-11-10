@@ -5,6 +5,7 @@ from maim_message import MessageServer
 from src.common.remote import TelemetryHeartBeatTask
 from src.manager.async_task_manager import async_task_manager
 from src.chat.utils.statistic import OnlineTimeRecordTask, StatisticOutputTask
+# from src.chat.utils.token_statistics import TokenStatisticsTask
 from src.chat.emoji_system.emoji_manager import get_emoji_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
 from src.config.config import global_config
@@ -63,6 +64,9 @@ class MainSystem:
 
         # 添加统计信息输出任务
         await async_task_manager.add_task(StatisticOutputTask())
+
+        # 添加聊天流统计任务（每5分钟生成一次报告，统计最近30天的数据）
+        # await async_task_manager.add_task(TokenStatisticsTask())
 
         # 添加遥测心跳任务
         await async_task_manager.add_task(TelemetryHeartBeatTask())

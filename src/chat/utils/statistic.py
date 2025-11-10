@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import json
 
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -10,6 +11,7 @@ from src.common.database.database import db
 from src.common.database.database_model import OnlineTime, LLMUsage, Messages
 from src.manager.async_task_manager import AsyncTask
 from src.manager.local_store_manager import local_storage
+from src.config.config import global_config
 
 logger = get_logger("maibot_statistic")
 
@@ -51,6 +53,7 @@ STD_TIME_COST_BY_MODULE = "std_time_costs_by_module"
 ONLINE_TIME = "online_time"
 TOTAL_MSG_CNT = "total_messages"
 MSG_CNT_BY_CHAT = "messages_by_chat"
+TOTAL_REPLY_CNT = "total_replies"
 
 
 class OnlineTimeRecordTask(AsyncTask):
@@ -132,6 +135,37 @@ def _format_online_time(online_seconds: int) -> str:
     else:
         # 其他情况格式化为"X分钟X秒"
         return f"{minutes}分钟{seconds}秒"
+
+
+def _format_large_number(num: float | int, html: bool = False) -> str:
+    """
+    格式化大数字，使用K后缀节省空间（大于9999时）
+    :param num: 要格式化的数字
+    :param html: 是否用于HTML输出（如果是，K会着色）
+    :return: 格式化后的字符串，如 12K, 1.3K, 120K
+    """
+    if num >= 10000:
+        # 大于等于10000，使用K后缀
+        value = num / 1000.0
+        if value >= 10:
+            number_part = str(int(value))
+            k_suffix = "K"
+        else:
+            number_part = f"{value:.1f}"
+            k_suffix = "K"
+        
+        if html:
+            # HTML输出：K着色为主题色并加粗大写
+            return f"{number_part}<span style='color: #8b5cf6; font-weight: bold;'>K</span>"
+        else:
+            # 控制台输出：纯文本，K大写
+            return f"{number_part}{k_suffix}"
+    else:
+        # 小于10000，直接显示
+        if isinstance(num, float):
+            return f"{num:.1f}" if num != int(num) else str(int(num))
+        else:
+            return str(num)
 
 
 class StatisticOutputTask(AsyncTask):
@@ -464,9 +498,13 @@ class StatisticOutputTask(AsyncTask):
             period_key: {
                 TOTAL_MSG_CNT: 0,
                 MSG_CNT_BY_CHAT: defaultdict(int),
+                TOTAL_REPLY_CNT: 0,
             }
             for period_key, _ in collect_period
         }
+        
+        # 获取bot的QQ账号
+        bot_qq_account = str(global_config.bot.qq_account) if hasattr(global_config, 'bot') and hasattr(global_config.bot, 'qq_account') else ""
 
         query_start_timestamp = collect_period[-1][1].timestamp()  # Messages.time is a DoubleField (timestamp)
         for message in Messages.select().where(Messages.time >= query_start_timestamp):  # type: ignore
@@ -505,11 +543,18 @@ class StatisticOutputTask(AsyncTask):
                 # 重置为正确的格式
                 self.name_mapping[chat_id] = (chat_name, message_time_ts)
 
+            # 检查是否是bot发送的消息（回复）
+            is_bot_reply = False
+            if bot_qq_account and message.user_id == bot_qq_account:
+                is_bot_reply = True
+            
             for idx, (_, period_start_dt) in enumerate(collect_period):
                 if message_time_ts >= period_start_dt.timestamp():
                     for period_key, _ in collect_period[idx:]:
                         stats[period_key][TOTAL_MSG_CNT] += 1
                         stats[period_key][MSG_CNT_BY_CHAT][chat_id] += 1
+                        if is_bot_reply:
+                            stats[period_key][TOTAL_REPLY_CNT] += 1
                     break
         return stats
 
@@ -635,12 +680,42 @@ class StatisticOutputTask(AsyncTask):
         """
         格式化总统计数据
         """
+        # 计算总token数（从所有模型的token数中累加）
+        total_tokens = sum(stats[TOTAL_TOK_BY_MODEL].values()) if stats[TOTAL_TOK_BY_MODEL] else 0
+        
+        # 计算花费/消息数量指标（每100条）
+        cost_per_100_messages = (stats[TOTAL_COST] / stats[TOTAL_MSG_CNT] * 100) if stats[TOTAL_MSG_CNT] > 0 else 0.0
+        
+        # 计算花费/时间指标（花费/小时）
+        online_hours = stats[ONLINE_TIME] / 3600.0 if stats[ONLINE_TIME] > 0 else 0.0
+        cost_per_hour = stats[TOTAL_COST] / online_hours if online_hours > 0 else 0.0
+        
+        # 计算token/消息数量指标（每100条）
+        tokens_per_100_messages = (total_tokens / stats[TOTAL_MSG_CNT] * 100) if stats[TOTAL_MSG_CNT] > 0 else 0.0
+        
+        # 计算token/时间指标（token/小时）
+        tokens_per_hour = (total_tokens / online_hours) if online_hours > 0 else 0.0
+        
+        # 计算花费/回复数量指标（每100条）
+        total_replies = stats.get(TOTAL_REPLY_CNT, 0)
+        cost_per_100_replies = (stats[TOTAL_COST] / total_replies * 100) if total_replies > 0 else 0.0
+        
+        # 计算token/回复数量指标（每100条）
+        tokens_per_100_replies = (total_tokens / total_replies * 100) if total_replies > 0 else 0.0
 
         output = [
             f"总在线时间: {_format_online_time(stats[ONLINE_TIME])}",
-            f"总消息数: {stats[TOTAL_MSG_CNT]}",
-            f"总请求数: {stats[TOTAL_REQ_CNT]}",
+            f"总消息数: {_format_large_number(stats[TOTAL_MSG_CNT])}",
+            f"总回复数: {_format_large_number(total_replies)}",
+            f"总请求数: {_format_large_number(stats[TOTAL_REQ_CNT])}",
+            f"总Token数: {_format_large_number(total_tokens)}",
             f"总花费: {stats[TOTAL_COST]:.2f}¥",
+            f"花费/消息数量: {cost_per_100_messages:.4f}¥/100条" if stats[TOTAL_MSG_CNT] > 0 else "花费/消息数量: N/A",
+            f"花费/回复数量: {cost_per_100_replies:.4f}¥/100条" if total_replies > 0 else "花费/回复数量: N/A",
+            f"花费/时间: {cost_per_hour:.2f}¥/小时" if online_hours > 0 else "花费/时间: N/A",
+            f"Token/消息数量: {_format_large_number(tokens_per_100_messages)}/100条" if stats[TOTAL_MSG_CNT] > 0 else "Token/消息数量: N/A",
+            f"Token/回复数量: {_format_large_number(tokens_per_100_replies)}/100条" if total_replies > 0 else "Token/回复数量: N/A",
+            f"Token/时间: {_format_large_number(tokens_per_hour)}/小时" if online_hours > 0 else "Token/时间: N/A",
             "",
         ]
 
@@ -667,8 +742,13 @@ class StatisticOutputTask(AsyncTask):
             cost = stats[COST_BY_MODEL][model_name]
             avg_time_cost = stats[AVG_TIME_COST_BY_MODEL][model_name]
             std_time_cost = stats[STD_TIME_COST_BY_MODEL][model_name]
+            # 格式化大数字
+            formatted_count = _format_large_number(count)
+            formatted_in_tokens = _format_large_number(in_tokens)
+            formatted_out_tokens = _format_large_number(out_tokens)
+            formatted_tokens = _format_large_number(tokens)
             output.append(
-                data_fmt.format(name, count, in_tokens, out_tokens, tokens, cost, avg_time_cost, std_time_cost)
+                data_fmt.format(name, formatted_count, formatted_in_tokens, formatted_out_tokens, formatted_tokens, cost, avg_time_cost, std_time_cost)
             )
 
         output.append("")
@@ -684,10 +764,12 @@ class StatisticOutputTask(AsyncTask):
         for chat_id, count in sorted(stats[MSG_CNT_BY_CHAT].items()):
             try:
                 chat_name = self.name_mapping.get(chat_id, ("未知聊天", 0))[0]
-                output.append(f"{chat_name[:32]:<32}  {count:>10}")
+                formatted_count = _format_large_number(count)
+                output.append(f"{chat_name[:32]:<32}  {formatted_count:>10}")
             except (IndexError, TypeError) as e:
                 logger.warning(f"格式化聊天统计时发生错误，chat_id: {chat_id}, 错误: {e}")
-                output.append(f"{'未知聊天':<32}  {count:>10}")
+                formatted_count = _format_large_number(count)
+                output.append(f"{'未知聊天':<32}  {formatted_count:>10}")
         output.append("")
         return "\n".join(output)
 
@@ -737,6 +819,7 @@ class StatisticOutputTask(AsyncTask):
             for period in self.stat_period
         ]
         tab_list.append('<button class="tab-link" onclick="showTab(event, \'charts\')">数据图表</button>')
+        tab_list.append('<button class="tab-link" onclick="showTab(event, \'metrics\')">指标趋势</button>')
 
         def _format_stat_data(stat_data: dict[str, Any], div_id: str, start_time: datetime) -> str:
             """
@@ -752,10 +835,10 @@ class StatisticOutputTask(AsyncTask):
                 [
                     f"<tr>"
                     f"<td>{model_name}</td>"
-                    f"<td>{count}</td>"
-                    f"<td>{stat_data[IN_TOK_BY_MODEL][model_name]}</td>"
-                    f"<td>{stat_data[OUT_TOK_BY_MODEL][model_name]}</td>"
-                    f"<td>{stat_data[TOTAL_TOK_BY_MODEL][model_name]}</td>"
+                    f"<td>{_format_large_number(count, html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[IN_TOK_BY_MODEL][model_name], html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[OUT_TOK_BY_MODEL][model_name], html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[TOTAL_TOK_BY_MODEL][model_name], html=True)}</td>"
                     f"<td>{stat_data[COST_BY_MODEL][model_name]:.2f} ¥</td>"
                     f"<td>{stat_data[AVG_TIME_COST_BY_MODEL][model_name]:.1f} 秒</td>"
                     f"<td>{stat_data[STD_TIME_COST_BY_MODEL][model_name]:.1f} 秒</td>"
@@ -770,10 +853,10 @@ class StatisticOutputTask(AsyncTask):
                 [
                     f"<tr>"
                     f"<td>{req_type}</td>"
-                    f"<td>{count}</td>"
-                    f"<td>{stat_data[IN_TOK_BY_TYPE][req_type]}</td>"
-                    f"<td>{stat_data[OUT_TOK_BY_TYPE][req_type]}</td>"
-                    f"<td>{stat_data[TOTAL_TOK_BY_TYPE][req_type]}</td>"
+                    f"<td>{_format_large_number(count, html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[IN_TOK_BY_TYPE][req_type], html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[OUT_TOK_BY_TYPE][req_type], html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[TOTAL_TOK_BY_TYPE][req_type], html=True)}</td>"
                     f"<td>{stat_data[COST_BY_TYPE][req_type]:.2f} ¥</td>"
                     f"<td>{stat_data[AVG_TIME_COST_BY_TYPE][req_type]:.1f} 秒</td>"
                     f"<td>{stat_data[STD_TIME_COST_BY_TYPE][req_type]:.1f} 秒</td>"
@@ -788,10 +871,10 @@ class StatisticOutputTask(AsyncTask):
                 [
                     f"<tr>"
                     f"<td>{module_name}</td>"
-                    f"<td>{count}</td>"
-                    f"<td>{stat_data[IN_TOK_BY_MODULE][module_name]}</td>"
-                    f"<td>{stat_data[OUT_TOK_BY_MODULE][module_name]}</td>"
-                    f"<td>{stat_data[TOTAL_TOK_BY_MODULE][module_name]}</td>"
+                    f"<td>{_format_large_number(count, html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[IN_TOK_BY_MODULE][module_name], html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[OUT_TOK_BY_MODULE][module_name], html=True)}</td>"
+                    f"<td>{_format_large_number(stat_data[TOTAL_TOK_BY_MODULE][module_name], html=True)}</td>"
                     f"<td>{stat_data[COST_BY_MODULE][module_name]:.2f} ¥</td>"
                     f"<td>{stat_data[AVG_TIME_COST_BY_MODULE][module_name]:.1f} 秒</td>"
                     f"<td>{stat_data[STD_TIME_COST_BY_MODULE][module_name]:.1f} 秒</td>"
@@ -807,10 +890,10 @@ class StatisticOutputTask(AsyncTask):
             for chat_id, count in sorted(stat_data[MSG_CNT_BY_CHAT].items()):
                 try:
                     chat_name = self.name_mapping.get(chat_id, ("未知聊天", 0))[0]
-                    chat_rows.append(f"<tr><td>{chat_name}</td><td>{count}</td></tr>")
+                    chat_rows.append(f"<tr><td>{chat_name}</td><td>{_format_large_number(count, html=True)}</td></tr>")
                 except (IndexError, TypeError) as e:
                     logger.warning(f"生成HTML聊天统计时发生错误，chat_id: {chat_id}, 错误: {e}")
-                    chat_rows.append(f"<tr><td>未知聊天</td><td>{count}</td></tr>")
+                    chat_rows.append(f"<tr><td>未知聊天</td><td>{_format_large_number(count, html=True)}</td></tr>")
             
             chat_rows_html = "\n".join(chat_rows) if chat_rows else "<tr><td colspan='2' style='text-align: center; color: #999;'>暂无数据</td></tr>"
             # 生成HTML
@@ -827,15 +910,47 @@ class StatisticOutputTask(AsyncTask):
                     </div>
                     <div class=\"kpi-card\">
                         <div class=\"kpi-title\">总消息数</div>
-                        <div class=\"kpi-value\">{stat_data[TOTAL_MSG_CNT]}</div>
+                        <div class=\"kpi-value\">{_format_large_number(stat_data[TOTAL_MSG_CNT], html=True)}</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">总回复数</div>
+                        <div class=\"kpi-value\">{_format_large_number(stat_data.get(TOTAL_REPLY_CNT, 0), html=True)}</div>
                     </div>
                     <div class=\"kpi-card\">
                         <div class=\"kpi-title\">总请求数</div>
-                        <div class=\"kpi-value\">{stat_data[TOTAL_REQ_CNT]}</div>
+                        <div class=\"kpi-value\">{_format_large_number(stat_data[TOTAL_REQ_CNT], html=True)}</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">总Token数</div>
+                        <div class=\"kpi-value\">{_format_large_number(sum(stat_data[TOTAL_TOK_BY_MODEL].values()) if stat_data[TOTAL_TOK_BY_MODEL] else 0, html=True)}</div>
                     </div>
                     <div class=\"kpi-card\">
                         <div class=\"kpi-title\">总花费</div>
                         <div class=\"kpi-value\">{stat_data[TOTAL_COST]:.2f} ¥</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">花费/消息数量</div>
+                        <div class=\"kpi-value\">{(stat_data[TOTAL_COST] / stat_data[TOTAL_MSG_CNT] * 100 if stat_data[TOTAL_MSG_CNT] > 0 else 0.0):.4f} ¥/100条</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">花费/时间</div>
+                        <div class=\"kpi-value\">{(stat_data[TOTAL_COST] / (stat_data[ONLINE_TIME] / 3600.0) if stat_data[ONLINE_TIME] > 0 else 0.0):.2f} ¥/小时</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">Token/消息数量</div>
+                        <div class=\"kpi-value\">{_format_large_number(sum(stat_data[TOTAL_TOK_BY_MODEL].values()) / stat_data[TOTAL_MSG_CNT] * 100 if stat_data[TOTAL_MSG_CNT] > 0 and stat_data[TOTAL_TOK_BY_MODEL] else 0.0, html=True)}/100条</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">Token/回复数量</div>
+                        <div class=\"kpi-value\">{_format_large_number(sum(stat_data[TOTAL_TOK_BY_MODEL].values()) / stat_data.get(TOTAL_REPLY_CNT, 0) * 100 if stat_data.get(TOTAL_REPLY_CNT, 0) > 0 and stat_data[TOTAL_TOK_BY_MODEL] else 0.0, html=True)}/100条</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">Token/时间</div>
+                        <div class=\"kpi-value\">{_format_large_number(sum(stat_data[TOTAL_TOK_BY_MODEL].values()) / (stat_data[ONLINE_TIME] / 3600.0) if stat_data[ONLINE_TIME] > 0 and stat_data[TOTAL_TOK_BY_MODEL] else 0.0, html=True)}/小时</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">花费/回复数量</div>
+                        <div class=\"kpi-value\">{(stat_data[TOTAL_COST] / stat_data.get(TOTAL_REPLY_CNT, 0) * 100 if stat_data.get(TOTAL_REPLY_CNT, 0) > 0 else 0.0):.4f} ¥/100条</div>
                     </div>
                 </div>
                 
@@ -1089,6 +1204,10 @@ class StatisticOutputTask(AsyncTask):
         # 添加图表内容
         chart_data = self._generate_chart_data(stat)
         tab_content_list.append(self._generate_chart_tab(chart_data))
+        
+        # 添加指标趋势图表
+        metrics_data = self._generate_metrics_data(now)
+        tab_content_list.append(self._generate_metrics_tab(metrics_data))
 
         joined_tab_list = "\n".join(tab_list)
         joined_tab_content = "\n".join(tab_content_list)
@@ -1161,7 +1280,7 @@ class StatisticOutputTask(AsyncTask):
         }
         .btn:hover { border-color: #9f8efb; color: #7c6bcf; background-color: #f1ecff; }
         /* 新增：KPI 卡片 */
-        .kpi-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0 6px; }
+        .kpi-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 12px 0 6px; }
         .kpi-card {
             background: linear-gradient(145deg, #ffffff 0%, #f6f2ff 100%);
             border: 1px solid #e3dbff;
@@ -1657,6 +1776,352 @@ class StatisticOutputTask(AsyncTask):
         </div>
         """
 
+    def _generate_metrics_data(self, now: datetime) -> dict:
+        """生成指标趋势数据"""
+        metrics_data = {}
+        
+        # 24小时尺度：1小时为单位
+        metrics_data["24h"] = self._collect_metrics_interval_data(now, hours=24, interval_hours=1)
+        
+        # 7天尺度：1天为单位
+        metrics_data["7d"] = self._collect_metrics_interval_data(now, hours=24*7, interval_hours=24)
+        
+        # 30天尺度：1天为单位
+        metrics_data["30d"] = self._collect_metrics_interval_data(now, hours=24*30, interval_hours=24)
+        
+        return metrics_data
+    
+    def _collect_metrics_interval_data(self, now: datetime, hours: int, interval_hours: int) -> dict:
+        """收集指定时间范围内每个间隔的指标数据"""
+        start_time = now - timedelta(hours=hours)
+        time_points = []
+        current_time = start_time
+        
+        # 生成时间点
+        while current_time <= now:
+            time_points.append(current_time)
+            current_time += timedelta(hours=interval_hours)
+        
+        # 初始化数据结构
+        cost_per_100_messages = [0.0] * len(time_points)  # 花费/消息数量（每100条）
+        cost_per_hour = [0.0] * len(time_points)  # 花费/时间（每小时）
+        tokens_per_100_messages = [0.0] * len(time_points)  # Token/消息数量（每100条）
+        tokens_per_hour = [0.0] * len(time_points)  # Token/时间（每小时）
+        cost_per_100_replies = [0.0] * len(time_points)  # 花费/回复数量（每100条）
+        tokens_per_100_replies = [0.0] * len(time_points)  # Token/回复数量（每100条）
+        
+        # 每个时间点的累计数据
+        total_costs = [0.0] * len(time_points)
+        total_tokens = [0] * len(time_points)
+        total_messages = [0] * len(time_points)
+        total_replies = [0] * len(time_points)
+        total_online_hours = [0.0] * len(time_points)
+        
+        # 获取bot的QQ账号
+        bot_qq_account = str(global_config.bot.qq_account) if hasattr(global_config, 'bot') and hasattr(global_config.bot, 'qq_account') else ""
+        
+        interval_seconds = interval_hours * 3600
+        
+        # 查询LLM使用记录
+        query_start_time = start_time
+        for record in LLMUsage.select().where(LLMUsage.timestamp >= query_start_time):  # type: ignore
+            record_time = record.timestamp
+            
+            # 找到对应的时间间隔索引
+            time_diff = (record_time - start_time).total_seconds()
+            interval_index = int(time_diff // interval_seconds)
+            
+            if 0 <= interval_index < len(time_points):
+                cost = record.cost or 0.0
+                prompt_tokens = record.prompt_tokens or 0
+                completion_tokens = record.completion_tokens or 0
+                total_token = prompt_tokens + completion_tokens
+                
+                total_costs[interval_index] += cost
+                total_tokens[interval_index] += total_token
+        
+        # 查询消息记录
+        query_start_timestamp = start_time.timestamp()
+        for message in Messages.select().where(Messages.time >= query_start_timestamp):  # type: ignore
+            message_time_ts = message.time
+            
+            time_diff = message_time_ts - query_start_timestamp
+            interval_index = int(time_diff // interval_seconds)
+            
+            if 0 <= interval_index < len(time_points):
+                total_messages[interval_index] += 1
+                # 检查是否是bot发送的消息（回复）
+                if bot_qq_account and message.user_id == bot_qq_account:
+                    total_replies[interval_index] += 1
+        
+        # 查询在线时间记录
+        for record in OnlineTime.select().where(OnlineTime.end_timestamp >= start_time):  # type: ignore
+            record_start = record.start_timestamp
+            record_end = record.end_timestamp
+            
+            # 找到记录覆盖的所有时间间隔
+            for idx, time_point in enumerate(time_points):
+                interval_start = time_point
+                interval_end = time_point + timedelta(hours=interval_hours)
+                
+                # 计算重叠部分
+                overlap_start = max(record_start, interval_start)
+                overlap_end = min(record_end, interval_end)
+                
+                if overlap_end > overlap_start:
+                    overlap_hours = (overlap_end - overlap_start).total_seconds() / 3600.0
+                    total_online_hours[idx] += overlap_hours
+        
+        # 计算指标
+        for idx in range(len(time_points)):
+            # 花费/消息数量（每100条）
+            if total_messages[idx] > 0:
+                cost_per_100_messages[idx] = (total_costs[idx] / total_messages[idx] * 100)
+            
+            # 花费/时间（每小时）
+            if total_online_hours[idx] > 0:
+                cost_per_hour[idx] = (total_costs[idx] / total_online_hours[idx])
+            
+            # Token/消息数量（每100条）
+            if total_messages[idx] > 0:
+                tokens_per_100_messages[idx] = (total_tokens[idx] / total_messages[idx] * 100)
+            
+            # Token/时间（每小时）
+            if total_online_hours[idx] > 0:
+                tokens_per_hour[idx] = (total_tokens[idx] / total_online_hours[idx])
+            
+            # 花费/回复数量（每100条）
+            if total_replies[idx] > 0:
+                cost_per_100_replies[idx] = (total_costs[idx] / total_replies[idx] * 100)
+            
+            # Token/回复数量（每100条）
+            if total_replies[idx] > 0:
+                tokens_per_100_replies[idx] = (total_tokens[idx] / total_replies[idx] * 100)
+        
+        # 生成时间标签
+        if interval_hours == 1:
+            time_labels = [t.strftime("%H:%M") for t in time_points]
+        else:
+            time_labels = [t.strftime("%m-%d") for t in time_points]
+        
+        return {
+            "time_labels": time_labels,
+            "cost_per_100_messages": cost_per_100_messages,
+            "cost_per_hour": cost_per_hour,
+            "tokens_per_100_messages": tokens_per_100_messages,
+            "tokens_per_hour": tokens_per_hour,
+            "cost_per_100_replies": cost_per_100_replies,
+            "tokens_per_100_replies": tokens_per_100_replies,
+        }
+    
+    def _generate_metrics_tab(self, metrics_data: dict) -> str:
+        """生成指标趋势图表选项卡HTML内容"""
+        colors = {
+            "cost_per_100_messages": "#8b5cf6",
+            "cost_per_hour": "#9f8efb",
+            "tokens_per_100_messages": "#b5a6ff",
+            "tokens_per_hour": "#c7bbff",
+            "cost_per_100_replies": "#d9ceff",
+            "tokens_per_100_replies": "#a78bfa",
+        }
+        
+        return f"""
+        <div id="metrics" class="tab-content">
+            <h2>指标趋势图表</h2>
+            
+            <!-- 时间尺度选择按钮 -->
+            <div style="margin: 20px 0; text-align: center;">
+                <label style="margin-right: 10px; font-weight: bold;">时间尺度:</label>
+                <button class="time-scale-btn" onclick="switchMetricsTimeScale('24h')">24小时</button>
+                <button class="time-scale-btn active" onclick="switchMetricsTimeScale('7d')">7天</button>
+                <button class="time-scale-btn" onclick="switchMetricsTimeScale('30d')">30天</button>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <div style="margin-bottom: 40px;">
+                    <canvas id="costPer100MessagesChart" width="800" height="400"></canvas>
+                </div>
+                <div style="margin-bottom: 40px;">
+                    <canvas id="costPerHourChart" width="800" height="400"></canvas>
+                </div>
+                <div style="margin-bottom: 40px;">
+                    <canvas id="tokensPer100MessagesChart" width="800" height="400"></canvas>
+                </div>
+                <div style="margin-bottom: 40px;">
+                    <canvas id="tokensPerHourChart" width="800" height="400"></canvas>
+                </div>
+                <div style="margin-bottom: 40px;">
+                    <canvas id="costPer100RepliesChart" width="800" height="400"></canvas>
+                </div>
+                <div>
+                    <canvas id="tokensPer100RepliesChart" width="800" height="400"></canvas>
+                </div>
+            </div>
+            
+            <style>
+                .time-scale-btn {{
+                    background-color: #ecf0f1;
+                    border: 1px solid #bdc3c7;
+                    color: #2c3e50;
+                    padding: 8px 16px;
+                    margin: 0 5px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                }}
+                
+                .time-scale-btn:hover {{
+                    background-color: #d5dbdb;
+                }}
+                
+                .time-scale-btn.active {{
+                    background-color: #8b5cf6;
+                    color: white;
+                    border-color: #7c6bcf;
+                }}
+            </style>
+            
+            <script>
+                const allMetricsData = {json.dumps(metrics_data)};
+                let currentMetricsCharts = {{}};
+                
+                const metricsConfigs = {{
+                    costPer100Messages: {{
+                        id: 'costPer100MessagesChart',
+                        title: '花费/消息数量',
+                        yAxisLabel: '花费 (¥/100条)',
+                        dataKey: 'cost_per_100_messages',
+                        color: '{colors["cost_per_100_messages"]}'
+                    }},
+                    costPerHour: {{
+                        id: 'costPerHourChart',
+                        title: '花费/时间',
+                        yAxisLabel: '花费 (¥/小时)',
+                        dataKey: 'cost_per_hour',
+                        color: '{colors["cost_per_hour"]}'
+                    }},
+                    tokensPer100Messages: {{
+                        id: 'tokensPer100MessagesChart',
+                        title: 'Token/消息数量',
+                        yAxisLabel: 'Token (/100条)',
+                        dataKey: 'tokens_per_100_messages',
+                        color: '{colors["tokens_per_100_messages"]}'
+                    }},
+                    tokensPerHour: {{
+                        id: 'tokensPerHourChart',
+                        title: 'Token/时间',
+                        yAxisLabel: 'Token (/小时)',
+                        dataKey: 'tokens_per_hour',
+                        color: '{colors["tokens_per_hour"]}'
+                    }},
+                    costPer100Replies: {{
+                        id: 'costPer100RepliesChart',
+                        title: '花费/回复数量',
+                        yAxisLabel: '花费 (¥/100条)',
+                        dataKey: 'cost_per_100_replies',
+                        color: '{colors["cost_per_100_replies"]}'
+                    }},
+                    tokensPer100Replies: {{
+                        id: 'tokensPer100RepliesChart',
+                        title: 'Token/回复数量',
+                        yAxisLabel: 'Token (/100条)',
+                        dataKey: 'tokens_per_100_replies',
+                        color: '{colors["tokens_per_100_replies"]}'
+                    }}
+                }};
+                
+                function switchMetricsTimeScale(timeScale) {{
+                    // 更新按钮状态
+                    document.querySelectorAll('.time-scale-btn').forEach(btn => {{
+                        btn.classList.remove('active');
+                    }});
+                    event.target.classList.add('active');
+                    
+                    // 更新图表数据
+                    const data = allMetricsData[timeScale];
+                    updateAllMetricsCharts(data, timeScale);
+                }}
+                
+                function updateAllMetricsCharts(data, timeScale) {{
+                    // 销毁现有图表
+                    Object.values(currentMetricsCharts).forEach(chart => {{
+                        if (chart) chart.destroy();
+                    }});
+                    
+                    currentMetricsCharts = {{}};
+                    
+                    // 重新创建图表
+                    createMetricsChart('costPer100Messages', data, timeScale);
+                    createMetricsChart('costPerHour', data, timeScale);
+                    createMetricsChart('tokensPer100Messages', data, timeScale);
+                    createMetricsChart('tokensPerHour', data, timeScale);
+                    createMetricsChart('costPer100Replies', data, timeScale);
+                    createMetricsChart('tokensPer100Replies', data, timeScale);
+                }}
+                
+                function createMetricsChart(chartType, data, timeScale) {{
+                    const config = metricsConfigs[chartType];
+                    
+                    currentMetricsCharts[chartType] = new Chart(document.getElementById(config.id), {{
+                        type: 'line',
+                        data: {{
+                            labels: data.time_labels,
+                            datasets: [{{
+                                label: config.title,
+                                data: data[config.dataKey],
+                                borderColor: config.color,
+                                backgroundColor: config.color + '20',
+                                tension: 0.4,
+                                fill: false
+                            }}]
+                        }},
+                        options: {{
+                            responsive: true,
+                            plugins: {{
+                                title: {{
+                                    display: true,
+                                    text: timeScale + '内' + config.title + '趋势',
+                                    font: {{ size: 16 }}
+                                }},
+                                legend: {{
+                                    display: false
+                                }}
+                            }},
+                            scales: {{
+                                x: {{
+                                    title: {{
+                                        display: true,
+                                        text: '时间'
+                                    }},
+                                    ticks: {{
+                                        maxTicksLimit: 12
+                                    }}
+                                }},
+                                y: {{
+                                    title: {{
+                                        display: true,
+                                        text: config.yAxisLabel
+                                    }},
+                                    beginAtZero: true
+                                }}
+                            }},
+                            interaction: {{
+                                intersect: false,
+                                mode: 'index'
+                            }}
+                        }}
+                    }});
+                }}
+                
+                // 初始化图表（默认7天）
+                document.addEventListener('DOMContentLoaded', function() {{
+                    updateAllMetricsCharts(allMetricsData['7d'], '7d');
+                }});
+            </script>
+        </div>
+        """
+
 
 class AsyncStatisticOutputTask(AsyncTask):
     """完全异步的统计输出任务 - 更高性能版本"""
@@ -1747,6 +2212,15 @@ class AsyncStatisticOutputTask(AsyncTask):
 
     def _generate_chart_tab(self, chart_data: dict) -> str:
         return StatisticOutputTask._generate_chart_tab(self, chart_data)  # type: ignore
+
+    def _generate_metrics_data(self, now: datetime) -> dict:
+        return StatisticOutputTask._generate_metrics_data(self, now)  # type: ignore
+
+    def _collect_metrics_interval_data(self, now: datetime, hours: int, interval_hours: int) -> dict:
+        return StatisticOutputTask._collect_metrics_interval_data(self, now, hours, interval_hours)  # type: ignore
+
+    def _generate_metrics_tab(self, metrics_data: dict) -> str:
+        return StatisticOutputTask._generate_metrics_tab(self, metrics_data)  # type: ignore
 
     def _get_chat_display_name_from_id(self, chat_id: str) -> str:
         return StatisticOutputTask._get_chat_display_name_from_id(self, chat_id)  # type: ignore
