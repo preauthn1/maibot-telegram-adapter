@@ -390,6 +390,7 @@ class ChatHistorySummarizer:
                 "theme": theme,
                 "keywords": json.dumps(keywords, ensure_ascii=False),
                 "summary": summary,
+                "count": 0,
             }
             
             # 使用db_save存储（使用start_time和chat_id作为唯一标识）

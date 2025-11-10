@@ -280,12 +280,12 @@ async def _react_agent_solve_question(
         return False, "未找到相关信息", thinking_steps
 
 
-def _get_recent_query_history(chat_id: str, time_window_seconds: float = 3600.0) -> str:
+def _get_recent_query_history(chat_id: str, time_window_seconds: float = 300.0) -> str:
     """获取最近一段时间内的查询历史
     
     Args:
         chat_id: 聊天ID
-        time_window_seconds: 时间窗口（秒），默认1小时
+        time_window_seconds: 时间窗口（秒），默认10分钟
         
     Returns:
         str: 格式化的查询历史字符串
@@ -302,7 +302,7 @@ def _get_recent_query_history(chat_id: str, time_window_seconds: float = 3600.0)
                 (ThinkingBack.update_time >= start_time)
             )
             .order_by(ThinkingBack.update_time.desc())
-            .limit(8)  # 最多返回10条最近的记录
+            .limit(5)  # 最多返回5条最近的记录
         )
         
         if not records.exists():
@@ -314,7 +314,8 @@ def _get_recent_query_history(chat_id: str, time_window_seconds: float = 3600.0)
         for record in records:
             status = "✓ 已找到答案" if record.found_answer else "✗ 未找到答案"
             answer_preview = ""
-            if record.answer:
+            # 只有找到答案时才显示答案内容
+            if record.found_answer and record.answer:
                 # 截取答案前100字符
                 answer_preview = record.answer[:100]
                 if len(record.answer) > 100:
@@ -554,7 +555,7 @@ async def build_memory_retrieval_prompt(
         chat_id = chat_stream.stream_id
         
         # 获取最近查询历史（最近1小时内的查询）
-        recent_query_history = _get_recent_query_history(chat_id, time_window_seconds=600.0)
+        recent_query_history = _get_recent_query_history(chat_id, time_window_seconds=300.0)
         if not recent_query_history:
             recent_query_history = "最近没有查询记录。"
         

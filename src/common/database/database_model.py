@@ -377,6 +377,7 @@ class ChatHistory(BaseModel):
     theme = TextField()  # 主题：这段对话的主要内容，一个简短的标题
     keywords = TextField()  # 关键词：这段对话的关键词，JSON格式存储
     summary = TextField()  # 概括：对这段话的平文本概括
+    count = IntegerField(default=0)  # 被检索次数
     
     class Meta:
         table_name = "chat_history"

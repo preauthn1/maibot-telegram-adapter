@@ -6,9 +6,7 @@
 import json
 from typing import Optional
 from src.common.logger import get_logger
-from src.config.config import model_config
 from src.common.database.database_model import ChatHistory
-from src.llm_models.utils_model import LLMRequest
 from src.chat.utils.utils import parse_keywords_string
 from .tool_registry import register_memory_retrieval_tool
 from .tool_utils import parse_datetime_to_timestamp, parse_time_range
@@ -116,10 +114,19 @@ async def query_chat_history(
                 return f"未找到包含关键词'{keywords_str}'的聊天记录概述"
             
             records = filtered_records
+
+        # 对即将返回的记录增加使用计数
+        records_to_use = records[:3]
+        for record in records_to_use:
+            try:
+                ChatHistory.update(count=ChatHistory.count + 1).where(ChatHistory.id == record.id).execute()
+                record.count = (record.count or 0) + 1
+            except Exception as update_error:
+                logger.error(f"更新聊天记录概述计数失败: {update_error}")
         
         # 构建结果文本
         results = []
-        for record in records[:10]:  # 最多返回10条记录
+        for record in records_to_use:  # 最多返回3条记录
             result_parts = []
             
             # 添加主题
@@ -146,66 +153,11 @@ async def query_chat_history(
         if not results:
             return "未找到相关聊天记录概述"
         
-        # 如果只有一条记录，直接返回
-        if len(results) == 1:
-            return results[0]
-        
-        # 多条记录，使用LLM总结
-        try:
-            llm_request = LLMRequest(
-                model_set=model_config.model_task_config.utils_small,
-                request_type="chat_history_analysis"
-            )
-            
-            query_desc = []
-            if keyword:
-                # 解析关键词列表用于显示
-                keywords_list = parse_keywords_string(keyword)
-                if keywords_list:
-                    keywords_str = "、".join(keywords_list)
-                    query_desc.append(f"关键词：{keywords_str}")
-                else:
-                    query_desc.append(f"关键词：{keyword}")
-            if time_range:
-                if " - " in time_range:
-                    query_desc.append(f"时间范围：{time_range}")
-                else:
-                    query_desc.append(f"时间点：{time_range}")
-            
-            query_info = "，".join(query_desc) if query_desc else "聊天记录概述"
-            
-            combined_results = "\n\n---\n\n".join(results)
-            
-            analysis_prompt = f"""请根据以下聊天记录概述，总结与查询条件相关的信息。请输出一段平文本，不要有特殊格式。
-查询条件：{query_info}
-
-聊天记录概述：
-{combined_results}
-
-请仔细分析聊天记录概述，提取与查询条件相关的信息并给出总结。如果概述中没有相关信息，输出"无有效信息"即可，不要输出其他内容。
-
-总结："""
-            
-            response, (reasoning, model_name, tool_calls) = await llm_request.generate_response_async(
-                prompt=analysis_prompt,
-                temperature=0.3,
-                max_tokens=512
-            )
-            
-            logger.info(f"查询聊天历史概述提示词: {analysis_prompt}")
-            logger.info(f"查询聊天历史概述响应: {response}")
-            logger.info(f"查询聊天历史概述推理: {reasoning}")
-            logger.info(f"查询聊天历史概述模型: {model_name}")
-            
-            if "无有效信息" in response:
-                return "无有效信息"
-            
-            return response
-            
-        except Exception as llm_error:
-            logger.error(f"LLM分析聊天记录概述失败: {llm_error}")
-            # 如果LLM分析失败，返回前3条记录的摘要
-            return "\n\n---\n\n".join(results[:3])
+        response_text = "\n\n---\n\n".join(results)
+        if len(records) > len(records_to_use):
+            omitted_count = len(records) - len(records_to_use)
+            response_text += f"\n\n(还有{omitted_count}条历史记录已省略)"
+        return response_text
             
     except Exception as e:
         logger.error(f"查询聊天历史概述失败: {e}")
