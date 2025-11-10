@@ -2,6 +2,7 @@ import time
 import json
 import re
 import random
+import asyncio
 from typing import List, Dict, Any, Optional, Tuple
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
@@ -430,6 +431,100 @@ def _store_thinking_back(
         logger.error(f"存储思考过程失败: {e}")
 
 
+def _get_max_iterations_by_question_count(question_count: int) -> int:
+    """根据问题数量获取最大迭代次数
+    
+    Args:
+        question_count: 问题数量
+        
+    Returns:
+        int: 最大迭代次数
+    """
+    if question_count == 1:
+        return 5
+    elif question_count == 2:
+        return 3
+    else:  # 3个或以上
+        return 1
+
+
+async def _process_single_question(
+    question: str,
+    chat_id: str,
+    context: str,
+    max_iterations: int
+) -> Optional[str]:
+    """处理单个问题的查询（包含缓存检查逻辑）
+    
+    Args:
+        question: 要查询的问题
+        chat_id: 聊天ID
+        context: 上下文信息
+        max_iterations: 最大迭代次数
+        
+    Returns:
+        Optional[str]: 如果找到答案，返回格式化的结果字符串，否则返回None
+    """
+    logger.info(f"开始处理问题: {question}")
+    
+    # 先检查thinking_back数据库中是否有现成答案
+    cached_result = _query_thinking_back(chat_id, question)
+    should_requery = False
+    
+    if cached_result:
+        cached_found_answer, cached_answer = cached_result
+        
+        # 根据found_answer的值决定是否重新查询
+        if cached_found_answer:  # found_answer == 1 (True)
+            # found_answer == 1：20%概率重新查询
+            if random.random() < 0.2:
+                should_requery = True
+                logger.info(f"found_answer=1，触发20%概率重新查询，问题: {question[:50]}...")
+        else:  # found_answer == 0 (False)
+            # found_answer == 0：40%概率重新查询
+            if random.random() < 0.4:
+                should_requery = True
+                logger.info(f"found_answer=0，触发40%概率重新查询，问题: {question[:50]}...")
+        
+        # 如果不需要重新查询，使用缓存答案
+        if not should_requery:
+            if cached_answer:
+                logger.info(f"从thinking_back缓存中获取答案，问题: {question[:50]}...")
+                return f"问题：{question}\n答案：{cached_answer}"
+            else:
+                # 缓存中没有答案，需要查询
+                should_requery = True
+    
+    # 如果没有缓存答案或需要重新查询，使用ReAct Agent查询
+    if not cached_result or should_requery:
+        if should_requery:
+            logger.info(f"概率触发重新查询，使用ReAct Agent查询，问题: {question[:50]}...")
+        else:
+            logger.info(f"未找到缓存答案，使用ReAct Agent查询，问题: {question[:50]}...")
+        
+        found_answer, answer, thinking_steps = await _react_agent_solve_question(
+            question=question,
+            chat_id=chat_id,
+            max_iterations=max_iterations,
+            timeout=30.0
+        )
+        
+        # 存储到数据库
+        _store_thinking_back(
+            chat_id=chat_id,
+            question=question,
+            context=context,
+            found_answer=found_answer,
+            answer=answer,
+            thinking_steps=thinking_steps
+        )
+        
+        if found_answer and answer:
+            return f"问题：{question}\n答案：{answer}"
+    
+    return None
+
+
 async def build_memory_retrieval_prompt(
     message: str,
     sender: str,
@@ -498,68 +593,31 @@ async def build_memory_retrieval_prompt(
         
         logger.info(f"解析到 {len(questions)} 个问题: {questions}")
         
-        # 第二步：对每个问题查询答案
+        # 第二步：根据问题数量确定最大迭代次数
+        max_iterations = _get_max_iterations_by_question_count(len(questions))
+        logger.info(f"问题数量: {len(questions)}，设置最大迭代次数: {max_iterations}")
+        
+        # 并行处理所有问题
+        question_tasks = [
+            _process_single_question(
+                question=question,
+                chat_id=chat_id,
+                context=message,
+                max_iterations=max_iterations
+            )
+            for question in questions
+        ]
+        
+        # 并行执行所有查询任务
+        results = await asyncio.gather(*question_tasks, return_exceptions=True)
+        
+        # 收集所有有效结果
         all_results = []
-        for question in questions:
-            logger.info(f"开始处理问题: {question}")
-            
-            # 先检查thinking_back数据库中是否有现成答案
-            cached_result = _query_thinking_back(chat_id, question)
-            should_requery = False
-            
-            if cached_result:
-                cached_found_answer, cached_answer = cached_result
-                
-                # 根据found_answer的值决定是否重新查询
-                if cached_found_answer:  # found_answer == 1 (True)
-                    # found_answer == 1：20%概率重新查询
-                    if random.random() < 0.2:
-                        should_requery = True
-                        logger.info(f"found_answer=1，触发20%概率重新查询，问题: {question[:50]}...")
-                    else:
-                        # 使用缓存答案
-                        if cached_answer:
-                            logger.info(f"从thinking_back缓存中获取答案（found_answer=1），问题: {question[:50]}...")
-                            all_results.append(f"问题：{question}\n答案：{cached_answer}")
-                            continue  # 跳过ReAct Agent查询
-                else:  # found_answer == 0 (False)
-                    # found_answer == 0：40%概率重新查询
-                    if random.random() < 0.4:
-                        should_requery = True
-                        logger.info(f"found_answer=0，触发40%概率重新查询，问题: {question[:50]}...")
-                    else:
-                        # 使用缓存答案（即使found_answer=0，也可能有部分答案）
-                        if cached_answer:
-                            logger.info(f"从thinking_back缓存中获取答案（found_answer=0），问题: {question[:50]}...")
-                            all_results.append(f"问题：{question}\n答案：{cached_answer}")
-                            continue  # 跳过ReAct Agent查询
-            
-            # 如果没有缓存答案或需要重新查询，使用ReAct Agent查询
-            if not cached_result or should_requery:
-                if should_requery:
-                    logger.info(f"概率触发重新查询，使用ReAct Agent查询，问题: {question[:50]}...")
-                else:
-                    logger.info(f"未找到缓存答案，使用ReAct Agent查询，问题: {question[:50]}...")
-                
-                found_answer, answer, thinking_steps = await _react_agent_solve_question(
-                    question=question,
-                    chat_id=chat_id,
-                    max_iterations=5,
-                    timeout=30.0
-                )
-                
-                # 存储到数据库
-                _store_thinking_back(
-                    chat_id=chat_id,
-                    question=question,
-                    context=message,  # 只存储前500字符作为上下文
-                    found_answer=found_answer,
-                    answer=answer,
-                    thinking_steps=thinking_steps
-                )
-                
-                if found_answer and answer:
-                    all_results.append(f"问题：{question}\n答案：{answer}")
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"处理问题 '{questions[i]}' 时发生异常: {result}")
+            elif result is not None:
+                all_results.append(result)
         
         end_time = time.time()
         

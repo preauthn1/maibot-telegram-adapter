@@ -221,14 +221,17 @@ def split_into_sentences_w_remove_punctuation(text: str) -> list[str]:
     while i < len(text):
         char = text[i]
         if char in separators:
-            # 检查分割条件：如果空格左右都是英文字母，则不分割（仅对空格应用此规则）
+            # 检查分割条件：如果空格左右都是英文字母、数字，或数字和英文之间，则不分割（仅对空格应用此规则）
             can_split = True
             if 0 < i < len(text) - 1:
                 prev_char = text[i - 1]
                 next_char = text[i + 1]
-                # 只对空格应用"不分割两个英文之间的空格"规则
-                if char == ' ' and is_english_letter(prev_char) and is_english_letter(next_char):
-                    can_split = False
+                # 只对空格应用"不分割数字和数字、数字和英文、英文和数字、英文和英文之间的空格"规则
+                if char == ' ':
+                    prev_is_alnum = prev_char.isdigit() or is_english_letter(prev_char)
+                    next_is_alnum = next_char.isdigit() or is_english_letter(next_char)
+                    if prev_is_alnum and next_is_alnum:
+                        can_split = False
 
             if can_split:
                 # 只有当当前段不为空时才添加

@@ -269,7 +269,16 @@ class ChatHistorySummarizer:
             )
             
             # 使用LLM压缩聊天内容
-            theme, keywords, summary = await self._compress_with_llm(original_text)
+            success, theme, keywords, summary = await self._compress_with_llm(original_text)
+            
+            if not success:
+                logger.warning(
+                    f"{self.log_prefix} LLM压缩失败，不存储到数据库 | 消息数: {len(messages)}"
+                )
+                # 清空当前批次，避免重复处理
+                self.current_batch = None
+                return
+            
             logger.info(
                 f"{self.log_prefix} LLM压缩完成 | 主题: {theme} | 关键词数: {len(keywords)} | 概括长度: {len(summary)} 字"
             )
@@ -297,12 +306,12 @@ class ChatHistorySummarizer:
             # 出错时也清空批次，避免重复处理
             self.current_batch = None
     
-    async def _compress_with_llm(self, original_text: str) -> tuple[str, List[str], str]:
+    async def _compress_with_llm(self, original_text: str) -> tuple[bool, str, List[str], str]:
         """
         使用LLM压缩聊天内容
         
         Returns:
-            tuple[str, List[str], str]: (主题, 关键词列表, 概括)
+            tuple[bool, str, List[str], str]: (是否成功, 主题, 关键词列表, 概括)
         """
         prompt = f"""请对以下聊天记录进行概括，提取以下信息：
 
@@ -353,13 +362,13 @@ class ChatHistorySummarizer:
             if isinstance(keywords, str):
                 keywords = [keywords]
             
-            return theme, keywords, summary
+            return True, theme, keywords, summary
             
         except Exception as e:
             logger.error(f"{self.log_prefix} LLM压缩聊天内容时出错: {e}")
             logger.error(f"{self.log_prefix} LLM响应: {response if 'response' in locals() else 'N/A'}")
-            # 返回默认值
-            return "未命名对话", [], "压缩失败，无法生成概括"
+            # 返回失败标志和默认值
+            return False, "未命名对话", [], "压缩失败，无法生成概括"
     
     async def _store_to_database(
         self,
