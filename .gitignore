@@ -2,6 +2,7 @@ data/
 data1/
 mongodb/
 NapCat.Framework.Windows.Once/
+NapCat.Framework.Windows.OneKey/
 log/
 logs/
 out/

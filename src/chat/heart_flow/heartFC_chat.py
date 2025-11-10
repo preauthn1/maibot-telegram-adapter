@@ -430,7 +430,7 @@ class HeartFChatting:
             asyncio.create_task(extract_and_store_jargon(self.stream_id))
             # 添加聊天内容概括任务 - 累积、打包和压缩聊天记录
             # 注意：后台循环已在start()中启动，这里作为额外触发点，在有思考时立即处理
-            asyncio.create_task(self.chat_history_summarizer.process())
+            # asyncio.create_task(self.chat_history_summarizer.process())
             
             
             cycle_timers, thinking_id = self.start_cycle()

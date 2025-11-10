@@ -104,7 +104,6 @@ class ChatHistorySummarizer:
             
             if not new_messages:
                 # 没有新消息，检查是否需要打包
-                logger.info(f"{self.log_prefix} 无新增消息，尝试对现有批次执行打包检查")
                 if self.current_batch and self.current_batch.messages:
                     await self._check_and_package(current_time)
                 self.last_check_time = current_time
@@ -112,10 +111,6 @@ class ChatHistorySummarizer:
             
             # 有新消息，更新最后检查时间
             self.last_check_time = current_time
-
-            logger.info(
-                f"{self.log_prefix} 获取到 {len(new_messages)} 条新消息，最新消息时间戳: {new_messages[-1].time if new_messages else 'N/A'}"
-            )
             
             # 如果有当前批次，添加新消息
             if self.current_batch:
@@ -123,7 +118,7 @@ class ChatHistorySummarizer:
                 self.current_batch.messages.extend(new_messages)
                 self.current_batch.end_time = current_time
                 logger.info(
-                    f"{self.log_prefix} 扩展现有批次: {before_count} -> {len(self.current_batch.messages)} 条消息，时间范围: {self.current_batch.start_time:.2f} - {self.current_batch.end_time:.2f}"
+                    f"{self.log_prefix} 批次更新: {before_count} -> {len(self.current_batch.messages)} 条消息"
                 )
             else:
                 # 创建新批次
@@ -133,7 +128,7 @@ class ChatHistorySummarizer:
                     end_time=current_time,
                 )
                 logger.info(
-                    f"{self.log_prefix} 创建新批次: 消息数 {len(new_messages)}，时间范围: {self.current_batch.start_time:.2f} - {self.current_batch.end_time:.2f}"
+                    f"{self.log_prefix} 新建批次: {len(new_messages)} 条消息"
                 )
             
             # 检查是否需要打包

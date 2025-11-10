@@ -820,48 +820,70 @@ class StatisticOutputTask(AsyncTask):
                     <strong>统计时段: </strong>
                     {start_time.strftime("%Y-%m-%d %H:%M:%S")} ~ {now.strftime("%Y-%m-%d %H:%M:%S")}
                 </p>
-                <p class=\"info-item\"><strong>总在线时间: </strong>{_format_online_time(stat_data[ONLINE_TIME])}</p>
-                <p class=\"info-item\"><strong>总消息数: </strong>{stat_data[TOTAL_MSG_CNT]}</p>
-                <p class=\"info-item\"><strong>总请求数: </strong>{stat_data[TOTAL_REQ_CNT]}</p>
-                <p class=\"info-item\"><strong>总花费: </strong>{stat_data[TOTAL_COST]:.2f} ¥</p>
+                <div class=\"kpi-cards\">
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">总在线时间</div>
+                        <div class=\"kpi-value\">{_format_online_time(stat_data[ONLINE_TIME])}</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">总消息数</div>
+                        <div class=\"kpi-value\">{stat_data[TOTAL_MSG_CNT]}</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">总请求数</div>
+                        <div class=\"kpi-value\">{stat_data[TOTAL_REQ_CNT]}</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">总花费</div>
+                        <div class=\"kpi-value\">{stat_data[TOTAL_COST]:.2f} ¥</div>
+                    </div>
+                </div>
                 
                 <h2>按模型分类统计</h2>
-                <table>
-                    <thead><tr><th>模型名称</th><th>调用次数</th><th>输入Token</th><th>输出Token</th><th>Token总量</th><th>累计花费</th><th>平均耗时(秒)</th><th>标准差(秒)</th></tr></thead>
-                    <tbody>
-                        {model_rows}
-                    </tbody>
-                </table>
+                <div class=\"table-wrap\">
+                    <table>
+                        <thead><tr><th>模型名称</th><th>调用次数</th><th>输入Token</th><th>输出Token</th><th>Token总量</th><th>累计花费</th><th>平均耗时(秒)</th><th>标准差(秒)</th></tr></thead>
+                        <tbody>
+                            {model_rows}
+                        </tbody>
+                    </table>
+                </div>
                 
                 <h2>按模块分类统计</h2>
-                <table>
-                    <thead>
-                        <tr><th>模块名称</th><th>调用次数</th><th>输入Token</th><th>输出Token</th><th>Token总量</th><th>累计花费</th><th>平均耗时(秒)</th><th>标准差(秒)</th></tr>
-                    </thead>
-                    <tbody>
-                    {module_rows}
-                    </tbody>
-                </table>
+                <div class=\"table-wrap\">
+                    <table>
+                        <thead>
+                            <tr><th>模块名称</th><th>调用次数</th><th>输入Token</th><th>输出Token</th><th>Token总量</th><th>累计花费</th><th>平均耗时(秒)</th><th>标准差(秒)</th></tr>
+                        </thead>
+                        <tbody>
+                        {module_rows}
+                        </tbody>
+                    </table>
+                </div>
     
                 <h2>按请求类型分类统计</h2>
-                <table>
-                    <thead>
-                        <tr><th>请求类型</th><th>调用次数</th><th>输入Token</th><th>输出Token</th><th>Token总量</th><th>累计花费</th><th>平均耗时(秒)</th><th>标准差(秒)</th></tr>
-                    </thead>
-                    <tbody>
-                    {type_rows}
-                    </tbody>
-                </table>
+                <div class=\"table-wrap\">
+                    <table>
+                        <thead>
+                            <tr><th>请求类型</th><th>调用次数</th><th>输入Token</th><th>输出Token</th><th>Token总量</th><th>累计花费</th><th>平均耗时(秒)</th><th>标准差(秒)</th></tr>
+                        </thead>
+                        <tbody>
+                        {type_rows}
+                        </tbody>
+                    </table>
+                </div>
     
                 <h2>聊天消息统计</h2>
-                <table>
-                    <thead>
-                        <tr><th>联系人/群组名称</th><th>消息数量</th></tr>
-                    </thead>
-                    <tbody>
-                    {chat_rows_html}
-                    </tbody>
-                </table>
+                <div class=\"table-wrap\">
+                    <table>
+                        <thead>
+                            <tr><th>联系人/群组名称</th><th>消息数量</th></tr>
+                        </thead>
+                        <tbody>
+                        {chat_rows_html}
+                        </tbody>
+                    </table>
+                </div>
                 
                 <h2>数据分布图表</h2>
                 <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px;">
@@ -1085,21 +1107,22 @@ class StatisticOutputTask(AsyncTask):
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f4f7f6;
-            color: #333;
+            background-color: #faf7ff;
+            color: #3a2f57;
             line-height: 1.6;
         }
         .container {
             max-width: 900px;
             margin: 20px auto;
-            background-color: #fff;
+            background-color: #ffffff;
             padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            box-shadow: 0 10px 28px rgba(122, 98, 182, 0.12);
+            border: 1px solid #e5dcff;
         }
         h1, h2 {
-            color: #2c3e50;
-            border-bottom: 2px solid #3498db;
+            color: #473673;
+            border-bottom: 2px solid #9f8efb;
             padding-bottom: 10px;
             margin-top: 0;
         }
@@ -1115,33 +1138,62 @@ class StatisticOutputTask(AsyncTask):
             margin-bottom: 10px;
         }
         .info-item {
-            background-color: #ecf0f1;
+            background-color: #f3eeff;
             padding: 8px 12px;
-            border-radius: 4px;
+            border-radius: 6px;
             margin-bottom: 8px;
             font-size: 0.95em;
         }
         .info-item strong {
-            color: #2980b9;
+            color: #7162bf;
         }
+        /* 新增：顶部工具条与按钮 */
+        .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+        .toolbar .right { display: flex; gap: 8px; align-items: center; }
+        .btn {
+            border: 1px solid #e3daff;
+            background-color: #fbf9ff;
+            color: #4a3c75;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all .2s ease;
+        }
+        .btn:hover { border-color: #9f8efb; color: #7c6bcf; background-color: #f1ecff; }
+        /* 新增：KPI 卡片 */
+        .kpi-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0 6px; }
+        .kpi-card {
+            background: linear-gradient(145deg, #ffffff 0%, #f6f2ff 100%);
+            border: 1px solid #e3dbff;
+            border-radius: 10px;
+            padding: 14px 16px;
+            box-shadow: 0 6px 16px rgba(113, 98, 191, 0.1);
+        }
+        .kpi-title { font-size: 12px; color: #8579a6; letter-spacing: .3px; margin-bottom: 6px; }
+        .kpi-value { font-size: 20px; font-weight: 700; letter-spacing: .2px; color: #8b5cf6; }
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
             font-size: 0.9em;
         }
+        /* 新增：表格包裹容器，支持横向滚动 */
+        .table-wrap { width: 100%; overflow-x: auto; border-radius: 6px; }
         th, td {
-            border: 1px solid #ddd;
+            border: 1px solid #e6ddff;
             padding: 10px;
             text-align: left;
         }
         th {
-            background-color: #3498db;
+            background-color: #9f8efb;
             color: white;
             font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
         tr:nth-child(even) {
-            background-color: #f9f9f9;
+            background-color: #f6f1ff;
         }
         .footer {
             text-align: center;
@@ -1151,25 +1203,32 @@ class StatisticOutputTask(AsyncTask):
         }
         .tabs {
             overflow: hidden;
-            background: #ecf0f1;
+            background: #f9f6ff;
             display: flex;
+            border: 1px solid #e4dcff;
+            border-radius: 10px;
+            box-shadow: 0 8px 18px rgba(120, 101, 179, 0.08);
         }
         .tabs button {
             background: inherit; border: none; outline: none;
-            padding: 14px 16px; cursor: pointer;
-            transition: 0.3s; font-size: 16px;
+            padding: 12px 14px; cursor: pointer;
+            transition: 0.2s; font-size: 15px;
+            color: #52467a;
         }
         .tabs button:hover {
-            background-color: #d4dbdc;
+            background-color: #efe9ff;
         }
         .tabs button.active {
-            background-color: #b3bbbd;
+            background-color: rgba(159, 142, 251, 0.25);
+            color: #6253a9;
         }
         .tab-content {
             display: none;
             padding: 20px;
-            background-color: #fff;
-            border: 1px solid #ccc;
+            background-color: #fefcff;
+            border: 1px solid #e4dcff;
+            border-top: none;
+            border-radius: 0 0 10px 10px;
         }
         .tab-content.active {
             display: block;
@@ -1180,14 +1239,19 @@ class StatisticOutputTask(AsyncTask):
 """
             + f"""
     <div class="container">
-        <h1>MaiBot运行统计报告</h1>
-        <p class="info-item"><strong>统计截止时间:</strong> {now.strftime("%Y-%m-%d %H:%M:%S")}</p>
+        <div class="toolbar">
+            <h1 style="margin: 0;">MaiBot运行统计报告</h1>
+            <div class="right">
+                <span class="info-item" style="margin: 0;"><strong>统计截止时间:</strong> {now.strftime("%Y-%m-%d %H:%M:%S")}</span>
+            </div>
+        </div>
 
         <div class="tabs">
             {joined_tab_list}
         </div>
 
         {joined_tab_content}
+        <div class="footer">Made with ❤️ by MaiBot • 本页会定期自动覆盖生成</div>
     </div>
 """
             + """
@@ -1321,16 +1385,16 @@ class StatisticOutputTask(AsyncTask):
 
         # 生成不同颜色的调色板
         colors = [
-            "#3498db",
-            "#e74c3c",
-            "#2ecc71",
-            "#f39c12",
-            "#9b59b6",
-            "#1abc9c",
-            "#34495e",
-            "#e67e22",
-            "#95a5a6",
-            "#f1c40f",
+            "#8b5cf6",
+            "#9f8efb",
+            "#b5a6ff",
+            "#c7bbff",
+            "#d9ceff",
+            "#a78bfa",
+            "#9073d8",
+            "#bfaefc",
+            "#cabdfd",
+            "#e6e0ff",
         ]
 
         # 默认使用24小时数据生成数据集
@@ -1512,7 +1576,7 @@ class StatisticOutputTask(AsyncTask):
                 
                 function createChart(chartType, data, timeRange) {{
                     const config = chartConfigs[chartType];
-                    const colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#34495e', '#e67e22', '#95a5a6', '#f1c40f'];
+                    const colors = ['#8b5cf6', '#9f8efb', '#b5a6ff', '#c7bbff', '#d9ceff', '#a78bfa', '#9073d8', '#bfaefc', '#cabdfd', '#e6e0ff'];
                     
                     let datasets = [];
                     
