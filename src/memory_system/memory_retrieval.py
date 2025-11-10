@@ -271,13 +271,12 @@ async def _react_agent_solve_question(
             pass
     
     # 达到最大迭代次数或超时，但Agent没有明确返回final_answer
-    # 这种情况下，即使收集到了一些信息，也不认为找到了答案
+    # 迭代超时应该直接视为no_answer，而不是使用已有信息
     # 只有Agent明确返回final_answer时，才认为找到了答案
     if collected_info:
         logger.warning(f"ReAct Agent达到最大迭代次数或超时，但未明确返回final_answer。已收集信息: {collected_info[:100]}...")
-        return False, collected_info, thinking_steps
-    else:
-        return False, "未找到相关信息", thinking_steps
+    logger.warning("ReAct Agent达到最大迭代次数或超时，直接视为no_answer")
+    return False, "未找到相关信息", thinking_steps
 
 
 def _get_recent_query_history(chat_id: str, time_window_seconds: float = 300.0) -> str:
