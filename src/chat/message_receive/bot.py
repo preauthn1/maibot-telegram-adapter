@@ -258,7 +258,7 @@ class ChatBot:
                 message.message_segment = Seg(type="seglist", data=modified_message.message_segments)
 
             if await self.handle_notice_message(message):
-                return
+                pass
 
             # 处理消息内容，生成纯文本
             await message.process()
