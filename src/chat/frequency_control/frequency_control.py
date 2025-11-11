@@ -112,10 +112,10 @@ class FrequencyControl:
             if len(response) < 20:
                 if "过于频繁" in response:
                     logger.info(f"频率调整: 过于频繁，调整值到{final_value_by_api}")
-                    self.talk_frequency_adjust = max(0.1, min(3.0, self.talk_frequency_adjust * 0.8))
+                    self.talk_frequency_adjust = max(0.1, min(1.5, self.talk_frequency_adjust * 0.8))
                 elif "过少" in response:
                     logger.info(f"频率调整: 过少，调整值到{final_value_by_api}")
-                    self.talk_frequency_adjust = max(0.1, min(3.0, self.talk_frequency_adjust * 1.2))
+                    self.talk_frequency_adjust = max(0.1, min(1.5, self.talk_frequency_adjust * 1.2))
                 self.last_frequency_adjust_time = time.time()
             else:
                 logger.info(f"频率调整：response不符合要求，取消本次调整")    

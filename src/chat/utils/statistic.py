@@ -690,9 +690,6 @@ class StatisticOutputTask(AsyncTask):
         online_hours = stats[ONLINE_TIME] / 3600.0 if stats[ONLINE_TIME] > 0 else 0.0
         cost_per_hour = stats[TOTAL_COST] / online_hours if online_hours > 0 else 0.0
         
-        # 计算token/消息数量指标（每100条）
-        tokens_per_100_messages = (total_tokens / stats[TOTAL_MSG_CNT] * 100) if stats[TOTAL_MSG_CNT] > 0 else 0.0
-        
         # 计算token/时间指标（token/小时）
         tokens_per_hour = (total_tokens / online_hours) if online_hours > 0 else 0.0
         
@@ -700,8 +697,9 @@ class StatisticOutputTask(AsyncTask):
         total_replies = stats.get(TOTAL_REPLY_CNT, 0)
         cost_per_100_replies = (stats[TOTAL_COST] / total_replies * 100) if total_replies > 0 else 0.0
         
-        # 计算token/回复数量指标（每100条）
-        tokens_per_100_replies = (total_tokens / total_replies * 100) if total_replies > 0 else 0.0
+        # 计算花费/消息数量（排除自己回复）指标（每100条）
+        total_messages_excluding_replies = stats[TOTAL_MSG_CNT] - total_replies
+        cost_per_100_messages_excluding_replies = (stats[TOTAL_COST] / total_messages_excluding_replies * 100) if total_messages_excluding_replies > 0 else 0.0
 
         output = [
             f"总在线时间: {_format_online_time(stats[ONLINE_TIME])}",
@@ -711,10 +709,9 @@ class StatisticOutputTask(AsyncTask):
             f"总Token数: {_format_large_number(total_tokens)}",
             f"总花费: {stats[TOTAL_COST]:.2f}¥",
             f"花费/消息数量: {cost_per_100_messages:.4f}¥/100条" if stats[TOTAL_MSG_CNT] > 0 else "花费/消息数量: N/A",
-            f"花费/回复数量: {cost_per_100_replies:.4f}¥/100条" if total_replies > 0 else "花费/回复数量: N/A",
+            f"花费/接受消息数量: {cost_per_100_messages_excluding_replies:.4f}¥/100条" if total_messages_excluding_replies > 0 else "花费/消息数量(排除回复): N/A",
+            f"花费/回复消息数量: {cost_per_100_replies:.4f}¥/100条" if total_replies > 0 else "花费/回复数量: N/A",
             f"花费/时间: {cost_per_hour:.2f}¥/小时" if online_hours > 0 else "花费/时间: N/A",
-            f"Token/消息数量: {_format_large_number(tokens_per_100_messages)}/100条" if stats[TOTAL_MSG_CNT] > 0 else "Token/消息数量: N/A",
-            f"Token/回复数量: {_format_large_number(tokens_per_100_replies)}/100条" if total_replies > 0 else "Token/回复数量: N/A",
             f"Token/时间: {_format_large_number(tokens_per_hour)}/小时" if online_hours > 0 else "Token/时间: N/A",
             "",
         ]
@@ -933,24 +930,20 @@ class StatisticOutputTask(AsyncTask):
                         <div class=\"kpi-value\">{(stat_data[TOTAL_COST] / stat_data[TOTAL_MSG_CNT] * 100 if stat_data[TOTAL_MSG_CNT] > 0 else 0.0):.4f} ¥/100条</div>
                     </div>
                     <div class=\"kpi-card\">
-                        <div class=\"kpi-title\">花费/时间</div>
-                        <div class=\"kpi-value\">{(stat_data[TOTAL_COST] / (stat_data[ONLINE_TIME] / 3600.0) if stat_data[ONLINE_TIME] > 0 else 0.0):.2f} ¥/小时</div>
-                    </div>
-                    <div class=\"kpi-card\">
-                        <div class=\"kpi-title\">Token/消息数量</div>
-                        <div class=\"kpi-value\">{_format_large_number(sum(stat_data[TOTAL_TOK_BY_MODEL].values()) / stat_data[TOTAL_MSG_CNT] * 100 if stat_data[TOTAL_MSG_CNT] > 0 and stat_data[TOTAL_TOK_BY_MODEL] else 0.0, html=True)}/100条</div>
-                    </div>
-                    <div class=\"kpi-card\">
-                        <div class=\"kpi-title\">Token/回复数量</div>
-                        <div class=\"kpi-value\">{_format_large_number(sum(stat_data[TOTAL_TOK_BY_MODEL].values()) / stat_data.get(TOTAL_REPLY_CNT, 0) * 100 if stat_data.get(TOTAL_REPLY_CNT, 0) > 0 and stat_data[TOTAL_TOK_BY_MODEL] else 0.0, html=True)}/100条</div>
-                    </div>
-                    <div class=\"kpi-card\">
-                        <div class=\"kpi-title\">Token/时间</div>
-                        <div class=\"kpi-value\">{_format_large_number(sum(stat_data[TOTAL_TOK_BY_MODEL].values()) / (stat_data[ONLINE_TIME] / 3600.0) if stat_data[ONLINE_TIME] > 0 and stat_data[TOTAL_TOK_BY_MODEL] else 0.0, html=True)}/小时</div>
+                        <div class=\"kpi-title\">花费/消息数量(排除回复)</div>
+                        <div class=\"kpi-value\">{(stat_data[TOTAL_COST] / (stat_data[TOTAL_MSG_CNT] - stat_data.get(TOTAL_REPLY_CNT, 0)) * 100 if (stat_data[TOTAL_MSG_CNT] - stat_data.get(TOTAL_REPLY_CNT, 0)) > 0 else 0.0):.4f} ¥/100条</div>
                     </div>
                     <div class=\"kpi-card\">
                         <div class=\"kpi-title\">花费/回复数量</div>
                         <div class=\"kpi-value\">{(stat_data[TOTAL_COST] / stat_data.get(TOTAL_REPLY_CNT, 0) * 100 if stat_data.get(TOTAL_REPLY_CNT, 0) > 0 else 0.0):.4f} ¥/100条</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">花费/时间</div>
+                        <div class=\"kpi-value\">{(stat_data[TOTAL_COST] / (stat_data[ONLINE_TIME] / 3600.0) if stat_data[ONLINE_TIME] > 0 else 0.0):.2f} ¥/小时</div>
+                    </div>
+                    <div class=\"kpi-card\">
+                        <div class=\"kpi-title\">Token/时间</div>
+                        <div class=\"kpi-value\">{_format_large_number(sum(stat_data[TOTAL_TOK_BY_MODEL].values()) / (stat_data[ONLINE_TIME] / 3600.0) if stat_data[ONLINE_TIME] > 0 and stat_data[TOTAL_TOK_BY_MODEL] else 0.0, html=True)}/小时</div>
                     </div>
                 </div>
                 
@@ -1805,10 +1798,8 @@ class StatisticOutputTask(AsyncTask):
         # 初始化数据结构
         cost_per_100_messages = [0.0] * len(time_points)  # 花费/消息数量（每100条）
         cost_per_hour = [0.0] * len(time_points)  # 花费/时间（每小时）
-        tokens_per_100_messages = [0.0] * len(time_points)  # Token/消息数量（每100条）
         tokens_per_hour = [0.0] * len(time_points)  # Token/时间（每小时）
         cost_per_100_replies = [0.0] * len(time_points)  # 花费/回复数量（每100条）
-        tokens_per_100_replies = [0.0] * len(time_points)  # Token/回复数量（每100条）
         
         # 每个时间点的累计数据
         total_costs = [0.0] * len(time_points)
@@ -1882,10 +1873,6 @@ class StatisticOutputTask(AsyncTask):
             if total_online_hours[idx] > 0:
                 cost_per_hour[idx] = (total_costs[idx] / total_online_hours[idx])
             
-            # Token/消息数量（每100条）
-            if total_messages[idx] > 0:
-                tokens_per_100_messages[idx] = (total_tokens[idx] / total_messages[idx] * 100)
-            
             # Token/时间（每小时）
             if total_online_hours[idx] > 0:
                 tokens_per_hour[idx] = (total_tokens[idx] / total_online_hours[idx])
@@ -1893,10 +1880,6 @@ class StatisticOutputTask(AsyncTask):
             # 花费/回复数量（每100条）
             if total_replies[idx] > 0:
                 cost_per_100_replies[idx] = (total_costs[idx] / total_replies[idx] * 100)
-            
-            # Token/回复数量（每100条）
-            if total_replies[idx] > 0:
-                tokens_per_100_replies[idx] = (total_tokens[idx] / total_replies[idx] * 100)
         
         # 生成时间标签
         if interval_hours == 1:
@@ -1908,10 +1891,8 @@ class StatisticOutputTask(AsyncTask):
             "time_labels": time_labels,
             "cost_per_100_messages": cost_per_100_messages,
             "cost_per_hour": cost_per_hour,
-            "tokens_per_100_messages": tokens_per_100_messages,
             "tokens_per_hour": tokens_per_hour,
             "cost_per_100_replies": cost_per_100_replies,
-            "tokens_per_100_replies": tokens_per_100_replies,
         }
     
     def _generate_metrics_tab(self, metrics_data: dict) -> str:
@@ -1919,10 +1900,8 @@ class StatisticOutputTask(AsyncTask):
         colors = {
             "cost_per_100_messages": "#8b5cf6",
             "cost_per_hour": "#9f8efb",
-            "tokens_per_100_messages": "#b5a6ff",
             "tokens_per_hour": "#c7bbff",
             "cost_per_100_replies": "#d9ceff",
-            "tokens_per_100_replies": "#a78bfa",
         }
         
         return f"""
@@ -1945,16 +1924,10 @@ class StatisticOutputTask(AsyncTask):
                     <canvas id="costPerHourChart" width="800" height="400"></canvas>
                 </div>
                 <div style="margin-bottom: 40px;">
-                    <canvas id="tokensPer100MessagesChart" width="800" height="400"></canvas>
-                </div>
-                <div style="margin-bottom: 40px;">
                     <canvas id="tokensPerHourChart" width="800" height="400"></canvas>
                 </div>
-                <div style="margin-bottom: 40px;">
-                    <canvas id="costPer100RepliesChart" width="800" height="400"></canvas>
-                </div>
                 <div>
-                    <canvas id="tokensPer100RepliesChart" width="800" height="400"></canvas>
+                    <canvas id="costPer100RepliesChart" width="800" height="400"></canvas>
                 </div>
             </div>
             
@@ -2001,13 +1974,6 @@ class StatisticOutputTask(AsyncTask):
                         dataKey: 'cost_per_hour',
                         color: '{colors["cost_per_hour"]}'
                     }},
-                    tokensPer100Messages: {{
-                        id: 'tokensPer100MessagesChart',
-                        title: 'Token/消息数量',
-                        yAxisLabel: 'Token (/100条)',
-                        dataKey: 'tokens_per_100_messages',
-                        color: '{colors["tokens_per_100_messages"]}'
-                    }},
                     tokensPerHour: {{
                         id: 'tokensPerHourChart',
                         title: 'Token/时间',
@@ -2021,13 +1987,6 @@ class StatisticOutputTask(AsyncTask):
                         yAxisLabel: '花费 (¥/100条)',
                         dataKey: 'cost_per_100_replies',
                         color: '{colors["cost_per_100_replies"]}'
-                    }},
-                    tokensPer100Replies: {{
-                        id: 'tokensPer100RepliesChart',
-                        title: 'Token/回复数量',
-                        yAxisLabel: 'Token (/100条)',
-                        dataKey: 'tokens_per_100_replies',
-                        color: '{colors["tokens_per_100_replies"]}'
                     }}
                 }};
                 
@@ -2054,10 +2013,8 @@ class StatisticOutputTask(AsyncTask):
                     // 重新创建图表
                     createMetricsChart('costPer100Messages', data, timeScale);
                     createMetricsChart('costPerHour', data, timeScale);
-                    createMetricsChart('tokensPer100Messages', data, timeScale);
                     createMetricsChart('tokensPerHour', data, timeScale);
                     createMetricsChart('costPer100Replies', data, timeScale);
-                    createMetricsChart('tokensPer100Replies', data, timeScale);
                 }}
                 
                 function createMetricsChart(chartType, data, timeScale) {{
