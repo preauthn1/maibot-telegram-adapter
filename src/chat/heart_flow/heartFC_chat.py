@@ -111,6 +111,9 @@ class HeartFChatting:
         self.question_probability_multiplier = 1
         self.questioned = False
         
+        # 跟踪连续 no_reply 次数，用于动态调整阈值
+        self.consecutive_no_reply_count = 0
+        
         # 聊天内容概括器
         self.chat_history_summarizer = ChatHistorySummarizer(chat_id=self.stream_id)
 
@@ -192,43 +195,21 @@ class HeartFChatting:
             filter_command=True,
         )
 
-        question_probability = 0
-        if time.time() - self.last_active_time > 7200:
-            question_probability = 0.0003
-        elif time.time() - self.last_active_time > 3600:
-            question_probability = 0.0001
+
+
+
+        # 根据连续 no_reply 次数动态调整阈值
+        # 3次 no_reply 时，阈值调高到 1.5（50%概率为1，50%概率为2）
+        # 5次 no_reply 时，提高到 2（大于等于两条消息的阈值）
+        if self.consecutive_no_reply_count >= 5:
+            threshold = 2
+        elif self.consecutive_no_reply_count >= 3:
+            # 1.5 的含义：50%概率为1，50%概率为2
+            threshold = 2 if random.random() < 0.5 else 1
         else:
-            question_probability = 0.00003
-
-        question_probability = question_probability * global_config.chat.get_auto_chat_value(self.stream_id) * self.question_probability_multiplier
+            threshold = 1
         
-        #暂时禁用
-        
-        # print(f"{self.log_prefix}  questioned: {self.questioned},len: {len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id))}")
-        # if question_probability > 0 and not self.questioned and len(global_conflict_tracker.get_questions_by_chat_id(self.stream_id)) == 0: #长久没有回复，可以试试主动发言，提问概率随着时间增加
-        #     # logger.info(f"{self.log_prefix} 长久没有回复，可以试试主动发言，概率: {question_probability}")
-        #     if random.random() < question_probability: # 30%概率主动发言
-        #         try:
-        #             self.questioned = True
-        #             self.last_active_time = time.time()
-        #             # print(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
-        #             logger.info(f"{self.log_prefix} 长久没有回复，可以试试主动发言，开始生成问题")
-        #             cycle_timers, thinking_id = self.start_cycle()
-        #             question_maker = QuestionMaker(self.stream_id)
-        #             question, context,conflict_context = await question_maker.make_question()
-        #             if question:
-        #                 logger.info(f"{self.log_prefix} 问题: {question}")
-        #                 await global_conflict_tracker.track_conflict(question, conflict_context, True, self.stream_id)
-        #                 await self._lift_question_reply(question,context,thinking_id)
-        #             else:
-        #                 logger.info(f"{self.log_prefix} 无问题")
-        #             # self.end_cycle(cycle_timers, thinking_id)
-        #         except Exception as e:
-        #             logger.error(f"{self.log_prefix} 主动提问失败: {e}")
-        #             print(traceback.format_exc())
-
-
-        if len(recent_messages_list) >= 1:
+        if len(recent_messages_list) >= threshold:
             # for message in recent_messages_list:
                 # print(message.processed_plain_text)
             # !处理no_reply_until_call逻辑
@@ -332,14 +313,15 @@ class HeartFChatting:
         available_actions: Dict[str, ActionInfo],
         cycle_timers: Dict[str, float],
     ) -> List[ActionPlannerInfo]:
-        """执行planner，但不包含reply动作（用于并行执行场景）"""
+        """执行planner，但不包含reply动作（用于并行执行场景，提及时使用简化版提示词）"""
         try:
             with Timer("规划器", cycle_timers):
                 action_to_use_info = await self.action_planner.plan(
                     loop_start_time=self.last_read_time,
                     available_actions=available_actions,
+                    is_mentioned=True,  # 标记为提及时，使用简化版提示词
                 )
-            # 过滤掉reply动作
+            # 过滤掉reply动作（虽然提及时不应该有reply，但为了安全还是过滤一下）
             return [action for action in action_to_use_info if action.action_type != "reply"]
         except Exception as e:
             logger.error(f"{self.log_prefix} Planner执行失败: {e}")
@@ -356,6 +338,8 @@ class HeartFChatting:
         """当被提及时，独立生成回复的任务"""
         try:
             self.questioned = False
+            # 重置连续 no_reply 计数
+            self.consecutive_no_reply_count = 0
             reason = "有人提到了你，进行回复"
             
             await database_api.store_action_info(
@@ -675,76 +659,6 @@ class HeartFChatting:
             traceback.print_exc()
             return False, ""
 
-    async def _lift_question_reply(self, question: str, question_context: str, thinking_id: str):
-        reason = f"在聊天中：\n{question_context}\n你对问题\"{question}\"感到好奇，想要和群友讨论"
-        new_msg = get_raw_msg_before_timestamp_with_chat(
-            chat_id=self.stream_id,
-            timestamp=time.time(),
-            limit=1,
-        )  
-
-        reply_action_info = ActionPlannerInfo(
-            action_type="reply", 
-            reasoning= "",
-            action_data={},
-            action_message=new_msg[0],
-            available_actions=None,
-            loop_start_time=time.time(),
-            action_reasoning=reason)
-        self.action_planner.add_plan_log(reasoning=f"你对问题\"{question}\"感到好奇，想要和群友讨论", actions=[reply_action_info])
-        
-        success, llm_response = await generator_api.rewrite_reply(
-            chat_stream=self.chat_stream,
-            reply_data={
-                "raw_reply": f"我对这个问题感到好奇：{question}",
-                "reason": reason,
-            },
-        )
-
-        if not success or not llm_response or not llm_response.reply_set:
-            logger.info("主动提问发言失败")
-            self.action_planner.add_plan_excute_log(result="主动回复生成失败")
-            return {"action_type": "reply", "success": False, "result": "主动回复生成失败", "loop_info": None}
-
-        if success:
-            for reply_seg in llm_response.reply_set.reply_data:
-                send_data = reply_seg.content
-                await send_api.text_to_stream(
-                    text=send_data,
-                    stream_id=self.stream_id,
-                )
-
-        await database_api.store_action_info(
-            chat_stream=self.chat_stream,
-            action_build_into_prompt=False,
-            action_prompt_display=reason,
-            action_done=True,
-            thinking_id=thinking_id,
-            action_data={"reply_text": llm_response.reply_set.reply_data[0].content},
-            action_name="reply",
-        )
-
-        # 构建循环信息
-        loop_info: Dict[str, Any] = {
-            "loop_plan_info": {
-                "action_result": [reply_action_info],
-            },
-            "loop_action_info": {
-                "action_taken": True,
-                "reply_text": llm_response.reply_set.reply_data[0].content,
-                "command": "",
-                "taken_time": time.time(),
-            },
-        }
-        self.last_active_time = time.time()
-        self.action_planner.add_plan_excute_log(result=f"你提问：{question}")
-
-        return {
-            "action_type": "reply",
-            "success": True,
-            "result": f"你提问：{question}",
-            "loop_info": loop_info,
-        }
 
 
     async def _send_response(
@@ -808,6 +722,9 @@ class HeartFChatting:
                     reason = action_planner_info.reasoning or "选择不回复"
                     # logger.info(f"{self.log_prefix} 选择不回复，原因: {reason}")
 
+                    # 增加连续 no_reply 计数
+                    self.consecutive_no_reply_count += 1
+
                     await database_api.store_action_info(
                         chat_stream=self.chat_stream,
                         action_build_into_prompt=False,
@@ -827,6 +744,8 @@ class HeartFChatting:
                     logger.info(f"{self.log_prefix} 保持沉默，直到有人直接叫的名字")
                     reason = action_planner_info.reasoning or "选择不回复"
 
+                    # 增加连续 no_reply 计数
+                    self.consecutive_no_reply_count += 1
                     self.no_reply_until_call = True
                     await database_api.store_action_info(
                         chat_stream=self.chat_stream,
@@ -844,6 +763,8 @@ class HeartFChatting:
                     # 直接当场执行reply逻辑
                     self.questioned = False
                     # 刷新主动发言状态
+                    # 重置连续 no_reply 计数
+                    self.consecutive_no_reply_count = 0
 
                     reason = action_planner_info.reasoning or "选择回复"
                     await database_api.store_action_info(

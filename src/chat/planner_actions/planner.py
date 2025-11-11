@@ -84,6 +84,42 @@ no_reply
     )
 
     Prompt(
+        """{time_block}
+{name_block}
+{chat_context_description}，以下是具体的聊天内容
+**聊天内容**
+{chat_content_block}
+
+**可选的action**
+no_reply
+动作描述：
+没有合适的可以使用的动作，不使用action
+{{"action":"no_reply"}}
+
+{action_options_text}
+
+**你之前的action执行和思考记录**
+{actions_before_now_block}
+
+请选择**可选的**且符合使用条件的action，并说明触发action的消息id(消息id格式:m+数字)
+先输出你的简短的选择思考理由，再输出你选择的action，理由不要分点，精简。
+**动作选择要求**
+请你根据聊天内容,用户的最新消息和以下标准选择合适的动作:
+1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
+2.如果相同的内容已经被执行，请不要重复执行
+{moderation_prompt}
+
+请选择所有符合使用要求的action，动作用json格式输出，用```json包裹，如果输出多个json，每个json都要单独一行放在同一个```json代码块内，你可以重复使用同一个动作或不同动作:
+**示例**
+// 理由文本（简短）
+```json
+{{"action":"动作名", "target_message_id":"m123", "reason":"原因"}}
+{{"action":"动作名", "target_message_id":"m456", "reason":"原因"}}
+```""",
+        "planner_prompt_mentioned",
+    )
+
+    Prompt(
         """
 {action_name}
 动作描述：{action_description}
@@ -205,6 +241,7 @@ class ActionPlanner:
         self,
         available_actions: Dict[str, ActionInfo],
         loop_start_time: float = 0.0,
+        is_mentioned: bool = False,
     ) -> List[ActionPlannerInfo]:
         # sourcery skip: use-named-expression
         """
@@ -244,6 +281,11 @@ class ActionPlanner:
 
         logger.debug(f"{self.log_prefix}过滤后有{len(filtered_actions)}个可用动作")
 
+        # 如果是提及时且没有可用动作，直接返回空列表，不调用LLM以节省token
+        if is_mentioned and not filtered_actions:
+            logger.info(f"{self.log_prefix}提及时没有可用动作，跳过plan调用")
+            return []
+
         # 构建包含所有动作的提示词
         prompt, message_id_list = await self.build_planner_prompt(
             is_group_chat=is_group_chat,
@@ -252,6 +294,7 @@ class ActionPlanner:
             chat_content_block=chat_content_block,
             message_id_list=message_id_list,
             interest=global_config.personality.interest,
+            is_mentioned=is_mentioned,
         )
 
         # 调用LLM获取决策
@@ -355,6 +398,7 @@ class ActionPlanner:
         message_id_list: List[Tuple[str, "DatabaseMessages"]],
         chat_content_block: str = "",
         interest: str = "",
+        is_mentioned: bool = False,
     ) -> tuple[str, List[Tuple[str, "DatabaseMessages"]]]:
         """构建 Planner LLM 的提示词 (获取模板并填充数据)"""
         try:
@@ -367,17 +411,6 @@ class ActionPlanner:
             # 构建动作选项块
             action_options_block = await self._build_action_options_block(current_available_actions)
 
-            # 检查是否有连续3次以上no_reply，如果有则添加no_reply_until_call选项
-            no_reply_until_call_block = ""
-            if self._has_consecutive_no_reply(min_count=3):
-                no_reply_until_call_block = """no_reply_until_call
-动作描述：
-保持沉默，直到有人直接叫你的名字
-当前话题不感兴趣时使用，或有人不喜欢你的发言时使用
-当你频繁选择no_reply时使用，表示话题暂时与你无关
-{{"action":"no_reply_until_call"}}
-"""
-
             # 其他信息
             moderation_prompt_block = "请不要输出违法违规内容，不要输出色情，暴力，政治相关内容，如有敏感内容，请规避。"
             time_block = f"当前时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
@@ -387,20 +420,47 @@ class ActionPlanner:
             )
             name_block = f"你的名字是{bot_name}{bot_nickname}，请注意哪些是你自己的发言。"
 
-            # 获取主规划器模板并填充
-            planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")
-            prompt = planner_prompt_template.format(
-                time_block=time_block,
-                chat_context_description=chat_context_description,
-                chat_content_block=chat_content_block,
-                actions_before_now_block=actions_before_now_block,
-                action_options_text=action_options_block,
-                no_reply_until_call_block=no_reply_until_call_block,
-                moderation_prompt=moderation_prompt_block,
-                name_block=name_block,
-                interest=interest,
-                plan_style=global_config.personality.plan_style,
-            )
+            # 根据是否是提及时选择不同的模板
+            if is_mentioned:
+                # 提及时使用简化版提示词，不需要reply、no_reply、no_reply_until_call
+                planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt_mentioned")
+                prompt = planner_prompt_template.format(
+                    time_block=time_block,
+                    chat_context_description=chat_context_description,
+                    chat_content_block=chat_content_block,
+                    actions_before_now_block=actions_before_now_block,
+                    action_options_text=action_options_block,
+                    moderation_prompt=moderation_prompt_block,
+                    name_block=name_block,
+                    interest=interest,
+                    plan_style=global_config.personality.plan_style,
+                )
+            else:
+                # 正常流程使用完整版提示词
+                # 检查是否有连续3次以上no_reply，如果有则添加no_reply_until_call选项
+                no_reply_until_call_block = ""
+                if self._has_consecutive_no_reply(min_count=3):
+                    no_reply_until_call_block = """no_reply_until_call
+动作描述：
+保持沉默，直到有人直接叫你的名字
+当前话题不感兴趣时使用，或有人不喜欢你的发言时使用
+当你频繁选择no_reply时使用，表示话题暂时与你无关
+{{"action":"no_reply_until_call"}}
+"""
+
+                planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")
+                prompt = planner_prompt_template.format(
+                    time_block=time_block,
+                    chat_context_description=chat_context_description,
+                    chat_content_block=chat_content_block,
+                    actions_before_now_block=actions_before_now_block,
+                    action_options_text=action_options_block,
+                    no_reply_until_call_block=no_reply_until_call_block,
+                    moderation_prompt=moderation_prompt_block,
+                    name_block=name_block,
+                    interest=interest,
+                    plan_style=global_config.personality.plan_style,
+                )
 
             return prompt, message_id_list
         except Exception as e:
