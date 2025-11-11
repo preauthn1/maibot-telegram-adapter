@@ -317,35 +317,6 @@ class Expression(BaseModel):
     class Meta:
         table_name = "expression"
 
-class MemoryChest(BaseModel):
-    """
-    用于存储记忆仓库的模型
-    """
-
-    title = TextField()  # 标题
-    content = TextField()  # 内容
-    chat_id = TextField(null=True)  # 聊天ID
-    locked = BooleanField(default=False)  # 是否锁定
-
-    class Meta:
-        table_name = "memory_chest"
-
-class MemoryConflict(BaseModel):
-    """
-    用于存储记忆整合过程中冲突内容的模型
-    """
-
-    conflict_content = TextField()  # 冲突内容
-    answer = TextField(null=True)  # 回答内容
-    create_time = FloatField()  # 创建时间
-    update_time = FloatField()  # 更新时间
-    context = TextField(null=True)  # 上下文
-    chat_id = TextField(null=True)  # 聊天ID
-    raise_time = FloatField(null=True)  # 触发次数
-
-    class Meta:
-        table_name = "memory_conflicts"
-        
 class Jargon(BaseModel):
     """
     用于存储俚语的模型
@@ -378,6 +349,7 @@ class ChatHistory(BaseModel):
     keywords = TextField()  # 关键词：这段对话的关键词，JSON格式存储
     summary = TextField()  # 概括：对这段话的平文本概括
     count = IntegerField(default=0)  # 被检索次数
+    forget_times = IntegerField(default=0)  # 被遗忘检查的次数
     
     class Meta:
         table_name = "chat_history"
@@ -410,8 +382,6 @@ MODELS = [
     PersonInfo,
     Expression,
     ActionRecords,
-    MemoryChest,
-    MemoryConflict,
     Jargon,
     ChatHistory,
     ThinkingBack,

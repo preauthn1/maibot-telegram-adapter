@@ -67,7 +67,8 @@ def init_memory_retrieval_prompt():
     # 第二步：ReAct Agent prompt（工具描述会在运行时动态生成）
     Prompt(
         """
-你的名字是{bot_name}，你正在参与聊天，你需要搜集信息来回答问题，帮助你参与聊天。
+你的名字是{bot_name}。现在是{time_now}。
+你正在参与聊天，你需要搜集信息来回答问题，帮助你参与聊天。
 你需要通过思考(Think)、行动(Action)、观察(Observation)的循环来回答问题。
 
 当前问题：{question}
@@ -160,7 +161,7 @@ async def _react_agent_solve_question(
     chat_id: str,
     max_iterations: int = 5,
     timeout: float = 30.0
-) -> Tuple[bool, str, List[Dict[str, Any]]]:
+) -> Tuple[bool, str, List[Dict[str, Any]], bool]:
     """使用ReAct架构的Agent来解决问题
     
     Args:
@@ -170,16 +171,18 @@ async def _react_agent_solve_question(
         timeout: 超时时间（秒）
         
     Returns:
-        Tuple[bool, str, List[Dict[str, Any]]]: (是否找到答案, 答案内容, 思考步骤列表)
+        Tuple[bool, str, List[Dict[str, Any]], bool]: (是否找到答案, 答案内容, 思考步骤列表, 是否超时)
     """
     start_time = time.time()
     collected_info = ""
     thinking_steps = []
+    is_timeout = False
     
     for iteration in range(max_iterations):
         # 检查超时
         if time.time() - start_time > timeout:
             logger.warning(f"ReAct Agent超时，已迭代{iteration}次")
+            is_timeout = True
             break
         
         logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代，问题: {question}")
@@ -191,10 +194,14 @@ async def _react_agent_solve_question(
         # 获取bot_name
         bot_name = global_config.bot.nickname
         
+        # 获取当前时间
+        time_now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        
         # 构建prompt（动态生成工具描述）
         prompt = await global_prompt_manager.format_prompt(
             "memory_retrieval_react_prompt",
             bot_name=bot_name,
+            time_now=time_now,
             question=question,
             collected_info=collected_info if collected_info else "暂无信息",
             tools_description=tool_registry.get_tools_description(),
@@ -247,14 +254,14 @@ async def _react_agent_solve_question(
                 step["observations"] = ["找到答案"]
                 thinking_steps.append(step)
                 logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 找到最终答案: {answer}")
-                return True, answer, thinking_steps
+                return True, answer, thinking_steps, False
             elif action_type == "no_answer":
                 # Agent确认无法找到答案
                 answer = thought  # 使用thought说明无法找到答案的原因
                 step["observations"] = ["确认无法找到答案"]
                 thinking_steps.append(step)
                 logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 确认无法找到答案: {answer}")
-                return False, answer, thinking_steps
+                return False, answer, thinking_steps, False
         
         # 并行执行所有工具
         tool_registry = get_tool_registry()
@@ -316,8 +323,11 @@ async def _react_agent_solve_question(
     # 只有Agent明确返回final_answer时，才认为找到了答案
     if collected_info:
         logger.warning(f"ReAct Agent达到最大迭代次数或超时，但未明确返回final_answer。已收集信息: {collected_info[:100]}...")
-    logger.warning("ReAct Agent达到最大迭代次数或超时，直接视为no_answer")
-    return False, "未找到相关信息", thinking_steps
+    if is_timeout:
+        logger.warning("ReAct Agent超时，直接视为no_answer")
+    else:
+        logger.warning("ReAct Agent达到最大迭代次数，直接视为no_answer")
+    return False, "未找到相关信息", thinking_steps, is_timeout
 
 
 def _get_recent_query_history(chat_id: str, time_window_seconds: float = 300.0) -> str:
@@ -513,28 +523,10 @@ def _store_thinking_back(
         logger.error(f"存储思考过程失败: {e}")
 
 
-def _get_max_iterations_by_question_count(question_count: int) -> int:
-    """根据问题数量获取最大迭代次数
-    
-    Args:
-        question_count: 问题数量
-        
-    Returns:
-        int: 最大迭代次数
-    """
-    if question_count == 1:
-        return 6
-    elif question_count == 2:
-        return 3
-    else:  # 3个或以上
-        return 2
-
-
 async def _process_single_question(
     question: str,
     chat_id: str,
-    context: str,
-    max_iterations: int
+    context: str
 ) -> Optional[str]:
     """处理单个问题的查询（包含缓存检查逻辑）
     
@@ -542,7 +534,6 @@ async def _process_single_question(
         question: 要查询的问题
         chat_id: 聊天ID
         context: 上下文信息
-        max_iterations: 最大迭代次数
         
     Returns:
         Optional[str]: 如果找到答案，返回格式化的结果字符串，否则返回None
@@ -584,22 +575,25 @@ async def _process_single_question(
         else:
             logger.info(f"未找到缓存答案，使用ReAct Agent查询，问题: {question[:50]}...")
         
-        found_answer, answer, thinking_steps = await _react_agent_solve_question(
+        found_answer, answer, thinking_steps, is_timeout = await _react_agent_solve_question(
             question=question,
             chat_id=chat_id,
-            max_iterations=max_iterations,
-            timeout=30.0
+            max_iterations=5,
+            timeout=120.0
         )
         
-        # 存储到数据库
-        _store_thinking_back(
-            chat_id=chat_id,
-            question=question,
-            context=context,
-            found_answer=found_answer,
-            answer=answer,
-            thinking_steps=thinking_steps
-        )
+        # 存储到数据库（超时时不存储）
+        if not is_timeout:
+            _store_thinking_back(
+                chat_id=chat_id,
+                question=question,
+                context=context,
+                found_answer=found_answer,
+                answer=answer,
+                thinking_steps=thinking_steps
+            )
+        else:
+            logger.info(f"ReAct Agent超时，不存储到数据库，问题: {question[:50]}...")
         
         if found_answer and answer:
             return f"问题：{question}\n答案：{answer}"
@@ -659,8 +653,6 @@ async def build_memory_retrieval_prompt(
         
         logger.info(f"记忆检索问题生成提示词: {question_prompt}")
         logger.info(f"记忆检索问题生成响应: {response}")
-        logger.info(f"记忆检索问题生成推理: {reasoning_content}")
-        logger.info(f"记忆检索问题生成模型: {model_name}")
         
         if not success:
             logger.error(f"LLM生成问题失败: {response}")
@@ -679,23 +671,21 @@ async def build_memory_retrieval_prompt(
                 retrieved_memory = "\n\n".join(cached_memories)
                 end_time = time.time()
                 logger.info(f"无当次查询，返回缓存记忆，耗时: {(end_time - start_time):.3f}秒，包含 {len(cached_memories)} 条缓存记忆")
-                return f"你回忆起了以下信息：\n{retrieved_memory}\n请在回复时参考这些回忆的信息。\n"
+                return f"你回忆起了以下信息：\n{retrieved_memory}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
             else:
                 return ""
         
         logger.info(f"解析到 {len(questions)} 个问题: {questions}")
         
-        # 第二步：根据问题数量确定最大迭代次数
-        max_iterations = _get_max_iterations_by_question_count(len(questions))
-        logger.info(f"问题数量: {len(questions)}，设置最大迭代次数: {max_iterations}")
+        # 第二步：并行处理所有问题（固定使用5次迭代/120秒超时）
+        logger.info(f"问题数量: {len(questions)}，固定设置最大迭代次数: 5，超时时间: 120秒")
         
         # 并行处理所有问题
         question_tasks = [
             _process_single_question(
                 question=question,
                 chat_id=chat_id,
-                context=message,
-                max_iterations=max_iterations
+                context=message
             )
             for question in questions
         ]
@@ -730,7 +720,7 @@ async def build_memory_retrieval_prompt(
         if all_results:
             retrieved_memory = "\n\n".join(all_results)
             logger.info(f"记忆检索成功，耗时: {(end_time - start_time):.3f}秒，包含 {len(all_results)} 条记忆（含缓存）")
-            return f"你回忆起了以下信息：\n{retrieved_memory}\n请在回复时参考这些回忆的信息。\n"
+            return f"你回忆起了以下信息：\n{retrieved_memory}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
         else:
             logger.debug("所有问题均未找到答案，且无缓存记忆")
             return ""

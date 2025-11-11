@@ -7,7 +7,6 @@ from src.chat.utils.chat_message_builder import (
 )
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
-from src.memory_system.questions import global_conflict_tracker
 from src.memory_system.memory_utils import parse_md_json
 
 logger = get_logger("curious")
@@ -137,7 +136,7 @@ class CuriousDetector:
     
     async def make_question_from_detection(self, question: str, context: str = "") -> bool:
         """
-        将检测到的问题记录到冲突追踪器中
+        将检测到的问题记录（已移除冲突追踪器功能）
         
         Args:
             question: 检测到的问题
@@ -150,14 +149,8 @@ class CuriousDetector:
             if not question or not question.strip():
                 return False
             
-            # 记录问题到冲突追踪器
-            await global_conflict_tracker.record_conflict(
-                conflict_content=question.strip(),
-                context=context,
-                chat_id=self.chat_id
-            )
-            
-            logger.info(f"已记录问题到冲突追踪器: {question}")
+            # 冲突追踪器功能已移除
+            logger.info(f"检测到问题（冲突追踪器已移除）: {question}")
             return True
             
         except Exception as e:

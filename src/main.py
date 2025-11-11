@@ -70,6 +70,10 @@ class MainSystem:
 
         # 添加遥测心跳任务
         await async_task_manager.add_task(TelemetryHeartBeatTask())
+        
+        # 添加记忆遗忘任务
+        from src.chat.utils.memory_forget_task import MemoryForgetTask
+        await async_task_manager.add_task(MemoryForgetTask())
 
         # 启动API服务器
         # start_api_server()

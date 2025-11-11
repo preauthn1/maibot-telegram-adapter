@@ -63,14 +63,14 @@ class FrequencyControl:
         )
         
         
-        if time.time() - self.last_frequency_adjust_time < 120 or len(msg_list) <= 5:
+        if time.time() - self.last_frequency_adjust_time < 160 or len(msg_list) <= 20:
             return
         else:
             new_msg_list = get_raw_msg_by_timestamp_with_chat(
                 chat_id=self.chat_id,
                 timestamp_start=self.last_frequency_adjust_time,
                 timestamp_end=time.time(),
-                limit=5,
+                limit=20,
                 limit_mode="latest",
             )
             
