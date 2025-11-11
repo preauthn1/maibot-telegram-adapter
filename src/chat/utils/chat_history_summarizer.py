@@ -334,20 +334,60 @@ class ChatHistorySummarizer:
             )
             
             # 解析JSON响应
-            # 尝试提取JSON部分
             import re
-            json_match = re.search(r'\{[^{}]*"theme"[^{}]*\}', response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
-            else:
-                json_str = response.strip()
             
             # 移除可能的markdown代码块标记
-            json_str = re.sub(r'```json\s*', '', json_str)
-            json_str = re.sub(r'```\s*', '', json_str)
+            json_str = response.strip()
+            json_str = re.sub(r'^```json\s*', '', json_str, flags=re.MULTILINE)
+            json_str = re.sub(r'^```\s*', '', json_str, flags=re.MULTILINE)
             json_str = json_str.strip()
             
-            result = json.loads(json_str)
+            # 尝试找到JSON对象的开始和结束位置
+            # 查找第一个 { 和最后一个匹配的 }
+            start_idx = json_str.find('{')
+            if start_idx == -1:
+                raise ValueError("未找到JSON对象开始标记")
+            
+            # 从后往前查找最后一个 }
+            end_idx = json_str.rfind('}')
+            if end_idx == -1 or end_idx <= start_idx:
+                raise ValueError("未找到JSON对象结束标记")
+            
+            # 提取JSON字符串
+            json_str = json_str[start_idx:end_idx + 1]
+            
+            # 尝试解析JSON
+            try:
+                result = json.loads(json_str)
+            except json.JSONDecodeError:
+                # 如果解析失败，尝试修复字符串值中的中文引号
+                # 简单方法：将字符串值中的中文引号替换为转义的英文引号
+                # 使用状态机方法：遍历字符串，在字符串值内部替换中文引号
+                fixed_chars = []
+                in_string = False
+                escape_next = False
+                i = 0
+                while i < len(json_str):
+                    char = json_str[i]
+                    if escape_next:
+                        fixed_chars.append(char)
+                        escape_next = False
+                    elif char == '\\':
+                        fixed_chars.append(char)
+                        escape_next = True
+                    elif char == '"' and not escape_next:
+                        fixed_chars.append(char)
+                        in_string = not in_string
+                    elif in_string and (char == '"' or char == '"'):
+                        # 在字符串值内部，将中文引号替换为转义的英文引号
+                        fixed_chars.append('\\"')
+                    else:
+                        fixed_chars.append(char)
+                    i += 1
+                
+                json_str = ''.join(fixed_chars)
+                # 再次尝试解析
+                result = json.loads(json_str)
             
             theme = result.get("theme", "未命名对话")
             keywords = result.get("keywords", [])
