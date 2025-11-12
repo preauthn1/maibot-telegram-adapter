@@ -94,8 +94,8 @@ def init_memory_retrieval_prompt():
 重要说明：
 - 你可以在一次迭代中执行多个查询，将多个action放在actions数组中
 - 如果只需要执行一个查询，actions数组中只包含一个action即可
-- 如果已经收集到足够的信息可以回答问题，请设置actions为包含一个action_type为"final_answer"的数组，并在thought中说明答案。除非明确找到答案，否则不要设置为final_answer。
-- 如果经过多次查询后，确认无法找到相关信息或答案，请设置actions为包含一个action_type为"no_answer"的数组，并在thought中说明原因。
+- 如果已经收集到足够的信息可以回答问题，请设置actions为包含一个action_type为"final_answer"的数组，并在action_params中提供答案（例如：{{"answer": "你的答案内容"}}）。除非明确找到答案，否则不要设置为final_answer。
+- 如果经过多次查询后，确认无法找到相关信息或答案，请设置actions为包含一个action_type为"no_answer"的数组，并在action_params中说明原因（例如：{{"reason": "无法找到的原因"}}）。
 
 请只输出JSON，不要输出其他内容：
 """,
@@ -248,16 +248,19 @@ async def _react_agent_solve_question(
         # 检查是否有final_answer或no_answer
         for action in actions:
             action_type = action.get("action_type", "")
+            action_params = action.get("action_params", {})
             if action_type == "final_answer":
                 # Agent认为已经找到答案
-                answer = thought  # 使用thought作为答案
+                # 从action_params中获取答案，如果没有则使用thought作为后备
+                answer = action_params.get("answer", thought) if isinstance(action_params, dict) else thought
                 step["observations"] = ["找到答案"]
                 thinking_steps.append(step)
                 logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 找到最终答案: {answer}")
                 return True, answer, thinking_steps, False
             elif action_type == "no_answer":
                 # Agent确认无法找到答案
-                answer = thought  # 使用thought说明无法找到答案的原因
+                # 从action_params中获取原因，如果没有则使用thought作为后备
+                answer = action_params.get("reason", thought) if isinstance(action_params, dict) else thought
                 step["observations"] = ["确认无法找到答案"]
                 thinking_steps.append(step)
                 logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 确认无法找到答案: {answer}")

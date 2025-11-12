@@ -56,18 +56,15 @@ def _init_inference_prompts() -> None:
     prompt1_str = """
 **词条内容**
 {content}
-
-**词条出现的上下文（raw_content）其中的SELF是你自己的发言**
-{raw_content_list}
+ 
 
 请根据以上词条内容和上下文，推断这个词条的含义。
-- 如果这是一个黑话、俚语或网络用语，请推断其含义和翻译
+- 如果这是一个黑话、俚语或网络用语，请推断其含义
 - 如果含义明确（常规词汇），也请说明
 
 以 JSON 格式输出：
 {{
-  "meaning": "详细含义说明（包含使用场景、来源、具体解释等）",
-  "translation": "原文（用一个词语写明这个词的实际含义）"
+  "meaning": "详细含义说明（包含使用场景、来源、具体解释等）"
 }}
 """
     Prompt(prompt1_str, "jargon_inference_with_context_prompt")
@@ -78,13 +75,12 @@ def _init_inference_prompts() -> None:
 {content}
 
 请仅根据这个词条本身，推断其含义。
-- 如果这是一个黑话、俚语或网络用语，请推断其含义和翻译
+- 如果这是一个黑话、俚语或网络用语，请推断其含义
 - 如果含义明确（常规词汇），也请说明
 
 以 JSON 格式输出：
 {{
-  "meaning": "详细含义说明（包含使用场景、来源、具体解释等）",
-  "translation": "原文（用一个词语写明这个词的实际含义）"
+  "meaning": "详细含义说明（包含使用场景、来源、具体解释等）"
 }}
 """
     Prompt(prompt2_str, "jargon_inference_content_only_prompt")
@@ -309,11 +305,9 @@ class JargonMiner:
             if is_jargon:
                 # 是黑话，使用推断1的结果（基于上下文，更准确）
                 jargon_obj.meaning = inference1.get("meaning", "")
-                jargon_obj.translation = inference1.get("translation", "")
             else:
                 # 不是黑话，也记录含义（使用推断2的结果，因为含义明确）
                 jargon_obj.meaning = inference2.get("meaning", "")
-                jargon_obj.translation = inference2.get("translation", "")
             
             # 更新最后一次判定的count值，避免重启后重复判定
             jargon_obj.last_inference_count = jargon_obj.count or 0
@@ -327,14 +321,13 @@ class JargonMiner:
             
             # 固定输出推断结果，格式化为可读形式
             if is_jargon:
-                # 是黑话，输出格式：[聊天名]xxx (translation)的含义是 xxxxxxxxxxx
-                translation = jargon_obj.translation or "未知"
+                # 是黑话，输出格式：[聊天名]xxx的含义是 xxxxxxxxxxx
                 meaning = jargon_obj.meaning or "无详细说明"
                 is_global = jargon_obj.is_global
                 if is_global:
-                    logger.info(f"[通用黑话]{content} ({translation})的含义是 {meaning}")
+                    logger.info(f"[通用黑话]{content}的含义是 {meaning}")
                 else:
-                    logger.info(f"[{self.stream_name}]{content} ({translation})的含义是 {meaning}")
+                    logger.info(f"[{self.stream_name}]{content}的含义是 {meaning}")
             else:
                 # 不是黑话，输出格式：[聊天名]xxx 不是黑话
                 logger.info(f"[{self.stream_name}]{content} 不是黑话")
@@ -558,7 +551,6 @@ class JargonMiner:
                             
                             # 合并其他字段：优先使用已有值
                             merged_meaning = None
-                            merged_translation = None
                             merged_is_jargon = None
                             merged_last_inference_count = None
                             merged_is_complete = False
@@ -566,8 +558,6 @@ class JargonMiner:
                             for obj in all_matching:
                                 if obj.meaning and not merged_meaning:
                                     merged_meaning = obj.meaning
-                                if obj.translation and not merged_translation:
-                                    merged_translation = obj.translation
                                 if obj.is_jargon is not None and merged_is_jargon is None:
                                     merged_is_jargon = obj.is_jargon
                                 if obj.last_inference_count is not None and merged_last_inference_count is None:
@@ -588,7 +578,6 @@ class JargonMiner:
                                 is_global=True,
                                 count=total_count,
                                 meaning=merged_meaning,
-                                translation=merged_translation,
                                 is_jargon=merged_is_jargon,
                                 last_inference_count=merged_last_inference_count,
                                 is_complete=merged_is_complete
@@ -664,7 +653,7 @@ def search_jargon(
         fuzzy: 是否模糊搜索，默认True（使用LIKE匹配）
     
     Returns:
-        List[Dict[str, str]]: 包含content, translation, meaning的字典列表
+        List[Dict[str, str]]: 包含content, meaning的字典列表
     """
     if not keyword or not keyword.strip():
         return []
@@ -674,7 +663,6 @@ def search_jargon(
     # 构建查询
     query = Jargon.select(
         Jargon.content,
-        Jargon.translation,
         Jargon.meaning
     )
     
@@ -704,13 +692,9 @@ def search_jargon(
             (Jargon.chat_id == chat_id) | Jargon.is_global
         )
     
-    # 只返回有translation或meaning的记录
+    # 只返回有meaning的记录
     query = query.where(
-        (
-            (Jargon.translation.is_null(False)) & (Jargon.translation != "")
-        ) | (
-            (Jargon.meaning.is_null(False)) & (Jargon.meaning != "")
-        )
+        (Jargon.meaning.is_null(False)) & (Jargon.meaning != "")
     )
     
     # 按count降序排序，优先返回出现频率高的
@@ -724,7 +708,6 @@ def search_jargon(
     for jargon in query:
         results.append({
             "content": jargon.content or "",
-            "translation": jargon.translation or "",
             "meaning": jargon.meaning or ""
         })
     
