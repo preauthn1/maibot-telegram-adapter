@@ -118,8 +118,13 @@ def _convert_tool_options(tool_options: list[ToolOption]) -> list[dict[str, Any]
         :param tool_option_param: 工具参数对象
         :return: 转换后的工具参数字典
         """
+        # JSON Schema要求使用"boolean"而不是"bool"
+        param_type_value = tool_option_param.param_type.value
+        if param_type_value == "bool":
+            param_type_value = "boolean"
+        
         return_dict: dict[str, Any] = {
-            "type": tool_option_param.param_type.value,
+            "type": param_type_value,
             "description": tool_option_param.description,
         }
         if tool_option_param.enum_values:
