@@ -16,7 +16,7 @@ class CuriousDetector:
     """
     好奇心检测器 - 检测聊天记录中的矛盾、冲突或需要提问的内容
     """
-    
+
     def __init__(self, chat_id: str):
         self.chat_id = chat_id
         self.llm_request = LLMRequest(
@@ -27,7 +27,7 @@ class CuriousDetector:
         self.last_detection_time: float = time.time()
         self.min_interval_seconds: float = 60.0
         self.min_messages: int = 20
-    
+
     def should_trigger(self) -> bool:
         if time.time() - self.last_detection_time < self.min_interval_seconds:
             return False
@@ -41,17 +41,17 @@ class CuriousDetector:
     async def detect_questions(self, recent_messages: List) -> Optional[str]:
         """
         检测最近消息中是否有需要提问的内容
-        
+
         Args:
             recent_messages: 最近的消息列表
-            
+
         Returns:
             Optional[str]: 如果检测到需要提问的内容，返回问题文本；否则返回None
         """
         try:
             if not recent_messages or len(recent_messages) < 2:
                 return None
-            
+
             # 构建聊天内容
             chat_content_block, _ = build_readable_messages_with_id(
                 messages=recent_messages,
@@ -60,9 +60,9 @@ class CuriousDetector:
                 truncate=True,
                 show_actions=True,
             )
-            
+
             # 问题跟踪功能已移除，不再检查已有问题
-            
+
             # 构建检测提示词
             prompt = f"""你是一个严谨的聊天内容分析器。请分析以下聊天记录，检测是否存在需要提问的内容。
 
@@ -98,20 +98,20 @@ class CuriousDetector:
                 logger.debug("已发送好奇心检测提示词")
 
             result_text, _ = await self.llm_request.generate_response_async(prompt, temperature=0.3)
-            
+
             logger.info(f"好奇心检测提示词: {prompt}")
             logger.info(f"好奇心检测结果: {result_text}")
-            
+
             if not result_text:
                 return None
-            
+
             result_text = result_text.strip()
-            
+
             # 检查是否输出NO
             if result_text.upper() == "NO":
                 logger.debug("未检测到需要提问的内容")
                 return None
-            
+
             # 尝试解析JSON
             try:
                 questions, reasoning = parse_md_json(result_text)
@@ -119,7 +119,7 @@ class CuriousDetector:
                     question_data = questions[0]
                     question = question_data.get("question", "")
                     reason = question_data.get("reason", "")
-                    
+
                     if question and question.strip():
                         logger.info(f"检测到需要提问的内容: {question}")
                         logger.info(f"提问理由: {reason}")
@@ -127,32 +127,32 @@ class CuriousDetector:
             except Exception as e:
                 logger.warning(f"解析问题JSON失败: {e}")
                 logger.debug(f"原始响应: {result_text}")
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"好奇心检测失败: {e}")
             return None
-    
+
     async def make_question_from_detection(self, question: str, context: str = "") -> bool:
         """
         将检测到的问题记录（已移除冲突追踪器功能）
-        
+
         Args:
             question: 检测到的问题
             context: 问题上下文
-            
+
         Returns:
             bool: 是否成功记录
         """
         try:
             if not question or not question.strip():
                 return False
-            
+
             # 冲突追踪器功能已移除
             logger.info(f"检测到问题（冲突追踪器已移除）: {question}")
             return True
-            
+
         except Exception as e:
             logger.error(f"记录问题失败: {e}")
             return False
@@ -174,11 +174,11 @@ curious_manager = CuriousManager()
 async def check_and_make_question(chat_id: str) -> bool:
     """
     检查聊天记录并生成问题（如果检测到需要提问的内容）
-    
+
     Args:
         chat_id: 聊天ID
         recent_messages: 最近的消息列表
-        
+
     Returns:
         bool: 是否检测到并记录了问题
     """
@@ -199,7 +199,7 @@ async def check_and_make_question(chat_id: str) -> bool:
 
         # 检测是否需要提问
         question = await detector.detect_questions(recent_messages)
-        
+
         if question:
             # 记录问题
             success = await detector.make_question_from_detection(question)
@@ -207,9 +207,9 @@ async def check_and_make_question(chat_id: str) -> bool:
                 logger.info(f"成功检测并记录问题: {question}")
                 detector.last_detection_time = time.time()
                 return True
-        
+
         return False
-        
+
     except Exception as e:
         logger.error(f"检查并生成问题失败: {e}")
         return False

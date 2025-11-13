@@ -120,31 +120,31 @@ def _should_infer_meaning(jargon_obj: Jargon) -> bool:
     # 如果已完成所有推断，不再推断
     if jargon_obj.is_complete:
         return False
-    
+
     count = jargon_obj.count or 0
     last_inference = jargon_obj.last_inference_count or 0
-    
+
     # 阈值列表：3,6, 10, 20, 40, 60, 100
-    thresholds = [3,6, 10, 20, 40, 60, 100]
-    
+    thresholds = [3, 6, 10, 20, 40, 60, 100]
+
     if count < thresholds[0]:
         return False
-    
+
     # 如果count没有超过上次判定值，不需要判定
     if count <= last_inference:
         return False
-    
+
     # 找到第一个大于last_inference的阈值
     next_threshold = None
     for threshold in thresholds:
         if threshold > last_inference:
             next_threshold = threshold
             break
-    
+
     # 如果没有找到下一个阈值，说明已经超过100，不应该再推断
     if next_threshold is None:
         return False
-    
+
     # 检查count是否达到或超过这个阈值
     return count >= next_threshold
 
@@ -155,13 +155,13 @@ class JargonMiner:
         self.last_learning_time: float = time.time()
         # 频率控制，可按需调整
         self.min_messages_for_learning: int = 20
-        self.min_learning_interval: float = 30  
+        self.min_learning_interval: float = 30
 
         self.llm = LLMRequest(
             model_set=model_config.model_task_config.utils,
             request_type="jargon.extract",
         )
-        
+
         # 初始化stream_name作为类属性，避免重复提取
         chat_manager = get_chat_manager()
         stream_name = chat_manager.get_stream_name(self.chat_id)
@@ -186,17 +186,19 @@ class JargonMiner:
         try:
             content = jargon_obj.content
             raw_content_str = jargon_obj.raw_content or ""
-            
+
             # 解析raw_content列表
             raw_content_list = []
             if raw_content_str:
                 try:
-                    raw_content_list = json.loads(raw_content_str) if isinstance(raw_content_str, str) else raw_content_str
+                    raw_content_list = (
+                        json.loads(raw_content_str) if isinstance(raw_content_str, str) else raw_content_str
+                    )
                     if not isinstance(raw_content_list, list):
                         raw_content_list = [raw_content_list] if raw_content_list else []
                 except (json.JSONDecodeError, TypeError):
                     raw_content_list = [raw_content_str] if raw_content_str else []
-            
+
             if not raw_content_list:
                 logger.warning(f"jargon {content} 没有raw_content，跳过推断")
                 return
@@ -208,12 +210,12 @@ class JargonMiner:
                 content=content,
                 raw_content_list=raw_content_text,
             )
-            
+
             response1, _ = await self.llm.generate_response_async(prompt1, temperature=0.3)
             if not response1:
                 logger.warning(f"jargon {content} 推断1失败：无响应")
                 return
-            
+
             # 解析推断1结果
             inference1 = None
             try:
@@ -235,12 +237,12 @@ class JargonMiner:
                 "jargon_inference_content_only_prompt",
                 content=content,
             )
-            
+
             response2, _ = await self.llm.generate_response_async(prompt2, temperature=0.3)
             if not response2:
                 logger.warning(f"jargon {content} 推断2失败：无响应")
                 return
-            
+
             # 解析推断2结果
             inference2 = None
             try:
@@ -256,7 +258,7 @@ class JargonMiner:
             except Exception as e:
                 logger.error(f"jargon {content} 推断2解析失败: {e}")
                 return
-            
+
             if global_config.debug.show_jargon_prompt:
                 logger.info(f"jargon {content} 推断2提示词: {prompt2}")
                 logger.info(f"jargon {content} 推断2结果: {response2}")
@@ -264,22 +266,22 @@ class JargonMiner:
                 logger.info(f"jargon {content} 推断1提示词: {prompt1}")
                 logger.info(f"jargon {content} 推断1结果: {response1}")
                 # logger.info(f"jargon {content} 推断1结果: {inference1}")
-            
+
             # 步骤3: 比较两个推断结果
             prompt3 = await global_prompt_manager.format_prompt(
                 "jargon_compare_inference_prompt",
                 inference1=json.dumps(inference1, ensure_ascii=False),
                 inference2=json.dumps(inference2, ensure_ascii=False),
             )
-            
+
             if global_config.debug.show_jargon_prompt:
                 logger.info(f"jargon {content} 比较提示词: {prompt3}")
-            
+
             response3, _ = await self.llm.generate_response_async(prompt3, temperature=0.3)
             if not response3:
                 logger.warning(f"jargon {content} 比较失败：无响应")
                 return
-            
+
             # 解析比较结果
             comparison = None
             try:
@@ -299,7 +301,7 @@ class JargonMiner:
             # 判断是否为黑话
             is_similar = comparison.get("is_similar", False)
             is_jargon = not is_similar  # 如果相似，说明不是黑话；如果有差异，说明是黑话
-            
+
             # 更新数据库记录
             jargon_obj.is_jargon = is_jargon
             if is_jargon:
@@ -308,17 +310,19 @@ class JargonMiner:
             else:
                 # 不是黑话，也记录含义（使用推断2的结果，因为含义明确）
                 jargon_obj.meaning = inference2.get("meaning", "")
-            
+
             # 更新最后一次判定的count值，避免重启后重复判定
             jargon_obj.last_inference_count = jargon_obj.count or 0
-            
+
             # 如果count>=100，标记为完成，不再进行推断
             if (jargon_obj.count or 0) >= 100:
                 jargon_obj.is_complete = True
-            
+
             jargon_obj.save()
-            logger.info(f"jargon {content} 推断完成: is_jargon={is_jargon}, meaning={jargon_obj.meaning}, last_inference_count={jargon_obj.last_inference_count}, is_complete={jargon_obj.is_complete}")
-            
+            logger.info(
+                f"jargon {content} 推断完成: is_jargon={is_jargon}, meaning={jargon_obj.meaning}, last_inference_count={jargon_obj.last_inference_count}, is_complete={jargon_obj.is_complete}"
+            )
+
             # 固定输出推断结果，格式化为可读形式
             if is_jargon:
                 # 是黑话，输出格式：[聊天名]xxx的含义是 xxxxxxxxxxx
@@ -331,10 +335,11 @@ class JargonMiner:
             else:
                 # 不是黑话，输出格式：[聊天名]xxx 不是黑话
                 logger.info(f"[{self.stream_name}]{content} 不是黑话")
-            
+
         except Exception as e:
             logger.error(f"jargon推断失败: {e}")
             import traceback
+
             traceback.print_exc()
 
     def should_trigger(self) -> bool:
@@ -362,7 +367,7 @@ class JargonMiner:
             # 记录本次提取的时间窗口，避免重复提取
             extraction_start_time = self.last_learning_time
             extraction_end_time = time.time()
-            
+
             # 拉取学习窗口内的消息
             messages = get_raw_msg_by_timestamp_with_chat_inclusive(
                 chat_id=self.chat_id,
@@ -385,7 +390,7 @@ class JargonMiner:
             response, _ = await self.llm.generate_response_async(prompt, temperature=0.2)
             if not response:
                 return
-            
+
             if global_config.debug.show_jargon_prompt:
                 logger.info(f"jargon提取提示词: {prompt}")
                 logger.info(f"jargon提取结果: {response}")
@@ -415,7 +420,7 @@ class JargonMiner:
                         continue
                     content = str(item.get("content", "")).strip()
                     raw_content_value = item.get("raw_content", "")
-                    
+
                     # 处理raw_content：可能是字符串或列表
                     raw_content_list = []
                     if isinstance(raw_content_value, list):
@@ -426,19 +431,15 @@ class JargonMiner:
                         raw_content_str = raw_content_value.strip()
                         if raw_content_str:
                             raw_content_list = [raw_content_str]
-                    
+
                     type_str = str(item.get("type", "")).strip().lower()
-                    
+
                     # 验证type是否为有效值
                     if type_str not in ["p", "c", "e"]:
                         type_str = "p"  # 默认值
-                    
+
                     if content and raw_content_list:
-                        entries.append({
-                            "content": content,
-                            "raw_content": raw_content_list,
-                            "type": type_str
-                        })
+                        entries.append({"content": content, "raw_content": raw_content_list, "type": type_str})
             except Exception as e:
                 logger.error(f"解析jargon JSON失败: {e}; 原始: {response}")
                 return
@@ -455,7 +456,7 @@ class JargonMiner:
                 if content_key not in seen:
                     seen.add(content_key)
                     uniq_entries.append(entry)
-            
+
             saved = 0
             updated = 0
             merged = 0
@@ -466,12 +467,8 @@ class JargonMiner:
                 try:
                     # 步骤1: 检查同chat_id的记录，默认纳入global项目
                     # 查询条件：chat_id匹配 OR (is_global为True且content匹配)
-                    query = (
-                        Jargon.select()
-                        .where(
-                            ((Jargon.chat_id == self.chat_id) | Jargon.is_global) &
-                            (Jargon.content == content)
-                        )
+                    query = Jargon.select().where(
+                        ((Jargon.chat_id == self.chat_id) | Jargon.is_global) & (Jargon.content == content)
                     )
                     if query.exists():
                         obj = query.get()
@@ -479,82 +476,82 @@ class JargonMiner:
                             obj.count = (obj.count or 0) + 1
                         except Exception:
                             obj.count = 1
-                        
+
                         # 合并raw_content列表：读取现有列表，追加新值，去重
                         existing_raw_content = []
                         if obj.raw_content:
                             try:
-                                existing_raw_content = json.loads(obj.raw_content) if isinstance(obj.raw_content, str) else obj.raw_content
+                                existing_raw_content = (
+                                    json.loads(obj.raw_content) if isinstance(obj.raw_content, str) else obj.raw_content
+                                )
                                 if not isinstance(existing_raw_content, list):
                                     existing_raw_content = [existing_raw_content] if existing_raw_content else []
                             except (json.JSONDecodeError, TypeError):
                                 existing_raw_content = [obj.raw_content] if obj.raw_content else []
-                        
+
                         # 合并并去重
                         merged_list = list(dict.fromkeys(existing_raw_content + raw_content_list))
                         obj.raw_content = json.dumps(merged_list, ensure_ascii=False)
-                        
+
                         # 更新type（如果为空）
                         if type_str and not obj.type:
                             obj.type = type_str
                         obj.save()
-                        
+
                         # 检查是否需要推断（达到阈值且超过上次判定值）
                         if _should_infer_meaning(obj):
                             # 异步触发推断，不阻塞主流程
                             # 重新加载对象以确保数据最新
                             jargon_id = obj.id
                             asyncio.create_task(self._infer_meaning_by_id(jargon_id))
-                        
+
                         updated += 1
                     else:
                         # 步骤2: 同chat_id没有找到，检查所有chat_id中是否有相同content的记录
                         # 查询所有非global的记录（global的已经在步骤1检查过了）
-                        all_content_query = (
-                            Jargon.select()
-                            .where(
-                                (Jargon.content == content) &
-                                (~Jargon.is_global)
-                            )
-                        )
+                        all_content_query = Jargon.select().where((Jargon.content == content) & (~Jargon.is_global))
                         all_matching = list(all_content_query)
-                        
+
                         # 如果找到3个或更多相同content的记录，合并它们
                         if len(all_matching) >= 3:
                             # 找到3个或更多已有记录，合并它们（新条目也会被包含在合并中）
                             total_count = sum((obj.count or 0) for obj in all_matching) + 1  # +1 是因为当前新条目
-                            
+
                             # 合并所有raw_content列表
                             all_raw_content = []
                             for obj in all_matching:
                                 if obj.raw_content:
                                     try:
-                                        obj_raw = json.loads(obj.raw_content) if isinstance(obj.raw_content, str) else obj.raw_content
+                                        obj_raw = (
+                                            json.loads(obj.raw_content)
+                                            if isinstance(obj.raw_content, str)
+                                            else obj.raw_content
+                                        )
                                         if not isinstance(obj_raw, list):
                                             obj_raw = [obj_raw] if obj_raw else []
                                         all_raw_content.extend(obj_raw)
                                     except (json.JSONDecodeError, TypeError):
                                         if obj.raw_content:
                                             all_raw_content.append(obj.raw_content)
-                            
+
                             # 添加当前新条目的raw_content
                             all_raw_content.extend(raw_content_list)
                             # 去重
                             merged_raw_content = list(dict.fromkeys(all_raw_content))
-                            
+
                             # 合并type：优先使用非空的值
                             merged_type = type_str
                             for obj in all_matching:
                                 if obj.type and not merged_type:
                                     merged_type = obj.type
                                     break
-                            
+
                             # 合并其他字段：优先使用已有值
                             merged_meaning = None
                             merged_is_jargon = None
                             merged_last_inference_count = None
                             merged_is_complete = False
-                            
+
                             for obj in all_matching:
                                 if obj.meaning and not merged_meaning:
                                     merged_meaning = obj.meaning
@@ -564,11 +561,11 @@ class JargonMiner:
                                     merged_last_inference_count = obj.last_inference_count
                                 if obj.is_complete:
                                     merged_is_complete = True
-                            
+
                             # 删除旧的记录
                             for obj in all_matching:
                                 obj.delete_instance()
-                            
+
                             # 创建新的global记录
                             Jargon.create(
                                 content=content,
@@ -580,10 +577,12 @@ class JargonMiner:
                                 meaning=merged_meaning,
                                 is_jargon=merged_is_jargon,
                                 last_inference_count=merged_last_inference_count,
-                                is_complete=merged_is_complete
+                                is_complete=merged_is_complete,
                             )
                             merged += 1
-                            logger.info(f"合并jargon为global: content={content}, 合并了{len(all_matching)}条已有记录+1条新记录（共{len(all_matching)+1}条），总count={total_count}")
+                            logger.info(
+                                f"合并jargon为global: content={content}, 合并了{len(all_matching)}条已有记录+1条新记录（共{len(all_matching) + 1}条），总count={total_count}"
+                            )
                         else:
                             # 找到少于3个已有记录，正常创建新记录
                             Jargon.create(
@@ -592,7 +591,7 @@ class JargonMiner:
                                 type=type_str,
                                 chat_id=self.chat_id,
                                 is_global=False,
-                                count=1
+                                count=1,
                             )
                             saved += 1
                 except Exception as e:
@@ -604,15 +603,17 @@ class JargonMiner:
                 # 收集所有提取的jargon内容
                 jargon_list = [entry["content"] for entry in uniq_entries]
                 jargon_str = ",".join(jargon_list)
-                
+
                 # 输出格式化的结果（使用logger.info会自动应用jargon模块的颜色）
                 logger.info(f"[{self.stream_name}]疑似黑话: {jargon_str}")
-                
+
                 # 更新为本次提取的结束时间，确保不会重复提取相同的消息窗口
                 self.last_learning_time = extraction_end_time
-            
+
             if saved or updated or merged:
-                logger.info(f"jargon写入: 新增 {saved} 条，更新 {updated} 条，合并为global {merged} 条，chat_id={self.chat_id}")
+                logger.info(
+                    f"jargon写入: 新增 {saved} 条，更新 {updated} 条，合并为global {merged} 条，chat_id={self.chat_id}"
+                )
         except Exception as e:
             logger.error(f"JargonMiner 运行失败: {e}")
 
@@ -636,36 +637,29 @@ async def extract_and_store_jargon(chat_id: str) -> None:
 
 
 def search_jargon(
-    keyword: str,
-    chat_id: Optional[str] = None,
-    limit: int = 10,
-    case_sensitive: bool = False,
-    fuzzy: bool = True
+    keyword: str, chat_id: Optional[str] = None, limit: int = 10, case_sensitive: bool = False, fuzzy: bool = True
 ) -> List[Dict[str, str]]:
     """
     搜索jargon，支持大小写不敏感和模糊搜索
-    
+
     Args:
         keyword: 搜索关键词
         chat_id: 可选的聊天ID，如果提供则优先搜索该聊天或global的jargon
         limit: 返回结果数量限制，默认10
         case_sensitive: 是否大小写敏感，默认False（不敏感）
         fuzzy: 是否模糊搜索，默认True（使用LIKE匹配）
-    
+
     Returns:
         List[Dict[str, str]]: 包含content, meaning的字典列表
     """
     if not keyword or not keyword.strip():
         return []
-    
+
     keyword = keyword.strip()
-    
+
     # 构建查询
-    query = Jargon.select(
-        Jargon.content,
-        Jargon.meaning
-    )
-    
+    query = Jargon.select(Jargon.content, Jargon.meaning)
+
     # 构建搜索条件
     if case_sensitive:
         # 大小写敏感
@@ -674,7 +668,7 @@ def search_jargon(
             search_condition = Jargon.content.contains(keyword)
         else:
             # 精确匹配
-            search_condition = (Jargon.content == keyword)
+            search_condition = Jargon.content == keyword
     else:
         # 大小写不敏感
         if fuzzy:
@@ -682,35 +676,26 @@ def search_jargon(
             search_condition = fn.LOWER(Jargon.content).contains(keyword.lower())
         else:
             # 精确匹配（使用LOWER函数）
-            search_condition = (fn.LOWER(Jargon.content) == keyword.lower())
-    
+            search_condition = fn.LOWER(Jargon.content) == keyword.lower()
+
     query = query.where(search_condition)
-    
+
     # 如果提供了chat_id，优先搜索该聊天或global的jargon
     if chat_id:
-        query = query.where(
-            (Jargon.chat_id == chat_id) | Jargon.is_global
-        )
-    
+        query = query.where((Jargon.chat_id == chat_id) | Jargon.is_global)
+
     # 只返回有meaning的记录
-    query = query.where(
-        (Jargon.meaning.is_null(False)) & (Jargon.meaning != "")
-    )
-    
+    query = query.where((Jargon.meaning.is_null(False)) & (Jargon.meaning != ""))
+
     # 按count降序排序，优先返回出现频率高的
     query = query.order_by(Jargon.count.desc())
-    
+
     # 限制结果数量
     query = query.limit(limit)
-    
+
     # 执行查询并返回结果
     results = []
     for jargon in query:
-        results.append({
-            "content": jargon.content or "",
-            "meaning": jargon.meaning or ""
-        })
-    
+        results.append({"content": jargon.content or "", "meaning": jargon.meaning or ""})
+
     return results
-
-

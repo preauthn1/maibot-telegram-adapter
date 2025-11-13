@@ -13,9 +13,10 @@ from src.person_info.person_info import Person
 from src.common.database.database_model import Images
 
 if TYPE_CHECKING:
-    from src.chat.heart_flow.heartFC_chat import HeartFChatting
+    pass
 
 logger = get_logger("chat")
+
 
 class HeartFCMessageReceiver:
     """心流处理器，负责处理接收到的消息并计算兴趣度"""

@@ -153,7 +153,7 @@ def _format_large_number(num: float | int, html: bool = False) -> str:
         else:
             number_part = f"{value:.1f}"
             k_suffix = "K"
-        
+
         if html:
             # HTML输出：K着色为主题色并加粗大写
             return f"{number_part}<span style='color: #8b5cf6; font-weight: bold;'>K</span>"
@@ -502,9 +502,13 @@ class StatisticOutputTask(AsyncTask):
             }
             for period_key, _ in collect_period
         }
-        
+
         # 获取bot的QQ账号
-        bot_qq_account = str(global_config.bot.qq_account) if hasattr(global_config, 'bot') and hasattr(global_config.bot, 'qq_account') else ""
+        bot_qq_account = (
+            str(global_config.bot.qq_account)
+            if hasattr(global_config, "bot") and hasattr(global_config.bot, "qq_account")
+            else ""
+        )
 
         query_start_timestamp = collect_period[-1][1].timestamp()  # Messages.time is a DoubleField (timestamp)
         for message in Messages.select().where(Messages.time >= query_start_timestamp):  # type: ignore
@@ -547,7 +551,7 @@ class StatisticOutputTask(AsyncTask):
             is_bot_reply = False
             if bot_qq_account and message.user_id == bot_qq_account:
                 is_bot_reply = True
-            
+
             for idx, (_, period_start_dt) in enumerate(collect_period):
                 if message_time_ts >= period_start_dt.timestamp():
                     for period_key, _ in collect_period[idx:]:
@@ -588,7 +592,9 @@ class StatisticOutputTask(AsyncTask):
                         continue
                 last_all_time_stat = last_stat["stat_data"]  # 上次完整统计的统计数据
                 last_stat_timestamp = datetime.fromtimestamp(last_stat["timestamp"])  # 上次完整统计数据的时间戳
-                self.stat_period = [item for item in self.stat_period if item[0] != "all_time"]  # 删除"所有时间"的统计时段
+                self.stat_period = [
+                    item for item in self.stat_period if item[0] != "all_time"
+                ]  # 删除"所有时间"的统计时段
                 self.stat_period.append(("all_time", now - last_stat_timestamp, "自部署以来的"))
         except Exception as e:
             logger.warning(f"加载上次完整统计数据失败，进行全量统计，错误信息：{e}")
@@ -640,12 +646,12 @@ class StatisticOutputTask(AsyncTask):
         # 更新上次完整统计数据的时间戳
         # 将所有defaultdict转换为普通dict以避免类型冲突
         clean_stat_data = self._convert_defaultdict_to_dict(stat["all_time"])
-        
+
         # 将 name_mapping 中的元组转换为列表，因为JSON不支持元组
         json_safe_name_mapping = {}
         for chat_id, (chat_name, timestamp) in self.name_mapping.items():
             json_safe_name_mapping[chat_id] = [chat_name, timestamp]
-        
+
         local_storage["last_full_statistics"] = {
             "name_mapping": json_safe_name_mapping,
             "stat_data": clean_stat_data,
@@ -682,24 +688,28 @@ class StatisticOutputTask(AsyncTask):
         """
         # 计算总token数（从所有模型的token数中累加）
         total_tokens = sum(stats[TOTAL_TOK_BY_MODEL].values()) if stats[TOTAL_TOK_BY_MODEL] else 0
-        
+
         # 计算花费/消息数量指标（每100条）
         cost_per_100_messages = (stats[TOTAL_COST] / stats[TOTAL_MSG_CNT] * 100) if stats[TOTAL_MSG_CNT] > 0 else 0.0
-        
+
         # 计算花费/时间指标（花费/小时）
         online_hours = stats[ONLINE_TIME] / 3600.0 if stats[ONLINE_TIME] > 0 else 0.0
         cost_per_hour = stats[TOTAL_COST] / online_hours if online_hours > 0 else 0.0
-        
+
         # 计算token/时间指标（token/小时）
         tokens_per_hour = (total_tokens / online_hours) if online_hours > 0 else 0.0
-        
+
         # 计算花费/回复数量指标（每100条）
         total_replies = stats.get(TOTAL_REPLY_CNT, 0)
         cost_per_100_replies = (stats[TOTAL_COST] / total_replies * 100) if total_replies > 0 else 0.0
-        
+
         # 计算花费/消息数量（排除自己回复）指标（每100条）
         total_messages_excluding_replies = stats[TOTAL_MSG_CNT] - total_replies
-        cost_per_100_messages_excluding_replies = (stats[TOTAL_COST] / total_messages_excluding_replies * 100) if total_messages_excluding_replies > 0 else 0.0
+        cost_per_100_messages_excluding_replies = (
+            (stats[TOTAL_COST] / total_messages_excluding_replies * 100)
+            if total_messages_excluding_replies > 0
+            else 0.0
+        )
 
         output = [
             f"总在线时间: {_format_online_time(stats[ONLINE_TIME])}",
@@ -709,7 +719,9 @@ class StatisticOutputTask(AsyncTask):
             f"总Token数: {_format_large_number(total_tokens)}",
             f"总花费: {stats[TOTAL_COST]:.2f}¥",
             f"花费/消息数量: {cost_per_100_messages:.4f}¥/100条" if stats[TOTAL_MSG_CNT] > 0 else "花费/消息数量: N/A",
-            f"花费/接受消息数量: {cost_per_100_messages_excluding_replies:.4f}¥/100条" if total_messages_excluding_replies > 0 else "花费/消息数量(排除回复): N/A",
+            f"花费/接受消息数量: {cost_per_100_messages_excluding_replies:.4f}¥/100条"
+            if total_messages_excluding_replies > 0
+            else "花费/消息数量(排除回复): N/A",
             f"花费/回复消息数量: {cost_per_100_replies:.4f}¥/100条" if total_replies > 0 else "花费/回复数量: N/A",
             f"花费/时间: {cost_per_hour:.2f}¥/小时" if online_hours > 0 else "花费/时间: N/A",
             f"Token/时间: {_format_large_number(tokens_per_hour)}/小时" if online_hours > 0 else "Token/时间: N/A",
@@ -745,7 +757,16 @@ class StatisticOutputTask(AsyncTask):
             formatted_out_tokens = _format_large_number(out_tokens)
             formatted_tokens = _format_large_number(tokens)
             output.append(
-                data_fmt.format(name, formatted_count, formatted_in_tokens, formatted_out_tokens, formatted_tokens, cost, avg_time_cost, std_time_cost)
+                data_fmt.format(
+                    name,
+                    formatted_count,
+                    formatted_in_tokens,
+                    formatted_out_tokens,
+                    formatted_tokens,
+                    cost,
+                    avg_time_cost,
+                    std_time_cost,
+                )
             )
 
         output.append("")
@@ -891,8 +912,12 @@ class StatisticOutputTask(AsyncTask):
                 except (IndexError, TypeError) as e:
                     logger.warning(f"生成HTML聊天统计时发生错误，chat_id: {chat_id}, 错误: {e}")
                     chat_rows.append(f"<tr><td>未知聊天</td><td>{_format_large_number(count, html=True)}</td></tr>")
-            
-            chat_rows_html = "\n".join(chat_rows) if chat_rows else "<tr><td colspan='2' style='text-align: center; color: #999;'>暂无数据</td></tr>"
+
+            chat_rows_html = (
+                "\n".join(chat_rows)
+                if chat_rows
+                else "<tr><td colspan='2' style='text-align: center; color: #999;'>暂无数据</td></tr>"
+            )
             # 生成HTML
             return f"""
             <div id=\"{div_id}\" class=\"tab-content\">
@@ -1197,7 +1222,7 @@ class StatisticOutputTask(AsyncTask):
         # 添加图表内容
         chart_data = self._generate_chart_data(stat)
         tab_content_list.append(self._generate_chart_tab(chart_data))
-        
+
         # 添加指标趋势图表
         metrics_data = self._generate_metrics_data(now)
         tab_content_list.append(self._generate_metrics_tab(metrics_data))
@@ -1772,121 +1797,125 @@ class StatisticOutputTask(AsyncTask):
     def _generate_metrics_data(self, now: datetime) -> dict:
         """生成指标趋势数据"""
         metrics_data = {}
-        
+
         # 24小时尺度：1小时为单位
         metrics_data["24h"] = self._collect_metrics_interval_data(now, hours=24, interval_hours=1)
-        
+
         # 7天尺度：1天为单位
-        metrics_data["7d"] = self._collect_metrics_interval_data(now, hours=24*7, interval_hours=24)
-        
+        metrics_data["7d"] = self._collect_metrics_interval_data(now, hours=24 * 7, interval_hours=24)
+
         # 30天尺度：1天为单位
-        metrics_data["30d"] = self._collect_metrics_interval_data(now, hours=24*30, interval_hours=24)
-        
+        metrics_data["30d"] = self._collect_metrics_interval_data(now, hours=24 * 30, interval_hours=24)
+
         return metrics_data
-    
+
     def _collect_metrics_interval_data(self, now: datetime, hours: int, interval_hours: int) -> dict:
         """收集指定时间范围内每个间隔的指标数据"""
         start_time = now - timedelta(hours=hours)
         time_points = []
         current_time = start_time
-        
+
         # 生成时间点
         while current_time <= now:
             time_points.append(current_time)
             current_time += timedelta(hours=interval_hours)
-        
+
         # 初始化数据结构
         cost_per_100_messages = [0.0] * len(time_points)  # 花费/消息数量（每100条）
         cost_per_hour = [0.0] * len(time_points)  # 花费/时间（每小时）
         tokens_per_hour = [0.0] * len(time_points)  # Token/时间（每小时）
         cost_per_100_replies = [0.0] * len(time_points)  # 花费/回复数量（每100条）
-        
+
         # 每个时间点的累计数据
         total_costs = [0.0] * len(time_points)
         total_tokens = [0] * len(time_points)
         total_messages = [0] * len(time_points)
         total_replies = [0] * len(time_points)
         total_online_hours = [0.0] * len(time_points)
-        
+
         # 获取bot的QQ账号
-        bot_qq_account = str(global_config.bot.qq_account) if hasattr(global_config, 'bot') and hasattr(global_config.bot, 'qq_account') else ""
-        
+        bot_qq_account = (
+            str(global_config.bot.qq_account)
+            if hasattr(global_config, "bot") and hasattr(global_config.bot, "qq_account")
+            else ""
+        )
+
         interval_seconds = interval_hours * 3600
-        
+
         # 查询LLM使用记录
         query_start_time = start_time
         for record in LLMUsage.select().where(LLMUsage.timestamp >= query_start_time):  # type: ignore
             record_time = record.timestamp
-            
+
             # 找到对应的时间间隔索引
             time_diff = (record_time - start_time).total_seconds()
             interval_index = int(time_diff // interval_seconds)
-            
+
             if 0 <= interval_index < len(time_points):
                 cost = record.cost or 0.0
                 prompt_tokens = record.prompt_tokens or 0
                 completion_tokens = record.completion_tokens or 0
                 total_token = prompt_tokens + completion_tokens
-                
+
                 total_costs[interval_index] += cost
                 total_tokens[interval_index] += total_token
-        
+
         # 查询消息记录
         query_start_timestamp = start_time.timestamp()
         for message in Messages.select().where(Messages.time >= query_start_timestamp):  # type: ignore
             message_time_ts = message.time
-            
+
             time_diff = message_time_ts - query_start_timestamp
             interval_index = int(time_diff // interval_seconds)
-            
+
             if 0 <= interval_index < len(time_points):
                 total_messages[interval_index] += 1
                 # 检查是否是bot发送的消息（回复）
                 if bot_qq_account and message.user_id == bot_qq_account:
                     total_replies[interval_index] += 1
-        
+
         # 查询在线时间记录
         for record in OnlineTime.select().where(OnlineTime.end_timestamp >= start_time):  # type: ignore
             record_start = record.start_timestamp
             record_end = record.end_timestamp
-            
+
             # 找到记录覆盖的所有时间间隔
             for idx, time_point in enumerate(time_points):
                 interval_start = time_point
                 interval_end = time_point + timedelta(hours=interval_hours)
-                
+
                 # 计算重叠部分
                 overlap_start = max(record_start, interval_start)
                 overlap_end = min(record_end, interval_end)
-                
+
                 if overlap_end > overlap_start:
                     overlap_hours = (overlap_end - overlap_start).total_seconds() / 3600.0
                     total_online_hours[idx] += overlap_hours
-        
+
         # 计算指标
         for idx in range(len(time_points)):
             # 花费/消息数量（每100条）
             if total_messages[idx] > 0:
-                cost_per_100_messages[idx] = (total_costs[idx] / total_messages[idx] * 100)
-            
+                cost_per_100_messages[idx] = total_costs[idx] / total_messages[idx] * 100
+
             # 花费/时间（每小时）
             if total_online_hours[idx] > 0:
-                cost_per_hour[idx] = (total_costs[idx] / total_online_hours[idx])
-            
+                cost_per_hour[idx] = total_costs[idx] / total_online_hours[idx]
+
             # Token/时间（每小时）
             if total_online_hours[idx] > 0:
-                tokens_per_hour[idx] = (total_tokens[idx] / total_online_hours[idx])
-            
+                tokens_per_hour[idx] = total_tokens[idx] / total_online_hours[idx]
+
             # 花费/回复数量（每100条）
             if total_replies[idx] > 0:
-                cost_per_100_replies[idx] = (total_costs[idx] / total_replies[idx] * 100)
-        
+                cost_per_100_replies[idx] = total_costs[idx] / total_replies[idx] * 100
+
         # 生成时间标签
         if interval_hours == 1:
             time_labels = [t.strftime("%H:%M") for t in time_points]
         else:
             time_labels = [t.strftime("%m-%d") for t in time_points]
-        
+
         return {
             "time_labels": time_labels,
             "cost_per_100_messages": cost_per_100_messages,
@@ -1894,7 +1923,7 @@ class StatisticOutputTask(AsyncTask):
             "tokens_per_hour": tokens_per_hour,
             "cost_per_100_replies": cost_per_100_replies,
         }
-    
+
     def _generate_metrics_tab(self, metrics_data: dict) -> str:
         """生成指标趋势图表选项卡HTML内容"""
         colors = {
@@ -1903,7 +1932,7 @@ class StatisticOutputTask(AsyncTask):
             "tokens_per_hour": "#c7bbff",
             "cost_per_100_replies": "#d9ceff",
         }
-        
+
         return f"""
         <div id="metrics" class="tab-content">
             <h2>指标趋势图表</h2>

@@ -239,7 +239,7 @@ def _build_stream_api_resp(
 
     # 检查 max_tokens 截断（流式的告警改由处理函数统一输出，这里不再输出）
     # 保留 finish_reason 仅用于上层判断
-    
+
     if not resp.content and not resp.tool_calls:
         raise EmptyResponseException()
 
@@ -293,7 +293,7 @@ async def _default_stream_response_handler(
 
         if hasattr(event.choices[0], "finish_reason") and event.choices[0].finish_reason:
             finish_reason = event.choices[0].finish_reason
-        
+
         if hasattr(event, "model") and event.model and not _model_name:
             _model_name = event.model  # 记录模型名
 
@@ -341,10 +341,7 @@ async def _default_stream_response_handler(
                 model_dbg = None
 
             # 统一日志格式
-            logger.info(
-                "模型%s因为超过最大max_token限制，可能仅输出部分内容，可视情况调整"
-                % (model_dbg or "")
-            )
+            logger.info("模型%s因为超过最大max_token限制，可能仅输出部分内容，可视情况调整" % (model_dbg or ""))
 
         return resp, _usage_record
     except Exception:
@@ -387,9 +384,7 @@ def _default_normal_response_parser(
                 raw_snippet = str(resp)[:300]
             except Exception:
                 raw_snippet = "<unserializable>"
-            logger.debug(
-                f"empty choices: model={model_dbg} id={id_dbg} usage={usage_dbg} raw≈{raw_snippet}"
-            )
+            logger.debug(f"empty choices: model={model_dbg} id={id_dbg} usage={usage_dbg} raw≈{raw_snippet}")
         except Exception:
             # 日志采集失败不应影响控制流
             pass
@@ -447,14 +442,11 @@ def _default_normal_response_parser(
             # print(resp)
             _model_name = resp.model
             # 统一日志格式
-            logger.info(
-                "模型%s因为超过最大max_token限制，可能仅输出部分内容，可视情况调整"
-                % (_model_name or "")
-            )
+            logger.info("模型%s因为超过最大max_token限制，可能仅输出部分内容，可视情况调整" % (_model_name or ""))
             return api_response, _usage_record
     except Exception as e:
         logger.debug(f"检查 MAX_TOKENS 截断时异常: {e}")
-    
+
     if not api_response.content and not api_response.tool_calls:
         raise EmptyResponseException()
 

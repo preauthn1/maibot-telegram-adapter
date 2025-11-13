@@ -3,6 +3,7 @@
 记忆系统工具函数
 包含模糊查找、相似度计算等工具函数
 """
+
 import json
 import re
 from difflib import SequenceMatcher
@@ -11,6 +12,7 @@ from src.common.logger import get_logger
 
 
 logger = get_logger("memory_utils")
+
 
 def parse_md_json(json_text: str) -> list[str]:
     """从Markdown格式的内容中提取JSON对象和推理内容"""
@@ -50,14 +52,15 @@ def parse_md_json(json_text: str) -> list[str]:
 
     return json_objects, reasoning_content
 
+
 def calculate_similarity(text1: str, text2: str) -> float:
     """
     计算两个文本的相似度
-    
+
     Args:
         text1: 第一个文本
         text2: 第二个文本
-        
+
     Returns:
         float: 相似度分数 (0-1)
     """
@@ -65,16 +68,16 @@ def calculate_similarity(text1: str, text2: str) -> float:
         # 预处理文本
         text1 = preprocess_text(text1)
         text2 = preprocess_text(text2)
-        
+
         # 使用SequenceMatcher计算相似度
         similarity = SequenceMatcher(None, text1, text2).ratio()
-        
+
         # 如果其中一个文本包含另一个，提高相似度
         if text1 in text2 or text2 in text1:
             similarity = max(similarity, 0.8)
-        
+
         return similarity
-        
+
     except Exception as e:
         logger.error(f"计算相似度时出错: {e}")
         return 0.0
@@ -83,26 +86,25 @@ def calculate_similarity(text1: str, text2: str) -> float:
 def preprocess_text(text: str) -> str:
     """
     预处理文本，提高匹配准确性
-    
+
     Args:
         text: 原始文本
-        
+
     Returns:
         str: 预处理后的文本
     """
     try:
         # 转换为小写
         text = text.lower()
-        
+
         # 移除标点符号和特殊字符
-        text = re.sub(r'[^\w\s]', '', text)
-        
+        text = re.sub(r"[^\w\s]", "", text)
+
         # 移除多余空格
-        text = re.sub(r'\s+', ' ', text).strip()
-        
+        text = re.sub(r"\s+", " ", text).strip()
+
         return text
-        
+
     except Exception as e:
         logger.error(f"预处理文本时出错: {e}")
         return text
-

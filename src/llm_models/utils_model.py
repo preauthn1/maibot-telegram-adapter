@@ -277,9 +277,7 @@ class LLMRequest:
                     logger.error(f"模型 '{model_info.name}' 在多次出现空回复后仍然失败。")
                     raise ModelAttemptFailed(f"模型 '{model_info.name}' 重试耗尽", original_exception=e) from e
 
-                logger.warning(
-                    f"模型 '{model_info.name}' 返回空回复(可重试)。剩余重试次数: {retry_remain}"
-                )
+                logger.warning(f"模型 '{model_info.name}' 返回空回复(可重试)。剩余重试次数: {retry_remain}")
                 await asyncio.sleep(api_provider.retry_interval)
 
             except NetworkConnectionError as e:
@@ -289,9 +287,7 @@ class LLMRequest:
                     logger.error(f"模型 '{model_info.name}' 在网络错误重试用尽后仍然失败。")
                     raise ModelAttemptFailed(f"模型 '{model_info.name}' 重试耗尽", original_exception=e) from e
 
-                logger.warning(
-                    f"模型 '{model_info.name}' 遇到网络错误(可重试): {str(e)}。剩余重试次数: {retry_remain}"
-                )
+                logger.warning(f"模型 '{model_info.name}' 遇到网络错误(可重试): {str(e)}。剩余重试次数: {retry_remain}")
                 await asyncio.sleep(api_provider.retry_interval)
 
             except RespNotOkException as e:

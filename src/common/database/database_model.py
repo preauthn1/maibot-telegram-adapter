@@ -317,10 +317,12 @@ class Expression(BaseModel):
     class Meta:
         table_name = "expression"
 
+
 class Jargon(BaseModel):
     """
     用于存储俚语的模型
     """
+
     content = TextField()
     raw_content = TextField(null=True)
     type = TextField(null=True)
@@ -332,14 +334,16 @@ class Jargon(BaseModel):
     is_jargon = BooleanField(null=True)  # None表示未判定，True表示是黑话，False表示不是黑话
     last_inference_count = IntegerField(null=True)  # 最后一次判定的count值，用于避免重启后重复判定
     is_complete = BooleanField(default=False)  # 是否已完成所有推断（count>=100后不再推断）
-    
+
     class Meta:
         table_name = "jargon"
+
 
 class ChatHistory(BaseModel):
     """
     用于存储聊天历史概括的模型
     """
+
     chat_id = TextField(index=True)  # 聊天ID
     start_time = DoubleField()  # 起始时间
     end_time = DoubleField()  # 结束时间
@@ -350,7 +354,7 @@ class ChatHistory(BaseModel):
     summary = TextField()  # 概括：对这段话的平文本概括
     count = IntegerField(default=0)  # 被检索次数
     forget_times = IntegerField(default=0)  # 被遗忘检查的次数
-    
+
     class Meta:
         table_name = "chat_history"
 
@@ -359,6 +363,7 @@ class ThinkingBack(BaseModel):
     """
     用于存储记忆检索思考过程的模型
     """
+
     chat_id = TextField(index=True)  # 聊天ID
     question = TextField()  # 提出的问题
     context = TextField(null=True)  # 上下文信息
@@ -367,9 +372,10 @@ class ThinkingBack(BaseModel):
     thinking_steps = TextField(null=True)  # 思考步骤（JSON格式）
     create_time = DoubleField()  # 创建时间
     update_time = DoubleField()  # 更新时间
-    
+
     class Meta:
         table_name = "thinking_back"
+
 
 MODELS = [
     ChatStreams,
@@ -386,6 +392,7 @@ MODELS = [
     ChatHistory,
     ThinkingBack,
 ]
+
 
 def create_tables():
     """

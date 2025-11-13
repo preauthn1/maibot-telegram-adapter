@@ -250,7 +250,7 @@ def _build_stream_api_resp(
             if fr:
                 reason = str(fr)
                 break
-    
+
     if str(reason).endswith("MAX_TOKENS"):
         has_visible_output = bool(resp.content and resp.content.strip())
         if has_visible_output:
@@ -281,8 +281,8 @@ async def _default_stream_response_handler(
     _tool_calls_buffer: list[tuple[str, str, dict]] = []  # 工具调用缓冲区，用于存储接收到的工具调用
     _usage_record = None  # 使用情况记录
     last_resp: GenerateContentResponse | None = None  # 保存最后一个 chunk
-    resp = APIResponse()  
-    
+    resp = APIResponse()
+
     def _insure_buffer_closed():
         if _fc_delta_buffer and not _fc_delta_buffer.closed:
             _fc_delta_buffer.close()
@@ -298,7 +298,7 @@ async def _default_stream_response_handler(
             chunk,
             _fc_delta_buffer,
             _tool_calls_buffer,
-            resp=resp, 
+            resp=resp,
         )
 
         if chunk.usage_metadata:
@@ -314,7 +314,7 @@ async def _default_stream_response_handler(
             _fc_delta_buffer,
             _tool_calls_buffer,
             last_resp=last_resp,
-            resp=resp, 
+            resp=resp,
         ), _usage_record
     except Exception:
         # 确保缓冲区被关闭

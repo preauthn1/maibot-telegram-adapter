@@ -2,7 +2,7 @@ import time
 import random
 import re
 
-from typing import List, Dict, Any, Tuple, Optional, Callable, Iterable
+from typing import List, Dict, Any, Tuple, Optional, Callable
 from rich.traceback import install
 
 from src.config.config import global_config
@@ -568,7 +568,6 @@ def build_readable_actions(actions: List[DatabaseActionRecords], mode: str = "re
     output_lines = []
     current_time = time.time()
 
-
     for action in actions:
         action_time = action.time or current_time
         action_name = action.action_name or "未知动作"
@@ -595,7 +594,6 @@ def build_readable_actions(actions: List[DatabaseActionRecords], mode: str = "re
 
         line = f"{time_ago_str}，你使用了“{action_name}”，具体内容是：“{action_prompt_display}”"
         output_lines.append(line)
- 
 
     return "\n".join(output_lines)
 
@@ -934,7 +932,6 @@ async def build_anonymous_messages(messages: List[DatabaseMessages]) -> str:
     final_output_lines.extend(output_lines)
     formatted_string = "".join(final_output_lines).strip()
     return formatted_string
-
 
 
 async def get_person_id_list(messages: List[Dict[str, Any]]) -> List[str]:
