@@ -3,7 +3,7 @@
 提供统一的工具注册和管理接口
 """
 
-from typing import List, Dict, Any, Optional, Callable, Awaitable, Tuple
+from typing import List, Dict, Any, Optional, Callable, Awaitable
 from src.common.logger import get_logger
 from src.llm_models.payload_content.tool_option import ToolParamType
 
