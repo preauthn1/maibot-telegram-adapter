@@ -3,16 +3,19 @@ from typing import List, Optional, Set
 
 try:
     import jieba
+
     _HAS_JIEBA = True
 except Exception:
     _HAS_JIEBA = False
 
 _WORD_RE = re.compile(r"[A-Za-z0-9_]+")
 # 匹配纯符号的正则表达式
-_SYMBOL_RE = re.compile(r'^[^\w\u4e00-\u9fff]+$')
+_SYMBOL_RE = re.compile(r"^[^\w\u4e00-\u9fff]+$")
+
 
 def simple_en_tokenize(text: str) -> List[str]:
     return _WORD_RE.findall(text.lower())
+
 
 class Tokenizer:
     def __init__(self, stopwords: Optional[Set[str]] = None, use_jieba: bool = True):

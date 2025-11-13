@@ -27,7 +27,7 @@ class BotConfig(ConfigBase):
 
     nickname: str
     """昵称"""
-    
+
     platforms: list[str] = field(default_factory=lambda: [])
     """其他平台列表"""
 
@@ -311,15 +311,17 @@ class MessageReceiveConfig(ConfigBase):
     ban_msgs_regex: set[str] = field(default_factory=lambda: set())
     """过滤正则表达式列表"""
 
+
 @dataclass
 class MemoryConfig(ConfigBase):
     """记忆配置类"""
-    
+
     max_memory_number: int = 100
     """记忆最大数量"""
-    
+
     memory_build_frequency: int = 1
     """记忆构建频率"""
+
 
 @dataclass
 class ExpressionConfig(ConfigBase):
@@ -494,12 +496,13 @@ class MoodConfig(ConfigBase):
 
     enable_mood: bool = True
     """是否启用情绪系统"""
-    
+
     mood_update_threshold: float = 1
     """情绪更新阈值,越高，更新越慢"""
-    
+
     emotion_style: str = "情绪较为稳定，但遭遇特定事件的时候起伏较大"
     """情感特征，影响情绪的变化情况"""
+
 
 @dataclass
 class VoiceConfig(ConfigBase):
@@ -644,16 +647,16 @@ class DebugConfig(ConfigBase):
 
     show_prompt: bool = False
     """是否显示prompt"""
-    
+
     show_replyer_prompt: bool = True
     """是否显示回复器prompt"""
-    
+
     show_replyer_reasoning: bool = True
     """是否显示回复器推理"""
-    
+
     show_jargon_prompt: bool = False
     """是否显示jargon相关提示词"""
-    
+
     show_planner_prompt: bool = False
     """是否显示planner相关提示词"""
 

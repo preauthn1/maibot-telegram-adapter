@@ -5,6 +5,7 @@ from maim_message import MessageServer
 from src.common.remote import TelemetryHeartBeatTask
 from src.manager.async_task_manager import async_task_manager
 from src.chat.utils.statistic import OnlineTimeRecordTask, StatisticOutputTask
+
 # from src.chat.utils.token_statistics import TokenStatisticsTask
 from src.chat.emoji_system.emoji_manager import get_emoji_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
@@ -70,9 +71,10 @@ class MainSystem:
 
         # 添加遥测心跳任务
         await async_task_manager.add_task(TelemetryHeartBeatTask())
-        
+
         # 添加记忆遗忘任务
         from src.chat.utils.memory_forget_task import MemoryForgetTask
+
         await async_task_manager.add_task(MemoryForgetTask())
 
         # 启动API服务器
@@ -105,7 +107,6 @@ class MainSystem:
         # 将bot.py中的chat_bot.message_process消息处理函数注册到api.py的消息处理基类中
         self.app.register_message_handler(chat_bot.message_process)
         self.app.register_custom_message_handler("message_id_echo", chat_bot.echo_message_process)
-
 
         # 触发 ON_START 事件
         from src.plugin_system.core.events_manager import events_manager

@@ -945,9 +945,7 @@ class EmojiManager:
                         prompt, image_base64, "jpg", temperature=0.5
                     )
                 else:
-                    prompt = (
-                        "这是一个表情包，请详细描述一下表情包所表达的情感和内容，简短描述细节，从互联网梗,meme的角度去分析，精简回答"
-                    )
+                    prompt = "这是一个表情包，请详细描述一下表情包所表达的情感和内容，简短描述细节，从互联网梗,meme的角度去分析，精简回答"
                     description, _ = await self.vlm.generate_response_for_image(
                         prompt, image_base64, image_format, temperature=0.5
                     )

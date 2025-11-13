@@ -1,5 +1,4 @@
 import asyncio
-from multiprocessing import context
 import time
 import traceback
 import random
@@ -102,14 +101,14 @@ class HeartFChatting:
 
         self.is_mute = False
 
-        self.last_active_time = time.time() # 记录上一次非noreply时间
+        self.last_active_time = time.time()  # 记录上一次非noreply时间
 
         self.question_probability_multiplier = 1
         self.questioned = False
-        
+
         # 跟踪连续 no_reply 次数，用于动态调整阈值
         self.consecutive_no_reply_count = 0
-        
+
         # 聊天内容概括器
         self.chat_history_summarizer = ChatHistorySummarizer(chat_id=self.stream_id)
 
@@ -127,10 +126,10 @@ class HeartFChatting:
 
             self._loop_task = asyncio.create_task(self._main_chat_loop())
             self._loop_task.add_done_callback(self._handle_loop_completion)
-            
+
             # 启动聊天内容概括器的后台定期检查循环
             await self.chat_history_summarizer.start()
-            
+
             logger.info(f"{self.log_prefix} HeartFChatting 启动完成")
 
         except Exception as e:
@@ -180,7 +179,7 @@ class HeartFChatting:
             + (f"详情: {'; '.join(timer_strings)}" if timer_strings else "")
         )
 
-    async def _loopbody(self):  
+    async def _loopbody(self):
         recent_messages_list = message_api.get_messages_by_time_in_chat(
             chat_id=self.stream_id,
             start_time=self.last_read_time,
@@ -190,9 +189,6 @@ class HeartFChatting:
             filter_mai=True,
             filter_command=True,
         )
-
-
-
 
         # 根据连续 no_reply 次数动态调整阈值
         # 3次 no_reply 时，阈值调高到 1.5（50%概率为1，50%概率为2）
@@ -204,10 +200,10 @@ class HeartFChatting:
             threshold = 2 if random.random() < 0.5 else 1
         else:
             threshold = 1
-        
+
         if len(recent_messages_list) >= threshold:
             # for message in recent_messages_list:
-                # print(message.processed_plain_text)
+            # print(message.processed_plain_text)
             # !处理no_reply_until_call逻辑
             if self.no_reply_until_call:
                 for message in recent_messages_list:
@@ -337,7 +333,7 @@ class HeartFChatting:
             # 重置连续 no_reply 计数
             self.consecutive_no_reply_count = 0
             reason = "有人提到了你，进行回复"
-            
+
             await database_api.store_action_info(
                 chat_stream=self.chat_stream,
                 action_build_into_prompt=False,
@@ -395,15 +391,16 @@ class HeartFChatting:
     ) -> bool:  # sourcery skip: merge-else-if-into-elif, remove-redundant-if
         if recent_messages_list is None:
             recent_messages_list = []
-        reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
+        _reply_text = ""  # 初始化reply_text变量，避免UnboundLocalError
 
         start_time = time.time()
 
-
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
-            asyncio.create_task(frequency_control_manager.get_or_create_frequency_control(self.stream_id).trigger_frequency_adjust())  
-            
+            asyncio.create_task(
+                frequency_control_manager.get_or_create_frequency_control(self.stream_id).trigger_frequency_adjust()
+            )
+
             # 添加curious检测任务 - 检测聊天记录中的矛盾、冲突或需要提问的内容
             # asyncio.create_task(check_and_make_question(self.stream_id))
             # 添加jargon提取任务 - 提取聊天中的黑话/俚语并入库（内部自行取消息并带冷却）
@@ -411,8 +408,7 @@ class HeartFChatting:
             # 添加聊天内容概括任务 - 累积、打包和压缩聊天记录
             # 注意：后台循环已在start()中启动，这里作为额外触发点，在有思考时立即处理
             # asyncio.create_task(self.chat_history_summarizer.process())
-            
-            
+
             cycle_timers, thinking_id = self.start_cycle()
             logger.info(f"{self.log_prefix} 开始第{self._cycle_counter}次思考")
 
@@ -427,7 +423,7 @@ class HeartFChatting:
             # 如果被提及，让回复生成和planner并行执行
             if force_reply_message:
                 logger.info(f"{self.log_prefix} 检测到提及，回复生成与planner并行执行")
-                
+
                 # 并行执行planner和回复生成
                 planner_task = asyncio.create_task(
                     self._run_planner_without_reply(
@@ -457,7 +453,12 @@ class HeartFChatting:
                 # 处理回复结果
                 if isinstance(reply_result, BaseException):
                     logger.error(f"{self.log_prefix} 回复生成异常: {reply_result}")
-                    reply_result = {"action_type": "reply", "success": False, "result": "回复生成异常", "loop_info": None}
+                    reply_result = {
+                        "action_type": "reply",
+                        "success": False,
+                        "result": "回复生成异常",
+                        "loop_info": None,
+                    }
             else:
                 # 正常流程：只执行planner
                 is_group_chat, chat_target_info, _ = self.action_planner.get_necessary_info()
@@ -516,7 +517,7 @@ class HeartFChatting:
 
             # 并行执行所有任务
             results = await asyncio.gather(*action_tasks, return_exceptions=True)
-            
+
             # 如果有独立的回复结果，添加到结果列表中
             if reply_result:
                 results = list(results) + [reply_result]
@@ -558,7 +559,7 @@ class HeartFChatting:
                         "taken_time": time.time(),
                     }
                 )
-                reply_text = reply_text_from_reply
+                _reply_text = reply_text_from_reply
             else:
                 # 没有回复信息，构建纯动作的loop_info
                 loop_info = {
@@ -571,7 +572,7 @@ class HeartFChatting:
                         "taken_time": time.time(),
                     },
                 }
-                reply_text = action_reply_text
+                _reply_text = action_reply_text
 
             self.end_cycle(loop_info, cycle_timers)
             self.print_cycle_info(cycle_timers)
@@ -647,15 +648,12 @@ class HeartFChatting:
             result = await action_handler.execute()
             success, action_text = result
 
-
             return success, action_text
 
         except Exception as e:
             logger.error(f"{self.log_prefix} 处理{action}时出错: {e}")
             traceback.print_exc()
             return False, ""
-
-
 
     async def _send_response(
         self,
@@ -732,7 +730,6 @@ class HeartFChatting:
                         action_reasoning=reason,
                     )
 
-
                     return {"action_type": "no_reply", "success": True, "result": "选择不回复", "command": ""}
 
                 elif action_planner_info.action_type == "no_reply_until_call":
@@ -753,7 +750,12 @@ class HeartFChatting:
                         action_name="no_reply_until_call",
                         action_reasoning=reason,
                     )
-                    return {"action_type": "no_reply_until_call", "success": True, "result": "保持沉默，直到有人直接叫的名字", "command": ""}
+                    return {
+                        "action_type": "no_reply_until_call",
+                        "success": True,
+                        "result": "保持沉默，直到有人直接叫的名字",
+                        "command": "",
+                    }
 
                 elif action_planner_info.action_type == "reply":
                     # 直接当场执行reply逻辑
@@ -783,18 +785,15 @@ class HeartFChatting:
                         enable_tool=global_config.tool.enable_tool,
                         request_type="replyer",
                         from_plugin=False,
-                        reply_time_point = action_planner_info.action_data.get("loop_start_time", time.time()),
+                        reply_time_point=action_planner_info.action_data.get("loop_start_time", time.time()),
                     )
 
                     if not success or not llm_response or not llm_response.reply_set:
                         if action_planner_info.action_message:
-                            logger.info(
-                                f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败"
-                            )
+                            logger.info(f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败")
                         else:
                             logger.info("回复生成失败")
                         return {"action_type": "reply", "success": False, "result": "回复生成失败", "loop_info": None}
-
 
                     response_set = llm_response.reply_set
                     selected_expressions = llm_response.selected_expressions
@@ -817,12 +816,12 @@ class HeartFChatting:
                     # 执行普通动作
                     with Timer("动作执行", cycle_timers):
                         success, result = await self._handle_action(
-                            action = action_planner_info.action_type,
-                            action_reasoning = action_planner_info.action_reasoning or "",
-                            action_data = action_planner_info.action_data or {},
-                            cycle_timers = cycle_timers,
-                            thinking_id = thinking_id,
-                            action_message= action_planner_info.action_message,
+                            action=action_planner_info.action_type,
+                            action_reasoning=action_planner_info.action_reasoning or "",
+                            action_data=action_planner_info.action_data or {},
+                            cycle_timers=cycle_timers,
+                            thinking_id=thinking_id,
+                            action_message=action_planner_info.action_message,
                         )
 
                     self.last_active_time = time.time()

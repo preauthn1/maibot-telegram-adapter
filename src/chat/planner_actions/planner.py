@@ -143,7 +143,6 @@ class ActionPlanner:
 
         self.last_obs_time_mark = 0.0
 
-
         self.plan_log: List[Tuple[str, float, Union[List[ActionPlannerInfo], str]]] = []
 
     def find_message_by_id(
@@ -306,7 +305,9 @@ class ActionPlanner:
             loop_start_time=loop_start_time,
         )
 
-        logger.info(f"{self.log_prefix}Planner:{reasoning}。选择了{len(actions)}个动作: {' '.join([a.action_type for a in actions])}")
+        logger.info(
+            f"{self.log_prefix}Planner:{reasoning}。选择了{len(actions)}个动作: {' '.join([a.action_type for a in actions])}"
+        )
 
         self.add_plan_log(reasoning, actions)
 
@@ -316,7 +317,7 @@ class ActionPlanner:
         self.plan_log.append((reasoning, time.time(), actions))
         if len(self.plan_log) > 20:
             self.plan_log.pop(0)
-    
+
     def add_plan_excute_log(self, result: str):
         self.plan_log.append(("", time.time(), result))
         if len(self.plan_log) > 20:
@@ -325,17 +326,17 @@ class ActionPlanner:
     def get_plan_log_str(self, max_action_records: int = 2, max_execution_records: int = 5) -> str:
         """
         获取计划日志字符串
-        
+
         Args:
             max_action_records: 显示多少条最新的action记录，默认2
             max_execution_records: 显示多少条最新执行结果记录，默认8
-            
+
         Returns:
             格式化的日志字符串
         """
         action_records = []
         execution_records = []
-        
+
         # 从后往前遍历，收集最新的记录
         for reasoning, timestamp, content in reversed(self.plan_log):
             if isinstance(content, list) and all(isinstance(action, ActionPlannerInfo) for action in content):
@@ -346,13 +347,13 @@ class ActionPlanner:
                 # 这是执行结果记录
                 if len(execution_records) < max_execution_records:
                     execution_records.append((reasoning, timestamp, content, "execution"))
-        
+
         # 合并所有记录并按时间戳排序
         all_records = action_records + execution_records
         all_records.sort(key=lambda x: x[1])  # 按时间戳排序
-        
+
         plan_log_str = ""
-        
+
         # 按时间顺序添加所有记录
         for reasoning, timestamp, content, record_type in all_records:
             time_str = datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
@@ -361,21 +362,21 @@ class ActionPlanner:
                 plan_log_str += f"{time_str}:{reasoning}\n"
             else:
                 plan_log_str += f"{time_str}:你执行了action:{content}\n"
-                
+
         return plan_log_str
 
     def _has_consecutive_no_reply(self, min_count: int = 3) -> bool:
         """
         检查是否有连续min_count次以上的no_reply
-        
+
         Args:
             min_count: 需要连续的最少次数，默认3
-            
+
         Returns:
             如果有连续min_count次以上no_reply返回True，否则返回False
         """
         consecutive_count = 0
-        
+
         # 从后往前遍历plan_log，检查最新的连续记录
         for _reasoning, _timestamp, content in reversed(self.plan_log):
             if isinstance(content, list) and all(isinstance(action, ActionPlannerInfo) for action in content):
@@ -387,7 +388,7 @@ class ActionPlanner:
                 else:
                     # 如果遇到非no_reply的action，重置计数
                     break
-        
+
         return False
 
     async def build_planner_prompt(
@@ -402,8 +403,7 @@ class ActionPlanner:
     ) -> tuple[str, List[Tuple[str, "DatabaseMessages"]]]:
         """构建 Planner LLM 的提示词 (获取模板并填充数据)"""
         try:
-
-            actions_before_now_block=self.get_plan_log_str()
+            actions_before_now_block = self.get_plan_log_str()
 
             # 构建聊天上下文描述
             chat_context_description = "你现在正在一个群聊中"
@@ -537,7 +537,7 @@ class ActionPlanner:
             for require_item in action_info.action_require:
                 require_text += f"- {require_item}\n"
             require_text = require_text.rstrip("\n")
-            
+
             if not action_info.parallel_action:
                 parallel_text = "(当选择这个动作时，请不要选择其他动作)"
             else:
@@ -564,7 +564,7 @@ class ActionPlanner:
         filtered_actions: Dict[str, ActionInfo],
         available_actions: Dict[str, ActionInfo],
         loop_start_time: float,
-    ) -> Tuple[str,List[ActionPlannerInfo]]:
+    ) -> Tuple[str, List[ActionPlannerInfo]]:
         """执行主规划器"""
         llm_content = None
         actions: List[ActionPlannerInfo] = []
@@ -589,7 +589,7 @@ class ActionPlanner:
 
         except Exception as req_e:
             logger.error(f"{self.log_prefix}LLM 请求执行失败: {req_e}")
-            return f"LLM 请求失败，模型出现问题: {req_e}",[
+            return f"LLM 请求失败，模型出现问题: {req_e}", [
                 ActionPlannerInfo(
                     action_type="no_reply",
                     reasoning=f"LLM 请求失败，模型出现问题: {req_e}",
@@ -608,7 +608,11 @@ class ActionPlanner:
                     logger.debug(f"{self.log_prefix}从响应中提取到{len(json_objects)}个JSON对象")
                     filtered_actions_list = list(filtered_actions.items())
                     for json_obj in json_objects:
-                        actions.extend(self._parse_single_action(json_obj, message_id_list, filtered_actions_list, extracted_reasoning))
+                        actions.extend(
+                            self._parse_single_action(
+                                json_obj, message_id_list, filtered_actions_list, extracted_reasoning
+                            )
+                        )
                 else:
                     # 尝试解析为直接的JSON
                     logger.warning(f"{self.log_prefix}LLM没有返回可用动作: {llm_content}")
@@ -631,7 +635,7 @@ class ActionPlanner:
 
         logger.debug(f"{self.log_prefix}规划器选择了{len(actions)}个动作: {' '.join([a.action_type for a in actions])}")
 
-        return extracted_reasoning,actions
+        return extracted_reasoning, actions
 
     def _create_no_reply(self, reasoning: str, available_actions: Dict[str, ActionInfo]) -> List[ActionPlannerInfo]:
         """创建no_reply"""
@@ -674,7 +678,7 @@ class ActionPlanner:
                 json_str = re.sub(r"/\*.*?\*/", "", json_str, flags=re.DOTALL)  # 移除多行注释
                 if json_str := json_str.strip():
                     # 尝试按行分割，每行可能是一个JSON对象
-                    lines = [line.strip() for line in json_str.split('\n') if line.strip()]
+                    lines = [line.strip() for line in json_str.split("\n") if line.strip()]
                     for line in lines:
                         try:
                             # 尝试解析每一行作为独立的JSON对象
@@ -688,7 +692,7 @@ class ActionPlanner:
                         except json.JSONDecodeError:
                             # 如果单行解析失败，尝试将整个块作为一个JSON对象或数组
                             pass
-                    
+
                     # 如果按行解析没有成功，尝试将整个块作为一个JSON对象或数组
                     if not json_objects:
                         json_obj = json.loads(repair_json(json_str))

@@ -6,18 +6,21 @@ import os
 from .tokenizer import Tokenizer
 from .online_nb import OnlineNaiveBayes
 
+
 class ExpressorModel:
     """
     直接使用朴素贝叶斯精排（可在线学习）
     支持存储situation字段，不参与计算，仅与style对应
     """
 
-    def __init__(self,
-                 alpha: float = 0.5,
-                 beta: float = 0.5,
-                 gamma: float = 1.0,
-                 vocab_size: int = 200000,
-                 use_jieba: bool = True):
+    def __init__(
+        self,
+        alpha: float = 0.5,
+        beta: float = 0.5,
+        gamma: float = 1.0,
+        vocab_size: int = 200000,
+        use_jieba: bool = True,
+    ):
         self.tokenizer = Tokenizer(stopwords=set(), use_jieba=use_jieba)
         self.nb = OnlineNaiveBayes(alpha=alpha, beta=beta, gamma=gamma, vocab_size=vocab_size)
         self._candidates: Dict[str, str] = {}  # cid -> text (style)
@@ -28,7 +31,7 @@ class ExpressorModel:
         self._candidates[cid] = text
         if situation is not None:
             self._situations[cid] = situation
-        
+
         # 确保在nb模型中初始化该候选的计数
         if cid not in self.nb.cls_counts:
             self.nb.cls_counts[cid] = 0.0
@@ -46,7 +49,7 @@ class ExpressorModel:
         toks = self.tokenizer.tokenize(text)
         if not toks:
             return None, {}
-        
+
         if not self._candidates:
             return None, {}
 
@@ -58,7 +61,7 @@ class ExpressorModel:
         # 取最高分
         if not scores:
             return None, {}
-        
+
         # 根据k参数限制返回的候选数量
         if k is not None and k > 0:
             # 按分数降序排序，取前k个
@@ -81,40 +84,42 @@ class ExpressorModel:
 
     def decay(self, factor: float):
         self.nb.decay(factor=factor)
-    
+
     def get_situation(self, cid: str) -> Optional[str]:
         """获取候选对应的situation"""
         return self._situations.get(cid)
-    
+
     def get_style(self, cid: str) -> Optional[str]:
         """获取候选对应的style"""
         return self._candidates.get(cid)
-    
+
     def get_candidate_info(self, cid: str) -> Tuple[Optional[str], Optional[str]]:
         """获取候选的style和situation信息"""
         return self._candidates.get(cid), self._situations.get(cid)
-    
+
     def get_all_candidates(self) -> Dict[str, Tuple[str, Optional[str]]]:
         """获取所有候选的style和situation信息"""
-        return {cid: (style, self._situations.get(cid)) 
-                for cid, style in self._candidates.items()}
+        return {cid: (style, self._situations.get(cid)) for cid, style in self._candidates.items()}
 
     def save(self, path: str):
         """保存模型"""
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
-            pickle.dump({
-                "candidates": self._candidates,
-                "situations": self._situations,
-                "nb": {
-                    "cls_counts": dict(self.nb.cls_counts),
-                    "token_counts": {cid: dict(tc) for cid, tc in self.nb.token_counts.items()},
-                    "alpha": self.nb.alpha,
-                    "beta": self.nb.beta,
-                    "gamma": self.nb.gamma,
-                    "V": self.nb.V,
-                }
-            }, f)
+            pickle.dump(
+                {
+                    "candidates": self._candidates,
+                    "situations": self._situations,
+                    "nb": {
+                        "cls_counts": dict(self.nb.cls_counts),
+                        "token_counts": {cid: dict(tc) for cid, tc in self.nb.token_counts.items()},
+                        "alpha": self.nb.alpha,
+                        "beta": self.nb.beta,
+                        "gamma": self.nb.gamma,
+                        "V": self.nb.V,
+                    },
+                },
+                f,
+            )
 
     def load(self, path: str):
         """加载模型"""
@@ -133,8 +138,10 @@ class ExpressorModel:
         self.nb.V = obj["nb"]["V"]
         self.nb._logZ.clear()
 
+
 def defaultdict_dict(d: Dict[str, Dict[str, float]]):
     from collections import defaultdict
+
     outer = defaultdict(lambda: defaultdict(float))
     for k, inner in d.items():
         outer[k].update(inner)
