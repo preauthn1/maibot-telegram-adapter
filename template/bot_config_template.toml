@@ -1,5 +1,5 @@
 [inner]
-version = "6.20.3"
+version = "6.21.1"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -124,6 +124,8 @@ max_memory_number = 100 # 记忆最大数量
 max_memory_size = 2048 # 记忆最大大小
 memory_build_frequency = 1 # 记忆构建频率
 
+[jargon]
+all_global = true # 是否开启全局黑话模式，注意，此功能关闭后，已经记录的全局黑话不会改变，需要手动删除
 
 [tool]
 enable_tool = true # 是否启用工具
@@ -161,6 +163,8 @@ ban_msgs_regex = [
 
 [lpmm_knowledge] # lpmm知识库配置
 enable = false # 是否启用lpmm知识库
+lpmm_mode = "agent"
+# 可选：classic经典模式，agent 模式，结合最新的记忆一同使用
 rag_synonym_search_top_k = 10 # 同义词搜索TopK
 rag_synonym_threshold = 0.8 # 同义词阈值（相似度高于此阈值的词语会被认为是同义词）
 info_extraction_workers = 3 # 实体提取同时执行线程数，非Pro模型不要设置超过5
@@ -255,3 +259,4 @@ chat_prompts = []
 #此系统暂时移除，无效配置
 [relationship]
 enable_relationship = true # 是否启用关系系统
+

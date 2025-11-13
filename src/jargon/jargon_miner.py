@@ -29,20 +29,19 @@ def _init_prompt() -> None:
 - 必须为对话中真实出现过的短词或短语
 - 必须是你无法理解含义的词语，没有明确含义的词语
 - 请不要选择有明确含义，或者含义清晰的词语
-- 必须是这几种类别之一：英文或中文缩写、中文拼音短语
 - 排除：人名、@、表情包/图片中的内容、纯标点、常规功能词（如的、了、呢、啊等）
 - 每个词条长度建议 2-8 个字符（不强制），尽量短小
 - 合并重复项，去重
 
-分类规则,type必须根据规则填写：
-- p（拼音缩写）：由字母构成的，汉语拼音首字母的简写词，例如：nb、yyds、xswl
-- e（英文缩写）：英文词语的缩写，用英文字母概括一个词汇或含义，例如：CPU、GPU、API
-- c（中文缩写）：中文词语的缩写，用几个汉字概括一个词汇或含义，例如：社死、内卷
+黑话必须为以下几种类型：
+- 由字母构成的，汉语拼音首字母的简写词，例如：nb、yyds、xswl
+- 英文词语的缩写，用英文字母概括一个词汇或含义，例如：CPU、GPU、API
+- 中文词语的缩写，用几个汉字概括一个词汇或含义，例如：社死、内卷
 
 以 JSON 数组输出，元素为对象（严格按以下结构）：
 [
-  {{"content": "词条", "raw_content": "包含该词条的完整对话上下文原文", "type": "p"}},
-  {{"content": "词条2", "raw_content": "包含该词条的完整对话上下文原文", "type": "c"}}
+  {{"content": "词条", "raw_content": "包含该词条的完整对话上下文原文"}},
+  {{"content": "词条2", "raw_content": "包含该词条的完整对话上下文原文"}}
 ]
 
 现在请输出：
@@ -154,8 +153,8 @@ class JargonMiner:
         self.chat_id = chat_id
         self.last_learning_time: float = time.time()
         # 频率控制，可按需调整
-        self.min_messages_for_learning: int = 20
-        self.min_learning_interval: float = 30  
+        self.min_messages_for_learning: int = 15
+        self.min_learning_interval: float = 20  
 
         self.llm = LLMRequest(
             model_set=model_config.model_task_config.utils,
@@ -427,17 +426,10 @@ class JargonMiner:
                         if raw_content_str:
                             raw_content_list = [raw_content_str]
                     
-                    type_str = str(item.get("type", "")).strip().lower()
-                    
-                    # 验证type是否为有效值
-                    if type_str not in ["p", "c", "e"]:
-                        type_str = "p"  # 默认值
-                    
                     if content and raw_content_list:
                         entries.append({
                             "content": content,
-                            "raw_content": raw_content_list,
-                            "type": type_str
+                            "raw_content": raw_content_list
                         })
             except Exception as e:
                 logger.error(f"解析jargon JSON失败: {e}; 原始: {response}")
@@ -458,21 +450,27 @@ class JargonMiner:
             
             saved = 0
             updated = 0
-            merged = 0
             for entry in uniq_entries:
                 content = entry["content"]
                 raw_content_list = entry["raw_content"]  # 已经是列表
-                type_str = entry["type"]
                 try:
-                    # 步骤1: 检查同chat_id的记录，默认纳入global项目
-                    # 查询条件：chat_id匹配 OR (is_global为True且content匹配)
-                    query = (
-                        Jargon.select()
-                        .where(
-                            ((Jargon.chat_id == self.chat_id) | Jargon.is_global) &
-                            (Jargon.content == content)
+                    # 根据all_global配置决定查询逻辑
+                    if global_config.jargon.all_global:
+                        # 开启all_global：无视chat_id，查询所有content匹配的记录（所有记录都是全局的）
+                        query = (
+                            Jargon.select()
+                            .where(Jargon.content == content)
                         )
-                    )
+                    else:
+                        # 关闭all_global：只查询chat_id匹配的记录（不考虑is_global）
+                        query = (
+                            Jargon.select()
+                            .where(
+                                (Jargon.chat_id == self.chat_id) &
+                                (Jargon.content == content)
+                            )
+                        )
+                    
                     if query.exists():
                         obj = query.get()
                         try:
@@ -494,9 +492,11 @@ class JargonMiner:
                         merged_list = list(dict.fromkeys(existing_raw_content + raw_content_list))
                         obj.raw_content = json.dumps(merged_list, ensure_ascii=False)
                         
-                        # 更新type（如果为空）
-                        if type_str and not obj.type:
-                            obj.type = type_str
+                        # 开启all_global时，确保记录标记为is_global=True
+                        if global_config.jargon.all_global:
+                            obj.is_global = True
+                        # 关闭all_global时，保持原有is_global不变（不修改）
+                        
                         obj.save()
                         
                         # 检查是否需要推断（达到阈值且超过上次判定值）
@@ -508,93 +508,22 @@ class JargonMiner:
                         
                         updated += 1
                     else:
-                        # 步骤2: 同chat_id没有找到，检查所有chat_id中是否有相同content的记录
-                        # 查询所有非global的记录（global的已经在步骤1检查过了）
-                        all_content_query = (
-                            Jargon.select()
-                            .where(
-                                (Jargon.content == content) &
-                                (~Jargon.is_global)
-                            )
-                        )
-                        all_matching = list(all_content_query)
-                        
-                        # 如果找到3个或更多相同content的记录，合并它们
-                        if len(all_matching) >= 3:
-                            # 找到3个或更多已有记录，合并它们（新条目也会被包含在合并中）
-                            total_count = sum((obj.count or 0) for obj in all_matching) + 1  # +1 是因为当前新条目
-                            
-                            # 合并所有raw_content列表
-                            all_raw_content = []
-                            for obj in all_matching:
-                                if obj.raw_content:
-                                    try:
-                                        obj_raw = json.loads(obj.raw_content) if isinstance(obj.raw_content, str) else obj.raw_content
-                                        if not isinstance(obj_raw, list):
-                                            obj_raw = [obj_raw] if obj_raw else []
-                                        all_raw_content.extend(obj_raw)
-                                    except (json.JSONDecodeError, TypeError):
-                                        if obj.raw_content:
-                                            all_raw_content.append(obj.raw_content)
-                            
-                            # 添加当前新条目的raw_content
-                            all_raw_content.extend(raw_content_list)
-                            # 去重
-                            merged_raw_content = list(dict.fromkeys(all_raw_content))
-                            
-                            # 合并type：优先使用非空的值
-                            merged_type = type_str
-                            for obj in all_matching:
-                                if obj.type and not merged_type:
-                                    merged_type = obj.type
-                                    break
-                            
-                            # 合并其他字段：优先使用已有值
-                            merged_meaning = None
-                            merged_is_jargon = None
-                            merged_last_inference_count = None
-                            merged_is_complete = False
-                            
-                            for obj in all_matching:
-                                if obj.meaning and not merged_meaning:
-                                    merged_meaning = obj.meaning
-                                if obj.is_jargon is not None and merged_is_jargon is None:
-                                    merged_is_jargon = obj.is_jargon
-                                if obj.last_inference_count is not None and merged_last_inference_count is None:
-                                    merged_last_inference_count = obj.last_inference_count
-                                if obj.is_complete:
-                                    merged_is_complete = True
-                            
-                            # 删除旧的记录
-                            for obj in all_matching:
-                                obj.delete_instance()
-                            
-                            # 创建新的global记录
-                            Jargon.create(
-                                content=content,
-                                raw_content=json.dumps(merged_raw_content, ensure_ascii=False),
-                                type=merged_type,
-                                chat_id="global",
-                                is_global=True,
-                                count=total_count,
-                                meaning=merged_meaning,
-                                is_jargon=merged_is_jargon,
-                                last_inference_count=merged_last_inference_count,
-                                is_complete=merged_is_complete
-                            )
-                            merged += 1
-                            logger.info(f"合并jargon为global: content={content}, 合并了{len(all_matching)}条已有记录+1条新记录（共{len(all_matching)+1}条），总count={total_count}")
+                        # 没找到匹配记录，创建新记录
+                        if global_config.jargon.all_global:
+                            # 开启all_global：新记录默认为is_global=True
+                            is_global_new = True
                         else:
-                            # 找到少于3个已有记录，正常创建新记录
-                            Jargon.create(
-                                content=content,
-                                raw_content=json.dumps(raw_content_list, ensure_ascii=False),
-                                type=type_str,
-                                chat_id=self.chat_id,
-                                is_global=False,
-                                count=1
-                            )
-                            saved += 1
+                            # 关闭all_global：新记录is_global=False
+                            is_global_new = False
+                        
+                        Jargon.create(
+                            content=content,
+                            raw_content=json.dumps(raw_content_list, ensure_ascii=False),
+                            chat_id=self.chat_id,
+                            is_global=is_global_new,
+                            count=1
+                        )
+                        saved += 1
                 except Exception as e:
                     logger.error(f"保存jargon失败: chat_id={self.chat_id}, content={content}, err={e}")
                     continue
@@ -611,8 +540,8 @@ class JargonMiner:
                 # 更新为本次提取的结束时间，确保不会重复提取相同的消息窗口
                 self.last_learning_time = extraction_end_time
             
-            if saved or updated or merged:
-                logger.info(f"jargon写入: 新增 {saved} 条，更新 {updated} 条，合并为global {merged} 条，chat_id={self.chat_id}")
+            if saved or updated:
+                logger.info(f"jargon写入: 新增 {saved} 条，更新 {updated} 条，chat_id={self.chat_id}")
         except Exception as e:
             logger.error(f"JargonMiner 运行失败: {e}")
 
@@ -647,7 +576,9 @@ def search_jargon(
     
     Args:
         keyword: 搜索关键词
-        chat_id: 可选的聊天ID，如果提供则优先搜索该聊天或global的jargon
+        chat_id: 可选的聊天ID
+            - 如果开启了all_global：此参数被忽略，查询所有is_global=True的记录
+            - 如果关闭了all_global：如果提供则优先搜索该聊天或global的jargon
         limit: 返回结果数量限制，默认10
         case_sensitive: 是否大小写敏感，默认False（不敏感）
         fuzzy: 是否模糊搜索，默认True（使用LIKE匹配）
@@ -686,11 +617,16 @@ def search_jargon(
     
     query = query.where(search_condition)
     
-    # 如果提供了chat_id，优先搜索该聊天或global的jargon
-    if chat_id:
-        query = query.where(
-            (Jargon.chat_id == chat_id) | Jargon.is_global
-        )
+    # 根据all_global配置决定查询逻辑
+    if global_config.jargon.all_global:
+        # 开启all_global：所有记录都是全局的，查询所有is_global=True的记录（无视chat_id）
+        query = query.where(Jargon.is_global)
+    else:
+        # 关闭all_global：如果提供了chat_id，优先搜索该聊天或global的jargon
+        if chat_id:
+            query = query.where(
+                (Jargon.chat_id == chat_id) | Jargon.is_global
+            )
     
     # 只返回有meaning的记录
     query = query.where(
