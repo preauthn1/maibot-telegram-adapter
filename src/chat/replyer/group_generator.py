@@ -1085,6 +1085,10 @@ class DefaultReplyer:
             if not global_config.lpmm_knowledge.enable:
                 logger.debug("LPMM知识库未启用，跳过获取知识库内容")
                 return ""
+            
+            if global_config.lpmm_knowledge.lpmm_mode == "agent":
+                return ""
+            
             time_now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
             bot_name = global_config.bot.nickname
@@ -1102,6 +1106,10 @@ class DefaultReplyer:
                 model_config=model_config.model_task_config.tool_use,
                 tool_options=[SearchKnowledgeFromLPMMTool.get_tool_definition()],
             )
+            
+            # logger.info(f"工具调用提示词: {prompt}")
+            # logger.info(f"工具调用: {tool_calls}")
+            
             if tool_calls:
                 result = await self.tool_executor.execute_tool_call(tool_calls[0], SearchKnowledgeFromLPMMTool())
                 end_time = time.time()
@@ -1109,7 +1117,7 @@ class DefaultReplyer:
                     logger.debug("从LPMM知识库获取知识失败，返回空知识...")
                     return ""
                 found_knowledge_from_lpmm = result.get("content", "")
-                logger.debug(
+                logger.info(
                     f"从LPMM知识库获取知识，相关信息：{found_knowledge_from_lpmm[:100]}...，信息长度: {len(found_knowledge_from_lpmm)}"
                 )
                 related_info += found_knowledge_from_lpmm

@@ -93,6 +93,14 @@ class ToolExecutor:
         # 获取可用工具
         tools = self._get_tool_definitions()
 
+        # 如果没有可用工具，直接返回空内容
+        if not tools:
+            logger.info(f"{self.log_prefix}没有可用工具，直接返回空内容")
+            if return_details:
+                return [], [], ""
+            else:
+                return [], [], ""
+
         # print(f"tools: {tools}")
 
         # 获取当前时间
@@ -116,6 +124,7 @@ class ToolExecutor:
         response, (reasoning_content, model_name, tool_calls) = await self.llm_model.generate_response_async(
             prompt=prompt, tools=tools, raise_when_empty=False
         )
+        
 
         # 执行工具调用
         tool_results, used_tools = await self.execute_tool_calls(tool_calls)

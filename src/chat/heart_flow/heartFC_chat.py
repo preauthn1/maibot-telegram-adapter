@@ -19,7 +19,6 @@ from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
 from src.express.expression_learner import expression_learner_manager
 from src.chat.frequency_control.frequency_control import frequency_control_manager
-from src.memory_system.curious import check_and_make_question
 from src.jargon import extract_and_store_jargon
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo

@@ -11,6 +11,7 @@ retrieval_tools/
 ├── tool_utils.py            # 工具函数库（共用函数）
 ├── query_jargon.py          # 查询jargon工具
 ├── query_chat_history.py    # 查询聊天历史工具
+├── query_lpmm_knowledge.py  # 查询LPMM知识库工具
 └── README.md                # 本文件
 ```
 
@@ -144,6 +145,11 @@ result = await tool.execute(time_range="2025-01-15 10:00:00 - 2025-01-15 20:00:0
   - `keyword` (可选) - 关键词，用于搜索消息内容
   - `time_point` (可选) - 时间点，格式：YYYY-MM-DD HH:MM:SS，用于查询某个时间点附近发生了什么（与time_range二选一）
   - `time_range` (可选) - 时间范围，格式：'YYYY-MM-DD HH:MM:SS - YYYY-MM-DD HH:MM:SS'（与time_point二选一）
+
+### query_lpmm_knowledge
+从LPMM知识库中检索与关键词相关的知识内容
+- 参数：
+  - `query` (必填) - 查询的关键词或问题描述
 
 ## 注意事项
 

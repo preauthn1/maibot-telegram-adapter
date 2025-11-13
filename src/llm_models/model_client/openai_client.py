@@ -77,6 +77,23 @@ def _convert_messages(messages: list[Message]) -> list[ChatCompletionMessagePara
             "content": content,
         }
 
+        if message.role == RoleType.Assistant and getattr(message, "tool_calls", None):
+            tool_calls_payload: list[dict[str, Any]] = []
+            for call in message.tool_calls or []:
+                tool_calls_payload.append(
+                    {
+                        "id": call.call_id,
+                        "type": "function",
+                        "function": {
+                            "name": call.func_name,
+                            "arguments": json.dumps(call.args or {}, ensure_ascii=False),
+                        },
+                    }
+                )
+            ret["tool_calls"] = tool_calls_payload
+            if ret["content"] == []:
+                ret["content"] = ""
+
         # 添加工具调用ID
         if message.role == RoleType.Tool:
             if not message.tool_call_id:

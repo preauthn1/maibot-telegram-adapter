@@ -9,7 +9,7 @@ from src.common.logger import get_logger
 from src.common.database.database_model import ChatHistory
 from src.chat.utils.utils import parse_keywords_string
 from .tool_registry import register_memory_retrieval_tool
-from .tool_utils import parse_datetime_to_timestamp, parse_time_range
+from ..memory_utils import parse_datetime_to_timestamp, parse_time_range
 
 logger = get_logger("memory_retrieval_tools")
 
@@ -17,7 +17,8 @@ logger = get_logger("memory_retrieval_tools")
 async def query_chat_history(
     chat_id: str,
     keyword: Optional[str] = None,
-    time_range: Optional[str] = None
+    time_range: Optional[str] = None,
+    fuzzy: bool = True
 ) -> str:
     """根据时间或关键词在chat_history表中查询聊天记录概述
     
@@ -27,6 +28,9 @@ async def query_chat_history(
         time_range: 时间范围或时间点，格式：
             - 时间范围："YYYY-MM-DD HH:MM:SS - YYYY-MM-DD HH:MM:SS"
             - 时间点："YYYY-MM-DD HH:MM:SS"（查询包含该时间点的记录）
+        fuzzy: 是否使用模糊匹配模式（默认True）
+            - True: 模糊匹配，只要包含任意一个关键词即匹配（OR关系）
+            - False: 全匹配，必须包含所有关键词才匹配（AND关系）
         
     Returns:
         str: 查询结果
@@ -62,9 +66,6 @@ async def query_chat_history(
         # 执行查询
         records = list(query.order_by(ChatHistory.start_time.desc()).limit(50))
         
-        if not records:
-            return "未找到相关聊天记录概述"
-        
         # 如果有关键词，进一步过滤
         if keyword:
             # 解析多个关键词（支持空格、逗号等分隔符）
@@ -96,24 +97,48 @@ async def query_chat_history(
                     except (json.JSONDecodeError, TypeError, ValueError):
                         pass
                 
-                # 检查是否包含任意一个关键词（OR关系）
+                # 根据匹配模式检查关键词
                 matched = False
-                for kw in keywords_lower:
-                    if (kw in theme or 
-                        kw in summary or 
-                        kw in original_text or
-                        any(kw in k for k in record_keywords_list)):
-                        matched = True
-                        break
+                if fuzzy:
+                    # 模糊匹配：只要包含任意一个关键词即匹配（OR关系）
+                    for kw in keywords_lower:
+                        if (kw in theme or 
+                            kw in summary or 
+                            kw in original_text or
+                            any(kw in k for k in record_keywords_list)):
+                            matched = True
+                            break
+                else:
+                    # 全匹配：必须包含所有关键词才匹配（AND关系）
+                    matched = True
+                    for kw in keywords_lower:
+                        kw_matched = (kw in theme or 
+                                     kw in summary or 
+                                     kw in original_text or
+                                     any(kw in k for k in record_keywords_list))
+                        if not kw_matched:
+                            matched = False
+                            break
                 
                 if matched:
                     filtered_records.append(record)
             
             if not filtered_records:
                 keywords_str = "、".join(keywords_list)
-                return f"未找到包含关键词'{keywords_str}'的聊天记录概述"
+                match_mode = "包含任意一个关键词" if fuzzy else "包含所有关键词"
+                if time_range:
+                    return f"未找到{match_mode}'{keywords_str}'且在指定时间范围内的聊天记录概述"
+                else:
+                    return f"未找到{match_mode}'{keywords_str}'的聊天记录概述"
             
             records = filtered_records
+        
+        # 如果没有记录（可能是时间范围查询但没有匹配的记录）
+        if not records:
+            if time_range:
+                return "未找到指定时间范围内的聊天记录概述"
+            else:
+                return "未找到相关聊天记录概述"
 
         # 对即将返回的记录增加使用计数
         records_to_use = records[:3]
@@ -168,18 +193,24 @@ def register_tool():
     """注册工具"""
     register_memory_retrieval_tool(
         name="query_chat_history",
-        description="根据时间或关键词在chat_history表的聊天记录概述库中查询。可以查询某个时间点发生了什么、某个时间范围内的事件，或根据关键词搜索消息概述",
+        description="根据时间或关键词在chat_history表的聊天记录概述库中查询。可以查询某个时间点发生了什么、某个时间范围内的事件，或根据关键词搜索消息概述。支持两种匹配模式：模糊匹配（默认，只要包含任意一个关键词即匹配）和全匹配（必须包含所有关键词才匹配）",
         parameters=[
             {
                 "name": "keyword",
                 "type": "string",
-                "description": "关键词（可选，支持多个关键词，可用空格、逗号、斜杠等分隔，如：'麦麦 百度网盘' 或 '麦麦,百度网盘'。用于在主题、关键词、概括、原文中搜索，只要包含任意一个关键词即匹配）",
+                "description": "关键词（可选，支持多个关键词，可用空格、逗号、斜杠等分隔，如：'麦麦 百度网盘' 或 '麦麦,百度网盘'。用于在主题、关键词、概括、原文中搜索）",
                 "required": False
             },
             {
                 "name": "time_range",
                 "type": "string",
                 "description": "时间范围或时间点（可选）。格式：'YYYY-MM-DD HH:MM:SS - YYYY-MM-DD HH:MM:SS'（时间范围，查询与时间范围有交集的记录）或 'YYYY-MM-DD HH:MM:SS'（时间点，查询包含该时间点的记录）",
+                "required": False
+            },
+            {
+                "name": "fuzzy",
+                "type": "boolean",
+                "description": "是否使用模糊匹配模式（默认True）。True表示模糊匹配（只要包含任意一个关键词即匹配，OR关系），False表示全匹配（必须包含所有关键词才匹配，AND关系）",
                 "required": False
             }
         ],

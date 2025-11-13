@@ -1030,6 +1030,10 @@ class PrivateReplyer:
             if not global_config.lpmm_knowledge.enable:
                 logger.debug("LPMM知识库未启用，跳过获取知识库内容")
                 return ""
+            
+            if global_config.lpmm_knowledge.lpmm_mode == "agent":
+                return ""
+            
             time_now = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
             bot_name = global_config.bot.nickname
