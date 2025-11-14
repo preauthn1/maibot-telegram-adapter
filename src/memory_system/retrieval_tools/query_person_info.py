@@ -12,6 +12,50 @@ from .tool_registry import register_memory_retrieval_tool
 logger = get_logger("memory_retrieval_tools")
 
 
+def _format_group_nick_names(group_nick_name_field) -> str:
+    """格式化群昵称信息
+    
+    Args:
+        group_nick_name_field: 群昵称字段（可能是字符串JSON或None）
+        
+    Returns:
+        str: 格式化后的群昵称信息字符串
+    """
+    if not group_nick_name_field:
+        return ""
+    
+    try:
+        # 解析JSON格式的群昵称列表
+        group_nick_names_data = json.loads(group_nick_name_field) if isinstance(group_nick_name_field, str) else group_nick_name_field
+        
+        if not isinstance(group_nick_names_data, list) or not group_nick_names_data:
+            return ""
+        
+        # 格式化群昵称列表
+        group_nick_list = []
+        for item in group_nick_names_data:
+            if isinstance(item, dict):
+                group_id = item.get("group_id", "未知群号")
+                group_nick_name = item.get("group_nick_name", "未知群昵称")
+                group_nick_list.append(f"  - 群号 {group_id}：{group_nick_name}")
+            elif isinstance(item, str):
+                # 兼容旧格式（如果存在）
+                group_nick_list.append(f"  - {item}")
+        
+        if group_nick_list:
+            return "群昵称：\n" + "\n".join(group_nick_list)
+        return ""
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        logger.warning(f"解析群昵称信息失败: {e}")
+        # 如果解析失败，尝试显示原始内容（截断）
+        if isinstance(group_nick_name_field, str):
+            preview = group_nick_name_field[:200]
+            if len(group_nick_name_field) > 200:
+                preview += "..."
+            return f"群昵称（原始数据）：{preview}"
+        return ""
+
+
 async def query_person_info(person_name: str) -> str:
     """根据person_name查询用户信息，使用模糊查询
     
@@ -67,6 +111,11 @@ async def query_person_info(person_name: str) -> str:
                 result_parts.append(f"平台：{record.platform}")
             if record.user_id:
                 result_parts.append(f"平台用户ID：{record.user_id}")
+            
+            # 群昵称信息
+            group_nick_name_str = _format_group_nick_names(getattr(record, "group_nick_name", None))
+            if group_nick_name_str:
+                result_parts.append(group_nick_name_str)
             
             # 名称设定原因
             if record.name_reason:
@@ -131,6 +180,11 @@ async def query_person_info(person_name: str) -> str:
                 result_parts.append(f"平台：{record.platform}")
             if record.user_id:
                 result_parts.append(f"平台用户ID：{record.user_id}")
+            
+            # 群昵称信息
+            group_nick_name_str = _format_group_nick_names(getattr(record, "group_nick_name", None))
+            if group_nick_name_str:
+                result_parts.append(group_nick_name_str)
             
             # 名称设定原因
             if record.name_reason:
@@ -219,7 +273,7 @@ def register_tool():
     """注册工具"""
     register_memory_retrieval_tool(
         name="query_person_info",
-        description="根据查询某个用户的所有信息。名称、昵称、平台、用户ID、qq号等",
+        description="根据查询某个用户的所有信息。名称、昵称、平台、用户ID、qq号、群昵称等",
         parameters=[
             {
                 "name": "person_name",

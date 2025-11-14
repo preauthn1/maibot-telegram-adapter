@@ -84,10 +84,19 @@ class HeartFCMessageReceiver:
 
             logger.info(f"[{mes_name}]{userinfo.user_nickname}:{processed_plain_text}")  # type: ignore
 
+            # 如果是群聊，获取群号和群昵称
+            group_id = None
+            group_nick_name = None
+            if chat.group_info:
+                group_id = chat.group_info.group_id  # type: ignore
+                group_nick_name = userinfo.user_cardname  # type: ignore
+
             _ = Person.register_person(
                 platform=message.message_info.platform,  # type: ignore
                 user_id=message.message_info.user_info.user_id,  # type: ignore
                 nickname=userinfo.user_nickname,  # type: ignore
+                group_id=group_id,
+                group_nick_name=group_nick_name,
             )
 
         except Exception as e:

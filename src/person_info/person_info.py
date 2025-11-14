@@ -160,7 +160,9 @@ def levenshtein_distance(s1: str, s2: str) -> int:
 
 class Person:
     @classmethod
-    def register_person(cls, platform: str, user_id: str, nickname: str):
+    def register_person(
+        cls, platform: str, user_id: str, nickname: str, group_id: Optional[str] = None, group_nick_name: Optional[str] = None
+    ):
         """
         注册新用户的类方法
         必须输入 platform、user_id 和 nickname 参数
@@ -169,6 +171,8 @@ class Person:
             platform: 平台名称
             user_id: 用户ID
             nickname: 用户昵称
+            group_id: 群号（可选，仅在群聊时提供）
+            group_nick_name: 群昵称（可选，仅在群聊时提供）
 
         Returns:
             Person: 新注册的Person实例
@@ -182,7 +186,11 @@ class Person:
 
         if is_person_known(person_id=person_id):
             logger.debug(f"用户 {nickname} 已存在")
-            return Person(person_id=person_id)
+            person = Person(person_id=person_id)
+            # 如果是群聊，更新群昵称
+            if group_id and group_nick_name:
+                person.add_group_nick_name(group_id, group_nick_name)
+            return person
 
         # 创建Person实例
         person = cls.__new__(cls)
@@ -201,6 +209,11 @@ class Person:
         person.know_since = time.time()
         person.last_know = time.time()
         person.memory_points = []
+        person.group_nick_name = []  # 初始化群昵称列表
+
+        # 如果是群聊，添加群昵称
+        if group_id and group_nick_name:
+            person.add_group_nick_name(group_id, group_nick_name)
 
         # 同步到数据库
         person.sync_to_database()
@@ -217,6 +230,7 @@ class Person:
             self.platform = platform
             self.nickname = global_config.bot.nickname
             self.person_name = global_config.bot.nickname
+            self.group_nick_name: list[dict[str, str]] = []
             return
 
         self.user_id = ""
@@ -255,6 +269,7 @@ class Person:
         self.know_since = None
         self.last_know: Optional[float] = None
         self.memory_points = []
+        self.group_nick_name: list[dict[str, str]] = []  # 群昵称列表，存储 {"group_id": str, "group_nick_name": str}
 
         # 从数据库加载数据
         self.load_from_database()
@@ -342,6 +357,31 @@ class Person:
             return memory_list
         return random.sample(memory_list, num)
 
+    def add_group_nick_name(self, group_id: str, group_nick_name: str):
+        """
+        添加或更新群昵称
+
+        Args:
+            group_id: 群号
+            group_nick_name: 群昵称
+        """
+        if not group_id or not group_nick_name:
+            return
+
+        # 检查是否已存在该群号的记录
+        for item in self.group_nick_name:
+            if item.get("group_id") == group_id:
+                # 更新现有记录
+                item["group_nick_name"] = group_nick_name
+                self.sync_to_database()
+                logger.debug(f"更新用户 {self.person_id} 在群 {group_id} 的群昵称为 {group_nick_name}")
+                return
+
+        # 添加新记录
+        self.group_nick_name.append({"group_id": group_id, "group_nick_name": group_nick_name})
+        self.sync_to_database()
+        logger.debug(f"添加用户 {self.person_id} 在群 {group_id} 的群昵称 {group_nick_name}")
+
     def load_from_database(self):
         """从数据库加载个人信息数据"""
         try:
@@ -371,6 +411,21 @@ class Person:
                         self.memory_points = []
                 else:
                     self.memory_points = []
+
+                # 处理group_nick_name字段（JSON格式的列表）
+                if record.group_nick_name:
+                    try:
+                        loaded_group_nick_names = json.loads(record.group_nick_name)
+                        # 确保是列表格式
+                        if isinstance(loaded_group_nick_names, list):
+                            self.group_nick_name = loaded_group_nick_names
+                        else:
+                            self.group_nick_name = []
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning(f"解析用户 {self.person_id} 的group_nick_name字段失败，使用默认值")
+                        self.group_nick_name = []
+                else:
+                    self.group_nick_name = []
 
                 logger.debug(f"已从数据库加载用户 {self.person_id} 的信息")
             else:
@@ -402,6 +457,9 @@ class Person:
                     [point for point in self.memory_points if point is not None], ensure_ascii=False
                 )
                 if self.memory_points
+                else json.dumps([], ensure_ascii=False),
+                "group_nick_name": json.dumps(self.group_nick_name, ensure_ascii=False)
+                if self.group_nick_name
                 else json.dumps([], ensure_ascii=False),
             }
 

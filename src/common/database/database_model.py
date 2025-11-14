@@ -267,6 +267,7 @@ class PersonInfo(BaseModel):
     platform = TextField()  # 平台
     user_id = TextField(index=True)  # 用户ID
     nickname = TextField(null=True)  # 用户昵称
+    group_nick_name = TextField(null=True)  # 群昵称列表 (JSON格式，存储 [{"group_id": str, "group_nick_name": str}])
     memory_points = TextField(null=True)  # 个人印象的点
     know_times = FloatField(null=True)  # 认识时间 (时间戳)
     know_since = FloatField(null=True)  # 首次印象总结时间
