@@ -258,7 +258,7 @@ class PrivateReplyer:
             return "", []
         style_habits = []
         # 使用从处理器传来的选中表达方式
-        # 根据配置模式选择表达方式：exp_model模式直接使用模型预测，classic模式使用LLM选择
+        # 使用模型预测选择表达方式
         selected_expressions, selected_ids = await expression_selector.select_suitable_expressions(
             self.chat_stream.stream_id, chat_history, max_num=8, target_message=target
         )

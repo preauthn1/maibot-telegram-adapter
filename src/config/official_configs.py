@@ -88,12 +88,6 @@ class ChatConfig(ConfigBase):
     mentioned_bot_reply: bool = True
     """是否启用提及必回复"""
 
-    auto_chat_value: float = 1
-    """自动聊天，越小，麦麦主动聊天的概率越低"""
-
-    enable_auto_chat_value_rules: bool = True
-    """是否启用动态自动聊天频率规则"""
-
     at_bot_inevitable_reply: float = 1
     """@bot 必然回复，1为100%回复，0为不额外增幅"""
 
@@ -119,24 +113,7 @@ class ChatConfig(ConfigBase):
         ["qq:114514:private", "00:00-23:59", 0.3],# 指定私聊全时段较安静
     ]
 
-    匹配优先级: 先匹配指定 chat 流规则，再匹配全局规则(\"\").
-    时间区间支持跨夜，例如 "23:00-02:00"。
-    """
-
-    auto_chat_value_rules: list[dict] = field(default_factory=lambda: [])
-    """
-    自动聊天频率规则列表，支持按聊天流/按日内时段配置。
-    规则格式：{ target="platform:id:type" 或 "", time="HH:MM-HH:MM", value=0.5 }
-
-    示例:
-    [
-        ["", "00:00-08:59", 0.2],                 # 全局规则：凌晨到早上更安静
-        ["", "09:00-22:59", 1.0],                 # 全局规则：白天正常
-        ["qq:1919810:group", "20:00-23:59", 0.6], # 指定群在晚高峰降低发言
-        ["qq:114514:private", "00:00-23:59", 0.3],# 指定私聊全时段较安静
-    ]
-
-    匹配优先级: 先匹配指定 chat 流规则，再匹配全局规则(\"\").
+    匹配优先级: 先匹配指定 chat 流规则，再匹配全局规则(\"\"). 
     时间区间支持跨夜，例如 "23:00-02:00"。
     """
 
@@ -245,61 +222,6 @@ class ChatConfig(ConfigBase):
         # 3) 未命中规则返回基础值
         return self.talk_value
 
-    def get_auto_chat_value(self, chat_id: Optional[str]) -> float:
-        """根据规则返回当前 chat 的动态 auto_chat_value，未匹配则回退到基础值。"""
-        if not self.enable_auto_chat_value_rules or not self.auto_chat_value_rules:
-            return self.auto_chat_value
-
-        now_min = self._now_minutes()
-
-        # 1) 先尝试匹配指定 chat 的规则
-        if chat_id:
-            for rule in self.auto_chat_value_rules:
-                if not isinstance(rule, dict):
-                    continue
-                target = rule.get("target", "")
-                time_range = rule.get("time", "")
-                value = rule.get("value", None)
-                if not isinstance(time_range, str):
-                    continue
-                # 跳过全局
-                if target == "":
-                    continue
-                config_chat_id = self._parse_stream_config_to_chat_id(str(target))
-                if config_chat_id is None or config_chat_id != chat_id:
-                    continue
-                parsed = self._parse_range(time_range)
-                if not parsed:
-                    continue
-                start_min, end_min = parsed
-                if self._in_range(now_min, start_min, end_min):
-                    try:
-                        return float(value)
-                    except Exception:
-                        continue
-
-        # 2) 再匹配全局规则("")
-        for rule in self.auto_chat_value_rules:
-            if not isinstance(rule, dict):
-                continue
-            target = rule.get("target", None)
-            time_range = rule.get("time", "")
-            value = rule.get("value", None)
-            if target != "" or not isinstance(time_range, str):
-                continue
-            parsed = self._parse_range(time_range)
-            if not parsed:
-                continue
-            start_min, end_min = parsed
-            if self._in_range(now_min, start_min, end_min):
-                try:
-                    return float(value)
-                except Exception:
-                    continue
-
-        # 3) 未命中规则返回基础值
-        return self.auto_chat_value
-
 
 @dataclass
 class MessageReceiveConfig(ConfigBase):
@@ -316,19 +238,18 @@ class MessageReceiveConfig(ConfigBase):
 class MemoryConfig(ConfigBase):
     """记忆配置类"""
 
-    max_memory_number: int = 100
-    """记忆最大数量"""
+    max_agent_iterations: int = 5
+    """Agent最多迭代轮数（最低为1）"""
 
-    memory_build_frequency: int = 1
-    """记忆构建频率"""
+    def __post_init__(self):
+        """验证配置值"""
+        if self.max_agent_iterations < 1:
+            raise ValueError(f"max_agent_iterations 必须至少为1，当前值: {self.max_agent_iterations}")
 
 
 @dataclass
 class ExpressionConfig(ConfigBase):
     """表达配置类"""
-
-    mode: str = "classic"
-    """表达方式模式，可选：classic经典模式，exp_model 表达模型模式"""
 
     learning_list: list[list] = field(default_factory=lambda: [])
     """

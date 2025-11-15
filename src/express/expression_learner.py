@@ -14,7 +14,6 @@ from src.chat.utils.chat_message_builder import (
 )
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
-from src.express.style_learner import style_learner_manager
 from src.express.express_utils import filter_message_content, calculate_similarity
 from json_repair import repair_json
 
@@ -180,10 +179,7 @@ class ExpressionLearner:
 
         current_time = time.time()
 
-        # 存储到数据库 Expression 表并训练 style_learner
-        has_new_expressions = False  # 记录是否有新的表达方式
-        learner = style_learner_manager.get_learner(self.chat_id)  # 获取 learner 实例
-
+        # 存储到数据库 Expression 表
         for (
             situation,
             style,
@@ -199,7 +195,6 @@ class ExpressionLearner:
                 expr_obj = query.get()
                 expr_obj.last_active_time = current_time
                 expr_obj.save()
-                continue
             else:
                 Expression.create(
                     situation=situation,
@@ -210,37 +205,6 @@ class ExpressionLearner:
                     context=context,
                     up_content=up_content,
                 )
-                has_new_expressions = True
-
-            # 训练 style_learner（up_content 和 style 必定存在）
-            try:
-                learner.add_style(style, situation)
-
-                # 学习映射关系
-                success = style_learner_manager.learn_mapping(self.chat_id, up_content, style)
-                if success:
-                    logger.debug(
-                        f"StyleLearner学习成功: {self.chat_id} - {up_content} -> {style}"
-                        + (f" (situation: {situation})" if situation else "")
-                    )
-                else:
-                    logger.warning(f"StyleLearner学习失败: {self.chat_id} - {up_content} -> {style}")
-            except Exception as e:
-                logger.error(f"StyleLearner学习异常: {self.chat_id} - {e}")
-
-        # 保存当前聊天室的 style_learner 模型
-        if has_new_expressions:
-            try:
-                logger.info(f"开始保存聊天室 {self.chat_id} 的 StyleLearner 模型...")
-                save_success = learner.save(style_learner_manager.model_save_path)
-
-                if save_success:
-                    logger.info(f"StyleLearner 模型保存成功，聊天室: {self.chat_id}")
-                else:
-                    logger.warning(f"StyleLearner 模型保存失败，聊天室: {self.chat_id}")
-
-            except Exception as e:
-                logger.error(f"StyleLearner 模型保存异常: {e}")
 
         return learnt_expressions
 
