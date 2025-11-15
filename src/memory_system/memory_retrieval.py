@@ -105,16 +105,20 @@ def init_memory_retrieval_prompt():
 **第一步：思考（Think）**
 在思考中分析：
 - 当前信息是否足够回答问题？
-- 如果足够，在思考中直接给出答案，格式为：final_answer(answer="你的答案内容")
-- 如果不够，说明最需要查询什么，并输出为纯文本说明
+- **如果信息足够且能找到明确答案**，在思考中直接给出答案，格式为：found_answer(answer="你的答案内容")
+- **如果信息不足或无法找到答案**，在思考中给出：not_enough_info(reason="信息不足或无法找到答案的原因")
+- 如果还需要继续查询，说明最需要查询什么，并输出为纯文本说明
 
 **第二步：行动（Action）**
 根据思考结果立即行动：
-- 如果思考中已给出final_answer → 无需调用工具，直接结束
-- 如果信息不足 → 调用相应工具查询（可并行调用多个工具）
-- 如果多次查询仍无结果 → 在思考中给出no_answer(reason="无法找到答案的原因")
+- 如果思考中已给出found_answer → 无需调用工具，直接结束
+- 如果思考中已给出not_enough_info → 无需调用工具，直接结束
+- 如果信息不足且需要继续查询 → 调用相应工具查询（可并行调用多个工具）
 
-**重要：答案必须在思考中给出，格式为 final_answer(answer="...") 或 no_answer(reason="...")，不要调用工具。**
+**重要规则：**
+- **只有在检索到明确、有关的信息并得出答案时，才使用found_answer**
+- **如果信息不足、无法确定、找不到相关信息，必须使用not_enough_info，不要使用found_answer**
+- 答案必须在思考中给出，格式为 found_answer(answer="...") 或 not_enough_info(reason="...")，不要调用工具。
 """,
         name="memory_retrieval_react_prompt",
     )
@@ -139,16 +143,20 @@ def init_memory_retrieval_prompt():
 **第一步：思考（Think）**
 在思考中分析：
 - 当前信息是否足够回答问题？
-- 如果足够，在思考中直接给出答案，格式为：final_answer(answer="你的答案内容")
-- 如果不够，说明最需要查询什么，并输出为纯文本说明
+- **如果信息足够且能找到明确答案**，在思考中直接给出答案，格式为：found_answer(answer="你的答案内容")
+- **如果信息不足或无法找到答案**，在思考中给出：not_enough_info(reason="信息不足或无法找到答案的原因")
+- 如果还需要继续查询，说明最需要查询什么，并输出为纯文本说明
 
 **第二步：行动（Action）**
 根据思考结果立即行动：
-- 如果思考中已给出final_answer → 无需调用工具，直接结束
-- 如果信息不足 → 调用相应工具查询（可并行调用多个工具）
-- 如果多次查询仍无结果 → 在思考中给出no_answer(reason="无法找到答案的原因")
+- 如果思考中已给出found_answer → 无需调用工具，直接结束
+- 如果思考中已给出not_enough_info → 无需调用工具，直接结束
+- 如果信息不足且需要继续查询 → 调用相应工具查询（可并行调用多个工具）
 
-**重要：答案必须在思考中给出，格式为 final_answer(answer="...") 或 no_answer(reason="...")，不要调用工具。**
+**重要规则：**
+- **只有在检索到明确、具体的答案时，才使用found_answer**
+- **如果信息不足、无法确定、找不到相关信息，必须使用not_enough_info，不要使用found_answer**
+- 答案必须在思考中给出，格式为 found_answer(answer="...") 或 not_enough_info(reason="...")，不要调用工具。
 """,
         name="memory_retrieval_react_prompt_head",
     )
@@ -171,10 +179,13 @@ def init_memory_retrieval_prompt():
 **执行步骤：**
 分析：
 - 当前信息是否足够回答问题？
-- 如果足够，在思考中直接给出答案，格式为：final_answer(answer="你的答案内容")
-- 如果不够，在思考中给出no_answer(reason="无法找到答案的原因")
+- **如果信息足够且能找到明确答案**，在思考中直接给出答案，格式为：found_answer(answer="你的答案内容")
+- **如果信息不足或无法找到答案**，在思考中给出：not_enough_info(reason="信息不足或无法找到答案的原因")
 
-**重要：答案必须给出，格式为 final_answer(answer="...") 或 no_answer(reason="...")。**
+**重要规则：**
+- **只有在检索到明确、具体的答案时，才使用found_answer**
+- **如果信息不足、无法确定、找不到相关信息，必须使用not_enough_info，不要使用found_answer**
+- 答案必须给出，格式为 found_answer(answer="...") 或 not_enough_info(reason="...")。
 """,
         name="memory_retrieval_react_final_prompt",
     )
@@ -498,13 +509,13 @@ async def _react_agent_solve_question(
             "observations": []
         }
         
-        # 优先从思考内容中提取final_answer或no_answer
+        # 优先从思考内容中提取found_answer或not_enough_info
         def extract_quoted_content(text, func_name, param_name):
             """从文本中提取函数调用中参数的值，支持单引号和双引号
             
             Args:
                 text: 要搜索的文本
-                func_name: 函数名，如 'final_answer'
+                func_name: 函数名，如 'found_answer'
                 param_name: 参数名，如 'answer'
             
             Returns:
@@ -556,33 +567,33 @@ async def _react_agent_solve_question(
             
             return None
         
-        # 从LLM的直接输出内容中提取final_answer或no_answer
-        final_answer_content = None
-        no_answer_reason = None
+        # 从LLM的直接输出内容中提取found_answer或not_enough_info
+        found_answer_content = None
+        not_enough_info_reason = None
         
         # 只检查response（LLM的直接输出内容），不检查reasoning_content
         if response:
-            final_answer_content = extract_quoted_content(response, 'final_answer', 'answer')
-            if not final_answer_content:
-                no_answer_reason = extract_quoted_content(response, 'no_answer', 'reason')
+            found_answer_content = extract_quoted_content(response, 'found_answer', 'answer')
+            if not found_answer_content:
+                not_enough_info_reason = extract_quoted_content(response, 'not_enough_info', 'reason')
         
         # 如果从输出内容中找到了答案，直接返回
-        if final_answer_content:
-            step["actions"].append({"action_type": "final_answer", "action_params": {"answer": final_answer_content}})
-            step["observations"] = ["从LLM输出内容中检测到final_answer"]
+        if found_answer_content:
+            step["actions"].append({"action_type": "found_answer", "action_params": {"answer": found_answer_content}})
+            step["observations"] = ["从LLM输出内容中检测到found_answer"]
             thinking_steps.append(step)
-            logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 从LLM输出内容中检测到final_answer: {final_answer_content[:100]}...")
-            return True, final_answer_content, thinking_steps, False
+            logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 从LLM输出内容中检测到found_answer: {found_answer_content[:100]}...")
+            return True, found_answer_content, thinking_steps, False
         
-        if no_answer_reason:
-            step["actions"].append({"action_type": "no_answer", "action_params": {"reason": no_answer_reason}})
-            step["observations"] = ["从LLM输出内容中检测到no_answer"]
+        if not_enough_info_reason:
+            step["actions"].append({"action_type": "not_enough_info", "action_params": {"reason": not_enough_info_reason}})
+            step["observations"] = ["从LLM输出内容中检测到not_enough_info"]
             thinking_steps.append(step)
-            logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 从LLM输出内容中检测到no_answer: {no_answer_reason[:100]}...")
-            return False, no_answer_reason, thinking_steps, False
+            logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 从LLM输出内容中检测到not_enough_info: {not_enough_info_reason[:100]}...")
+            return False, not_enough_info_reason, thinking_steps, False
         
         if is_final_iteration:
-            step["actions"].append({"action_type": "no_answer", "action_params": {"reason": "已到达最后一次迭代，无法找到答案"}})
+            step["actions"].append({"action_type": "not_enough_info", "action_params": {"reason": "已到达最后一次迭代，无法找到答案"}})
             step["observations"] = ["已到达最后一次迭代，无法找到答案"]
             thinking_steps.append(step)
             logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 已到达最后一次迭代，无法找到答案")
@@ -605,7 +616,7 @@ async def _react_agent_solve_question(
                 # 如果响应不为空，记录思考过程，继续下一轮迭代
                 step["observations"] = [f"思考完成，但未调用工具。响应: {response}"]
                 logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 思考完成但未调用工具: {response[:100]}...")
-                # 继续下一轮迭代，让LLM有机会在思考中给出final_answer或继续查询
+                # 继续下一轮迭代，让LLM有机会在思考中给出found_answer或继续查询
                 collected_info += f"思考: {response}"
                 thinking_steps.append(step)
                 continue
@@ -677,15 +688,15 @@ async def _react_agent_solve_question(
         
         thinking_steps.append(step)
     
-    # 达到最大迭代次数或超时，但Agent没有明确返回final_answer
-    # 迭代超时应该直接视为no_answer，而不是使用已有信息
-    # 只有Agent明确返回final_answer时，才认为找到了答案
+    # 达到最大迭代次数或超时，但Agent没有明确返回found_answer
+    # 迭代超时应该直接视为not_enough_info，而不是使用已有信息
+    # 只有Agent明确返回found_answer时，才认为找到了答案
     if collected_info:
-        logger.warning(f"ReAct Agent达到最大迭代次数或超时，但未明确返回final_answer。已收集信息: {collected_info[:100]}...")
+        logger.warning(f"ReAct Agent达到最大迭代次数或超时，但未明确返回found_answer。已收集信息: {collected_info[:100]}...")
     if is_timeout:
-        logger.warning("ReAct Agent超时，直接视为no_answer")
+        logger.warning("ReAct Agent超时，直接视为not_enough_info")
     else:
-        logger.warning("ReAct Agent达到最大迭代次数，直接视为no_answer")
+        logger.warning("ReAct Agent达到最大迭代次数，直接视为not_enough_info")
     return False, "未找到相关信息", thinking_steps, is_timeout
 
 
