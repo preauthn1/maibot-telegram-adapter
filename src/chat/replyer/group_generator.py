@@ -883,6 +883,7 @@ class DefaultReplyer:
             "replyer_prompt",
             expression_habits_block=expression_habits_block,
             tool_info_block=tool_info,
+            bot_name=global_config.bot.nickname,
             knowledge_prompt=prompt_info,
             mood_state=mood_state_prompt,
             # relation_info_block=relation_info,
