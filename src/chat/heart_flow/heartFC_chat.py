@@ -764,7 +764,9 @@ class HeartFChatting:
                     # 重置连续 no_reply 计数
                     self.consecutive_no_reply_count = 0
 
-                    reason = action_planner_info.reasoning or "选择回复"
+                    reason = action_planner_info.reasoning or ""
+                    # 使用 action_reasoning（planner 的整体思考理由）作为 reply_reason
+                    planner_reasoning = action_planner_info.action_reasoning or reason
                     await database_api.store_action_info(
                         chat_stream=self.chat_stream,
                         action_build_into_prompt=False,
@@ -781,7 +783,7 @@ class HeartFChatting:
                         reply_message=action_planner_info.action_message,
                         available_actions=available_actions,
                         chosen_actions=chosen_action_plan_infos,
-                        reply_reason=reason,
+                        reply_reason=planner_reasoning,
                         enable_tool=global_config.tool.enable_tool,
                         request_type="replyer",
                         from_plugin=False,

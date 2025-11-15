@@ -765,6 +765,12 @@ class PrivateReplyer:
         memory_retrieval: str = results_dict["memory_retrieval"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
 
+        # 从 chosen_actions 中提取 planner 的整体思考理由
+        planner_reasoning = ""
+        if reply_reason:
+            # 如果没有 chosen_actions，使用 reply_reason 作为备选
+            planner_reasoning = f"你的想法是：{reply_reason}"
+
         if extra_info:
             extra_info_block = f"以下是你在回复时需要参考的信息，现在请你阅读以下内容，进行决策\n{extra_info}\n以上是你在回复时需要参考的信息，现在请你阅读以下内容，进行决策"
         else:
@@ -834,6 +840,7 @@ class PrivateReplyer:
                 sender_name=sender,
                 memory_retrieval=memory_retrieval,
                 chat_prompt=chat_prompt_block,
+                planner_reasoning=planner_reasoning,
             ), selected_expressions
 
     async def build_prompt_rewrite_context(
