@@ -58,7 +58,8 @@ def _init_inference_prompts() -> None:
     prompt1_str = """
 **词条内容**
 {content}
- 
+**词条出现的上下文（raw_content）其中的SELF是你自己的发言**
+{raw_content_list}
 
 请根据以上词条内容和上下文，推断这个词条的含义。
 - 如果这是一个黑话、俚语或网络用语，请推断其含义
@@ -350,13 +351,22 @@ class JargonMiner:
                 logger.error(f"jargon {content} 推断2解析失败: {e}")
                 return
             
+
+            logger.info(f"jargon {content} 推断2提示词: {prompt2}")
+            logger.info(f"jargon {content} 推断2结果: {response2}")
+            logger.info(f"jargon {content} 推断1提示词: {prompt1}")
+            logger.info(f"jargon {content} 推断1结果: {response1}")
+            
             if global_config.debug.show_jargon_prompt:
                 logger.info(f"jargon {content} 推断2提示词: {prompt2}")
                 logger.info(f"jargon {content} 推断2结果: {response2}")
-                # logger.info(f"jargon {content} 推断2结果: {inference2}")
                 logger.info(f"jargon {content} 推断1提示词: {prompt1}")
                 logger.info(f"jargon {content} 推断1结果: {response1}")
-                # logger.info(f"jargon {content} 推断1结果: {inference1}")
+            else:
+                logger.debug(f"jargon {content} 推断2提示词: {prompt2}")
+                logger.debug(f"jargon {content} 推断2结果: {response2}")
+                logger.debug(f"jargon {content} 推断1提示词: {prompt1}")
+                logger.debug(f"jargon {content} 推断1结果: {response1}")
             
             # 步骤3: 比较两个推断结果
             prompt3 = await global_prompt_manager.format_prompt(

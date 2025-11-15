@@ -450,8 +450,8 @@ async def _react_agent_solve_question(
 
                 messages.extend(_conversation_messages)
                 
-                for msg in messages:
-                    print(msg)
+                # for msg in messages:
+                    # print(msg)
 
                 return messages
 
