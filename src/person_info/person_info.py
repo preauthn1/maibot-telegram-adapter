@@ -13,6 +13,7 @@ from src.common.database.database import db
 from src.common.database.database_model import PersonInfo
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import global_config, model_config
+from src.chat.message_receive.chat_stream import get_chat_manager
 
 
 logger = get_logger("person_info")
@@ -722,3 +723,74 @@ class PersonInfoManager:
 
 
 person_info_manager = PersonInfoManager()
+
+
+async def store_person_memory_from_answer(person_name: str, memory_content: str, chat_id: str) -> None:
+    """将人物信息存入person_info的memory_points
+    
+    Args:
+        person_name: 人物名称
+        memory_content: 记忆内容
+        chat_id: 聊天ID
+    """
+    try:
+        # 从chat_id获取chat_stream
+        chat_stream = get_chat_manager().get_stream(chat_id)
+        if not chat_stream:
+            logger.warning(f"无法获取chat_stream for chat_id: {chat_id}")
+            return
+        
+        platform = chat_stream.platform
+        
+        # 尝试从person_name查找person_id
+        # 首先尝试通过person_name查找
+        person_id = get_person_id_by_person_name(person_name)
+        
+        if not person_id:
+            # 如果通过person_name找不到，尝试从chat_stream获取user_info
+            if chat_stream.user_info:
+                user_id = chat_stream.user_info.user_id
+                person_id = get_person_id(platform, user_id)
+            else:
+                logger.warning(f"无法确定person_id for person_name: {person_name}, chat_id: {chat_id}")
+                return
+        
+        # 创建或获取Person对象
+        person = Person(person_id=person_id)
+        
+        if not person.is_known:
+            logger.warning(f"用户 {person_name} (person_id: {person_id}) 尚未认识，无法存储记忆")
+            return
+        
+        # 确定记忆分类（可以根据memory_content判断，这里使用通用分类）
+        category = "其他"  # 默认分类，可以根据需要调整
+        
+        # 记忆点格式：category:content:weight
+        weight = "1.0"  # 默认权重
+        memory_point = f"{category}:{memory_content}:{weight}"
+        
+        # 添加到memory_points
+        if not person.memory_points:
+            person.memory_points = []
+        
+        # 检查是否已存在相似的记忆点（避免重复）
+        is_duplicate = False
+        for existing_point in person.memory_points:
+            if existing_point and isinstance(existing_point, str):
+                parts = existing_point.split(":", 2)
+                if len(parts) >= 2:
+                    existing_content = parts[1].strip()
+                    # 简单相似度检查（如果内容相同或非常相似，则跳过）
+                    if existing_content == memory_content or memory_content in existing_content or existing_content in memory_content:
+                        is_duplicate = True
+                        break
+        
+        if not is_duplicate:
+            person.memory_points.append(memory_point)
+            person.sync_to_database()
+            logger.info(f"成功添加记忆点到 {person_name} (person_id: {person_id}): {memory_point}")
+        else:
+            logger.debug(f"记忆点已存在，跳过: {memory_point}")
+    
+    except Exception as e:
+        logger.error(f"存储人物记忆失败: {e}")

@@ -1,7 +1,7 @@
 import time
 import json
 import asyncio
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from json_repair import repair_json
 from peewee import fn
 
@@ -10,9 +10,12 @@ from src.common.database.database_model import Jargon
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 from src.chat.message_receive.chat_stream import get_chat_manager
+from src.plugin_system.apis import llm_api
 from src.chat.utils.chat_message_builder import (
     build_anonymous_messages,
     get_raw_msg_by_timestamp_with_chat_inclusive,
+    get_raw_msg_before_timestamp_with_chat,
+    build_readable_messages_with_list,
 )
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 
@@ -107,6 +110,97 @@ def _init_inference_prompts() -> None:
 
 _init_prompt()
 _init_inference_prompts()
+
+
+async def _enrich_raw_content_if_needed(
+    content: str,
+    raw_content_list: List[str],
+    chat_id: str,
+    messages: List[Any],
+    extraction_start_time: float,
+    extraction_end_time: float,
+) -> List[str]:
+    """
+    检查raw_content是否只包含黑话本身，如果是，则获取该消息的前三条消息作为原始内容
+    
+    Args:
+        content: 黑话内容
+        raw_content_list: 原始raw_content列表
+        chat_id: 聊天ID
+        messages: 当前时间窗口内的消息列表
+        extraction_start_time: 提取开始时间
+        extraction_end_time: 提取结束时间
+    
+    Returns:
+        处理后的raw_content列表
+    """
+    enriched_list = []
+    
+    for raw_content in raw_content_list:
+        # 检查raw_content是否只包含黑话本身（去除空白字符后比较）
+        raw_content_clean = raw_content.strip()
+        content_clean = content.strip()
+        
+        # 如果raw_content只包含黑话本身（可能有一些标点或空白），则尝试获取上下文
+        # 去除所有空白字符后比较，确保只包含黑话本身
+        raw_content_normalized = raw_content_clean.replace(" ", "").replace("\n", "").replace("\t", "")
+        content_normalized = content_clean.replace(" ", "").replace("\n", "").replace("\t", "")
+        
+        if raw_content_normalized == content_normalized:
+            # 在消息列表中查找只包含该黑话的消息（去除空白后比较）
+            target_message = None
+            for msg in messages:
+                msg_content = (msg.processed_plain_text or msg.display_message or "").strip()
+                msg_content_normalized = msg_content.replace(" ", "").replace("\n", "").replace("\t", "")
+                # 检查消息内容是否只包含黑话本身（去除空白后完全匹配）
+                if msg_content_normalized == content_normalized:
+                    target_message = msg
+                    break
+            
+            if target_message and target_message.time:
+                # 获取该消息的前三条消息
+                try:
+                    previous_messages = get_raw_msg_before_timestamp_with_chat(
+                        chat_id=chat_id,
+                        timestamp=target_message.time,
+                        limit=3
+                    )
+                    
+                    if previous_messages:
+                        # 将前三条消息和当前消息一起格式化
+                        context_messages = previous_messages + [target_message]
+                        # 按时间排序
+                        context_messages.sort(key=lambda x: x.time or 0)
+                        
+                        # 格式化为可读消息
+                        formatted_context, _ = await build_readable_messages_with_list(
+                            context_messages,
+                            replace_bot_name=True,
+                            timestamp_mode="relative",
+                            truncate=False,
+                        )
+                        
+                        if formatted_context.strip():
+                            enriched_list.append(formatted_context.strip())
+                            logger.warning(f"为黑话 {content} 补充了上下文消息")
+                        else:
+                            # 如果格式化失败，使用原始raw_content
+                            enriched_list.append(raw_content)
+                    else:
+                        # 没有找到前三条消息，使用原始raw_content
+                        enriched_list.append(raw_content)
+                except Exception as e:
+                    logger.warning(f"获取黑话 {content} 的上下文消息失败: {e}")
+                    # 出错时使用原始raw_content
+                    enriched_list.append(raw_content)
+            else:
+                # 没有找到包含黑话的消息，使用原始raw_content
+                enriched_list.append(raw_content)
+        else:
+            # raw_content包含更多内容，直接使用
+            enriched_list.append(raw_content)
+    
+    return enriched_list
 
 
 def _should_infer_meaning(jargon_obj: Jargon) -> bool:
@@ -453,6 +547,17 @@ class JargonMiner:
             for entry in uniq_entries:
                 content = entry["content"]
                 raw_content_list = entry["raw_content"]  # 已经是列表
+                
+                # 检查并补充raw_content：如果只包含黑话本身，则获取前三条消息作为上下文
+                raw_content_list = await _enrich_raw_content_if_needed(
+                    content=content,
+                    raw_content_list=raw_content_list,
+                    chat_id=self.chat_id,
+                    messages=messages,
+                    extraction_start_time=extraction_start_time,
+                    extraction_end_time=extraction_end_time,
+                )
+                
                 try:
                     # 根据all_global配置决定查询逻辑
                     if global_config.jargon.all_global:
@@ -648,5 +753,85 @@ def search_jargon(
         })
     
     return results
+
+
+async def store_jargon_from_answer(jargon_keyword: str, answer: str, chat_id: str) -> None:
+    """将黑话存入jargon系统
+    
+    Args:
+        jargon_keyword: 黑话关键词
+        answer: 答案内容（将概括为raw_content）
+        chat_id: 聊天ID
+    """
+    try:
+        # 概括答案为简短的raw_content
+        summary_prompt = f"""请将以下答案概括为一句简短的话（不超过50字），作为黑话"{jargon_keyword}"的使用示例：
+
+答案：{answer}
+
+只输出概括后的内容，不要输出其他内容："""
+        
+        success, summary, _, _ = await llm_api.generate_with_model(
+            summary_prompt,
+            model_config=model_config.model_task_config.utils_small,
+            request_type="memory.summarize_jargon",
+        )
+        
+        logger.info(f"概括答案提示: {summary_prompt}")
+        logger.info(f"概括答案: {summary}")
+        
+        if not success:
+            logger.warning(f"概括答案失败，使用原始答案: {summary}")
+            summary = answer[:100]  # 截取前100字符作为备用
+        
+        raw_content = summary.strip()[:200]  # 限制长度
+        
+        # 检查是否已存在
+        if global_config.jargon.all_global:
+            query = Jargon.select().where(Jargon.content == jargon_keyword)
+        else:
+            query = Jargon.select().where(
+                (Jargon.chat_id == chat_id) &
+                (Jargon.content == jargon_keyword)
+            )
+        
+        if query.exists():
+            # 更新现有记录
+            obj = query.get()
+            obj.count = (obj.count or 0) + 1
+            
+            # 合并raw_content列表
+            existing_raw_content = []
+            if obj.raw_content:
+                try:
+                    existing_raw_content = json.loads(obj.raw_content) if isinstance(obj.raw_content, str) else obj.raw_content
+                    if not isinstance(existing_raw_content, list):
+                        existing_raw_content = [existing_raw_content] if existing_raw_content else []
+                except (json.JSONDecodeError, TypeError):
+                    existing_raw_content = [obj.raw_content] if obj.raw_content else []
+            
+            # 合并并去重
+            merged_list = list(dict.fromkeys(existing_raw_content + [raw_content]))
+            obj.raw_content = json.dumps(merged_list, ensure_ascii=False)
+            
+            if global_config.jargon.all_global:
+                obj.is_global = True
+            
+            obj.save()
+            logger.info(f"更新jargon记录: {jargon_keyword}")
+        else:
+            # 创建新记录
+            is_global_new = True if global_config.jargon.all_global else False
+            Jargon.create(
+                content=jargon_keyword,
+                raw_content=json.dumps([raw_content], ensure_ascii=False),
+                chat_id=chat_id,
+                is_global=is_global_new,
+                count=1
+            )
+            logger.info(f"创建新jargon记录: {jargon_keyword}")
+    
+    except Exception as e:
+        logger.error(f"存储jargon失败: {e}")
 
 
