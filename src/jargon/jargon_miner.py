@@ -64,11 +64,14 @@ def _init_inference_prompts() -> None:
 请根据以上词条内容和上下文，推断这个词条的含义。
 - 如果这是一个黑话、俚语或网络用语，请推断其含义
 - 如果含义明确（常规词汇），也请说明
+- 如果上下文信息不足，无法推断含义，请设置 no_info 为 true
 
 以 JSON 格式输出：
 {{
-  "meaning": "详细含义说明（包含使用场景、来源、具体解释等）"
+  "meaning": "详细含义说明（包含使用场景、来源、具体解释等）",
+  "no_info": false
 }}
+注意：如果信息不足无法推断，请设置 "no_info": true，此时 meaning 可以为空字符串
 """
     Prompt(prompt1_str, "jargon_inference_with_context_prompt")
 
@@ -323,6 +326,17 @@ class JargonMiner:
             except Exception as e:
                 logger.error(f"jargon {content} 推断1解析失败: {e}")
                 return
+            
+            # 检查推断1是否表示信息不足无法推断
+            no_info = inference1.get("no_info", False)
+            meaning1 = inference1.get("meaning", "").strip()
+            if no_info or not meaning1:
+                logger.info(f"jargon {content} 推断1表示信息不足无法推断，放弃本次推断，待下次更新")
+                # 更新最后一次判定的count值，避免在同一阈值重复尝试
+                jargon_obj.last_inference_count = jargon_obj.count or 0
+                jargon_obj.save()
+                return
+
 
             # 步骤2: 仅基于content推断
             prompt2 = await global_prompt_manager.format_prompt(
