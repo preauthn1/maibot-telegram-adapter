@@ -27,10 +27,11 @@ def init_prompt():
 
 请你分析聊天内容的语境、情绪、话题类型，从上述情境中选择最适合当前聊天情境的，最多{max_num}个情境。
 考虑因素包括：
-1. 聊天的情绪氛围（轻松、严肃、幽默等）
-2. 话题类型（日常、技术、游戏、情感等）
-3. 情境与当前语境的匹配度
+1.聊天的情绪氛围（轻松、严肃、幽默等）
+2.话题类型（日常、技术、游戏、情感等）
+3.情境与当前语境的匹配度
 {target_message_extra_block}
+{reply_reason_block}
 
 请以JSON格式输出，只需要输出选中的情境编号：
 例如：
@@ -163,6 +164,7 @@ class ExpressionSelector:
         chat_info: str,
         max_num: int = 10,
         target_message: Optional[str] = None,
+        reply_reason: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], List[int]]:
         """
         选择适合的表达方式（使用classic模式：随机选择+LLM选择）
@@ -172,6 +174,7 @@ class ExpressionSelector:
             chat_info: 聊天内容信息
             max_num: 最大选择数量
             target_message: 目标消息内容
+            reply_reason: planner给出的回复理由
 
         Returns:
             Tuple[List[Dict[str, Any]], List[int]]: 选中的表达方式列表和ID列表
@@ -183,7 +186,7 @@ class ExpressionSelector:
 
         # 使用classic模式（随机选择+LLM选择）
         logger.debug(f"使用classic模式为聊天流 {chat_id} 选择表达方式")
-        return await self._select_expressions_classic(chat_id, chat_info, max_num, target_message)
+        return await self._select_expressions_classic(chat_id, chat_info, max_num, target_message, reply_reason)
 
     async def _select_expressions_classic(
         self,
@@ -191,6 +194,7 @@ class ExpressionSelector:
         chat_info: str,
         max_num: int = 10,
         target_message: Optional[str] = None,
+        reply_reason: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], List[int]]:
         """
         classic模式：随机选择+LLM选择
@@ -200,6 +204,7 @@ class ExpressionSelector:
             chat_info: 聊天内容信息
             max_num: 最大选择数量
             target_message: 目标消息内容
+            reply_reason: planner给出的回复理由
 
         Returns:
             Tuple[List[Dict[str, Any]], List[int]]: 选中的表达方式列表和ID列表
@@ -229,11 +234,17 @@ class ExpressionSelector:
             all_situations_str = "\n".join(all_situations)
 
             if target_message:
-                target_message_str = f"，现在你想要回复消息：{target_message}"
+                target_message_str = f"，现在你想要对上面的这条消息进行恢复：“{target_message}”"
                 target_message_extra_block = "4.考虑你要回复的目标消息"
             else:
                 target_message_str = ""
                 target_message_extra_block = ""
+
+            # 构建reply_reason块
+            if reply_reason:
+                reply_reason_block = f"5.考虑你的回复理由：{reply_reason}"
+            else:
+                reply_reason_block = ""
 
             # 3. 构建prompt（只包含情境，不包含完整的表达方式）
             prompt = (await global_prompt_manager.get_prompt_async("expression_evaluation_prompt")).format(
@@ -243,11 +254,15 @@ class ExpressionSelector:
                 max_num=max_num,
                 target_message=target_message_str,
                 target_message_extra_block=target_message_extra_block,
+                reply_reason_block=reply_reason_block,
             )
 
             # 4. 调用LLM
             content, (reasoning_content, model_name, _) = await self.llm_model.generate_response_async(prompt=prompt)
 
+            
+            print(prompt)
+            
             if not content:
                 logger.warning("LLM返回空结果")
                 return [], []

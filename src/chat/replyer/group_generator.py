@@ -227,13 +227,14 @@ class DefaultReplyer:
             traceback.print_exc()
             return False, llm_response
 
-    async def build_expression_habits(self, chat_history: str, target: str) -> Tuple[str, List[int]]:
+    async def build_expression_habits(self, chat_history: str, target: str, reply_reason: str = "") -> Tuple[str, List[int]]:
         # sourcery skip: for-append-to-extend
         """构建表达习惯块
 
         Args:
             chat_history: 聊天历史记录
             target: 目标消息内容
+            reply_reason: planner给出的回复理由
 
         Returns:
             str: 表达习惯信息字符串
@@ -246,7 +247,7 @@ class DefaultReplyer:
         # 使用从处理器传来的选中表达方式
         # 使用模型预测选择表达方式
         selected_expressions, selected_ids = await expression_selector.select_suitable_expressions(
-            self.chat_stream.stream_id, chat_history, max_num=8, target_message=target
+            self.chat_stream.stream_id, chat_history, max_num=8, target_message=target, reply_reason=reply_reason
         )
 
         if selected_expressions:
@@ -787,7 +788,7 @@ class DefaultReplyer:
         # 并行执行七个构建任务
         task_results = await asyncio.gather(
             self._time_and_run_task(
-                self.build_expression_habits(chat_talking_prompt_short, target), "expression_habits"
+                self.build_expression_habits(chat_talking_prompt_short, target, reply_reason), "expression_habits"
             ),
             self._time_and_run_task(
                 self.build_tool_info(chat_talking_prompt_short, sender, target, enable_tool=enable_tool), "tool_info"

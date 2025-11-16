@@ -89,9 +89,6 @@ class ChatHistorySummarizer:
             current_time = time.time()
 
         try:
-            logger.info(
-                f"{self.log_prefix} 开始处理聊天概括，时间窗口: {self.last_check_time:.2f} -> {current_time:.2f}"
-            )
             # 获取从上次检查时间到当前时间的新消息
             new_messages = message_api.get_messages_by_time_in_chat(
                 chat_id=self.chat_id,
@@ -109,6 +106,10 @@ class ChatHistorySummarizer:
                     await self._check_and_package(current_time)
                 self.last_check_time = current_time
                 return
+            
+            logger.info(
+                f"{self.log_prefix} 开始处理聊天概括，时间窗口: {self.last_check_time:.2f} -> {current_time:.2f}"
+            )
 
             # 有新消息，更新最后检查时间
             self.last_check_time = current_time
