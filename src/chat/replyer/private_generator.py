@@ -768,7 +768,7 @@ class PrivateReplyer:
 
         # 从 chosen_actions 中提取 planner 的整体思考理由
         planner_reasoning = ""
-        if reply_reason:
+        if global_config.chat.include_planner_reasoning and reply_reason:
             # 如果没有 chosen_actions，使用 reply_reason 作为备选
             planner_reasoning = f"你的想法是：{reply_reason}"
 

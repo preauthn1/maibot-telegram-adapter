@@ -16,11 +16,10 @@ logger = get_logger("expression_selector")
 
 
 def init_prompt():
-    expression_evaluation_prompt = """
-以下是正在进行的聊天内容：
-{chat_observe_info}
+    expression_evaluation_prompt = """{chat_observe_info}
 
 你的名字是{bot_name}{target_message}
+{reply_reason_block}
 
 以下是可选的表达情境：
 {all_situations}
@@ -31,7 +30,6 @@ def init_prompt():
 2.话题类型（日常、技术、游戏、情感等）
 3.情境与当前语境的匹配度
 {target_message_extra_block}
-{reply_reason_block}
 
 请以JSON格式输出，只需要输出选中的情境编号：
 例如：
@@ -234,22 +232,25 @@ class ExpressionSelector:
             all_situations_str = "\n".join(all_situations)
 
             if target_message:
-                target_message_str = f"，现在你想要对上面的这条消息进行恢复：“{target_message}”"
+                target_message_str = f"，现在你想要对这条消息进行回复：“{target_message}”"
                 target_message_extra_block = "4.考虑你要回复的目标消息"
             else:
                 target_message_str = ""
                 target_message_extra_block = ""
-
+                
+            chat_context = f"以下是正在进行的聊天内容：{chat_info}"
+    
             # 构建reply_reason块
             if reply_reason:
-                reply_reason_block = f"5.考虑你的回复理由：{reply_reason}"
+                reply_reason_block = f"你的回复理由是：{reply_reason}"
+                chat_context = ""
             else:
                 reply_reason_block = ""
 
             # 3. 构建prompt（只包含情境，不包含完整的表达方式）
             prompt = (await global_prompt_manager.get_prompt_async("expression_evaluation_prompt")).format(
                 bot_name=global_config.bot.nickname,
-                chat_observe_info=chat_info,
+                chat_observe_info=chat_context,
                 all_situations=all_situations_str,
                 max_num=max_num,
                 target_message=target_message_str,
@@ -261,7 +262,7 @@ class ExpressionSelector:
             content, (reasoning_content, model_name, _) = await self.llm_model.generate_response_async(prompt=prompt)
 
             
-            print(prompt)
+            # print(prompt)
             
             if not content:
                 logger.warning("LLM返回空结果")

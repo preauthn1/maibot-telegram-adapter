@@ -56,7 +56,6 @@ class DefaultReplyer:
         self.chat_stream = chat_stream
         self.is_group_chat, self.chat_target_info = get_chat_type_and_target_info(self.chat_stream.stream_id)
         self.heart_fc_sender = UniversalMessageSender()
-        # self.memory_activator = MemoryActivator()
 
         from src.plugin_system.core.tool_use import ToolExecutor  # 延迟导入ToolExecutor，不然会循环依赖
 
@@ -848,7 +847,7 @@ class DefaultReplyer:
 
         # 从 chosen_actions 中提取 planner 的整体思考理由
         planner_reasoning = ""
-        if reply_reason:
+        if global_config.chat.include_planner_reasoning and reply_reason:
             # 如果没有 chosen_actions，使用 reply_reason 作为备选
             planner_reasoning = f"你的想法是：{reply_reason}"
 

@@ -1,5 +1,5 @@
 [inner]
-version = "6.21.3"
+version = "6.21.4"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -100,6 +100,8 @@ talk_value_rules = [
     { target = "qq:1919810:group", time = "20:00-23:59", value = 0.6 },
     { target = "qq:114514:private", time = "00:00-23:59", value = 0.3 },
 ]
+
+include_planner_reasoning = false # 是否将planner推理加入replyer，默认关闭（不加入）
 
 [memory]
 max_agent_iterations = 5 # 记忆思考深度（最低为1（不深入思考））
