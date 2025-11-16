@@ -4,11 +4,15 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from src.common.logger import get_logger
 from .token_manager import get_token_manager
+from .config_routes import router as config_router
 
 logger = get_logger("webui.api")
 
 # 创建路由器
 router = APIRouter(prefix="/api/webui", tags=["WebUI"])
+
+# 注册配置管理路由
+router.include_router(config_router)
 
 
 class TokenVerifyRequest(BaseModel):
