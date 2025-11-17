@@ -5,6 +5,7 @@ from typing import Optional
 from src.common.logger import get_logger
 from .token_manager import get_token_manager
 from .config_routes import router as config_router
+from .statistics_routes import router as statistics_router
 
 logger = get_logger("webui.api")
 
@@ -13,6 +14,8 @@ router = APIRouter(prefix="/api/webui", tags=["WebUI"])
 
 # 注册配置管理路由
 router.include_router(config_router)
+# 注册统计数据路由
+router.include_router(statistics_router)
 
 
 class TokenVerifyRequest(BaseModel):
