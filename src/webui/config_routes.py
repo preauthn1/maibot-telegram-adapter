@@ -39,7 +39,7 @@ from src.config.api_ada_configs import (
 )
 from src.webui.config_schema import ConfigSchemaGenerator
 
-logger = get_logger("webui.config_routes")
+logger = get_logger("webui")
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -239,7 +239,7 @@ async def update_model_config(config_data: dict[str, Any] = Body(...)):
 
 
 @router.post("/bot/section/{section_name}")
-async def update_bot_config_section(section_name: str, section_data: dict[str, Any] = Body(...)):
+async def update_bot_config_section(section_name: str, section_data: Any = Body(...)):
     """更新麦麦主程序配置的指定节"""
     try:
         # 读取现有配置
@@ -276,7 +276,7 @@ async def update_bot_config_section(section_name: str, section_data: dict[str, A
 
 
 @router.post("/model/section/{section_name}")
-async def update_model_config_section(section_name: str, section_data: dict[str, Any] = Body(...)):
+async def update_model_config_section(section_name: str, section_data: Any = Body(...)):
     """更新模型配置的指定节"""
     try:
         # 读取现有配置
