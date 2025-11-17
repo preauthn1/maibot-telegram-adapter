@@ -42,6 +42,14 @@ def setup_production_mode() -> bool:
     try:
         from src.common.server import get_global_server
         from starlette.responses import FileResponse
+        import mimetypes
+        
+        # 确保正确的 MIME 类型映射
+        mimetypes.init()
+        mimetypes.add_type('application/javascript', '.js')
+        mimetypes.add_type('application/javascript', '.mjs')
+        mimetypes.add_type('text/css', '.css')
+        mimetypes.add_type('application/json', '.json')
         
         server = get_global_server()
         base_dir = Path(__file__).parent.parent.parent
@@ -68,11 +76,12 @@ def setup_production_mode() -> bool:
             # 检查文件是否存在
             file_path = static_path / full_path
             if file_path.is_file():
-                # 直接返回文件，Starlette 会自动管理文件句柄
-                return FileResponse(file_path)
+                # 自动检测 MIME 类型
+                media_type = mimetypes.guess_type(str(file_path))[0]
+                return FileResponse(file_path, media_type=media_type)
             
             # 返回 index.html（SPA 路由）
-            return FileResponse(static_path / "index.html")
+            return FileResponse(static_path / "index.html", media_type="text/html")
         
         host = os.getenv("HOST", "127.0.0.1")
         port = os.getenv("PORT", "8000")
