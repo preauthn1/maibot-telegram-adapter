@@ -843,8 +843,8 @@ def start_log_cleanup_task():
 
 def shutdown_logging():
     """优雅关闭日志系统，释放所有文件句柄"""
-    logger = get_logger("logger")
-    logger.info("正在关闭日志系统...")
+    # 先输出到控制台，避免日志系统关闭后无法输出
+    print("[logger] 正在关闭日志系统...")
 
     # 关闭所有handler
     root_logger = logging.getLogger()
@@ -865,4 +865,5 @@ def shutdown_logging():
                     handler.close()
                 logger_obj.removeHandler(handler)
 
-    logger.info("日志系统已关闭")
+    # 使用 print 而不是 logger，因为 logger 已经关闭
+    print("[logger] 日志系统已关闭")

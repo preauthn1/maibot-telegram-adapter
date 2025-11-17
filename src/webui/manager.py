@@ -41,8 +41,7 @@ def setup_production_mode() -> bool:
     """设置生产模式 - 挂载静态文件"""
     try:
         from src.common.server import get_global_server
-        from fastapi.staticfiles import StaticFiles
-        from fastapi.responses import FileResponse
+        from starlette.responses import FileResponse
         
         server = get_global_server()
         base_dir = Path(__file__).parent.parent.parent
@@ -58,14 +57,6 @@ def setup_production_mode() -> bool:
             logger.warning("💡 请确认前端已正确构建")
             return False
         
-        # 挂载静态资源
-        if (static_path / "assets").exists():
-            server.app.mount(
-                "/assets",
-                StaticFiles(directory=str(static_path / "assets")),
-                name="assets"
-            )
-        
         # 处理 SPA 路由
         @server.app.get("/{full_path:path}")
         async def serve_spa(full_path: str):
@@ -77,6 +68,7 @@ def setup_production_mode() -> bool:
             # 检查文件是否存在
             file_path = static_path / full_path
             if file_path.is_file():
+                # 直接返回文件，Starlette 会自动管理文件句柄
                 return FileResponse(file_path)
             
             # 返回 index.html（SPA 路由）
