@@ -212,6 +212,10 @@ if __name__ == "__main__":
         # 创建事件循环
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        
+        # 初始化 WebSocket 日志推送
+        from src.common.logger import initialize_ws_handler
+        initialize_ws_handler(loop)
 
         try:
             # 执行初始化和任务调度
