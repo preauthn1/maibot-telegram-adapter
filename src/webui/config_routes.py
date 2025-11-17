@@ -44,6 +44,40 @@ logger = get_logger("webui")
 router = APIRouter(prefix="/config", tags=["config"])
 
 
+# ===== 辅助函数 =====
+
+
+def _update_dict_preserve_comments(target: Any, source: Any) -> None:
+    """
+    递归合并字典，保留 target 中的注释和格式
+    将 source 的值更新到 target 中（仅更新已存在的键）
+    
+    Args:
+        target: 目标字典（tomlkit 对象，包含注释）
+        source: 源字典（普通 dict 或 list）
+    """
+    # 如果 source 是列表，直接替换（数组表没有注释保留的意义）
+    if isinstance(source, list):
+        return  # 调用者需要直接赋值
+    
+    # 如果都是字典，递归合并
+    if isinstance(source, dict) and isinstance(target, dict):
+        for key, value in source.items():
+            if key == "version":
+                continue  # 跳过版本号
+            if key in target:
+                target_value = target[key]
+                # 递归处理嵌套字典
+                if isinstance(value, dict) and isinstance(target_value, dict):
+                    _update_dict_preserve_comments(target_value, value)
+                else:
+                    # 使用 tomlkit.item 保持类型
+                    try:
+                        target[key] = tomlkit.item(value)
+                    except (TypeError, ValueError):
+                        target[key] = value
+
+
 # ===== 架构获取接口 =====
 
 
@@ -240,7 +274,7 @@ async def update_model_config(config_data: dict[str, Any] = Body(...)):
 
 @router.post("/bot/section/{section_name}")
 async def update_bot_config_section(section_name: str, section_data: Any = Body(...)):
-    """更新麦麦主程序配置的指定节"""
+    """更新麦麦主程序配置的指定节（保留注释和格式）"""
     try:
         # 读取现有配置
         config_path = os.path.join(CONFIG_DIR, "bot_config.toml")
@@ -254,7 +288,17 @@ async def update_bot_config_section(section_name: str, section_data: Any = Body(
         if section_name not in config_data:
             raise HTTPException(status_code=404, detail=f"配置节 '{section_name}' 不存在")
 
-        config_data[section_name] = section_data
+        # 使用递归合并保留注释（对于字典类型）
+        # 对于数组类型（如 platforms, aliases），直接替换
+        if isinstance(section_data, list):
+            # 列表直接替换
+            config_data[section_name] = section_data
+        elif isinstance(section_data, dict) and isinstance(config_data[section_name], dict):
+            # 字典递归合并
+            _update_dict_preserve_comments(config_data[section_name], section_data)
+        else:
+            # 其他类型直接替换
+            config_data[section_name] = section_data
 
         # 验证完整配置
         try:
@@ -262,11 +306,11 @@ async def update_bot_config_section(section_name: str, section_data: Any = Body(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}")
 
-        # 保存配置
+        # 保存配置（tomlkit.dump 会保留注释）
         with open(config_path, "w", encoding="utf-8") as f:
             tomlkit.dump(config_data, f)
 
-        logger.info(f"配置节 '{section_name}' 已更新")
+        logger.info(f"配置节 '{section_name}' 已更新（保留注释）")
         return {"success": True, "message": f"配置节 '{section_name}' 已保存"}
     except HTTPException:
         raise
@@ -277,7 +321,7 @@ async def update_bot_config_section(section_name: str, section_data: Any = Body(
 
 @router.post("/model/section/{section_name}")
 async def update_model_config_section(section_name: str, section_data: Any = Body(...)):
-    """更新模型配置的指定节"""
+    """更新模型配置的指定节（保留注释和格式）"""
     try:
         # 读取现有配置
         config_path = os.path.join(CONFIG_DIR, "model_config.toml")
@@ -291,7 +335,17 @@ async def update_model_config_section(section_name: str, section_data: Any = Bod
         if section_name not in config_data:
             raise HTTPException(status_code=404, detail=f"配置节 '{section_name}' 不存在")
 
-        config_data[section_name] = section_data
+        # 使用递归合并保留注释（对于字典类型）
+        # 对于数组表（如 [[models]], [[api_providers]]），直接替换
+        if isinstance(section_data, list):
+            # 列表直接替换
+            config_data[section_name] = section_data
+        elif isinstance(section_data, dict) and isinstance(config_data[section_name], dict):
+            # 字典递归合并
+            _update_dict_preserve_comments(config_data[section_name], section_data)
+        else:
+            # 其他类型直接替换
+            config_data[section_name] = section_data
 
         # 验证完整配置
         try:
@@ -299,11 +353,11 @@ async def update_model_config_section(section_name: str, section_data: Any = Bod
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}")
 
-        # 保存配置
+        # 保存配置（tomlkit.dump 会保留注释）
         with open(config_path, "w", encoding="utf-8") as f:
             tomlkit.dump(config_data, f)
 
-        logger.info(f"配置节 '{section_name}' 已更新")
+        logger.info(f"配置节 '{section_name}' 已更新（保留注释）")
         return {"success": True, "message": f"配置节 '{section_name}' 已保存"}
     except HTTPException:
         raise
