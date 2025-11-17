@@ -65,8 +65,8 @@ def get_ws_handler():
     global _ws_handler
     if _ws_handler is None:
         _ws_handler = WebSocketLogHandler()
-        # WebSocket handler 只推送 INFO 及以上级别
-        _ws_handler.setLevel(logging.INFO)
+        # WebSocket handler 推送所有级别的日志
+        _ws_handler.setLevel(logging.DEBUG)
     return _ws_handler
 
 
