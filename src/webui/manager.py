@@ -31,6 +31,14 @@ def setup_webui(mode: str = "production") -> bool:
 
 def setup_dev_mode() -> bool:
     """设置开发模式 - 仅启用 CORS，前端自行启动"""
+    from src.common.server import get_global_server
+    from .logs_ws import router as logs_router
+    
+    # 注册 WebSocket 日志路由（开发模式也需要）
+    server = get_global_server()
+    server.register_router(logs_router)
+    logger.info("✅ WebSocket 日志推送路由已注册")
+    
     logger.info("📝 WebUI 开发模式已启用")
     logger.info("🌐 请手动启动前端开发服务器: cd webui && npm run dev")
     logger.info("💡 前端将运行在 http://localhost:7999")
@@ -42,6 +50,7 @@ def setup_production_mode() -> bool:
     try:
         from src.common.server import get_global_server
         from starlette.responses import FileResponse
+        from .logs_ws import router as logs_router
         import mimetypes
         
         # 确保正确的 MIME 类型映射
@@ -52,6 +61,11 @@ def setup_production_mode() -> bool:
         mimetypes.add_type('application/json', '.json')
         
         server = get_global_server()
+        
+        # 注册 WebSocket 日志路由
+        server.register_router(logs_router)
+        logger.info("✅ WebSocket 日志推送路由已注册")
+        
         base_dir = Path(__file__).parent.parent.parent
         static_path = base_dir / "webui" / "dist"
         
