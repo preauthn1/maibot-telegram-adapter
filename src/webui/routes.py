@@ -6,6 +6,9 @@ from src.common.logger import get_logger
 from .token_manager import get_token_manager
 from .config_routes import router as config_router
 from .statistics_routes import router as statistics_router
+from .person_routes import router as person_router
+from .expression_routes import router as expression_router
+from .emoji_routes import router as emoji_router
 
 logger = get_logger("webui.api")
 
@@ -16,6 +19,12 @@ router = APIRouter(prefix="/api/webui", tags=["WebUI"])
 router.include_router(config_router)
 # 注册统计数据路由
 router.include_router(statistics_router)
+# 注册人物信息管理路由
+router.include_router(person_router)
+# 注册表达方式管理路由
+router.include_router(expression_router)
+# 注册表情包管理路由
+router.include_router(emoji_router)
 
 
 class TokenVerifyRequest(BaseModel):
