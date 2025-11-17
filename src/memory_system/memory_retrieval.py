@@ -15,6 +15,35 @@ from src.llm_models.payload_content.message import MessageBuilder, RoleType, Mes
 
 logger = get_logger("memory_retrieval")
 
+THINKING_BACK_NOT_FOUND_RETENTION_SECONDS = 3600  # 未找到答案记录保留时长
+THINKING_BACK_CLEANUP_INTERVAL_SECONDS = 300      # 清理频率
+_last_not_found_cleanup_ts: float = 0.0
+
+
+def _cleanup_stale_not_found_thinking_back() -> None:
+    """定期清理过期的未找到答案记录"""
+    global _last_not_found_cleanup_ts
+    
+    now = time.time()
+    if now - _last_not_found_cleanup_ts < THINKING_BACK_CLEANUP_INTERVAL_SECONDS:
+        return
+    
+    threshold_time = now - THINKING_BACK_NOT_FOUND_RETENTION_SECONDS
+    try:
+        deleted_rows = (
+            ThinkingBack.delete()
+            .where(
+                (ThinkingBack.found_answer == 0) &
+                (ThinkingBack.update_time < threshold_time)
+            )
+            .execute()
+        )
+        if deleted_rows:
+            logger.info(f"清理过期的未找到答案thinking_back记录 {deleted_rows} 条")
+        _last_not_found_cleanup_ts = now
+    except Exception as e:
+        logger.error(f"清理未找到答案的thinking_back记录失败: {e}")
+
 def init_memory_retrieval_prompt():
     """初始化记忆检索相关的 prompt 模板和工具"""
     # 首先注册所有工具
@@ -312,8 +341,7 @@ async def _retrieve_concepts_with_jargon(
                 results.append("；".join(output_parts) if len(output_parts) > 1 else output_parts[0])
                 logger.info(f"在jargon库中找到匹配（精确匹配）: {concept}，找到{len(jargon_results)}条结果")
         else:
-            # 未找到
-            results.append(f"未在jargon库中找到'{concept}'的解释")
+            # 未找到，不返回占位信息，只记录日志
             logger.info(f"在jargon库中未找到匹配: {concept}")
     
     if results:
@@ -351,11 +379,10 @@ async def _retrieve_persons_info(
                 results.append(f"【{person}】\n{person_info}")
                 logger.info(f"查询到人物信息: {person}")
             else:
-                results.append(f"未找到人物'{person}'的信息")
+                # 未找到时不插入占位信息
                 logger.info(f"未找到人物信息: {person}")
         except Exception as e:
             logger.error(f"查询人物信息失败: {person}, 错误: {e}")
-            results.append(f"查询人物'{person}'信息时发生错误: {str(e)}")
     
     if results:
         return "【人物信息检索结果】\n" + "\n\n".join(results) + "\n"
@@ -997,6 +1024,8 @@ async def _process_single_question(
         Optional[str]: 如果找到答案，返回格式化的结果字符串，否则返回None
     """
     logger.info(f"开始处理问题: {question}")
+
+    _cleanup_stale_not_found_thinking_back()
     
     # 先检查thinking_back数据库中是否有现成答案
     cached_result = _query_thinking_back(chat_id, question)
@@ -1005,26 +1034,22 @@ async def _process_single_question(
     if cached_result:
         cached_found_answer, cached_answer = cached_result
         
-        # 根据found_answer的值决定是否重新查询
         if cached_found_answer:  # found_answer == 1 (True)
             # found_answer == 1：20%概率重新查询
-            if random.random() < 0.2:
+            if random.random() < 0.5:
                 should_requery = True
                 logger.info(f"found_answer=1，触发20%概率重新查询，问题: {question[:50]}...")
-        else:  # found_answer == 0 (False)
-            # found_answer == 0：40%概率重新查询
-            if random.random() < 0.4:
-                should_requery = True
-                logger.info(f"found_answer=0，触发40%概率重新查询，问题: {question[:50]}...")
-        
-        # 如果不需要重新查询，使用缓存答案
-        if not should_requery:
-            if cached_answer:
+            
+            if not should_requery and cached_answer:
                 logger.info(f"从thinking_back缓存中获取答案，问题: {question[:50]}...")
                 return f"问题：{question}\n答案：{cached_answer}"
-            else:
-                # 缓存中没有答案，需要查询
+            elif not cached_answer:
                 should_requery = True
+                logger.info(f"found_answer=1 但缓存答案为空，重新查询，问题: {question[:50]}...")
+        else:
+            # found_answer == 0：不使用缓存，直接重新查询
+            should_requery = True
+            logger.info(f"thinking_back存在但未找到答案，忽略缓存重新查询，问题: {question[:50]}...")
     
     # 如果没有缓存答案或需要重新查询，使用ReAct Agent查询
     if not cached_result or should_requery:
