@@ -11,6 +11,7 @@ from src.plugin_system.apis import llm_api
 from src.common.database.database_model import ThinkingBack
 from json_repair import repair_json
 from src.memory_system.retrieval_tools import get_tool_registry, init_all_tools
+from src.memory_system.retrieval_tools.query_lpmm_knowledge import query_lpmm_knowledge
 from src.llm_models.payload_content.message import MessageBuilder, RoleType, Message
 
 logger = get_logger("memory_retrieval")
@@ -63,20 +64,17 @@ def init_memory_retrieval_prompt():
 1. 对话中是否提到了过去发生的事情、人物、事件或信息
 2. 是否有需要回忆的内容（比如"之前说过"、"上次"、"以前"等）
 3. 是否有需要查找历史信息的问题
-4. 是否需要查找某人的信息（person: 如果对话中提到人名、昵称、用户ID等，需要查询该人物的详细信息）
-5. 是否有问题可以搜集信息帮助你聊天
-6. 对话中是否包含黑话、俚语、缩写等可能需要查询的概念
+4. 是否有问题可以搜集信息帮助你聊天
+5. 对话中是否包含黑话、俚语、缩写等可能需要查询的概念
 
 重要提示：
 - **每次只能提出一个问题**，选择最需要查询的关键问题
-- 如果"最近已查询的问题和结果"中已经包含了类似的问题，请避免重复生成相同或相似的问题
+- 如果"最近已查询的问题和结果"中已经包含了类似的问题并得到了答案，请避免重复生成相同或相似的问题，不需要重复查询
 - 如果之前已经查询过某个问题但未找到答案，可以尝试用不同的方式提问或更具体的问题
-- 如果之前已经查询过某个问题并找到了答案，可以直接参考已有结果，不需要重复查询
 
 如果你认为需要从记忆中检索信息来回答，请：
-1. 先识别对话中可能需要查询的概念（黑话/俚语/缩写/专有名词等关键词），放入"concepts"字段
-2. 识别对话中提到的人物名称（人名、昵称等），放入"person"字段
-3. 然后根据上下文提出**一个**最关键的问题来帮助你回复目标消息，放入"questions"字段
+1. 识别对话中可能需要查询的概念（黑话/俚语/缩写/专有名词等关键词），放入"concepts"字段
+2. 根据上下文提出**一个**最关键的问题来帮助你回复目标消息，放入"questions"字段
 
 问题格式示例：
 - "xxx在前几天干了什么"
@@ -84,17 +82,11 @@ def init_memory_retrieval_prompt():
 - "xxxx和xxx的关系是什么"
 - "xxx在某个时间点发生了什么"
 
-请输出JSON格式，包含三个字段：
-- "concepts": 需要检索的概念列表（字符串数组），如果不需要检索概念则输出空数组[]
-- "person": 需要查询的人物名称列表（字符串数组），如果不需要查询人物信息则输出空数组[]
-- "questions": 问题数组（字符串数组），如果不需要检索记忆则输出空数组[]，如果需要检索则只输出包含一个问题的数组
-
 输出格式示例（需要检索时）：
 ```json
 {{
-  "concepts": ["AAA", "BBB", "CCC"],
-  "person": ["张三", "李四"],
-  "questions": ["张三在前几天干了什么"]
+  "concepts": ["AAA", "BBB", "CCC"], #需要检索的概念列表（字符串数组），如果不需要检索概念则输出空数组[]
+  "questions": ["张三在前几天干了什么"] #问题数组（字符串数组），如果不需要检索记忆则输出空数组[]，如果需要检索则只输出包含一个问题的数组
 }}
 ```
 
@@ -102,7 +94,6 @@ def init_memory_retrieval_prompt():
 ```json
 {{
   "concepts": [],
-  "person": [],
   "questions": []
 }}
 ```
@@ -114,10 +105,8 @@ def init_memory_retrieval_prompt():
     
     # 第二步：ReAct Agent prompt（使用function calling，要求先思考再行动）
     Prompt(
-        """
-你的名字是{bot_name}。现在是{time_now}。
+        """你的名字是{bot_name}。现在是{time_now}。
 你正在参与聊天，你需要搜集信息来回答问题，帮助你参与聊天。
-你需要通过思考(Think)、行动(Action)、观察(Observation)的循环来回答问题。
 
 **重要限制：**
 - 最大查询轮数：{max_iterations}轮（当前第{current_iteration}轮，剩余{remaining_iterations}轮）
@@ -130,7 +119,6 @@ def init_memory_retrieval_prompt():
 {collected_info}
 
 **执行步骤：**
-
 **第一步：思考（Think）**
 在思考中分析：
 - 当前信息是否足够回答问题？
@@ -139,6 +127,10 @@ def init_memory_retrieval_prompt():
 - **如果已有信息不足或无法找到答案**，在思考中给出：not_enough_info(reason="信息不足或无法找到答案的原因")
 
 **第二步：行动（Action）**
+- 如果涉及过往事件，可以使用聊天记录查询工具查询过往事件
+- 如果涉及概念，可以用jargon查询，或根据关键词检索聊天记录
+- 如果涉及人物，可以使用人物信息查询工具查询人物信息
+- 如果不确定查询类别，也可以使用lpmm知识库查询
 - 如果信息不足且需要继续查询，说明最需要查询什么，并输出为纯文本说明，然后调用相应工具查询（可并行调用多个工具）
 
 **重要规则：**
@@ -151,14 +143,8 @@ def init_memory_retrieval_prompt():
     
     # 额外，如果最后一轮迭代：ReAct Agent prompt（使用function calling，要求先思考再行动）
     Prompt(
-        """
-你的名字是{bot_name}。现在是{time_now}。
-你正在参与聊天，你需要搜集信息来回答问题，帮助你参与聊天。
-
-**重要限制：**
-- 你已经经过几轮查询，尝试了信息搜集，现在你需要总结信息，选择回答问题或判断问题无法回答
-- 思考要简短，直接切入要点
-- 必须严格使用检索到的信息回答问题，不要编造信息
+        """你的名字是{bot_name}。现在是{time_now}。
+你正在参与聊天，你需要根据搜集到的信息判断问题是否可以回答问题。
 
 当前问题：{question}
 已收集的信息：
@@ -171,6 +157,9 @@ def init_memory_retrieval_prompt():
 - **如果信息不足或无法找到答案**，在思考中给出：not_enough_info(reason="信息不足或无法找到答案的原因")
 
 **重要规则：**
+- 你已经经过几轮查询，尝试了信息搜集，现在你需要总结信息，选择回答问题或判断问题无法回答
+- 必须严格使用检索到的信息回答问题，不要编造信息
+- 答案必须精简，不要过多解释
 - **只有在检索到明确、具体的答案时，才使用found_answer**
 - **如果信息不足、无法确定、找不到相关信息，必须使用not_enough_info，不要使用found_answer**
 - 答案必须给出，格式为 found_answer(answer="...") 或 not_enough_info(reason="...")。
@@ -308,46 +297,6 @@ async def _retrieve_concepts_with_jargon(
     return ""
 
 
-async def _retrieve_persons_info(
-    persons: List[str],
-    chat_id: str
-) -> str:
-    """对人物列表进行信息检索
-    
-    Args:
-        persons: 人物名称列表
-        chat_id: 聊天ID
-        
-    Returns:
-        str: 检索结果字符串
-    """
-    if not persons:
-        return ""
-    
-    from src.memory_system.retrieval_tools.query_person_info import query_person_info
-    
-    results = []
-    for person in persons:
-        person = person.strip()
-        if not person:
-            continue
-        
-        try:
-            person_info = await query_person_info(person)
-            if person_info and "未找到" not in person_info:
-                results.append(f"【{person}】\n{person_info}")
-                logger.info(f"查询到人物信息: {person}")
-            else:
-                # 未找到时不插入占位信息
-                logger.info(f"未找到人物信息: {person}")
-        except Exception as e:
-            logger.error(f"查询人物信息失败: {person}, 错误: {e}")
-    
-    if results:
-        return "【人物信息检索结果】\n" + "\n\n".join(results) + "\n"
-    return ""
-
-
 async def _react_agent_solve_question(
     question: str,
     chat_id: str,
@@ -468,11 +417,10 @@ async def _react_agent_solve_question(
                         content_type = "未知"
                     
                     # 构建单条消息的日志信息
-                    msg_info = f"\n[消息 {idx}] 角色: {role_name}"
-                    msg_info += f"\n  内容类型: {content_type}"
+                    msg_info = f"\n[消息 {idx}] 角色: {role_name} 内容类型: {content_type}\n========================================"
                     
                     if full_content:
-                        msg_info += f"\n  内容:\n{full_content}"
+                        msg_info += f"\n{full_content}"
                     
                     if msg.tool_calls:
                         msg_info += f"\n  工具调用: {len(msg.tool_calls)}个"
@@ -1014,6 +962,22 @@ async def _process_single_question(
     logger.info(f"开始处理问题: {question}")
 
     _cleanup_stale_not_found_thinking_back()
+
+    question_initial_info = initial_info or ""
+
+    # 预先进行一次LPMM知识库查询，作为后续ReAct Agent的辅助信息
+    if global_config.lpmm_knowledge.enable:
+        try:
+            lpmm_result = await query_lpmm_knowledge(question, limit=2)
+            if lpmm_result and lpmm_result.startswith("你从LPMM知识库中找到"):
+                if question_initial_info:
+                    question_initial_info += "\n"
+                question_initial_info += f"【LPMM知识库预查询】\n{lpmm_result}"
+                logger.info(f"LPMM预查询命中，问题: {question[:50]}...")
+            else:
+                logger.info(f"LPMM预查询未命中或未找到信息，问题: {question[:50]}...")
+        except Exception as e:
+            logger.error(f"LPMM预查询失败，问题: {question[:50]}... 错误: {e}")
     
     # 先检查thinking_back数据库中是否有现成答案
     cached_result = _query_thinking_back(chat_id, question)
@@ -1051,7 +1015,7 @@ async def _process_single_question(
             chat_id=chat_id,
             max_iterations=global_config.memory.max_agent_iterations,
             timeout=120.0,
-            initial_info=initial_info
+            initial_info=question_initial_info
         )
         
         # 存储到数据库（超时时不存储）
@@ -1132,10 +1096,9 @@ async def build_memory_retrieval_prompt(
             logger.error(f"LLM生成问题失败: {response}")
             return ""
         
-        # 解析概念列表、人物列表和问题列表
-        concepts, persons, questions = _parse_questions_json(response)
+        # 解析概念列表和问题列表
+        concepts, questions = _parse_questions_json(response)
         logger.info(f"解析到 {len(concepts)} 个概念: {concepts}")
-        logger.info(f"解析到 {len(persons)} 个人物: {persons}")
         logger.info(f"解析到 {len(questions)} 个问题: {questions}")
         
         # 对概念进行jargon检索，作为初始信息
@@ -1149,22 +1112,13 @@ async def build_memory_retrieval_prompt(
             else:
                 logger.info("概念检索未找到任何结果")
         
-        # 对人物进行信息检索，添加到初始信息
-        if persons:
-            logger.info(f"开始对 {len(persons)} 个人物进行信息检索")
-            person_info = await _retrieve_persons_info(persons, chat_id)
-            if person_info:
-                initial_info += person_info
-                logger.info(f"人物信息检索完成，结果: {person_info[:200]}...")
-            else:
-                logger.info("人物信息检索未找到任何结果")
         
         # 获取缓存的记忆（与question时使用相同的时间窗口和数量限制）
         cached_memories = _get_cached_memories(chat_id, time_window_seconds=300.0)
         
         if not questions:
             logger.debug("模型认为不需要检索记忆或解析失败")
-            # 即使没有当次查询，也返回缓存的记忆、概念检索结果和人物信息检索结果
+            # 即使没有当次查询，也返回缓存的记忆和概念检索结果
             all_results = []
             if initial_info:
                 all_results.append(initial_info.strip())
@@ -1174,7 +1128,7 @@ async def build_memory_retrieval_prompt(
             if all_results:
                 retrieved_memory = "\n\n".join(all_results)
                 end_time = time.time()
-                logger.info(f"无当次查询，返回缓存记忆、概念检索和人物信息检索结果，耗时: {(end_time - start_time):.3f}秒")
+                logger.info(f"无当次查询，返回缓存记忆和概念检索结果，耗时: {(end_time - start_time):.3f}秒")
                 return f"你回忆起了以下信息：\n{retrieved_memory}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
             else:
                 return ""
@@ -1236,14 +1190,14 @@ async def build_memory_retrieval_prompt(
         return ""
 
 
-def _parse_questions_json(response: str) -> Tuple[List[str], List[str], List[str]]:
-    """解析问题JSON，返回概念列表、人物列表和问题列表
+def _parse_questions_json(response: str) -> Tuple[List[str], List[str]]:
+    """解析问题JSON，返回概念列表和问题列表
     
     Args:
         response: LLM返回的响应
         
     Returns:
-        Tuple[List[str], List[str], List[str]]: (概念列表, 人物列表, 问题列表)
+        Tuple[List[str], List[str]]: (概念列表, 问题列表)
     """
     try:
         # 尝试提取JSON（可能包含在```json代码块中）
@@ -1262,30 +1216,26 @@ def _parse_questions_json(response: str) -> Tuple[List[str], List[str], List[str
         # 解析JSON
         parsed = json.loads(repaired_json)
         
-        # 只支持新格式：包含concepts、person和questions的对象
+        # 只支持新格式：包含concepts和questions的对象
         if not isinstance(parsed, dict):
             logger.warning(f"解析的JSON不是对象格式: {parsed}")
-            return [], [], []
+            return [], []
         
         concepts_raw = parsed.get("concepts", [])
-        persons_raw = parsed.get("person", [])
         questions_raw = parsed.get("questions", [])
         
         # 确保是列表
         if not isinstance(concepts_raw, list):
             concepts_raw = []
-        if not isinstance(persons_raw, list):
-            persons_raw = []
         if not isinstance(questions_raw, list):
             questions_raw = []
         
         # 确保所有元素都是字符串
         concepts = [c for c in concepts_raw if isinstance(c, str) and c.strip()]
-        persons = [p for p in persons_raw if isinstance(p, str) and p.strip()]
         questions = [q for q in questions_raw if isinstance(q, str) and q.strip()]
         
-        return concepts, persons, questions
+        return concepts, questions
         
     except Exception as e:
         logger.error(f"解析问题JSON失败: {e}, 响应内容: {response[:200]}...")
-        return [], [], []
+        return [], []
