@@ -135,57 +135,16 @@ def init_memory_retrieval_prompt():
 在思考中分析：
 - 当前信息是否足够回答问题？
 - **如果信息足够且能找到明确答案**，在思考中直接给出答案，格式为：found_answer(answer="你的答案内容")
-- **如果信息不足或无法找到答案**，在思考中给出：not_enough_info(reason="信息不足或无法找到答案的原因")
-- 如果还需要继续查询，说明最需要查询什么，并输出为纯文本说明
+- **如果需要尝试搜集更多信息，进一步调用工具，进入第二步行动环节
+- **如果已有信息不足或无法找到答案**，在思考中给出：not_enough_info(reason="信息不足或无法找到答案的原因")
 
 **第二步：行动（Action）**
-根据思考结果立即行动：
-- 如果思考中已给出found_answer → 无需调用工具，直接结束
-- 如果思考中已给出not_enough_info → 无需调用工具，直接结束
-- 如果信息不足且需要继续查询 → 调用相应工具查询（可并行调用多个工具）
+- 如果信息不足且需要继续查询，说明最需要查询什么，并输出为纯文本说明，然后调用相应工具查询（可并行调用多个工具）
 
 **重要规则：**
 - **只有在检索到明确、有关的信息并得出答案时，才使用found_answer**
 - **如果信息不足、无法确定、找不到相关信息，必须使用not_enough_info，不要使用found_answer**
-- 答案必须在思考中给出，格式为 found_answer(answer="...") 或 not_enough_info(reason="...")，不要调用工具。
-""",
-        name="memory_retrieval_react_prompt",
-    )
-
-    # 第二步：ReAct Agent prompt（使用function calling，要求先思考再行动）
-    Prompt(
-        """
-你的名字是{bot_name}。现在是{time_now}。
-你正在参与聊天，你需要搜集信息来回答问题，帮助你参与聊天。
-你需要通过思考(Think)、行动(Action)、观察(Observation)的循环来回答问题。
-
-**重要限制：**
-- 最大查询轮数：{max_iterations}轮（当前第{current_iteration}轮，剩余{remaining_iterations}轮）
-- 必须尽快得出答案，避免不必要的查询
-- 思考要简短，直接切入要点
-- 必须严格使用检索到的信息回答问题，不要编造信息
-
-当前问题：{question}
-
-**执行步骤：**
-
-**第一步：思考（Think）**
-在思考中分析：
-- 当前信息是否足够回答问题？
-- **如果信息足够且能找到明确答案**，在思考中直接给出答案，格式为：found_answer(answer="你的答案内容")
-- **如果信息不足或无法找到答案**，在思考中给出：not_enough_info(reason="信息不足或无法找到答案的原因")
-- 如果还需要继续查询，说明最需要查询什么，并输出为纯文本说明
-
-**第二步：行动（Action）**
-根据思考结果立即行动：
-- 如果思考中已给出found_answer → 无需调用工具，直接结束
-- 如果思考中已给出not_enough_info → 无需调用工具，直接结束
-- 如果信息不足且需要继续查询 → 调用相应工具查询（可并行调用多个工具）
-
-**重要规则：**
-- **只有在检索到明确、具体的答案时，才使用found_answer**
-- **如果信息不足、无法确定、找不到相关信息，必须使用not_enough_info，不要使用found_answer**
-- 答案必须在思考中给出，格式为 found_answer(answer="...") 或 not_enough_info(reason="...")，不要调用工具。
+- 答案必须在思考中给出，格式为 found_answer(answer="...") 或 not_enough_info(reason="...")
 """,
         name="memory_retrieval_react_prompt_head",
     )
@@ -435,36 +394,41 @@ async def _react_agent_solve_question(
         remaining_iterations = max_iterations - current_iteration
         is_final_iteration = current_iteration >= max_iterations
         
-        # 构建prompt（不再需要工具文本描述）
-
-        prompt_type = "memory_retrieval_react_prompt"
+        
         if is_final_iteration:
-            prompt_type = "memory_retrieval_react_final_prompt"
+            # 最后一次迭代，使用最终prompt
             tool_definitions = []
             logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代，问题: {question}|可用工具数量: 0（最后一次迭代，不提供工具调用）")
+            
+            prompt = await global_prompt_manager.format_prompt(
+                "memory_retrieval_react_final_prompt",
+                bot_name=bot_name,
+                time_now=time_now,
+                question=question,
+                collected_info=collected_info if collected_info else "暂无信息",
+                current_iteration=current_iteration,
+                remaining_iterations=remaining_iterations,
+                max_iterations=max_iterations,
+            )
+            
+            logger.info(f"ReAct Agent 第 {iteration + 1} 次Prompt: {prompt}")
+            success, response, reasoning_content, model_name, tool_calls = await llm_api.generate_with_model_with_tools(
+                prompt,
+                model_config=model_config.model_task_config.tool_use,
+                tool_options=tool_definitions,
+                request_type="memory.react",
+            )
         else:
+            # 非最终迭代，使用head_prompt
             tool_definitions = tool_registry.get_tool_definitions()
             logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代，问题: {question}|可用工具数量: {len(tool_definitions)}")
 
-        prompt = await global_prompt_manager.format_prompt(
-            prompt_type,
-            bot_name=bot_name,
-            time_now=time_now,
-            question=question,
-            collected_info=collected_info if collected_info else "暂无信息",
-            current_iteration=current_iteration,
-            remaining_iterations=remaining_iterations,
-            max_iterations=max_iterations,
-        )
-
-        
-
-        if not is_final_iteration:
             head_prompt = await global_prompt_manager.format_prompt(
                 "memory_retrieval_react_prompt_head",
                 bot_name=bot_name,
                 time_now=time_now,
                 question=question,
+                collected_info=collected_info if collected_info else "",
                 current_iteration=current_iteration,
                 remaining_iterations=remaining_iterations,
                 max_iterations=max_iterations,
@@ -474,7 +438,6 @@ async def _react_agent_solve_question(
                 _client,
                 *,
                 _head_prompt: str = head_prompt,
-                _prompt: str = prompt,
                 _conversation_messages: List[Message] = conversation_messages,
             ) -> List[Message]:
                 messages: List[Message] = []
@@ -482,27 +445,52 @@ async def _react_agent_solve_question(
                 system_builder = MessageBuilder()
                 system_builder.set_role(RoleType.System)
                 system_builder.add_text_content(_head_prompt)
-                if _prompt.strip():
-                    system_builder.add_text_content(f"\n{_prompt}")
                 messages.append(system_builder.build())
 
                 messages.extend(_conversation_messages)
                 
-                # for msg in messages:
-                    # print(msg)
+                # 优化日志展示 - 合并所有消息到一条日志
+                log_lines = []
+                for idx, msg in enumerate(messages, 1):
+                    role_name = msg.role.value if hasattr(msg.role, 'value') else str(msg.role)
+                    
+                    # 处理内容 - 显示完整内容，不截断
+                    if isinstance(msg.content, str):
+                        full_content = msg.content
+                        content_type = "文本"
+                    elif isinstance(msg.content, list):
+                        text_parts = [item for item in msg.content if isinstance(item, str)]
+                        image_count = len([item for item in msg.content if isinstance(item, tuple)])
+                        full_content = "".join(text_parts) if text_parts else ""
+                        content_type = f"混合({len(text_parts)}段文本, {image_count}张图片)"
+                    else:
+                        full_content = str(msg.content)
+                        content_type = "未知"
+                    
+                    # 构建单条消息的日志信息
+                    msg_info = f"\n[消息 {idx}] 角色: {role_name}"
+                    msg_info += f"\n  内容类型: {content_type}"
+                    
+                    if full_content:
+                        msg_info += f"\n  内容:\n{full_content}"
+                    
+                    if msg.tool_calls:
+                        msg_info += f"\n  工具调用: {len(msg.tool_calls)}个"
+                        for tool_call in msg.tool_calls:
+                            msg_info += f"\n    - {tool_call}"
+                    
+                    if msg.tool_call_id:
+                        msg_info += f"\n  工具调用ID: {msg.tool_call_id}"
+                    
+                    log_lines.append(msg_info)
+                
+                # 合并所有消息为一条日志输出
+                logger.info(f"消息列表 (共{len(messages)}条):{''.join(log_lines)}")
 
                 return messages
 
             success, response, reasoning_content, model_name, tool_calls = await llm_api.generate_with_model_with_tools_by_message_factory(
                 message_factory,
-                model_config=model_config.model_task_config.tool_use,
-                tool_options=tool_definitions,
-                request_type="memory.react",
-            )
-        else:
-            logger.info(f"ReAct Agent 第 {iteration + 1} 次Prompt: {prompt}")
-            success, response, reasoning_content, model_name, tool_calls = await llm_api.generate_with_model_with_tools(
-                prompt,
                 model_config=model_config.model_task_config.tool_use,
                 tool_options=tool_definitions,
                 request_type="memory.react",
