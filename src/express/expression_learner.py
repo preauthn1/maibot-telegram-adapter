@@ -94,8 +94,8 @@ class ExpressionLearner:
         _, self.enable_learning, self.learning_intensity = global_config.expression.get_expression_config_for_chat(
             self.chat_id
         )
-        self.min_messages_for_learning = 30 / self.learning_intensity  # 触发学习所需的最少消息数
-        self.min_learning_interval = 300 / self.learning_intensity
+        self.min_messages_for_learning = 15 / self.learning_intensity  # 触发学习所需的最少消息数
+        self.min_learning_interval = 120 / self.learning_intensity
 
     def should_trigger_learning(self) -> bool:
         """
