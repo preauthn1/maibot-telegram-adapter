@@ -79,7 +79,8 @@ class TokenManager:
         config = {
             "access_token": token,
             "created_at": self._get_current_timestamp(),
-            "updated_at": self._get_current_timestamp()
+            "updated_at": self._get_current_timestamp(),
+            "first_setup_completed": False  # 标记首次配置未完成
         }
         
         self._save_config(config)
@@ -230,6 +231,53 @@ class TokenManager:
             return False, f"Token 必须包含特殊符号 ({special_chars})"
         
         return True, "Token 格式正确"
+
+    def is_first_setup(self) -> bool:
+        """
+        检查是否为首次配置
+        
+        Returns:
+            bool: 是否为首次配置
+        """
+        config = self._load_config()
+        return not config.get("first_setup_completed", False)
+
+    def mark_setup_completed(self) -> bool:
+        """
+        标记首次配置已完成
+        
+        Returns:
+            bool: 是否标记成功
+        """
+        try:
+            config = self._load_config()
+            config["first_setup_completed"] = True
+            config["setup_completed_at"] = self._get_current_timestamp()
+            self._save_config(config)
+            logger.info("首次配置已标记为完成")
+            return True
+        except Exception as e:
+            logger.error(f"标记首次配置完成失败: {e}")
+            return False
+
+    def reset_setup_status(self) -> bool:
+        """
+        重置首次配置状态，允许重新进入配置向导
+        
+        Returns:
+            bool: 是否重置成功
+        """
+        try:
+            config = self._load_config()
+            config["first_setup_completed"] = False
+            if "setup_completed_at" in config:
+                del config["setup_completed_at"]
+            self._save_config(config)
+            logger.info("首次配置状态已重置")
+            return True
+        except Exception as e:
+            logger.error(f"重置首次配置状态失败: {e}")
+            return False
 
 
 # 全局单例
