@@ -1,5 +1,6 @@
 """表情包管理 API 路由"""
 from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from src.common.logger import get_logger
@@ -7,6 +8,7 @@ from src.common.database.database_model import Emoji
 from .token_manager import get_token_manager
 import json
 import time
+import os
 
 logger = get_logger("webui.emoji")
 
@@ -481,3 +483,65 @@ async def ban_emoji(
     except Exception as e:
         logger.exception(f"禁用表情包失败: {e}")
         raise HTTPException(status_code=500, detail=f"禁用表情包失败: {str(e)}") from e
+
+
+@router.get("/{emoji_id}/thumbnail")
+async def get_emoji_thumbnail(
+    emoji_id: int,
+    token: Optional[str] = Query(None, description="访问令牌"),
+    authorization: Optional[str] = Header(None)
+):
+    """
+    获取表情包缩略图
+    
+    Args:
+        emoji_id: 表情包ID
+        token: 访问令牌（通过 query parameter）
+        authorization: Authorization header
+        
+    Returns:
+        表情包图片文件
+    """
+    try:
+        # 优先使用 query parameter 中的 token（用于 img 标签）
+        if token:
+            token_manager = get_token_manager()
+            if not token_manager.verify_token(token):
+                raise HTTPException(status_code=401, detail="Token 无效或已过期")
+        else:
+            # 如果没有 query token，则验证 Authorization header
+            verify_auth_token(authorization)
+        
+        emoji = Emoji.get_or_none(Emoji.id == emoji_id)
+        
+        if not emoji:
+            raise HTTPException(status_code=404, detail=f"未找到 ID 为 {emoji_id} 的表情包")
+        
+        # 检查文件是否存在
+        if not os.path.exists(emoji.full_path):
+            raise HTTPException(status_code=404, detail="表情包文件不存在")
+        
+        # 根据格式设置 MIME 类型
+        mime_types = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'gif': 'image/gif',
+            'webp': 'image/webp',
+            'bmp': 'image/bmp'
+        }
+        
+        media_type = mime_types.get(emoji.format.lower(), 'application/octet-stream')
+        
+        return FileResponse(
+            path=emoji.full_path,
+            media_type=media_type,
+            filename=f"{emoji.emoji_hash}.{emoji.format}"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"获取表情包缩略图失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取表情包缩略图失败: {str(e)}") from e
+
