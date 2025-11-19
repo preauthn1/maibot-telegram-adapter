@@ -11,6 +11,7 @@ from .expression_routes import router as expression_router
 from .emoji_routes import router as emoji_router
 from .plugin_routes import router as plugin_router
 from .plugin_progress_ws import get_progress_router
+from .routers.system import router as system_router
 
 logger = get_logger("webui.api")
 
@@ -31,6 +32,8 @@ router.include_router(emoji_router)
 router.include_router(plugin_router)
 # 注册插件进度 WebSocket 路由
 router.include_router(get_progress_router())
+# 注册系统控制路由
+router.include_router(system_router)
 
 
 class TokenVerifyRequest(BaseModel):
