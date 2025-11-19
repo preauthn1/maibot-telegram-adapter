@@ -338,6 +338,53 @@ async def delete_expression(expression_id: int, authorization: Optional[str] = H
         raise HTTPException(status_code=500, detail=f"删除表达方式失败: {str(e)}") from e
 
 
+class BatchDeleteRequest(BaseModel):
+    """批量删除请求"""
+
+    ids: List[int]
+
+
+@router.post("/batch/delete", response_model=ExpressionDeleteResponse)
+async def batch_delete_expressions(request: BatchDeleteRequest, authorization: Optional[str] = Header(None)):
+    """
+    批量删除表达方式
+
+    Args:
+        request: 包含要删除的ID列表的请求
+        authorization: Authorization header
+
+    Returns:
+        删除结果
+    """
+    try:
+        verify_auth_token(authorization)
+
+        if not request.ids:
+            raise HTTPException(status_code=400, detail="未提供要删除的表达方式ID")
+
+        # 查找所有要删除的表达方式
+        expressions = Expression.select().where(Expression.id.in_(request.ids))
+        found_ids = [expr.id for expr in expressions]
+
+        # 检查是否有未找到的ID
+        not_found_ids = set(request.ids) - set(found_ids)
+        if not_found_ids:
+            logger.warning(f"部分表达方式未找到: {not_found_ids}")
+
+        # 执行批量删除
+        deleted_count = Expression.delete().where(Expression.id.in_(found_ids)).execute()
+
+        logger.info(f"批量删除了 {deleted_count} 个表达方式")
+
+        return ExpressionDeleteResponse(success=True, message=f"成功删除 {deleted_count} 个表达方式")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"批量删除表达方式失败: {e}")
+        raise HTTPException(status_code=500, detail=f"批量删除表达方式失败: {str(e)}") from e
+
+
 @router.get("/stats/summary")
 async def get_expression_stats(authorization: Optional[str] = Header(None)):
     """

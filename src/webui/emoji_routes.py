@@ -76,6 +76,22 @@ class EmojiDeleteResponse(BaseModel):
     message: str
 
 
+class BatchDeleteRequest(BaseModel):
+    """批量删除请求"""
+
+    emoji_ids: List[int]
+
+
+class BatchDeleteResponse(BaseModel):
+    """批量删除响应"""
+
+    success: bool
+    message: str
+    deleted_count: int
+    failed_count: int
+    failed_ids: List[int] = []
+
+
 def verify_auth_token(authorization: Optional[str]) -> bool:
     """验证认证 Token"""
     if not authorization or not authorization.startswith("Bearer "):
@@ -503,3 +519,59 @@ async def get_emoji_thumbnail(
     except Exception as e:
         logger.exception(f"获取表情包缩略图失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取表情包缩略图失败: {str(e)}") from e
+
+
+@router.post("/batch/delete", response_model=BatchDeleteResponse)
+async def batch_delete_emojis(request: BatchDeleteRequest, authorization: Optional[str] = Header(None)):
+    """
+    批量删除表情包
+
+    Args:
+        request: 包含emoji_ids列表的请求
+        authorization: Authorization header
+
+    Returns:
+        批量删除结果
+    """
+    try:
+        verify_auth_token(authorization)
+
+        if not request.emoji_ids:
+            raise HTTPException(status_code=400, detail="未提供要删除的表情包ID")
+
+        deleted_count = 0
+        failed_count = 0
+        failed_ids = []
+
+        for emoji_id in request.emoji_ids:
+            try:
+                emoji = Emoji.get_or_none(Emoji.id == emoji_id)
+                if emoji:
+                    emoji.delete_instance()
+                    deleted_count += 1
+                    logger.info(f"批量删除表情包: {emoji_id}")
+                else:
+                    failed_count += 1
+                    failed_ids.append(emoji_id)
+            except Exception as e:
+                logger.error(f"删除表情包 {emoji_id} 失败: {e}")
+                failed_count += 1
+                failed_ids.append(emoji_id)
+
+        message = f"成功删除 {deleted_count} 个表情包"
+        if failed_count > 0:
+            message += f"，{failed_count} 个失败"
+
+        return BatchDeleteResponse(
+            success=True,
+            message=message,
+            deleted_count=deleted_count,
+            failed_count=failed_count,
+            failed_ids=failed_ids,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"批量删除表情包失败: {e}")
+        raise HTTPException(status_code=500, detail=f"批量删除失败: {str(e)}") from e

@@ -75,6 +75,22 @@ class PersonDeleteResponse(BaseModel):
     message: str
 
 
+class BatchDeleteRequest(BaseModel):
+    """批量删除请求"""
+
+    person_ids: List[str]
+
+
+class BatchDeleteResponse(BaseModel):
+    """批量删除响应"""
+
+    success: bool
+    message: str
+    deleted_count: int
+    failed_count: int
+    failed_ids: List[str] = []
+
+
 def verify_auth_token(authorization: Optional[str]) -> bool:
     """验证认证 Token"""
     if not authorization or not authorization.startswith("Bearer "):
@@ -334,3 +350,59 @@ async def get_person_stats(authorization: Optional[str] = Header(None)):
     except Exception as e:
         logger.exception(f"获取统计数据失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取统计数据失败: {str(e)}") from e
+
+
+@router.post("/batch/delete", response_model=BatchDeleteResponse)
+async def batch_delete_persons(request: BatchDeleteRequest, authorization: Optional[str] = Header(None)):
+    """
+    批量删除人物信息
+
+    Args:
+        request: 包含person_ids列表的请求
+        authorization: Authorization header
+
+    Returns:
+        批量删除结果
+    """
+    try:
+        verify_auth_token(authorization)
+
+        if not request.person_ids:
+            raise HTTPException(status_code=400, detail="未提供要删除的人物ID")
+
+        deleted_count = 0
+        failed_count = 0
+        failed_ids = []
+
+        for person_id in request.person_ids:
+            try:
+                person = PersonInfo.get_or_none(PersonInfo.person_id == person_id)
+                if person:
+                    person.delete_instance()
+                    deleted_count += 1
+                    logger.info(f"批量删除: {person_id}")
+                else:
+                    failed_count += 1
+                    failed_ids.append(person_id)
+            except Exception as e:
+                logger.error(f"删除 {person_id} 失败: {e}")
+                failed_count += 1
+                failed_ids.append(person_id)
+
+        message = f"成功删除 {deleted_count} 个人物"
+        if failed_count > 0:
+            message += f"，{failed_count} 个失败"
+
+        return BatchDeleteResponse(
+            success=True,
+            message=message,
+            deleted_count=deleted_count,
+            failed_count=failed_count,
+            failed_ids=failed_ids,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"批量删除人物信息失败: {e}")
+        raise HTTPException(status_code=500, detail=f"批量删除失败: {str(e)}") from e
