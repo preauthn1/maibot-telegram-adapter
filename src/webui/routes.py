@@ -62,6 +62,24 @@ class TokenRegenerateResponse(BaseModel):
     message: str = Field(..., description="生成结果消息")
 
 
+class FirstSetupStatusResponse(BaseModel):
+    """首次配置状态响应"""
+    is_first_setup: bool = Field(..., description="是否为首次配置")
+    message: str = Field(..., description="状态消息")
+
+
+class CompleteSetupResponse(BaseModel):
+    """完成配置响应"""
+    success: bool = Field(..., description="是否成功")
+    message: str = Field(..., description="结果消息")
+
+
+class ResetSetupResponse(BaseModel):
+    """重置配置响应"""
+    success: bool = Field(..., description="是否成功")
+    message: str = Field(..., description="结果消息")
+
+
 @router.get("/health")
 async def health_check():
     """健康检查"""
@@ -174,3 +192,110 @@ async def regenerate_token(authorization: Optional[str] = Header(None)):
         logger.error(f"Token 重新生成失败: {e}")
         raise HTTPException(status_code=500, detail="Token 重新生成失败") from e
 
+
+@router.get("/setup/status", response_model=FirstSetupStatusResponse)
+async def get_setup_status(authorization: Optional[str] = Header(None)):
+    """
+    获取首次配置状态
+    
+    Args:
+        authorization: Authorization header (Bearer token)
+        
+    Returns:
+        首次配置状态
+    """
+    try:
+        # 验证 token
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="未提供有效的认证信息")
+        
+        current_token = authorization.replace("Bearer ", "")
+        token_manager = get_token_manager()
+        
+        if not token_manager.verify_token(current_token):
+            raise HTTPException(status_code=401, detail="Token 无效")
+        
+        # 检查是否为首次配置
+        is_first = token_manager.is_first_setup()
+        
+        return FirstSetupStatusResponse(
+            is_first_setup=is_first,
+            message="首次配置" if is_first else "已完成配置"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取配置状态失败: {e}")
+        raise HTTPException(status_code=500, detail="获取配置状态失败") from e
+
+
+@router.post("/setup/complete", response_model=CompleteSetupResponse)
+async def complete_setup(authorization: Optional[str] = Header(None)):
+    """
+    标记首次配置完成
+    
+    Args:
+        authorization: Authorization header (Bearer token)
+        
+    Returns:
+        完成结果
+    """
+    try:
+        # 验证 token
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="未提供有效的认证信息")
+        
+        current_token = authorization.replace("Bearer ", "")
+        token_manager = get_token_manager()
+        
+        if not token_manager.verify_token(current_token):
+            raise HTTPException(status_code=401, detail="Token 无效")
+        
+        # 标记配置完成
+        success = token_manager.mark_setup_completed()
+        
+        return CompleteSetupResponse(
+            success=success,
+            message="配置已完成" if success else "标记失败"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"标记配置完成失败: {e}")
+        raise HTTPException(status_code=500, detail="标记配置完成失败") from e
+
+
+@router.post("/setup/reset", response_model=ResetSetupResponse)
+async def reset_setup(authorization: Optional[str] = Header(None)):
+    """
+    重置首次配置状态，允许重新进入配置向导
+    
+    Args:
+        authorization: Authorization header (Bearer token)
+        
+    Returns:
+        重置结果
+    """
+    try:
+        # 验证 token
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="未提供有效的认证信息")
+        
+        current_token = authorization.replace("Bearer ", "")
+        token_manager = get_token_manager()
+        
+        if not token_manager.verify_token(current_token):
+            raise HTTPException(status_code=401, detail="Token 无效")
+        
+        # 重置配置状态
+        success = token_manager.reset_setup_status()
+        
+        return ResetSetupResponse(
+            success=success,
+            message="配置状态已重置" if success else "重置失败"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"重置配置状态失败: {e}")
+        raise HTTPException(status_code=500, detail="重置配置状态失败") from e
