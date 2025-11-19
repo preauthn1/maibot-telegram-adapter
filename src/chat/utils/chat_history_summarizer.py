@@ -106,7 +106,7 @@ class ChatHistorySummarizer:
                     await self._check_and_package(current_time)
                 self.last_check_time = current_time
                 return
-            
+
             logger.info(
                 f"{self.log_prefix} 开始处理聊天概括，时间窗口: {self.last_check_time:.2f} -> {current_time:.2f}"
             )
