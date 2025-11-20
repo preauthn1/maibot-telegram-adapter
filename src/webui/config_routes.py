@@ -319,6 +319,58 @@ async def update_bot_config_section(section_name: str, section_data: Any = Body(
         raise HTTPException(status_code=500, detail=f"更新配置节失败: {str(e)}")
 
 
+# ===== 原始 TOML 文件操作接口 =====
+
+
+@router.get("/bot/raw")
+async def get_bot_config_raw():
+    """获取麦麦主程序配置的原始 TOML 内容"""
+    try:
+        config_path = os.path.join(CONFIG_DIR, "bot_config.toml")
+        if not os.path.exists(config_path):
+            raise HTTPException(status_code=404, detail="配置文件不存在")
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw_content = f.read()
+
+        return {"success": True, "content": raw_content}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"读取配置文件失败: {e}")
+        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {str(e)}")
+
+
+@router.post("/bot/raw")
+async def update_bot_config_raw(raw_content: str = Body(..., embed=True)):
+    """更新麦麦主程序配置（直接保存原始 TOML 内容，会先验证格式）"""
+    try:
+        # 验证 TOML 格式
+        try:
+            config_data = tomlkit.loads(raw_content)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"TOML 格式错误: {str(e)}")
+
+        # 验证配置数据结构
+        try:
+            Config.from_dict(config_data)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}")
+
+        # 保存配置文件
+        config_path = os.path.join(CONFIG_DIR, "bot_config.toml")
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(raw_content)
+
+        logger.info("麦麦主程序配置已更新（原始模式）")
+        return {"success": True, "message": "配置已保存"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"保存配置文件失败: {e}")
+        raise HTTPException(status_code=500, detail=f"保存配置文件失败: {str(e)}")
+
+
 @router.post("/model/section/{section_name}")
 async def update_model_config_section(section_name: str, section_data: Any = Body(...)):
     """更新模型配置的指定节（保留注释和格式）"""
