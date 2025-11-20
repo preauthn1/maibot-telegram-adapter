@@ -647,7 +647,7 @@ class LPMMKnowledgeConfig(ConfigBase):
 
     enable: bool = True
     """是否启用LPMM知识库"""
-    
+
     lpmm_mode: Literal["classic", "agent"] = "classic"
     """LPMM知识库模式，可选：classic经典模式，agent 模式，结合最新的记忆一同使用"""
 

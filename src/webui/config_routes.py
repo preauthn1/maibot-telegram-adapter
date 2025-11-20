@@ -51,7 +51,7 @@ def _update_dict_preserve_comments(target: Any, source: Any) -> None:
     """
     递归合并字典，保留 target 中的注释和格式
     将 source 的值更新到 target 中（仅更新已存在的键）
-    
+
     Args:
         target: 目标字典（tomlkit 对象，包含注释）
         source: 源字典（普通 dict 或 list）
@@ -59,7 +59,7 @@ def _update_dict_preserve_comments(target: Any, source: Any) -> None:
     # 如果 source 是列表，直接替换（数组表没有注释保留的意义）
     if isinstance(source, list):
         return  # 调用者需要直接赋值
-    
+
     # 如果都是字典，递归合并
     if isinstance(source, dict) and isinstance(target, dict):
         for key, value in source.items():

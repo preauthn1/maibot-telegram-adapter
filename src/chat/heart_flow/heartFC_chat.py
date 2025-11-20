@@ -333,7 +333,6 @@ class HeartFChatting:
             # 重置连续 no_reply 计数
             self.consecutive_no_reply_count = 0
             reason = ""
-            
 
             await database_api.store_action_info(
                 chat_stream=self.chat_stream,

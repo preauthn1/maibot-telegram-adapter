@@ -36,10 +36,10 @@ class MainSystem:
         # 使用消息API替代直接的FastAPI实例
         self.app: MessageServer = get_global_api()
         self.server: Server = get_global_server()
-        
+
         # 注册 WebUI API 路由
         self._register_webui_routes()
-        
+
         # 设置 WebUI（开发/生产模式）
         self._setup_webui()
 
@@ -47,6 +47,7 @@ class MainSystem:
         """注册 WebUI API 路由"""
         try:
             from src.webui.routes import router as webui_router
+
             self.server.register_router(webui_router)
             logger.info("WebUI API 路由已注册")
         except Exception as e:
@@ -55,15 +56,17 @@ class MainSystem:
     def _setup_webui(self):
         """设置 WebUI（根据环境变量决定模式）"""
         import os
+
         webui_enabled = os.getenv("WEBUI_ENABLED", "false").lower() == "true"
         if not webui_enabled:
             logger.info("WebUI 已禁用")
             return
-        
+
         webui_mode = os.getenv("WEBUI_MODE", "production").lower()
-        
+
         try:
             from src.webui.manager import setup_webui
+
             setup_webui(mode=webui_mode)
         except Exception as e:
             logger.error(f"设置 WebUI 失败: {e}")
