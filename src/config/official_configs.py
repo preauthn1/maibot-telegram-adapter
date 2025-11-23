@@ -279,6 +279,12 @@ class ExpressionConfig(ConfigBase):
     格式: [["qq:12345:group", "qq:67890:private"]]
     """
 
+    reflect: bool = False
+    """是否启用表达反思"""
+
+    reflect_operator_id: str = ""
+    """表达反思操作员ID"""
+
     def _parse_stream_config_to_chat_id(self, stream_config_str: str) -> Optional[str]:
         """
         解析流配置字符串并生成对应的 chat_id

@@ -316,6 +316,8 @@ class Expression(BaseModel):
     last_active_time = FloatField()
     chat_id = TextField(index=True)
     create_date = FloatField(null=True)  # 创建日期，允许为空以兼容老数据
+    checked = BooleanField(default=False)  # 是否已检查
+    rejected = BooleanField(default=False)  # 是否被拒绝但未更新
 
     class Meta:
         table_name = "expression"
