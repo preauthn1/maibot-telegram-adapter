@@ -1,5 +1,5 @@
 [inner]
-version = "6.23.0"
+version = "6.23.1"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 #如果你想要修改配置文件，请递增version的值
@@ -82,6 +82,7 @@ expression_groups = [
 
 reflect = false # 是否启用表达反思（Bot主动向管理员询问表达方式是否合适）
 reflect_operator_id = "" # 表达反思操作员ID，格式：platform:id:type (例如 "qq:123456:private" 或 "qq:654321:group")
+allow_reflect = [] # 允许进行表达反思的聊天流ID列表，格式：["qq:123456:private", "qq:654321:group", ...]，只有在此列表中的聊天流才会提出问题并跟踪。如果列表为空，则所有聊天流都可以进行表达反思（前提是 reflect = true）
 
 
 [chat] #麦麦的聊天设置

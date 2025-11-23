@@ -37,6 +37,12 @@ class ExpressionReflector:
                 logger.info(f"[Expression Reflection] Operator ID 未配置，跳过")
                 return False
 
+            # 检查是否在允许列表中
+            allow_reflect = global_config.expression.allow_reflect
+            if allow_reflect and self.chat_id not in allow_reflect:
+                logger.info(f"[Expression Reflection] 当前聊天流 {self.chat_id} 不在允许列表中，跳过")
+                return False
+
             # 检查上一次提问时间
             current_time = time.time()
             time_since_last_ask = current_time - self.last_ask_time

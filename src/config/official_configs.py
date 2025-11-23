@@ -285,6 +285,14 @@ class ExpressionConfig(ConfigBase):
     reflect_operator_id: str = ""
     """表达反思操作员ID"""
 
+    allow_reflect: list[str] = field(default_factory=list)
+    """
+    允许进行表达反思的聊天流ID列表
+    格式: ["qq:123456:private", "qq:654321:group", ...]
+    只有在此列表中的聊天流才会提出问题并跟踪
+    如果列表为空，则所有聊天流都可以进行表达反思（前提是 reflect = true）
+    """
+
     def _parse_stream_config_to_chat_id(self, stream_config_str: str) -> Optional[str]:
         """
         解析流配置字符串并生成对应的 chat_id

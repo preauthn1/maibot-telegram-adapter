@@ -791,92 +791,6 @@ def _query_thinking_back(chat_id: str, question: str) -> Optional[Tuple[bool, st
         return None
 
 
-async def _analyze_question_answer(question: str, answer: str, chat_id: str) -> None:
-    """异步分析问题和答案的类别，并存储到相应系统
-
-    Args:
-        question: 问题
-        answer: 答案
-        chat_id: 聊天ID
-    """
-    try:
-        # 使用LLM分析类别
-        analysis_prompt = f"""请分析以下问题和答案的类别：
-
-问题：{question}
-答案：{answer}
-
-类别说明：
-1. 人物信息：有关某个用户的个体信息（如某人的喜好、习惯、经历等）
-2. 黑话：对特定概念、缩写词、谐音词、自创词的解释（如"yyds"、"社死"等）
-3. 其他：除此之外的其他内容
-
-请输出JSON格式：
-{{
-    "category": "人物信息" | "黑话" | "其他",
-    "jargon_keyword": "如果是黑话，提取关键词（如'yyds'），否则为空字符串",
-    "person_name": "如果是人物信息，提取人物名称，否则为空字符串",
-    "memory_content": "如果是人物信息，提取要存储的记忆内容（简短概括），否则为空字符串"
-}}
-
-只输出JSON，不要输出其他内容："""
-
-        success, response, _, _ = await llm_api.generate_with_model(
-            analysis_prompt,
-            model_config=model_config.model_task_config.utils,
-            request_type="memory.analyze_qa",
-        )
-
-        if not success:
-            logger.error(f"分析问题和答案失败: {response}")
-            return
-
-        # 解析JSON响应
-        try:
-            json_pattern = r"```json\s*(.*?)\s*```"
-            matches = re.findall(json_pattern, response, re.DOTALL)
-
-            if matches:
-                json_str = matches[0]
-            else:
-                json_str = response.strip()
-
-            repaired_json = repair_json(json_str)
-            analysis_result = json.loads(repaired_json)
-
-            category = analysis_result.get("category", "").strip()
-
-            if category == "黑话":
-                # 处理黑话
-                jargon_keyword = analysis_result.get("jargon_keyword", "").strip()
-                if jargon_keyword:
-                    from src.jargon.jargon_miner import store_jargon_from_answer
-
-                    await store_jargon_from_answer(jargon_keyword, answer, chat_id)
-                else:
-                    logger.warning(f"分析为黑话但未提取到关键词，问题: {question[:50]}...")
-
-            elif category == "人物信息":
-                # 处理人物信息
-                # person_name = analysis_result.get("person_name", "").strip()
-                # memory_content = analysis_result.get("memory_content", "").strip()
-                # if person_name and memory_content:
-                #     from src.person_info.person_info import store_person_memory_from_answer
-                #     await store_person_memory_from_answer(person_name, memory_content, chat_id)
-                # else:
-                #     logger.warning(f"分析为人物信息但未提取到人物名称或记忆内容，问题: {question[:50]}...")
-                pass  # 功能暂时禁用
-
-            else:
-                logger.info(f"问题和答案类别为'其他'，不进行存储，问题: {question[:50]}...")
-
-        except Exception as e:
-            logger.error(f"解析分析结果失败: {e}, 响应: {response[:200]}...")
-
-    except Exception as e:
-        logger.error(f"分析问题和答案时发生异常: {e}")
-
-
 def _store_thinking_back(
     chat_id: str, question: str, context: str, found_answer: bool, answer: str, thinking_steps: List[Dict[str, Any]]
 ) -> None:
@@ -1013,8 +927,6 @@ async def _process_single_question(question: str, chat_id: str, context: str, in
             logger.info(f"ReAct Agent超时，不存储到数据库，问题: {question[:50]}...")
 
         if found_answer and answer:
-            # 创建异步任务分析问题和答案
-            asyncio.create_task(_analyze_question_answer(question, answer, chat_id))
             return f"问题：{question}\n答案：{answer}"
 
     return None

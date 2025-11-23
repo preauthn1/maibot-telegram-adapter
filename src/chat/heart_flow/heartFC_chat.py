@@ -18,6 +18,8 @@ from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
 from src.express.expression_learner import expression_learner_manager
 from src.chat.frequency_control.frequency_control import frequency_control_manager
+from src.express.reflect_tracker import reflect_tracker_manager
+from src.express.expression_reflector import expression_reflector_manager
 from src.jargon import extract_and_store_jargon
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
@@ -397,8 +399,9 @@ class HeartFChatting:
         # ReflectTracker Check
         # 在每次回复前检查一次上下文，看是否有反思问题得到了解答
         # -------------------------------------------------------------------------
-        from src.express.reflect_tracker import reflect_tracker_manager
         
+        reflector = expression_reflector_manager.get_or_create_reflector(self.stream_id)
+        await reflector.check_and_ask()
         tracker = reflect_tracker_manager.get_tracker(self.stream_id)
         if tracker:
             resolved = await tracker.trigger_tracker()
@@ -406,16 +409,8 @@ class HeartFChatting:
                 reflect_tracker_manager.remove_tracker(self.stream_id)
                 logger.info(f"{self.log_prefix} ReflectTracker resolved and removed.")
 
-        # -------------------------------------------------------------------------
-        # Expression Reflection Check
-        # 检查是否需要提问表达反思
-        # -------------------------------------------------------------------------
-        from src.express.expression_reflector import expression_reflector_manager
-        reflector = expression_reflector_manager.get_or_create_reflector(self.stream_id)
-        asyncio.create_task(reflector.check_and_ask())
 
         start_time = time.time()
-
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
             asyncio.create_task(

@@ -140,6 +140,7 @@ class ExpressionSelector:
                     "source_id": expr.chat_id,
                     "create_date": expr.create_date if expr.create_date is not None else expr.last_active_time,
                     "count": expr.count if getattr(expr, "count", None) is not None else 1,
+                    "checked": expr.checked if getattr(expr, "checked", None) is not None else False,
                 }
                 for expr in style_query
             ]
