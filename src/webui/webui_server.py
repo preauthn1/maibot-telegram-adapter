@@ -88,14 +88,20 @@ class WebUIServer:
             # 导入所有 WebUI 路由
             from src.webui.routes import router as webui_router
             from src.webui.logs_ws import router as logs_router
+            
+            logger.info("开始导入 knowledge_routes...")
+            from src.webui.knowledge_routes import router as knowledge_router
+            logger.info("knowledge_routes 导入成功")
 
             # 注册路由
             self.app.include_router(webui_router)
             self.app.include_router(logs_router)
+            self.app.include_router(knowledge_router)
+            logger.info(f"knowledge_router 路由前缀: {knowledge_router.prefix}")
 
             logger.info("✅ WebUI API 路由已注册")
         except Exception as e:
-            logger.error(f"❌ 注册 WebUI API 路由失败: {e}")
+            logger.error(f"❌ 注册 WebUI API 路由失败: {e}", exc_info=True)
 
     async def start(self):
         """启动服务器"""

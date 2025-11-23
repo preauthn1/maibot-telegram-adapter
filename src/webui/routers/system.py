@@ -42,19 +42,23 @@ async def restart_maibot():
     使用 os.execv 重启当前进程，配置更改将在重启后生效。
     注意：此操作会使麦麦暂时离线。
     """
+    import asyncio
+    
     try:
         # 记录重启操作
         print(f"[{datetime.now()}] WebUI 触发重启操作")
 
-        # 使用 os.execv 重启当前进程
-        # 这会替换当前进程，保持相同的 PID
-        python = sys.executable
-        args = [python] + sys.argv
+        # 定义延迟重启的异步任务
+        async def delayed_restart():
+            await asyncio.sleep(0.5)  # 延迟0.5秒，确保响应已发送
+            python = sys.executable
+            args = [python] + sys.argv
+            os.execv(python, args)
+        
+        # 创建后台任务执行重启
+        asyncio.create_task(delayed_restart())
 
-        # 返回成功响应（实际上这个响应可能不会发送，因为进程会立即重启）
-        # 但我们仍然返回它以保持 API 一致性
-        os.execv(python, args)
-
+        # 立即返回成功响应
         return RestartResponse(success=True, message="麦麦正在重启中...")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"重启失败: {str(e)}") from e
