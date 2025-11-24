@@ -39,9 +39,19 @@ class ExpressionReflector:
 
             # 检查是否在允许列表中
             allow_reflect = global_config.expression.allow_reflect
-            if allow_reflect and self.chat_id not in allow_reflect:
-                logger.info(f"[Expression Reflection] 当前聊天流 {self.chat_id} 不在允许列表中，跳过")
-                return False
+            if allow_reflect:
+                # 将 allow_reflect 中的 platform:id:type 格式转换为 chat_id 列表
+                allow_reflect_chat_ids = []
+                for stream_config in allow_reflect:
+                    parsed_chat_id = global_config.expression._parse_stream_config_to_chat_id(stream_config)
+                    if parsed_chat_id:
+                        allow_reflect_chat_ids.append(parsed_chat_id)
+                    else:
+                        logger.warning(f"[Expression Reflection] 无法解析 allow_reflect 配置项: {stream_config}")
+                
+                if self.chat_id not in allow_reflect_chat_ids:
+                    logger.info(f"[Expression Reflection] 当前聊天流 {self.chat_id} 不在允许列表中，跳过")
+                    return False
 
             # 检查上一次提问时间
             current_time = time.time()

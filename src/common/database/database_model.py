@@ -330,8 +330,6 @@ class Jargon(BaseModel):
 
     content = TextField()
     raw_content = TextField(null=True)
-    type = TextField(null=True)
-    translation = TextField(null=True)
     meaning = TextField(null=True)
     chat_id = TextField(index=True)
     is_global = BooleanField(default=False)

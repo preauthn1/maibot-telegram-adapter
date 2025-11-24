@@ -22,6 +22,7 @@ MaiMBot-LPMM
 *.zip
 run_bot.bat
 run_na.bat
+run_all_in_wt.bat
 run.bat
 log_debug/
 run_amds.bat

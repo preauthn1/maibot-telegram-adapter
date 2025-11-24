@@ -352,6 +352,7 @@ def _build_readable_messages_internal(
     pic_counter: int = 1,
     show_pic: bool = True,
     message_id_list: Optional[List[Tuple[str, DatabaseMessages]]] = None,
+    pic_single: bool = False,
 ) -> Tuple[str, List[Tuple[float, str, str]], Dict[str, str], int]:
     # sourcery skip: use-getitem-for-re-match-groups
     """
@@ -378,6 +379,7 @@ def _build_readable_messages_internal(
     if pic_id_mapping is None:
         pic_id_mapping = {}
     current_pic_counter = pic_counter
+    pic_description_cache: Dict[str, str] = {}
 
     # 创建时间戳到消息ID的映射，用于在消息前添加[id]标识符
     timestamp_to_id_mapping: Dict[float, str] = {}
@@ -400,6 +402,17 @@ def _build_readable_messages_internal(
             nonlocal current_pic_counter
             nonlocal pic_counter
             pic_id = match.group(1)
+            if pic_single:
+                if pic_id not in pic_description_cache:
+                    description = "内容正在阅读，请稍等"
+                    try:
+                        image = Images.get_or_none(Images.image_id == pic_id)
+                        if image and image.description:
+                            description = image.description
+                    except Exception:
+                        pass
+                    pic_description_cache[pic_id] = description
+                return f"[图片：{pic_description_cache[pic_id]}]"
             if pic_id not in pic_id_mapping:
                 pic_id_mapping[pic_id] = f"图片{current_pic_counter}"
                 current_pic_counter += 1
@@ -603,6 +616,7 @@ async def build_readable_messages_with_list(
     replace_bot_name: bool = True,
     timestamp_mode: str = "relative",
     truncate: bool = False,
+    pic_single: bool = False,
 ) -> Tuple[str, List[Tuple[float, str, str]]]:
     """
     将消息列表转换为可读的文本格式，并返回原始(时间戳, 昵称, 内容)列表。
@@ -613,10 +627,16 @@ async def build_readable_messages_with_list(
         replace_bot_name,
         timestamp_mode,
         truncate,
+        pic_id_mapping=None,
+        pic_counter=1,
+        show_pic=True,
+        message_id_list=None,
+        pic_single=pic_single,
     )
 
-    if pic_mapping_info := build_pic_mapping_info(pic_id_mapping):
-        formatted_string = f"{pic_mapping_info}\n\n{formatted_string}"
+    if not pic_single:
+        if pic_mapping_info := build_pic_mapping_info(pic_id_mapping):
+            formatted_string = f"{pic_mapping_info}\n\n{formatted_string}"
 
     return formatted_string, details_list
 
@@ -630,6 +650,7 @@ def build_readable_messages_with_id(
     show_actions: bool = False,
     show_pic: bool = True,
     remove_emoji_stickers: bool = False,
+    pic_single: bool = False,
 ) -> Tuple[str, List[Tuple[str, DatabaseMessages]]]:
     """
     将消息列表转换为可读的文本格式，并返回原始(时间戳, 昵称, 内容)列表。
@@ -647,6 +668,7 @@ def build_readable_messages_with_id(
         read_mark=read_mark,
         message_id_list=message_id_list,
         remove_emoji_stickers=remove_emoji_stickers,
+        pic_single=pic_single,
     )
 
     return formatted_string, message_id_list
@@ -662,6 +684,7 @@ def build_readable_messages(
     show_pic: bool = True,
     message_id_list: Optional[List[Tuple[str, DatabaseMessages]]] = None,
     remove_emoji_stickers: bool = False,
+    pic_single: bool = False,
 ) -> str:  # sourcery skip: extract-method
     """
     将消息列表转换为可读的文本格式。
@@ -769,14 +792,14 @@ def build_readable_messages(
             truncate,
             show_pic=show_pic,
             message_id_list=message_id_list,
+            pic_single=pic_single,
         )
 
-        # 生成图片映射信息并添加到最前面
-        pic_mapping_info = build_pic_mapping_info(pic_id_mapping)
-        if pic_mapping_info:
-            return f"{pic_mapping_info}\n\n{formatted_string}"
-        else:
-            return formatted_string
+        if not pic_single:
+            pic_mapping_info = build_pic_mapping_info(pic_id_mapping)
+            if pic_mapping_info:
+                return f"{pic_mapping_info}\n\n{formatted_string}"
+        return formatted_string
     else:
         # 按 read_mark 分割消息
         messages_before_mark = [msg for msg in copy_messages if (msg.time or 0) <= read_mark]
@@ -796,6 +819,7 @@ def build_readable_messages(
             pic_counter,
             show_pic=show_pic,
             message_id_list=message_id_list,
+            pic_single=pic_single,
         )
         formatted_after, _, pic_id_mapping, _ = _build_readable_messages_internal(
             messages_after_mark,
@@ -806,15 +830,19 @@ def build_readable_messages(
             pic_counter,
             show_pic=show_pic,
             message_id_list=message_id_list,
+            pic_single=pic_single,
         )
 
         read_mark_line = "\n--- 以上消息是你已经看过，请关注以下未读的新消息---\n"
 
         # 生成图片映射信息
-        if pic_id_mapping:
-            pic_mapping_info = f"图片信息：\n{build_pic_mapping_info(pic_id_mapping)}\n聊天记录信息：\n"
+        if not pic_single:
+            if pic_id_mapping:
+                pic_mapping_info = f"图片信息：\n{build_pic_mapping_info(pic_id_mapping)}\n聊天记录信息：\n"
+            else:
+                pic_mapping_info = "聊天记录信息：\n"
         else:
-            pic_mapping_info = "聊天记录信息：\n"
+            pic_mapping_info = ""
 
         # 组合结果
         result_parts = []
@@ -832,7 +860,7 @@ def build_readable_messages(
         return "".join(result_parts)
 
 
-async def build_anonymous_messages(messages: List[DatabaseMessages]) -> str:
+async def build_anonymous_messages(messages: List[DatabaseMessages], show_ids: bool = False) -> str:
     """
     构建匿名可读消息，将不同人的名称转为唯一占位符（A、B、C...），bot自己用SELF。
     处理 回复<aaa:bbb> 和 @<aaa:bbb> 字段，将bbb映射为匿名占位符。
@@ -889,7 +917,7 @@ async def build_anonymous_messages(messages: List[DatabaseMessages]) -> str:
             current_char += 1
         return person_map[person_id]
 
-    for msg in messages:
+    for i, msg in enumerate(messages):
         try:
             platform = msg.chat_info.platform
             user_id = msg.user_info.user_id
@@ -910,7 +938,12 @@ async def build_anonymous_messages(messages: List[DatabaseMessages]) -> str:
 
             content = replace_user_references(content, platform, anon_name_resolver, replace_bot_name=False)
 
-            header = f"{anon_name}说 "
+            # 构建消息头，如果启用show_ids则添加序号
+            if show_ids:
+                header = f"[{i + 1}] {anon_name}说 "
+            else:
+                header = f"{anon_name}说 "
+                
             output_lines.append(header)
             stripped_line = content.strip()
             if stripped_line:
