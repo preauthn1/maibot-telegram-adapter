@@ -394,11 +394,9 @@ async def register_emoji(emoji_id: int, authorization: Optional[str] = Header(No
         if emoji.is_registered:
             raise HTTPException(status_code=400, detail="该表情包已经注册")
 
-        if emoji.is_banned:
-            raise HTTPException(status_code=400, detail="该表情包已被禁用，无法注册")
-
-        # 注册表情包
+        # 注册表情包（如果已封禁，自动解除封禁）
         emoji.is_registered = True
+        emoji.is_banned = False  # 注册时自动解除封禁
         emoji.register_time = time.time()
         emoji.save()
 

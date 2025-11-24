@@ -235,12 +235,21 @@ if __name__ == "__main__":
             loop.run_until_complete(main_tasks)
 
         except KeyboardInterrupt:
-            # loop.run_until_complete(get_global_api().stop())
             logger.warning("收到中断信号，正在优雅关闭...")
+            
+            # 取消主任务
+            if 'main_tasks' in locals() and main_tasks and not main_tasks.done():
+                main_tasks.cancel()
+                try:
+                    loop.run_until_complete(main_tasks)
+                except asyncio.CancelledError:
+                    pass
+            
+            # 执行优雅关闭
             if loop and not loop.is_closed():
                 try:
                     loop.run_until_complete(graceful_shutdown())
-                except Exception as ge:  # 捕捉优雅关闭时可能发生的错误
+                except Exception as ge:
                     logger.error(f"优雅关闭时发生错误: {ge}")
         # 新增：检测外部请求关闭
 

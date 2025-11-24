@@ -516,10 +516,14 @@ async def install_plugin(request: InstallPluginRequest, authorization: Optional[
         plugins_dir = Path("plugins")
         plugins_dir.mkdir(exist_ok=True)
 
-        target_path = plugins_dir / request.plugin_id
+        # 将插件 ID 中的点替换为下划线作为文件夹名称（避免文件系统问题）
+        # 例如: SengokuCola.Mute-Plugin -> SengokuCola_Mute-Plugin
+        folder_name = request.plugin_id.replace(".", "_")
+        target_path = plugins_dir / folder_name
 
-        # 检查插件是否已安装
-        if target_path.exists():
+        # 检查插件是否已安装（需要检查两种格式：新格式下划线和旧格式点）
+        old_format_path = plugins_dir / request.plugin_id
+        if target_path.exists() or old_format_path.exists():
             await update_progress(
                 stage="error",
                 progress=0,
@@ -607,6 +611,12 @@ async def install_plugin(request: InstallPluginRequest, authorization: Optional[
             for field in required_fields:
                 if field not in manifest:
                     raise ValueError(f"缺少必需字段: {field}")
+            
+            # 将插件 ID 写入 manifest（用于后续准确识别）
+            # 这样即使文件夹名称改变，也能通过 manifest 准确识别插件
+            manifest["id"] = request.plugin_id
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json_module.dump(manifest, f, ensure_ascii=False, indent=2)
 
         except Exception as e:
             # 清理失败的安装
@@ -686,20 +696,28 @@ async def uninstall_plugin(
             plugin_id=request.plugin_id,
         )
 
-        # 1. 检查插件是否存在
+        # 1. 检查插件是否存在（支持新旧两种格式）
         plugins_dir = Path("plugins")
-        plugin_path = plugins_dir / request.plugin_id
-
+        # 新格式：下划线
+        folder_name = request.plugin_id.replace(".", "_")
+        plugin_path = plugins_dir / folder_name
+        # 旧格式：点
+        old_format_path = plugins_dir / request.plugin_id
+        
+        # 优先使用新格式，如果不存在则尝试旧格式
         if not plugin_path.exists():
-            await update_progress(
-                stage="error",
-                progress=0,
-                message="插件不存在",
-                operation="uninstall",
-                plugin_id=request.plugin_id,
-                error="插件未安装或已被删除",
-            )
-            raise HTTPException(status_code=404, detail="插件未安装")
+            if old_format_path.exists():
+                plugin_path = old_format_path
+            else:
+                await update_progress(
+                    stage="error",
+                    progress=0,
+                    message="插件不存在",
+                    operation="uninstall",
+                    plugin_id=request.plugin_id,
+                    error="插件未安装或已被删除",
+                )
+                raise HTTPException(status_code=404, detail="插件未安装")
 
         await update_progress(
             stage="loading",
@@ -812,25 +830,32 @@ async def update_plugin(request: UpdatePluginRequest, authorization: Optional[st
             plugin_id=request.plugin_id,
         )
 
-        # 1. 检查插件是否已安装
+        # 1. 检查插件是否已安装（支持新旧两种格式）
         plugins_dir = Path("plugins")
-        plugin_path = plugins_dir / request.plugin_id
-
+        # 新格式：下划线
+        folder_name = request.plugin_id.replace(".", "_")
+        plugin_path = plugins_dir / folder_name
+        # 旧格式：点
+        old_format_path = plugins_dir / request.plugin_id
+        
+        # 优先使用新格式，如果不存在则尝试旧格式
         if not plugin_path.exists():
-            await update_progress(
-                stage="error",
-                progress=0,
-                message="插件不存在",
-                operation="update",
-                plugin_id=request.plugin_id,
-                error="插件未安装，请先安装",
-            )
-            raise HTTPException(status_code=404, detail="插件未安装")
+            if old_format_path.exists():
+                plugin_path = old_format_path
+            else:
+                await update_progress(
+                    stage="error",
+                    progress=0,
+                    message="插件不存在",
+                    operation="update",
+                    plugin_id=request.plugin_id,
+                    error="插件未安装，请先安装",
+                )
+                raise HTTPException(status_code=404, detail="插件未安装")
 
         # 2. 读取旧版本信息
         manifest_path = plugin_path / "_manifest.json"
         old_version = "unknown"
-        plugin_name = request.plugin_id
 
         if manifest_path.exists():
             try:
@@ -839,7 +864,6 @@ async def update_plugin(request: UpdatePluginRequest, authorization: Optional[st
                 with open(manifest_path, "r", encoding="utf-8") as f:
                     manifest = json_module.load(f)
                 old_version = manifest.get("version", "unknown")
-                _plugin_name = manifest.get("name", request.plugin_id)
             except Exception:
                 pass
 
@@ -1032,18 +1056,18 @@ async def get_installed_plugins(authorization: Optional[str] = Header(None)) -> 
             if not plugin_path.is_dir():
                 continue
 
-            # 目录名即为插件 ID
-            plugin_id = plugin_path.name
+            # 目录名（可能是下划线格式、点格式或其他格式）
+            folder_name = plugin_path.name
 
             # 跳过隐藏目录和特殊目录
-            if plugin_id.startswith(".") or plugin_id.startswith("__"):
+            if folder_name.startswith(".") or folder_name.startswith("__"):
                 continue
 
             # 读取 _manifest.json
             manifest_path = plugin_path / "_manifest.json"
 
             if not manifest_path.exists():
-                logger.warning(f"插件 {plugin_id} 缺少 _manifest.json，跳过")
+                logger.warning(f"插件文件夹 {folder_name} 缺少 _manifest.json，跳过")
                 continue
 
             try:
@@ -1054,8 +1078,57 @@ async def get_installed_plugins(authorization: Optional[str] = Header(None)) -> 
 
                 # 基本验证
                 if "name" not in manifest or "version" not in manifest:
-                    logger.warning(f"插件 {plugin_id} 的 _manifest.json 格式无效，跳过")
+                    logger.warning(f"插件文件夹 {folder_name} 的 _manifest.json 格式无效，跳过")
                     continue
+
+                # 获取插件 ID（优先从 manifest，否则从文件夹名推断）
+                if "id" in manifest:
+                    # 优先使用 manifest 中的 id（最准确）
+                    plugin_id = manifest["id"]
+                else:
+                    # 从 manifest 信息构建 ID
+                    # 尝试从 author.name 和 repository_url 构建标准 ID
+                    author_name = None
+                    repo_name = None
+                    
+                    # 获取作者名
+                    if "author" in manifest:
+                        if isinstance(manifest["author"], dict) and "name" in manifest["author"]:
+                            author_name = manifest["author"]["name"]
+                        elif isinstance(manifest["author"], str):
+                            author_name = manifest["author"]
+                    
+                    # 从 repository_url 获取仓库名
+                    if "repository_url" in manifest:
+                        repo_url = manifest["repository_url"].rstrip("/")
+                        if repo_url.endswith(".git"):
+                            repo_url = repo_url[:-4]
+                        repo_name = repo_url.split("/")[-1]
+                    
+                    # 构建 ID
+                    if author_name and repo_name:
+                        # 标准格式: Author.RepoName
+                        plugin_id = f"{author_name}.{repo_name}"
+                    elif author_name:
+                        # 如果只有作者，使用 Author.FolderName
+                        plugin_id = f"{author_name}.{folder_name}"
+                    else:
+                        # 从文件夹名推断
+                        if "_" in folder_name and "." not in folder_name:
+                            # 假设格式为 Author_PluginName，转换为 Author.PluginName
+                            plugin_id = folder_name.replace("_", ".", 1)
+                        else:
+                            # 直接使用文件夹名
+                            plugin_id = folder_name
+                    
+                    # 将推断的 ID 写入 manifest（方便下次识别）
+                    logger.info(f"为插件 {folder_name} 自动生成 ID: {plugin_id}")
+                    manifest["id"] = plugin_id
+                    try:
+                        with open(manifest_path, "w", encoding="utf-8") as f:
+                            json_module.dump(manifest, f, ensure_ascii=False, indent=2)
+                    except Exception as write_error:
+                        logger.warning(f"无法写入 ID 到 manifest: {write_error}")
 
                 # 添加到已安装列表（返回完整的 manifest 信息）
                 installed_plugins.append(
