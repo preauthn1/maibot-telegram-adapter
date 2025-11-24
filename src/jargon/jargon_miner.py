@@ -720,7 +720,7 @@ class JargonMiner:
                         continue
 
                     if _contains_bot_self_name(content):
-                        logger.debug(f"解析阶段跳过包含机器人昵称/别名的词条: {content}")
+                        logger.info(f"解析阶段跳过包含机器人昵称/别名的词条: {content}")
                         continue
 
                     msg_id_str = str(msg_id_value or "").strip()
@@ -735,10 +735,10 @@ class JargonMiner:
 
                     target_msg = messages[msg_index]
                     if _is_bot_message(target_msg):
-                        logger.debug(f"解析阶段跳过引用机器人自身消息的词条: content={content}, msg_id={msg_id_str}")
+                        logger.info(f"解析阶段跳过引用机器人自身消息的词条: content={content}, msg_id={msg_id_str}")
                         continue
                     if _has_adjacent_bot_message(messages, msg_index):
-                        logger.debug(
+                        logger.info(
                             f"解析阶段跳过因邻近机器人发言的词条: content={content}, msg_id={msg_id_str}"
                         )
                         continue
@@ -786,14 +786,14 @@ class JargonMiner:
                 raw_content_list = entry["raw_content"]  # 已经是列表
 
                 # 检查并补充raw_content：如果只包含黑话本身，则获取前三条消息作为上下文
-                raw_content_list = await _enrich_raw_content_if_needed(
-                    content=content,
-                    raw_content_list=raw_content_list,
-                    chat_id=self.chat_id,
-                    messages=messages,
-                    extraction_start_time=extraction_start_time,
-                    extraction_end_time=extraction_end_time,
-                )
+                # raw_content_list = await _enrich_raw_content_if_needed(
+                #     content=content,
+                #     raw_content_list=raw_content_list,
+                #     chat_id=self.chat_id,
+                #     messages=messages,
+                #     extraction_start_time=extraction_start_time,
+                #     extraction_end_time=extraction_end_time,
+                # )
 
                 try:
                     # 根据all_global配置决定查询逻辑
