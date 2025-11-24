@@ -156,7 +156,7 @@ class MainSystem:
 
     async def schedule_tasks(self):
         """调度定时任务"""
-        while True:
+        try:
             tasks = [
                 get_emoji_manager().start_periodic_check_register(),
                 self.app.run(),
@@ -168,6 +168,9 @@ class MainSystem:
                 tasks.append(self.webui_server.start())
 
             await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            logger.info("调度任务已取消")
+            raise
 
     # async def forget_memory_task(self):
     #     """记忆遗忘任务"""
