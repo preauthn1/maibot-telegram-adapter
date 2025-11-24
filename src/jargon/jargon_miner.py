@@ -13,6 +13,7 @@ from src.config.config import model_config, global_config
 from src.chat.message_receive.chat_stream import get_chat_manager
 from src.plugin_system.apis import llm_api
 from src.chat.utils.chat_message_builder import (
+    build_readable_messages,
     build_readable_messages_with_id,
     get_raw_msg_by_timestamp_with_chat_inclusive,
     get_raw_msg_before_timestamp_with_chat,
@@ -45,48 +46,38 @@ def _contains_bot_self_name(content: str) -> bool:
     return any(name in target for name in candidates if target)
 
 
-def _format_context_message(msg: Any, seq_index: int) -> str:
-    """
-    将单条消息格式化为带序号的上下文行
-    """
-    if msg is None:
-        return ""
-
-    text = (getattr(msg, "display_message", None) or getattr(msg, "processed_plain_text", None) or "").strip()
-    if not text:
-        return ""
-
-    user_info = getattr(msg, "user_info", None)
-    nickname = ""
-    if user_info:
-        nickname = getattr(user_info, "user_nickname", "") or getattr(user_info, "user_id", "")
-
-    if not nickname:
-        nickname = getattr(msg, "user_nickname", "") or getattr(msg, "user_id", "") or "某人"
-
-    return f"{nickname}: {text}"
-
-
 def _build_context_paragraph(messages: List[Any], center_index: int) -> Optional[str]:
     """
-    构建包含中心消息上下文的段落（前3条+后3条）
+    构建包含中心消息上下文的段落（前3条+后3条），使用标准的 readable builder 输出
     """
     if not messages or center_index < 0 or center_index >= len(messages):
         return None
 
     context_start = max(0, center_index - 3)
     context_end = min(len(messages), center_index + 1 + 3)
+    context_messages = messages[context_start:context_end]
 
-    context_lines: List[str] = []
-    for idx in range(context_start, context_end):
-        formatted_line = _format_context_message(messages[idx], idx + 1)
-        if formatted_line:
-            context_lines.append(formatted_line)
-
-    if not context_lines:
+    if not context_messages:
         return None
 
-    paragraph = "\n".join(context_lines).strip()
+    try:
+        paragraph = build_readable_messages(
+            messages=context_messages,
+            replace_bot_name=True,
+            timestamp_mode="relative",
+            read_mark=0.0,
+            truncate=False,
+            show_actions=False,
+            show_pic=True,
+            message_id_list=None,
+            remove_emoji_stickers=False,
+            pic_single=True,
+        )
+    except Exception as e:
+        logger.warning(f"构建上下文段落失败: {e}")
+        return None
+
+    paragraph = paragraph.strip()
     return paragraph or None
 
 
