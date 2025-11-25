@@ -8,11 +8,12 @@ from src.common.logger import get_logger
 from src.config.config import global_config, model_config
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.plugin_system.apis import llm_api
-from src.common.database.database_model import ThinkingBack
+from src.common.database.database_model import ThinkingBack, Jargon
 from json_repair import repair_json
 from src.memory_system.retrieval_tools import get_tool_registry, init_all_tools
 from src.memory_system.retrieval_tools.query_lpmm_knowledge import query_lpmm_knowledge
 from src.llm_models.payload_content.message import MessageBuilder, RoleType, Message
+from src.jargon.jargon_utils import parse_chat_id_list, chat_id_list_contains, contains_bot_self_name
 
 logger = get_logger("memory_retrieval")
 
@@ -63,27 +64,23 @@ def init_memory_retrieval_prompt():
 2. 是否有需要回忆的内容（比如"之前说过"、"上次"、"以前"等）
 3. 是否有需要查找历史信息的问题
 4. 是否有问题可以搜集信息帮助你聊天
-5. 对话中是否包含黑话、俚语、缩写等可能需要查询的概念
 
 重要提示：
 - **每次只能提出一个问题**，选择最需要查询的关键问题
 - 如果"最近已查询的问题和结果"中已经包含了类似的问题并得到了答案，请避免重复生成相同或相似的问题，不需要重复查询
 - 如果之前已经查询过某个问题但未找到答案，可以尝试用不同的方式提问或更具体的问题
 
-如果你认为需要从记忆中检索信息来回答，请：
-1. 识别对话中可能需要查询的概念（黑话/俚语/缩写/专有名词等关键词），放入"concepts"字段
-2. 根据上下文提出**一个**最关键的问题来帮助你回复目标消息，放入"questions"字段
+如果你认为需要从记忆中检索信息来回答，请根据上下文提出**一个**最关键的问题来帮助你回复目标消息，放入"questions"字段
 
 问题格式示例：
 - "xxx在前几天干了什么"
-- "xxx是什么"
+- "xxx是什么，在什么时候提到过?"
 - "xxxx和xxx的关系是什么"
 - "xxx在某个时间点发生了什么"
 
 输出格式示例（需要检索时）：
 ```json
 {{
-  "concepts": ["AAA", "BBB", "CCC"], #需要检索的概念列表（字符串数组），如果不需要检索概念则输出空数组[]
   "questions": ["张三在前几天干了什么"] #问题数组（字符串数组），如果不需要检索记忆则输出空数组[]，如果需要检索则只输出包含一个问题的数组
 }}
 ```
@@ -91,7 +88,6 @@ def init_memory_retrieval_prompt():
 输出格式示例（不需要检索时）：
 ```json
 {{
-  "concepts": [],
   "questions": []
 }}
 ```
@@ -278,6 +274,54 @@ async def _retrieve_concepts_with_jargon(concepts: List[str], chat_id: str) -> s
     if results:
         return "【概念检索结果】\n" + "\n".join(results) + "\n"
     return ""
+
+
+def _match_jargon_from_text(chat_text: str, chat_id: str) -> List[str]:
+    """直接在聊天文本中匹配已知的jargon，返回出现过的黑话列表"""
+    if not chat_text or not chat_text.strip():
+        return []
+
+    start_time = time.time()
+
+    query = Jargon.select().where((Jargon.meaning.is_null(False)) & (Jargon.meaning != ""))
+    if global_config.jargon.all_global:
+        query = query.where(Jargon.is_global)
+
+    query = query.order_by(Jargon.count.desc())
+
+    query_time = time.time()
+    matched: Dict[str, None] = {}
+
+    for jargon in query:
+        content = (jargon.content or "").strip()
+        if not content:
+            continue
+
+        if contains_bot_self_name(content):
+            continue
+
+        if not global_config.jargon.all_global and not jargon.is_global:
+            chat_id_list = parse_chat_id_list(jargon.chat_id)
+            if not chat_id_list_contains(chat_id_list, chat_id):
+                continue
+
+        pattern = re.escape(content)
+        if re.search(r"[\u4e00-\u9fff]", content):
+            search_pattern = pattern
+        else:
+            search_pattern = r"\b" + pattern + r"\b"
+
+        if re.search(search_pattern, chat_text, re.IGNORECASE):
+            matched[content] = None
+
+    end_time = time.time()
+    logger.info(
+        f"记忆检索黑话匹配: 查询耗时 {(query_time - start_time):.3f}s, "
+        f"匹配耗时 {(end_time - query_time):.3f}s, 总耗时 {(end_time - start_time):.3f}s, "
+        f"匹配到 {len(matched)} 个黑话"
+    )
+
+    return list(matched.keys())
 
 
 async def _react_agent_solve_question(
@@ -991,11 +1035,17 @@ async def build_memory_retrieval_prompt(
             return ""
 
         # 解析概念列表和问题列表
-        concepts, questions = _parse_questions_json(response)
-        logger.info(f"解析到 {len(concepts)} 个概念: {concepts}")
+        _, questions = _parse_questions_json(response)
         logger.info(f"解析到 {len(questions)} 个问题: {questions}")
 
-        # 对概念进行jargon检索，作为初始信息
+        # 使用匹配逻辑自动识别聊天中的黑话概念
+        concepts = _match_jargon_from_text(message, chat_id)
+        if concepts:
+            logger.info(f"黑话匹配命中 {len(concepts)} 个概念: {concepts}")
+        else:
+            logger.info("黑话匹配未命中任何概念")
+
+        # 对匹配到的概念进行jargon检索，作为初始信息
         initial_info = ""
         if concepts:
             logger.info(f"开始对 {len(concepts)} 个概念进行jargon检索")
@@ -1025,8 +1075,6 @@ async def build_memory_retrieval_prompt(
                 return f"你回忆起了以下信息：\n{retrieved_memory}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
             else:
                 return ""
-
-        logger.info(f"解析到 {len(questions)} 个问题: {questions}")
 
         # 第二步：并行处理所有问题（使用配置的最大迭代次数/120秒超时）
         max_iterations = global_config.memory.max_agent_iterations

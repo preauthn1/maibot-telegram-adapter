@@ -11,127 +11,24 @@ from src.common.database.database_model import Jargon
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 from src.chat.message_receive.chat_stream import get_chat_manager
-from src.plugin_system.apis import llm_api
 from src.chat.utils.chat_message_builder import (
-    build_readable_messages,
     build_readable_messages_with_id,
     get_raw_msg_by_timestamp_with_chat_inclusive,
-    get_raw_msg_before_timestamp_with_chat,
-    build_readable_messages_with_list,
 )
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
-from src.chat.utils.utils import parse_platform_accounts
+from src.jargon.jargon_utils import (
+    is_bot_message, 
+    build_context_paragraph, 
+    contains_bot_self_name, 
+    parse_chat_id_list, 
+    chat_id_list_contains,
+    update_chat_id_list
+)
 
 
 logger = get_logger("jargon")
 
 
-def _contains_bot_self_name(content: str) -> bool:
-    """
-    判断词条是否包含机器人的昵称或别名
-    """
-    if not content:
-        return False
-
-    bot_config = getattr(global_config, "bot", None)
-    if not bot_config:
-        return False
-
-    target = content.strip().lower()
-    nickname = str(getattr(bot_config, "nickname", "") or "").strip().lower()
-    alias_names = [str(alias or "").strip().lower() for alias in getattr(bot_config, "alias_names", []) or []]
-
-    candidates = [name for name in [nickname, *alias_names] if name]
-
-    return any(name in target for name in candidates if target)
-
-
-def _build_context_paragraph(messages: List[Any], center_index: int) -> Optional[str]:
-    """
-    构建包含中心消息上下文的段落（前3条+后3条），使用标准的 readable builder 输出
-    """
-    if not messages or center_index < 0 or center_index >= len(messages):
-        return None
-
-    context_start = max(0, center_index - 3)
-    context_end = min(len(messages), center_index + 1 + 3)
-    context_messages = messages[context_start:context_end]
-
-    if not context_messages:
-        return None
-
-    try:
-        paragraph = build_readable_messages(
-            messages=context_messages,
-            replace_bot_name=True,
-            timestamp_mode="relative",
-            read_mark=0.0,
-            truncate=False,
-            show_actions=False,
-            show_pic=True,
-            message_id_list=None,
-            remove_emoji_stickers=False,
-            pic_single=True,
-        )
-    except Exception as e:
-        logger.warning(f"构建上下文段落失败: {e}")
-        return None
-
-    paragraph = paragraph.strip()
-    return paragraph or None
-
-
-def _is_bot_message(msg: Any) -> bool:
-    """判断消息是否来自机器人自身"""
-    if msg is None:
-        return False
-
-    bot_config = getattr(global_config, "bot", None)
-    if not bot_config:
-        return False
-
-    platform = (
-        str(getattr(msg, "user_platform", "") or getattr(getattr(msg, "user_info", None), "platform", "") or "")
-        .strip()
-        .lower()
-    )
-    user_id = (
-        str(getattr(msg, "user_id", "") or getattr(getattr(msg, "user_info", None), "user_id", "") or "")
-        .strip()
-    )
-
-    if not platform or not user_id:
-        return False
-
-    platform_accounts = {}
-    try:
-        platform_accounts = parse_platform_accounts(getattr(bot_config, "platforms", []) or [])
-    except Exception:
-        platform_accounts = {}
-
-    bot_accounts: Dict[str, str] = {}
-    qq_account = str(getattr(bot_config, "qq_account", "") or "").strip()
-    if qq_account:
-        bot_accounts["qq"] = qq_account
-
-    telegram_account = str(getattr(bot_config, "telegram_account", "") or "").strip()
-    if telegram_account:
-        bot_accounts["telegram"] = telegram_account
-
-    for plat, account in platform_accounts.items():
-        if account and plat not in bot_accounts:
-            bot_accounts[plat] = account
-
-    bot_account = bot_accounts.get(platform)
-    return bool(bot_account and user_id == bot_account)
-
-
-def _has_adjacent_bot_message(messages: List[Any], center_index: int) -> bool:
-    """检查目标消息的上一条或下一条是否为机器人发言"""
-    for neighbor in (center_index - 1, center_index + 1):
-        if 0 <= neighbor < len(messages) and _is_bot_message(messages[neighbor]):
-            return True
-    return False
 
 
 def _init_prompt() -> None:
@@ -176,6 +73,7 @@ def _init_inference_prompts() -> None:
 请根据上下文，推断"{content}"这个词条的含义。
 - 如果这是一个黑话、俚语或网络用语，请推断其含义
 - 如果含义明确（常规词汇），也请说明
+- {bot_name} 的发言内容可能包含错误，请不要参考其发言内容
 - 如果上下文信息不足，无法推断含义，请设置 no_info 为 true
 
 以 JSON 格式输出：
@@ -227,94 +125,6 @@ def _init_inference_prompts() -> None:
 _init_prompt()
 _init_inference_prompts()
 
-
-async def _enrich_raw_content_if_needed(
-    content: str,
-    raw_content_list: List[str],
-    chat_id: str,
-    messages: List[Any],
-    extraction_start_time: float,
-    extraction_end_time: float,
-) -> List[str]:
-    """
-    检查raw_content是否只包含黑话本身，如果是，则获取该消息的前三条消息作为原始内容
-
-    Args:
-        content: 黑话内容
-        raw_content_list: 原始raw_content列表
-        chat_id: 聊天ID
-        messages: 当前时间窗口内的消息列表
-        extraction_start_time: 提取开始时间
-        extraction_end_time: 提取结束时间
-
-    Returns:
-        处理后的raw_content列表
-    """
-    enriched_list = []
-
-    for raw_content in raw_content_list:
-        # 检查raw_content是否只包含黑话本身（去除空白字符后比较）
-        raw_content_clean = raw_content.strip()
-        content_clean = content.strip()
-
-        # 如果raw_content只包含黑话本身（可能有一些标点或空白），则尝试获取上下文
-        # 去除所有空白字符后比较，确保只包含黑话本身
-        raw_content_normalized = raw_content_clean.replace(" ", "").replace("\n", "").replace("\t", "")
-        content_normalized = content_clean.replace(" ", "").replace("\n", "").replace("\t", "")
-
-        if raw_content_normalized == content_normalized:
-            # 在消息列表中查找只包含该黑话的消息（去除空白后比较）
-            target_message = None
-            for msg in messages:
-                msg_content = (msg.processed_plain_text or msg.display_message or "").strip()
-                msg_content_normalized = msg_content.replace(" ", "").replace("\n", "").replace("\t", "")
-                # 检查消息内容是否只包含黑话本身（去除空白后完全匹配）
-                if msg_content_normalized == content_normalized:
-                    target_message = msg
-                    break
-
-            if target_message and target_message.time:
-                # 获取该消息的前三条消息
-                try:
-                    previous_messages = get_raw_msg_before_timestamp_with_chat(
-                        chat_id=chat_id, timestamp=target_message.time, limit=3
-                    )
-
-                    if previous_messages:
-                        # 将前三条消息和当前消息一起格式化
-                        context_messages = previous_messages + [target_message]
-                        # 按时间排序
-                        context_messages.sort(key=lambda x: x.time or 0)
-
-                        # 格式化为可读消息
-                        formatted_context, _ = await build_readable_messages_with_list(
-                            context_messages,
-                            replace_bot_name=True,
-                            timestamp_mode="relative",
-                            truncate=False,
-                        )
-
-                        if formatted_context.strip():
-                            enriched_list.append(formatted_context.strip())
-                            logger.warning(f"为黑话 {content} 补充了上下文消息")
-                        else:
-                            # 如果格式化失败，使用原始raw_content
-                            enriched_list.append(raw_content)
-                    else:
-                        # 没有找到前三条消息，使用原始raw_content
-                        enriched_list.append(raw_content)
-                except Exception as e:
-                    logger.warning(f"获取黑话 {content} 的上下文消息失败: {e}")
-                    # 出错时使用原始raw_content
-                    enriched_list.append(raw_content)
-            else:
-                # 没有找到包含黑话的消息，使用原始raw_content
-                enriched_list.append(raw_content)
-        else:
-            # raw_content包含更多内容，直接使用
-            enriched_list.append(raw_content)
-
-    return enriched_list
 
 
 def _should_infer_meaning(jargon_obj: Jargon) -> bool:
@@ -402,7 +212,7 @@ class JargonMiner:
 
         for idx, msg in enumerate(messages):
             msg_text = (getattr(msg, "display_message", None) or getattr(msg, "processed_plain_text", None) or "").strip()
-            if not msg_text or _is_bot_message(msg):
+            if not msg_text or is_bot_message(msg):
                 continue
 
             for content in self.cache.keys():
@@ -411,9 +221,7 @@ class JargonMiner:
                 if (content, idx) in processed_pairs:
                     continue
                 if content in msg_text:
-                    if _has_adjacent_bot_message(messages, idx):
-                        continue
-                    paragraph = _build_context_paragraph(messages, idx)
+                    paragraph = build_context_paragraph(messages, idx)
                     if not paragraph:
                         continue
                     cached_entries.append({"content": content, "raw_content": [paragraph]})
@@ -719,7 +527,7 @@ class JargonMiner:
                     if not content:
                         continue
 
-                    if _contains_bot_self_name(content):
+                    if contains_bot_self_name(content):
                         logger.info(f"解析阶段跳过包含机器人昵称/别名的词条: {content}")
                         continue
 
@@ -734,16 +542,11 @@ class JargonMiner:
                         continue
 
                     target_msg = messages[msg_index]
-                    if _is_bot_message(target_msg):
+                    if is_bot_message(target_msg):
                         logger.info(f"解析阶段跳过引用机器人自身消息的词条: content={content}, msg_id={msg_id_str}")
                         continue
-                    if _has_adjacent_bot_message(messages, msg_index):
-                        logger.info(
-                            f"解析阶段跳过因邻近机器人发言的词条: content={content}, msg_id={msg_id_str}"
-                        )
-                        continue
 
-                    context_paragraph = _build_context_paragraph(messages, msg_index)
+                    context_paragraph = build_context_paragraph(messages, msg_index)
                     if not context_paragraph:
                         logger.warning(f"解析jargon失败：上下文为空，content={content}, msg_id={msg_id_str}")
                         continue
@@ -785,27 +588,27 @@ class JargonMiner:
                 content = entry["content"]
                 raw_content_list = entry["raw_content"]  # 已经是列表
 
-                # 检查并补充raw_content：如果只包含黑话本身，则获取前三条消息作为上下文
-                # raw_content_list = await _enrich_raw_content_if_needed(
-                #     content=content,
-                #     raw_content_list=raw_content_list,
-                #     chat_id=self.chat_id,
-                #     messages=messages,
-                #     extraction_start_time=extraction_start_time,
-                #     extraction_end_time=extraction_end_time,
-                # )
 
                 try:
-                    # 根据all_global配置决定查询逻辑
-                    if global_config.jargon.all_global:
-                        # 开启all_global：无视chat_id，查询所有content匹配的记录（所有记录都是全局的）
-                        query = Jargon.select().where(Jargon.content == content)
-                    else:
-                        # 关闭all_global：只查询chat_id匹配的记录（不考虑is_global）
-                        query = Jargon.select().where((Jargon.chat_id == self.chat_id) & (Jargon.content == content))
+                    # 查询所有content匹配的记录
+                    query = Jargon.select().where(Jargon.content == content)
 
-                    if query.exists():
-                        obj = query.get()
+                    # 查找匹配的记录
+                    matched_obj = None
+                    for obj in query:
+                        if global_config.jargon.all_global:
+                            # 开启all_global：所有content匹配的记录都可以
+                            matched_obj = obj
+                            break
+                        else:
+                            # 关闭all_global：需要检查chat_id列表是否包含目标chat_id
+                            chat_id_list = parse_chat_id_list(obj.chat_id)
+                            if chat_id_list_contains(chat_id_list, self.chat_id):
+                                matched_obj = obj
+                                break
+
+                    if matched_obj:
+                        obj = matched_obj
                         try:
                             obj.count = (obj.count or 0) + 1
                         except Exception:
@@ -826,6 +629,11 @@ class JargonMiner:
                         # 合并并去重
                         merged_list = list(dict.fromkeys(existing_raw_content + raw_content_list))
                         obj.raw_content = json.dumps(merged_list, ensure_ascii=False)
+
+                        # 更新chat_id列表：增加当前chat_id的计数
+                        chat_id_list = parse_chat_id_list(obj.chat_id)
+                        updated_chat_id_list = update_chat_id_list(chat_id_list, self.chat_id, increment=1)
+                        obj.chat_id = json.dumps(updated_chat_id_list, ensure_ascii=False)
 
                         # 开启all_global时，确保记录标记为is_global=True
                         if global_config.jargon.all_global:
@@ -851,10 +659,14 @@ class JargonMiner:
                             # 关闭all_global：新记录is_global=False
                             is_global_new = False
 
+                        # 使用新格式创建chat_id列表：[[chat_id, count]]
+                        chat_id_list = [[self.chat_id, 1]]
+                        chat_id_json = json.dumps(chat_id_list, ensure_ascii=False)
+
                         Jargon.create(
                             content=content,
                             raw_content=json.dumps(raw_content_list, ensure_ascii=False),
-                            chat_id=self.chat_id,
+                            chat_id=chat_id_json,
                             is_global=is_global_new,
                             count=1,
                         )
@@ -924,8 +736,8 @@ def search_jargon(
 
     keyword = keyword.strip()
 
-    # 构建查询
-    query = Jargon.select(Jargon.content, Jargon.meaning)
+    # 构建查询（选择所有需要的字段，以便后续过滤）
+    query = Jargon.select()
 
     # 构建搜索条件
     if case_sensitive:
@@ -951,102 +763,34 @@ def search_jargon(
     if global_config.jargon.all_global:
         # 开启all_global：所有记录都是全局的，查询所有is_global=True的记录（无视chat_id）
         query = query.where(Jargon.is_global)
-    else:
-        # 关闭all_global：如果提供了chat_id，优先搜索该聊天或global的jargon
-        if chat_id:
-            query = query.where((Jargon.chat_id == chat_id) | Jargon.is_global)
+    # 注意：对于all_global=False的情况，chat_id过滤在Python层面进行，以便兼容新旧格式
 
-    # 只返回有meaning的记录
-    query = query.where((Jargon.meaning.is_null(False)) & (Jargon.meaning != ""))
+    # 注意：meaning的过滤移到Python层面，因为我们需要先过滤chat_id
 
     # 按count降序排序，优先返回出现频率高的
     query = query.order_by(Jargon.count.desc())
 
-    # 限制结果数量
-    query = query.limit(limit)
+    # 限制结果数量（先多取一些，因为后面可能过滤）
+    query = query.limit(limit * 2)
 
-    # 执行查询并返回结果
+    # 执行查询并返回结果，过滤chat_id
     results = []
     for jargon in query:
+        # 如果提供了chat_id且all_global=False，需要检查chat_id列表是否包含目标chat_id
+        if chat_id and not global_config.jargon.all_global:
+            chat_id_list = parse_chat_id_list(jargon.chat_id)
+            # 如果记录是is_global=True，或者chat_id列表包含目标chat_id，则包含
+            if not jargon.is_global and not chat_id_list_contains(chat_id_list, chat_id):
+                continue
+        
+        # 只返回有meaning的记录
+        if not jargon.meaning or jargon.meaning.strip() == "":
+            continue
+        
         results.append({"content": jargon.content or "", "meaning": jargon.meaning or ""})
+        
+        # 达到限制数量后停止
+        if len(results) >= limit:
+            break
 
     return results
-
-
-async def store_jargon_from_answer(jargon_keyword: str, answer: str, chat_id: str) -> None:
-    """将黑话存入jargon系统
-
-    Args:
-        jargon_keyword: 黑话关键词
-        answer: 答案内容（将概括为raw_content）
-        chat_id: 聊天ID
-    """
-    try:
-        # 概括答案为简短的raw_content
-        summary_prompt = f"""请将以下答案概括为一句简短的话（不超过50字），作为黑话"{jargon_keyword}"的使用示例：
-
-答案：{answer}
-
-只输出概括后的内容，不要输出其他内容："""
-
-        success, summary, _, _ = await llm_api.generate_with_model(
-            summary_prompt,
-            model_config=model_config.model_task_config.utils_small,
-            request_type="memory.summarize_jargon",
-        )
-
-        logger.info(f"概括答案提示: {summary_prompt}")
-        logger.info(f"概括答案: {summary}")
-
-        if not success:
-            logger.warning(f"概括答案失败，使用原始答案: {summary}")
-            summary = answer[:100]  # 截取前100字符作为备用
-
-        raw_content = summary.strip()[:200]  # 限制长度
-
-        # 检查是否已存在
-        if global_config.jargon.all_global:
-            query = Jargon.select().where(Jargon.content == jargon_keyword)
-        else:
-            query = Jargon.select().where((Jargon.chat_id == chat_id) & (Jargon.content == jargon_keyword))
-
-        if query.exists():
-            # 更新现有记录
-            obj = query.get()
-            obj.count = (obj.count or 0) + 1
-
-            # 合并raw_content列表
-            existing_raw_content = []
-            if obj.raw_content:
-                try:
-                    existing_raw_content = (
-                        json.loads(obj.raw_content) if isinstance(obj.raw_content, str) else obj.raw_content
-                    )
-                    if not isinstance(existing_raw_content, list):
-                        existing_raw_content = [existing_raw_content] if existing_raw_content else []
-                except (json.JSONDecodeError, TypeError):
-                    existing_raw_content = [obj.raw_content] if obj.raw_content else []
-
-            # 合并并去重
-            merged_list = list(dict.fromkeys(existing_raw_content + [raw_content]))
-            obj.raw_content = json.dumps(merged_list, ensure_ascii=False)
-
-            if global_config.jargon.all_global:
-                obj.is_global = True
-
-            obj.save()
-            logger.info(f"更新jargon记录: {jargon_keyword}")
-        else:
-            # 创建新记录
-            is_global_new = True if global_config.jargon.all_global else False
-            Jargon.create(
-                content=jargon_keyword,
-                raw_content=json.dumps([raw_content], ensure_ascii=False),
-                chat_id=chat_id,
-                is_global=is_global_new,
-                count=1,
-            )
-            logger.info(f"创建新jargon记录: {jargon_keyword}")
-
-    except Exception as e:
-        logger.error(f"存储jargon失败: {e}")
