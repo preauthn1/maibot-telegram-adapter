@@ -53,7 +53,7 @@ src/plugins/utils/statistic.py
 CLAUDE.md
 MaiBot-Dashboard/
 cloudflare-workers/
-
+result.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
