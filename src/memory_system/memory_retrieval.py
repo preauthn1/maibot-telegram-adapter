@@ -342,8 +342,9 @@ async def _react_agent_solve_question(
     """
     start_time = time.time()
     collected_info = initial_info if initial_info else ""
+    enable_jargon_detection = global_config.memory.enable_jargon_detection
     seen_jargon_concepts: Set[str] = set()
-    if initial_jargon_concepts:
+    if enable_jargon_detection and initial_jargon_concepts:
         for concept in initial_jargon_concepts:
             concept = (concept or "").strip()
             if concept:
@@ -697,20 +698,21 @@ async def _react_agent_solve_question(
                     tool_builder.add_text_content(observation_text)
                     tool_builder.add_tool_call(tool_call_item.call_id)
                     conversation_messages.append(tool_builder.build())
-                    jargon_concepts = _match_jargon_from_text(stripped_observation, chat_id)
-                    if jargon_concepts:
-                        jargon_info = ""
-                        new_concepts = []
-                        for concept in jargon_concepts:
-                            normalized_concept = concept.strip()
-                            if normalized_concept and normalized_concept not in seen_jargon_concepts:
-                                new_concepts.append(normalized_concept)
-                                seen_jargon_concepts.add(normalized_concept)
-                        if new_concepts:
-                            jargon_info = await _retrieve_concepts_with_jargon(new_concepts, chat_id)
-                        if jargon_info:
-                            collected_info += f"\n{jargon_info}\n"
-                            logger.info(f"工具输出触发黑话解析: {new_concepts}")
+                    if enable_jargon_detection:
+                        jargon_concepts = _match_jargon_from_text(stripped_observation, chat_id)
+                        if jargon_concepts:
+                            jargon_info = ""
+                            new_concepts = []
+                            for concept in jargon_concepts:
+                                normalized_concept = concept.strip()
+                                if normalized_concept and normalized_concept not in seen_jargon_concepts:
+                                    new_concepts.append(normalized_concept)
+                                    seen_jargon_concepts.add(normalized_concept)
+                            if new_concepts:
+                                jargon_info = await _retrieve_concepts_with_jargon(new_concepts, chat_id)
+                            if jargon_info:
+                                collected_info += f"\n{jargon_info}\n"
+                                logger.info(f"工具输出触发黑话解析: {new_concepts}")
                 # logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 工具 {i+1} 执行结果: {observation_text}")
 
         thinking_steps.append(step)
@@ -859,13 +861,15 @@ async def _process_single_question(
     # 直接使用ReAct Agent查询（不再从thinking_back获取缓存）
     logger.info(f"使用ReAct Agent查询，问题: {question[:50]}...")
 
+    jargon_concepts_for_agent = initial_jargon_concepts if global_config.memory.enable_jargon_detection else None
+
     found_answer, answer, thinking_steps, is_timeout = await _react_agent_solve_question(
         question=question,
         chat_id=chat_id,
         max_iterations=global_config.memory.max_agent_iterations,
         timeout=120.0,
         initial_info=question_initial_info,
-        initial_jargon_concepts=initial_jargon_concepts,
+        initial_jargon_concepts=jargon_concepts_for_agent,
     )
 
     # 存储查询历史到数据库（超时时不存储）
@@ -950,17 +954,22 @@ async def build_memory_retrieval_prompt(
         if questions:
             logger.info(f"解析到 {len(questions)} 个问题: {questions}")
 
-        # 使用匹配逻辑自动识别聊天中的黑话概念
-        concepts = _match_jargon_from_text(message, chat_id)
-        if concepts:
-            logger.info(f"黑话匹配命中 {len(concepts)} 个概念: {concepts}")
+        enable_jargon_detection = global_config.memory.enable_jargon_detection
+        concepts: List[str] = []
+
+        if enable_jargon_detection:
+            # 使用匹配逻辑自动识别聊天中的黑话概念
+            concepts = _match_jargon_from_text(message, chat_id)
+            if concepts:
+                logger.info(f"黑话匹配命中 {len(concepts)} 个概念: {concepts}")
+            else:
+                logger.debug("黑话匹配未命中任何概念")
         else:
-            logger.debug("黑话匹配未命中任何概念")
+            logger.debug("已禁用记忆检索中的黑话识别")
 
         # 对匹配到的概念进行jargon检索，作为初始信息
         initial_info = ""
-        if concepts:
-            # logger.info(f"开始对 {len(concepts)} 个概念进行jargon检索")
+        if enable_jargon_detection and concepts:
             concept_info = await _retrieve_concepts_with_jargon(concepts, chat_id)
             if concept_info:
                 initial_info += concept_info
@@ -985,7 +994,7 @@ async def build_memory_retrieval_prompt(
                 chat_id=chat_id,
                 context=message,
                 initial_info=initial_info,
-                initial_jargon_concepts=concepts,
+                initial_jargon_concepts=concepts if enable_jargon_detection else None,
             )
             for question in questions
         ]

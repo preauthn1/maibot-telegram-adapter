@@ -244,6 +244,9 @@ class MemoryConfig(ConfigBase):
     max_agent_iterations: int = 5
     """Agent最多迭代轮数（最低为1）"""
 
+    enable_jargon_detection: bool = True
+    """记忆检索过程中是否启用黑话识别"""
+
     def __post_init__(self):
         """验证配置值"""
         if self.max_agent_iterations < 1:
