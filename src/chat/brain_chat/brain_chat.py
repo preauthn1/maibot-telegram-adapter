@@ -278,6 +278,7 @@ class BrainChatting:
                 chat_id=self.stream_id,
                 timestamp=time.time(),
                 limit=int(global_config.chat.max_context_size * 0.6),
+                filter_no_read_command=True,
             )
             chat_content_block, message_id_list = build_readable_messages_with_id(
                 messages=message_list_before_now,

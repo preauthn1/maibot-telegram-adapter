@@ -302,13 +302,17 @@ def get_raw_msg_before_timestamp(timestamp: float, limit: int = 0) -> List[Datab
     return find_messages(message_filter=filter_query, sort=sort_order, limit=limit)
 
 
-def get_raw_msg_before_timestamp_with_chat(chat_id: str, timestamp: float, limit: int = 0) -> List[DatabaseMessages]:
+def get_raw_msg_before_timestamp_with_chat(
+    chat_id: str, timestamp: float, limit: int = 0, filter_no_read_command: bool = False
+) -> List[DatabaseMessages]:
     """获取指定时间戳之前的消息，按时间升序排序，返回消息列表
     limit: 限制返回的消息数量，0为不限制
     """
     filter_query = {"chat_id": chat_id, "time": {"$lt": timestamp}}
     sort_order = [("time", 1)]
-    return find_messages(message_filter=filter_query, sort=sort_order, limit=limit)
+    return find_messages(
+        message_filter=filter_query, sort=sort_order, limit=limit, filter_no_read_command=filter_no_read_command
+    )
 
 
 def get_raw_msg_before_timestamp_with_users(
@@ -468,6 +472,8 @@ def _build_readable_messages_internal(
 
         # 使用独立函数处理用户引用格式
         if content := replace_user_references(content, platform, replace_bot_name=replace_bot_name):
+            if getattr(message, "is_command", False):
+                content = f"[is_command=True] {content}"
             detailed_messages_raw.append((timestamp, person_name, content, False))
 
     if not detailed_messages_raw:

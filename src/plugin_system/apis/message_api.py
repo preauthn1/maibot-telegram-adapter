@@ -280,7 +280,11 @@ def get_messages_before_time(timestamp: float, limit: int = 0, filter_mai: bool 
 
 
 def get_messages_before_time_in_chat(
-    chat_id: str, timestamp: float, limit: int = 0, filter_mai: bool = False
+    chat_id: str,
+    timestamp: float,
+    limit: int = 0,
+    filter_mai: bool = False,
+    filter_no_read_command: bool = False,
 ) -> List[DatabaseMessages]:
     """
     获取指定聊天中指定时间戳之前的消息
@@ -305,9 +309,15 @@ def get_messages_before_time_in_chat(
         raise ValueError("chat_id 不能为空")
     if not isinstance(chat_id, str):
         raise ValueError("chat_id 必须是字符串类型")
+    messages = get_raw_msg_before_timestamp_with_chat(
+        chat_id=chat_id,
+        timestamp=timestamp,
+        limit=limit,
+        filter_no_read_command=filter_no_read_command,
+    )
     if filter_mai:
-        return filter_mai_messages(get_raw_msg_before_timestamp_with_chat(chat_id, timestamp, limit))
-    return get_raw_msg_before_timestamp_with_chat(chat_id, timestamp, limit)
+        return filter_mai_messages(messages)
+    return messages
 
 
 def get_messages_before_time_for_users(
