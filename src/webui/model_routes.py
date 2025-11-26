@@ -121,16 +121,18 @@ async def _fetch_models_from_provider(
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="请求超时，请稍后重试")
     except httpx.HTTPStatusError as e:
+        # 注意：使用 502 Bad Gateway 而不是原始的 401/403，
+        # 因为前端的 fetchWithAuth 会把 401 当作 WebUI 认证失败处理
         if e.response.status_code == 401:
-            raise HTTPException(status_code=401, detail="API Key 无效或已过期")
+            raise HTTPException(status_code=502, detail="API Key 无效或已过期")
         elif e.response.status_code == 403:
-            raise HTTPException(status_code=403, detail="没有权限访问模型列表")
+            raise HTTPException(status_code=502, detail="没有权限访问模型列表，请检查 API Key 权限")
         elif e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail="该提供商不支持获取模型列表")
+            raise HTTPException(status_code=502, detail="该提供商不支持获取模型列表")
         else:
             raise HTTPException(
-                status_code=e.response.status_code, 
-                detail=f"请求失败: {e.response.text}"
+                status_code=502, 
+                detail=f"上游服务请求失败 ({e.response.status_code}): {e.response.text[:200]}"
             )
     except Exception as e:
         logger.error(f"获取模型列表失败: {e}")
