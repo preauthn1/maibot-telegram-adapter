@@ -852,7 +852,7 @@ class DefaultReplyer:
         memory_retrieval: str = results_dict["memory_retrieval"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
         mood_state_prompt: str = results_dict["mood_state_prompt"]
-        jargon_explanation: Optional[str] = results_dict.get("jargon_explanation")
+        jargon_explanation: str = results_dict.get("jargon_explanation") or ""
 
         # 从 chosen_actions 中提取 planner 的整体思考理由
         planner_reasoning = ""
