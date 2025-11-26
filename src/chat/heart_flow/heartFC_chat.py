@@ -189,7 +189,8 @@ class HeartFChatting:
             limit=20,
             limit_mode="latest",
             filter_mai=True,
-            filter_command=True,
+            filter_command=False,
+            filter_no_read_command=True,
         )
 
         # 根据连续 no_reply 次数动态调整阈值

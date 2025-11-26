@@ -120,6 +120,7 @@ def get_raw_msg_by_timestamp_with_chat(
     limit_mode: str = "latest",
     filter_bot=False,
     filter_command=False,
+    filter_no_read_command=False,
 ) -> List[DatabaseMessages]:
     """获取在特定聊天从指定时间戳到指定时间戳的消息，按时间升序排序，返回消息列表
     limit: 限制返回的消息数量，0为不限制
@@ -137,6 +138,7 @@ def get_raw_msg_by_timestamp_with_chat(
         limit_mode=limit_mode,
         filter_bot=filter_bot,
         filter_command=filter_command,
+        filter_no_read_command=filter_no_read_command,
     )
 
 
@@ -147,6 +149,8 @@ def get_raw_msg_by_timestamp_with_chat_inclusive(
     limit: int = 0,
     limit_mode: str = "latest",
     filter_bot=False,
+    filter_command=False,
+    filter_no_read_command=False,
 ) -> List[DatabaseMessages]:
     """获取在特定聊天从指定时间戳到指定时间戳的消息（包含边界），按时间升序排序，返回消息列表
     limit: 限制返回的消息数量，0为不限制
@@ -157,7 +161,13 @@ def get_raw_msg_by_timestamp_with_chat_inclusive(
     sort_order = [("time", 1)] if limit == 0 else None
     # 直接将 limit_mode 传递给 find_messages
     return find_messages(
-        message_filter=filter_query, sort=sort_order, limit=limit, limit_mode=limit_mode, filter_bot=filter_bot
+        message_filter=filter_query,
+        sort=sort_order,
+        limit=limit,
+        limit_mode=limit_mode,
+        filter_bot=filter_bot,
+        filter_command=filter_command,
+        filter_no_read_command=filter_no_read_command,
     )
 
 

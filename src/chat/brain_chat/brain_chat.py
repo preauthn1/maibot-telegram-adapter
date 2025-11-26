@@ -164,7 +164,8 @@ class BrainChatting:
             limit=20,
             limit_mode="latest",
             filter_mai=True,
-            filter_command=True,
+            filter_command=False,
+            filter_no_read_command=True,
         )
 
         if len(recent_messages_list) >= 1:

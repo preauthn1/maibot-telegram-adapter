@@ -170,6 +170,7 @@ class Messages(BaseModel):
     is_emoji = BooleanField(default=False)
     is_picid = BooleanField(default=False)
     is_command = BooleanField(default=False)
+    is_no_read_command = BooleanField(default=False)
     is_notify = BooleanField(default=False)
 
     selected_expressions = TextField(null=True)
