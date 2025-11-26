@@ -133,6 +133,8 @@ async def get_emoji_list(
     is_registered: Optional[bool] = Query(None, description="是否已注册筛选"),
     is_banned: Optional[bool] = Query(None, description="是否被禁用筛选"),
     format: Optional[str] = Query(None, description="格式筛选"),
+    sort_by: Optional[str] = Query("usage_count", description="排序字段"),
+    sort_order: Optional[str] = Query("desc", description="排序方向"),
     authorization: Optional[str] = Header(None),
 ):
     """
@@ -145,6 +147,8 @@ async def get_emoji_list(
         is_registered: 是否已注册筛选
         is_banned: 是否被禁用筛选
         format: 格式筛选
+        sort_by: 排序字段 (usage_count, register_time, record_time, last_used_time)
+        sort_order: 排序方向 (asc, desc)
         authorization: Authorization header
 
     Returns:
@@ -172,12 +176,22 @@ async def get_emoji_list(
         if format:
             query = query.where(Emoji.format == format)
 
-        # 排序：使用次数倒序，然后按记录时间倒序
-        from peewee import Case
+        # 排序字段映射
+        sort_field_map = {
+            "usage_count": Emoji.usage_count,
+            "register_time": Emoji.register_time,
+            "record_time": Emoji.record_time,
+            "last_used_time": Emoji.last_used_time,
+        }
 
-        query = query.order_by(
-            Emoji.usage_count.desc(), Case(None, [(Emoji.record_time.is_null(), 1)], 0), Emoji.record_time.desc()
-        )
+        # 获取排序字段，默认使用 usage_count
+        sort_field = sort_field_map.get(sort_by, Emoji.usage_count)
+
+        # 应用排序
+        if sort_order == "asc":
+            query = query.order_by(sort_field.asc())
+        else:
+            query = query.order_by(sort_field.desc())
 
         # 获取总数
         total = query.count()
