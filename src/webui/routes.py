@@ -13,6 +13,7 @@ from .emoji_routes import router as emoji_router
 from .plugin_routes import router as plugin_router
 from .plugin_progress_ws import get_progress_router
 from .routers.system import router as system_router
+from .model_routes import router as model_router
 
 logger = get_logger("webui.api")
 
@@ -35,6 +36,8 @@ router.include_router(plugin_router)
 router.include_router(get_progress_router())
 # 注册系统控制路由
 router.include_router(system_router)
+# 注册模型列表获取路由
+router.include_router(model_router)
 
 
 class TokenVerifyRequest(BaseModel):
