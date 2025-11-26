@@ -745,6 +745,58 @@ class ActionPlanner:
                 logger.warning(f"解析JSON块失败: {e}, 块内容: {match[:100]}...")
                 continue
 
+        # 如果没有找到完整的```json```块，尝试查找不完整的代码块（缺少结尾```）
+        if not json_objects:
+            json_start_pos = content.find("```json")
+            if json_start_pos != -1:
+                # 找到```json之后的内容
+                json_content_start = json_start_pos + 7  # ```json的长度
+                # 提取从```json之后到内容结尾的所有内容
+                incomplete_json_str = content[json_content_start:].strip()
+                
+                # 提取JSON之前的内容作为推理文本
+                if json_start_pos > 0:
+                    reasoning_content = content[:json_start_pos].strip()
+                    reasoning_content = re.sub(r"^//\s*", "", reasoning_content, flags=re.MULTILINE)
+                    reasoning_content = reasoning_content.strip()
+                
+                if incomplete_json_str:
+                    try:
+                        # 清理可能的注释和格式问题
+                        json_str = re.sub(r"//.*?\n", "\n", incomplete_json_str)
+                        json_str = re.sub(r"/\*.*?\*/", "", json_str, flags=re.DOTALL)
+                        json_str = json_str.strip()
+                        
+                        if json_str:
+                            # 尝试按行分割，每行可能是一个JSON对象
+                            lines = [line.strip() for line in json_str.split("\n") if line.strip()]
+                            for line in lines:
+                                try:
+                                    json_obj = json.loads(repair_json(line))
+                                    if isinstance(json_obj, dict):
+                                        json_objects.append(json_obj)
+                                    elif isinstance(json_obj, list):
+                                        for item in json_obj:
+                                            if isinstance(item, dict):
+                                                json_objects.append(item)
+                                except json.JSONDecodeError:
+                                    pass
+                            
+                            # 如果按行解析没有成功，尝试将整个块作为一个JSON对象或数组
+                            if not json_objects:
+                                try:
+                                    json_obj = json.loads(repair_json(json_str))
+                                    if isinstance(json_obj, dict):
+                                        json_objects.append(json_obj)
+                                    elif isinstance(json_obj, list):
+                                        for item in json_obj:
+                                            if isinstance(item, dict):
+                                                json_objects.append(item)
+                                except Exception as e:
+                                    logger.debug(f"尝试解析不完整的JSON代码块失败: {e}")
+                    except Exception as e:
+                        logger.debug(f"处理不完整的JSON代码块时出错: {e}")
+
         return json_objects, reasoning_content
 
 

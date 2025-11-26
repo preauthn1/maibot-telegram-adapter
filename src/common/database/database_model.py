@@ -239,6 +239,20 @@ class ImageDescriptions(BaseModel):
         table_name = "image_descriptions"
 
 
+class EmojiDescriptionCache(BaseModel):
+    """
+    存储表情包的详细描述和情感标签缓存
+    """
+
+    emoji_hash = TextField(unique=True, index=True)
+    description = TextField()  # 详细描述
+    emotion_tags = TextField(null=True)  # 情感标签，逗号分隔
+    timestamp = FloatField()
+
+    class Meta:
+        table_name = "emoji_description_cache"
+
+
 class OnlineTime(BaseModel):
     """
     用于存储在线时长记录的模型。
@@ -389,6 +403,7 @@ MODELS = [
     Messages,
     Images,
     ImageDescriptions,
+    EmojiDescriptionCache,
     OnlineTime,
     PersonInfo,
     Expression,
