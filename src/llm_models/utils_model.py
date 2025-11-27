@@ -333,12 +333,24 @@ class LLMRequest:
 
             except NetworkConnectionError as e:
                 # 网络错误：单独记录并重试
+                # 尝试从链式异常中获取原始错误信息以诊断具体原因
+                original_error_info = ""
+                if e.__cause__:
+                    original_error_type = type(e.__cause__).__name__
+                    original_error_msg = str(e.__cause__)
+                    original_error_info = f"\n  底层异常类型: {original_error_type}\n  底层异常信息: {original_error_msg}"
+                
                 retry_remain -= 1
                 if retry_remain <= 0:
-                    logger.error(f"模型 '{model_info.name}' 在网络错误重试用尽后仍然失败。")
+                    logger.error(f"模型 '{model_info.name}' 在网络错误重试用尽后仍然失败。{original_error_info}")
                     raise ModelAttemptFailed(f"模型 '{model_info.name}' 重试耗尽", original_exception=e) from e
 
-                logger.warning(f"模型 '{model_info.name}' 遇到网络错误(可重试): {str(e)}。剩余重试次数: {retry_remain}")
+                logger.warning(
+                    f"模型 '{model_info.name}' 遇到网络错误(可重试): {str(e)}{original_error_info}\n"
+                    f"  常见原因: 如请求的API正常但APITimeoutError类型错误过多，请尝试调整模型配置中对应API Provider的timeout值\n"
+                    f"  其它可能原因: 网络波动、DNS 故障、连接超时、防火墙限制或代理问题\n"
+                    f"  剩余重试次数: {retry_remain}"
+                )
                 await asyncio.sleep(api_provider.retry_interval)
 
             except RespNotOkException as e:
