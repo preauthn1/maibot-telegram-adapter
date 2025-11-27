@@ -222,7 +222,8 @@ class ActionPlanner:
             # 非no_reply动作需要target_message_id
             target_message = None
 
-            if target_message_id := action_json.get("target_message_id"):
+            target_message_id = action_json.get("target_message_id")
+            if target_message_id:
                 # 根据target_message_id查找原始消息
                 target_message = self.find_message_by_id(target_message_id, message_id_list)
                 if target_message is None:
@@ -232,6 +233,20 @@ class ActionPlanner:
             else:
                 target_message = message_id_list[-1][1]
                 logger.debug(f"{self.log_prefix}动作'{action}'缺少target_message_id，使用最新消息作为target_message")
+
+            if (
+                action != "no_reply"
+                and target_message is not None
+                and self._is_message_from_self(target_message)
+            ):
+                logger.info(
+                    f"{self.log_prefix}Planner选择了自己的消息 {target_message_id or target_message.message_id} 作为目标，强制使用 no_reply"
+                )
+                reasoning = (
+                    f"目标消息 {target_message_id or target_message.message_id} 来自机器人自身，违反不回复自身消息规则。原始理由: {reasoning}"
+                )
+                action = "no_reply"
+                target_message = None
 
             # 验证action是否可用
             available_action_names = [action_name for action_name, _ in current_available_actions]
@@ -276,6 +291,17 @@ class ActionPlanner:
             )
 
         return action_planner_infos
+
+    def _is_message_from_self(self, message: "DatabaseMessages") -> bool:
+        """判断消息是否由机器人自身发送"""
+        try:
+            return (
+                str(message.user_info.user_id) == str(global_config.bot.qq_account)
+                and (message.user_info.platform or "") == (global_config.bot.platform or "")
+            )
+        except AttributeError:
+            logger.warning(f"{self.log_prefix}检测消息发送者失败，缺少必要字段")
+            return False
 
     async def plan(
         self,
