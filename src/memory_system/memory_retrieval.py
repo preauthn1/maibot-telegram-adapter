@@ -76,6 +76,8 @@ def init_memory_retrieval_prompt():
 - "xxxx和xxx的关系是什么"
 - "xxx在某个时间点发生了什么"
 
+问题要说明前因后果和上下文，使其全面且精准
+
 输出格式示例（需要检索时）：
 ```json
 {{
