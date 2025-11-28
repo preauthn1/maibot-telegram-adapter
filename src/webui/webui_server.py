@@ -92,11 +92,16 @@ class WebUIServer:
             logger.info("开始导入 knowledge_routes...")
             from src.webui.knowledge_routes import router as knowledge_router
             logger.info("knowledge_routes 导入成功")
+            
+            # 导入本地聊天室路由
+            from src.webui.chat_routes import router as chat_router
+            logger.info("chat_routes 导入成功")
 
             # 注册路由
             self.app.include_router(webui_router)
             self.app.include_router(logs_router)
             self.app.include_router(knowledge_router)
+            self.app.include_router(chat_router)
             logger.info(f"knowledge_router 路由前缀: {knowledge_router.prefix}")
 
             logger.info("✅ WebUI API 路由已注册")
@@ -116,6 +121,8 @@ class WebUIServer:
 
         logger.info("🌐 WebUI 服务器启动中...")
         logger.info(f"🌐 访问地址: http://{self.host}:{self.port}")
+        if self.host == "0.0.0.0":
+            logger.info(f"本机访问请使用 http://localhost:{self.port}")
 
         try:
             await self._server.serve()
