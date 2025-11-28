@@ -29,8 +29,10 @@ def parse_version(version_str: str) -> tuple[int, int, int]:
     Returns:
         (major, minor, patch) 三元组
     """
-    # 移除 snapshot 等后缀
-    base_version = version_str.split(".snapshot")[0].split(".dev")[0].split(".alpha")[0].split(".beta")[0]
+    # 移除 snapshot、dev、alpha、beta 等后缀（支持 - 和 . 分隔符）
+    import re
+    # 匹配 -snapshot.X, .snapshot, -dev, .dev, -alpha, .alpha, -beta, .beta 等后缀
+    base_version = re.split(r'[-.](?:snapshot|dev|alpha|beta|rc)', version_str, flags=re.IGNORECASE)[0]
 
     parts = base_version.split(".")
     if len(parts) < 3:
@@ -1152,4 +1154,413 @@ async def get_installed_plugins(authorization: Optional[str] = Header(None)) -> 
 
     except Exception as e:
         logger.error(f"获取已安装插件列表失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"服务器错误: {str(e)}") from e
+
+
+# ============ 插件配置管理 API ============
+
+
+class UpdatePluginConfigRequest(BaseModel):
+    """更新插件配置请求"""
+
+    config: Dict[str, Any] = Field(..., description="配置数据")
+
+
+@router.get("/config/{plugin_id}/schema")
+async def get_plugin_config_schema(
+    plugin_id: str, authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
+    """
+    获取插件配置 Schema
+    
+    返回插件的完整配置 schema，包含所有 section、字段定义和布局信息。
+    用于前端动态生成配置表单。
+    """
+    # Token 验证
+    token = authorization.replace("Bearer ", "") if authorization else None
+    token_manager = get_token_manager()
+    if not token or not token_manager.verify_token(token):
+        raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
+
+    logger.info(f"获取插件配置 Schema: {plugin_id}")
+
+    try:
+        # 尝试从已加载的插件中获取
+        from src.plugin_system.core.plugin_manager import plugin_manager
+        
+        # 查找插件实例
+        plugin_instance = None
+        
+        # 遍历所有已加载的插件
+        for loaded_plugin_name in plugin_manager.list_loaded_plugins():
+            instance = plugin_manager.get_plugin_instance(loaded_plugin_name)
+            if instance:
+                # 匹配 plugin_name 或 manifest 中的 id
+                if instance.plugin_name == plugin_id:
+                    plugin_instance = instance
+                    break
+                # 也尝试匹配 manifest 中的 id
+                manifest_id = instance.get_manifest_info("id", "")
+                if manifest_id == plugin_id:
+                    plugin_instance = instance
+                    break
+        
+        if plugin_instance and hasattr(plugin_instance, 'get_webui_config_schema'):
+            # 从插件实例获取 schema
+            schema = plugin_instance.get_webui_config_schema()
+            return {"success": True, "schema": schema}
+        
+        # 如果插件未加载，尝试从文件系统读取
+        # 查找插件目录
+        plugins_dir = Path("plugins")
+        plugin_path = None
+        
+        for p in plugins_dir.iterdir():
+            if p.is_dir():
+                manifest_path = p / "_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r", encoding="utf-8") as f:
+                            manifest = json.load(f)
+                        if manifest.get("id") == plugin_id or p.name == plugin_id:
+                            plugin_path = p
+                            break
+                    except Exception:
+                        continue
+        
+        if not plugin_path:
+            raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
+        
+        # 读取配置文件获取当前配置
+        config_path = plugin_path / "config.toml"
+        current_config = {}
+        if config_path.exists():
+            import toml
+            current_config = toml.load(config_path)
+        
+        # 构建基础 schema（无法获取完整的 ConfigField 信息）
+        schema = {
+            "plugin_id": plugin_id,
+            "plugin_info": {
+                "name": plugin_id,
+                "version": "",
+                "description": "",
+                "author": "",
+            },
+            "sections": {},
+            "layout": {"type": "auto", "tabs": []},
+            "_note": "插件未加载，仅返回当前配置结构",
+        }
+        
+        # 从当前配置推断 schema
+        for section_name, section_data in current_config.items():
+            if isinstance(section_data, dict):
+                schema["sections"][section_name] = {
+                    "name": section_name,
+                    "title": section_name,
+                    "description": None,
+                    "icon": None,
+                    "collapsed": False,
+                    "order": 0,
+                    "fields": {},
+                }
+                for field_name, field_value in section_data.items():
+                    # 推断字段类型
+                    field_type = type(field_value).__name__
+                    ui_type = "text"
+                    if isinstance(field_value, bool):
+                        ui_type = "switch"
+                    elif isinstance(field_value, (int, float)):
+                        ui_type = "number"
+                    elif isinstance(field_value, list):
+                        ui_type = "list"
+                    elif isinstance(field_value, dict):
+                        ui_type = "json"
+                    
+                    schema["sections"][section_name]["fields"][field_name] = {
+                        "name": field_name,
+                        "type": field_type,
+                        "default": field_value,
+                        "description": field_name,
+                        "label": field_name,
+                        "ui_type": ui_type,
+                        "required": False,
+                        "hidden": False,
+                        "disabled": False,
+                        "order": 0,
+                    }
+        
+        return {"success": True, "schema": schema}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取插件配置 Schema 失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"服务器错误: {str(e)}") from e
+
+
+@router.get("/config/{plugin_id}")
+async def get_plugin_config(
+    plugin_id: str, authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
+    """
+    获取插件当前配置值
+    
+    返回插件的当前配置值。
+    """
+    # Token 验证
+    token = authorization.replace("Bearer ", "") if authorization else None
+    token_manager = get_token_manager()
+    if not token or not token_manager.verify_token(token):
+        raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
+
+    logger.info(f"获取插件配置: {plugin_id}")
+
+    try:
+        # 查找插件目录
+        plugins_dir = Path("plugins")
+        plugin_path = None
+        
+        for p in plugins_dir.iterdir():
+            if p.is_dir():
+                manifest_path = p / "_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r", encoding="utf-8") as f:
+                            manifest = json.load(f)
+                        if manifest.get("id") == plugin_id or p.name == plugin_id:
+                            plugin_path = p
+                            break
+                    except Exception:
+                        continue
+        
+        if not plugin_path:
+            raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
+        
+        # 读取配置文件
+        config_path = plugin_path / "config.toml"
+        if not config_path.exists():
+            return {"success": True, "config": {}, "message": "配置文件不存在"}
+        
+        import toml
+        config = toml.load(config_path)
+        
+        return {"success": True, "config": config}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取插件配置失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"服务器错误: {str(e)}") from e
+
+
+@router.put("/config/{plugin_id}")
+async def update_plugin_config(
+    plugin_id: str,
+    request: UpdatePluginConfigRequest,
+    authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
+    """
+    更新插件配置
+    
+    保存新的配置值到插件的配置文件。
+    """
+    # Token 验证
+    token = authorization.replace("Bearer ", "") if authorization else None
+    token_manager = get_token_manager()
+    if not token or not token_manager.verify_token(token):
+        raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
+
+    logger.info(f"更新插件配置: {plugin_id}")
+
+    try:
+        # 查找插件目录
+        plugins_dir = Path("plugins")
+        plugin_path = None
+        
+        for p in plugins_dir.iterdir():
+            if p.is_dir():
+                manifest_path = p / "_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r", encoding="utf-8") as f:
+                            manifest = json.load(f)
+                        if manifest.get("id") == plugin_id or p.name == plugin_id:
+                            plugin_path = p
+                            break
+                    except Exception:
+                        continue
+        
+        if not plugin_path:
+            raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
+        
+        config_path = plugin_path / "config.toml"
+        
+        # 备份旧配置
+        import shutil
+        import datetime
+        if config_path.exists():
+            backup_name = f"config.toml.backup.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+            backup_path = plugin_path / backup_name
+            shutil.copy(config_path, backup_path)
+            logger.info(f"已备份配置文件: {backup_path}")
+        
+        # 写入新配置
+        import toml
+        with open(config_path, "w", encoding="utf-8") as f:
+            toml.dump(request.config, f)
+        
+        logger.info(f"已更新插件配置: {plugin_id}")
+        
+        return {
+            "success": True,
+            "message": "配置已保存",
+            "note": "配置更改将在插件重新加载后生效"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新插件配置失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"服务器错误: {str(e)}") from e
+
+
+@router.post("/config/{plugin_id}/reset")
+async def reset_plugin_config(
+    plugin_id: str, authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
+    """
+    重置插件配置为默认值
+    
+    删除当前配置文件，下次加载插件时将使用默认配置。
+    """
+    # Token 验证
+    token = authorization.replace("Bearer ", "") if authorization else None
+    token_manager = get_token_manager()
+    if not token or not token_manager.verify_token(token):
+        raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
+
+    logger.info(f"重置插件配置: {plugin_id}")
+
+    try:
+        # 查找插件目录
+        plugins_dir = Path("plugins")
+        plugin_path = None
+        
+        for p in plugins_dir.iterdir():
+            if p.is_dir():
+                manifest_path = p / "_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r", encoding="utf-8") as f:
+                            manifest = json.load(f)
+                        if manifest.get("id") == plugin_id or p.name == plugin_id:
+                            plugin_path = p
+                            break
+                    except Exception:
+                        continue
+        
+        if not plugin_path:
+            raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
+        
+        config_path = plugin_path / "config.toml"
+        
+        if not config_path.exists():
+            return {"success": True, "message": "配置文件不存在，无需重置"}
+        
+        # 备份并删除
+        import shutil
+        import datetime
+        backup_name = f"config.toml.reset.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+        backup_path = plugin_path / backup_name
+        shutil.move(config_path, backup_path)
+        
+        logger.info(f"已重置插件配置: {plugin_id}，备份: {backup_path}")
+        
+        return {
+            "success": True,
+            "message": "配置已重置，下次加载插件时将使用默认配置",
+            "backup": str(backup_path)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"重置插件配置失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"服务器错误: {str(e)}") from e
+
+
+@router.post("/config/{plugin_id}/toggle")
+async def toggle_plugin(
+    plugin_id: str, authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
+    """
+    切换插件启用状态
+    
+    切换插件配置中的 enabled 字段。
+    """
+    # Token 验证
+    token = authorization.replace("Bearer ", "") if authorization else None
+    token_manager = get_token_manager()
+    if not token or not token_manager.verify_token(token):
+        raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
+
+    logger.info(f"切换插件状态: {plugin_id}")
+
+    try:
+        # 查找插件目录
+        plugins_dir = Path("plugins")
+        plugin_path = None
+        
+        for p in plugins_dir.iterdir():
+            if p.is_dir():
+                manifest_path = p / "_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r", encoding="utf-8") as f:
+                            manifest = json.load(f)
+                        if manifest.get("id") == plugin_id or p.name == plugin_id:
+                            plugin_path = p
+                            break
+                    except Exception:
+                        continue
+        
+        if not plugin_path:
+            raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
+        
+        config_path = plugin_path / "config.toml"
+        
+        import toml
+        
+        # 读取当前配置
+        config = {}
+        if config_path.exists():
+            config = toml.load(config_path)
+        
+        # 切换 enabled 状态
+        if "plugin" not in config:
+            config["plugin"] = {}
+        
+        current_enabled = config["plugin"].get("enabled", True)
+        new_enabled = not current_enabled
+        config["plugin"]["enabled"] = new_enabled
+        
+        # 写入配置
+        with open(config_path, "w", encoding="utf-8") as f:
+            toml.dump(config, f)
+        
+        status = "启用" if new_enabled else "禁用"
+        logger.info(f"已{status}插件: {plugin_id}")
+        
+        return {
+            "success": True,
+            "enabled": new_enabled,
+            "message": f"插件已{status}",
+            "note": "状态更改将在下次加载插件时生效"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"切换插件状态失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"服务器错误: {str(e)}") from e

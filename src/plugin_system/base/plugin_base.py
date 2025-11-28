@@ -12,7 +12,11 @@ from src.plugin_system.base.component_types import (
     PluginInfo,
     PythonDependency,
 )
-from src.plugin_system.base.config_types import ConfigField
+from src.plugin_system.base.config_types import (
+    ConfigField,
+    ConfigSection,
+    ConfigLayout,
+)
 from src.plugin_system.utils.manifest_utils import ManifestValidator
 
 logger = get_logger("plugin_base")
@@ -60,7 +64,10 @@ class PluginBase(ABC):
     def config_schema(self) -> Dict[str, Union[Dict[str, ConfigField], str]]:
         return {}
 
-    config_section_descriptions: Dict[str, str] = {}
+    config_section_descriptions: Dict[str, Union[str, ConfigSection]] = {}
+
+    # 布局配置（可选，不定义则使用自动布局）
+    config_layout: ConfigLayout = None
 
     def __init__(self, plugin_dir: str):
         """初始化插件
@@ -563,6 +570,93 @@ class PluginBase(ABC):
                 return default
 
         return current
+
+    def get_webui_config_schema(self) -> Dict[str, Any]:
+        """
+        获取 WebUI 配置 Schema
+        
+        返回完整的配置 schema，包含：
+        - 插件基本信息
+        - 所有 section 及其字段定义
+        - 布局配置
+        
+        用于 WebUI 动态生成配置表单。
+        
+        Returns:
+            Dict: 完整的配置 schema
+        """
+        schema = {
+            "plugin_id": self.plugin_name,
+            "plugin_info": {
+                "name": self.display_name,
+                "version": self.plugin_version,
+                "description": self.plugin_description,
+                "author": self.plugin_author,
+            },
+            "sections": {},
+            "layout": None,
+        }
+        
+        # 处理 sections
+        for section_name, fields in self.config_schema.items():
+            if not isinstance(fields, dict):
+                continue
+                
+            section_data = {
+                "name": section_name,
+                "title": section_name,
+                "description": None,
+                "icon": None,
+                "collapsed": False,
+                "order": 0,
+                "fields": {},
+            }
+            
+            # 获取 section 元数据
+            section_meta = self.config_section_descriptions.get(section_name)
+            if section_meta:
+                if isinstance(section_meta, str):
+                    section_data["title"] = section_meta
+                elif isinstance(section_meta, ConfigSection):
+                    section_data["title"] = section_meta.title
+                    section_data["description"] = section_meta.description
+                    section_data["icon"] = section_meta.icon
+                    section_data["collapsed"] = section_meta.collapsed
+                    section_data["order"] = section_meta.order
+                elif isinstance(section_meta, dict):
+                    section_data.update(section_meta)
+            
+            # 处理字段
+            for field_name, field_def in fields.items():
+                if isinstance(field_def, ConfigField):
+                    field_data = field_def.to_dict()
+                    field_data["name"] = field_name
+                    section_data["fields"][field_name] = field_data
+            
+            schema["sections"][section_name] = section_data
+        
+        # 处理布局
+        if self.config_layout:
+            schema["layout"] = self.config_layout.to_dict()
+        else:
+            # 自动布局：按 section order 排序
+            schema["layout"] = {
+                "type": "auto",
+                "tabs": [],
+            }
+        
+        return schema
+
+    def get_current_config_values(self) -> Dict[str, Any]:
+        """
+        获取当前配置值
+        
+        返回插件当前的配置值（已从配置文件加载）。
+        
+        Returns:
+            Dict: 当前配置值
+        """
+        return self.config.copy()
 
     @abstractmethod
     def register_plugin(self) -> bool:
