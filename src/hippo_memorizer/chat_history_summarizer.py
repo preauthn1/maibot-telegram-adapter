@@ -8,8 +8,9 @@ import json
 import time
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from dataclasses import dataclass, field
+from json_repair import repair_json
 
 from src.common.logger import get_logger
 from src.common.data_models.database_data_model import DatabaseMessages
@@ -369,12 +370,12 @@ class ChatHistorySummarizer:
         should_check = False
 
         # 条件1: 消息数量 >= 100，触发一次检查
-        if message_count >= 50:
+        if message_count >= 80:
             should_check = True
             logger.info(f"{self.log_prefix} 触发检查条件: 消息数量达到 {message_count} 条（阈值: 100条）")
 
         # 条件2: 距离上一次检查 > 3600 秒（1小时），触发一次检查
-        elif time_since_last_check > 1200:
+        elif time_since_last_check > 2400:
             should_check = True
             logger.info(f"{self.log_prefix} 触发检查条件: 距上次检查 {time_str}（阈值: 1小时）")
 
@@ -483,11 +484,11 @@ class ChatHistorySummarizer:
         topics_to_finalize: List[str] = []
         for topic, item in self.topic_cache.items():
             if item.no_update_checks >= 3:
-                logger.info(f"{self.log_prefix} 话题[{topic}] 连续 5 次检查无新增内容，触发打包存储")
+                logger.info(f"{self.log_prefix} 话题[{topic}] 连续 3 次检查无新增内容，触发打包存储")
                 topics_to_finalize.append(topic)
                 continue
-            if len(item.messages) > 8:
-                logger.info(f"{self.log_prefix} 话题[{topic}] 消息条数超过 30，触发打包存储")
+            if len(item.messages) > 5:
+                logger.info(f"{self.log_prefix} 话题[{topic}] 消息条数超过 4，触发打包存储")
                 topics_to_finalize.append(topic)
 
         for topic in topics_to_finalize:
@@ -606,18 +607,42 @@ class ChatHistorySummarizer:
                 max_tokens=800,
             )
 
-            import re
             logger.info(f"{self.log_prefix} 话题识别LLM Prompt: {prompt}")
             logger.info(f"{self.log_prefix} 话题识别LLM Response: {response}")
 
-            json_str = response.strip()
-            # 移除可能的 markdown 代码块标记
-            json_str = re.sub(r"^```json\s*", "", json_str, flags=re.MULTILINE)
-            json_str = re.sub(r"^```\s*", "", json_str, flags=re.MULTILINE)
-            json_str = json_str.strip()
+            # 尝试从响应中提取JSON代码块
+            json_str = None
+            json_pattern = r"```json\s*(.*?)\s*```"
+            matches = re.findall(json_pattern, response, re.DOTALL)
+            
+            if matches:
+                # 找到JSON代码块，使用第一个匹配
+                json_str = matches[0].strip()
+            else:
+                # 如果没有找到代码块，尝试查找JSON数组的开始和结束位置
+                # 查找第一个 [ 和最后一个 ]
+                start_idx = response.find('[')
+                end_idx = response.rfind(']')
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    json_str = response[start_idx:end_idx + 1].strip()
+                else:
+                    # 如果还是找不到，尝试直接使用整个响应（移除可能的markdown标记）
+                    json_str = response.strip()
+                    json_str = re.sub(r"^```json\s*", "", json_str, flags=re.MULTILINE)
+                    json_str = re.sub(r"^```\s*", "", json_str, flags=re.MULTILINE)
+                    json_str = json_str.strip()
 
-            # 尝试直接解析为 JSON 数组
-            result = json.loads(json_str)
+            # 使用json_repair修复可能的JSON错误
+            if json_str:
+                try:
+                    repaired_json = repair_json(json_str)
+                    result = json.loads(repaired_json) if isinstance(repaired_json, str) else repaired_json
+                except Exception as repair_error:
+                    # 如果repair失败，尝试直接解析
+                    logger.warning(f"{self.log_prefix} JSON修复失败，尝试直接解析: {repair_error}")
+                    result = json.loads(json_str)
+            else:
+                raise ValueError("无法从响应中提取JSON内容")
 
             if not isinstance(result, list):
                 logger.error(f"{self.log_prefix} 话题识别返回的 JSON 不是列表: {result}")
@@ -722,41 +747,30 @@ class ChatHistorySummarizer:
             )
 
             # 解析JSON响应
-            import re
-
-            # 移除可能的markdown代码块标记
             json_str = response.strip()
             json_str = re.sub(r"^```json\s*", "", json_str, flags=re.MULTILINE)
             json_str = re.sub(r"^```\s*", "", json_str, flags=re.MULTILINE)
             json_str = json_str.strip()
 
-            # 尝试找到JSON对象的开始和结束位置
-            # 查找第一个 { 和最后一个匹配的 }
+            # 查找JSON对象的开始与结束
             start_idx = json_str.find("{")
             if start_idx == -1:
                 raise ValueError("未找到JSON对象开始标记")
 
-            # 从后往前查找最后一个 }
             end_idx = json_str.rfind("}")
             if end_idx == -1 or end_idx <= start_idx:
-                raise ValueError("未找到JSON对象结束标记")
+                logger.warning(f"{self.log_prefix} JSON缺少结束标记，尝试自动修复")
+                extracted_json = json_str[start_idx:]
+            else:
+                extracted_json = json_str[start_idx : end_idx + 1]
 
-            # 提取JSON字符串
-            json_str = json_str[start_idx : end_idx + 1]
-
-            # 尝试解析JSON
-            try:
-                result = json.loads(json_str)
-            except json.JSONDecodeError:
-                # 如果解析失败，尝试修复字符串值中的中文引号
-                # 简单方法：将字符串值中的中文引号替换为转义的英文引号
-                # 使用状态机方法：遍历字符串，在字符串值内部替换中文引号
-                fixed_chars = []
+            def _parse_with_quote_fix(payload: str) -> Dict[str, Any]:
+                fixed_chars: List[str] = []
                 in_string = False
                 escape_next = False
                 i = 0
-                while i < len(json_str):
-                    char = json_str[i]
+                while i < len(payload):
+                    char = payload[i]
                     if escape_next:
                         fixed_chars.append(char)
                         escape_next = False
@@ -766,16 +780,28 @@ class ChatHistorySummarizer:
                     elif char == '"' and not escape_next:
                         fixed_chars.append(char)
                         in_string = not in_string
-                    elif in_string and (char == '"' or char == '"'):
+                    elif in_string and char in {"“", "”"}:
                         # 在字符串值内部，将中文引号替换为转义的英文引号
                         fixed_chars.append('\\"')
                     else:
                         fixed_chars.append(char)
                     i += 1
 
-                json_str = "".join(fixed_chars)
-                # 再次尝试解析
-                result = json.loads(json_str)
+                repaired = "".join(fixed_chars)
+                return json.loads(repaired)
+
+            try:
+                result = json.loads(extracted_json)
+            except json.JSONDecodeError:
+                try:
+                    repaired_json = repair_json(extracted_json)
+                    if isinstance(repaired_json, str):
+                        result = json.loads(repaired_json)
+                    else:
+                        result = repaired_json
+                except Exception as repair_error:
+                    logger.warning(f"{self.log_prefix} repair_json 失败，使用引号修复: {repair_error}")
+                    result = _parse_with_quote_fix(extracted_json)
 
             keywords = result.get("keywords", [])
             summary = result.get("summary", "无概括")
