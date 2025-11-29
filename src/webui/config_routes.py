@@ -586,8 +586,8 @@ async def save_adapter_config(data: dict[str, str] = Body(...)):
 
         # 验证 TOML 格式
         try:
-            import toml
-            toml.loads(content)
+            import tomlkit
+            tomlkit.loads(content)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"TOML 格式错误: {str(e)}")
 

@@ -1235,8 +1235,9 @@ async def get_plugin_config_schema(
         config_path = plugin_path / "config.toml"
         current_config = {}
         if config_path.exists():
-            import toml
-            current_config = toml.load(config_path)
+            import tomlkit
+            with open(config_path, "r", encoding="utf-8") as f:
+                current_config = tomlkit.load(f)
         
         # 构建基础 schema（无法获取完整的 ConfigField 信息）
         schema = {
@@ -1342,10 +1343,11 @@ async def get_plugin_config(
         if not config_path.exists():
             return {"success": True, "config": {}, "message": "配置文件不存在"}
         
-        import toml
-        config = toml.load(config_path)
+        import tomlkit
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = tomlkit.load(f)
         
-        return {"success": True, "config": config}
+        return {"success": True, "config": dict(config)}
 
     except HTTPException:
         raise
@@ -1405,10 +1407,18 @@ async def update_plugin_config(
             shutil.copy(config_path, backup_path)
             logger.info(f"已备份配置文件: {backup_path}")
         
-        # 写入新配置
-        import toml
+        # 写入新配置（使用 tomlkit 保留注释）
+        import tomlkit
+        # 先读取原配置以保留注释和格式
+        existing_doc = tomlkit.document()
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                existing_doc = tomlkit.load(f)
+        # 更新值
+        for key, value in request.config.items():
+            existing_doc[key] = value
         with open(config_path, "w", encoding="utf-8") as f:
-            toml.dump(request.config, f)
+            tomlkit.dump(existing_doc, f)
         
         logger.info(f"已更新插件配置: {plugin_id}")
         
@@ -1530,24 +1540,25 @@ async def toggle_plugin(
         
         config_path = plugin_path / "config.toml"
         
-        import toml
+        import tomlkit
         
-        # 读取当前配置
-        config = {}
+        # 读取当前配置（保留注释和格式）
+        config = tomlkit.document()
         if config_path.exists():
-            config = toml.load(config_path)
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = tomlkit.load(f)
         
         # 切换 enabled 状态
         if "plugin" not in config:
-            config["plugin"] = {}
+            config["plugin"] = tomlkit.table()
         
         current_enabled = config["plugin"].get("enabled", True)
         new_enabled = not current_enabled
         config["plugin"]["enabled"] = new_enabled
         
-        # 写入配置
+        # 写入配置（保留注释）
         with open(config_path, "w", encoding="utf-8") as f:
-            toml.dump(config, f)
+            tomlkit.dump(config, f)
         
         status = "启用" if new_enabled else "禁用"
         logger.info(f"已{status}插件: {plugin_id}")
