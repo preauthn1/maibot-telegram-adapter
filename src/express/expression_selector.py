@@ -128,7 +128,7 @@ class ExpressionSelector:
 
             # 优化：一次性查询所有相关chat_id的表达方式，排除 rejected=1 的表达
             style_query = Expression.select().where(
-                (Expression.chat_id.in_(related_chat_ids)) & (Expression.rejected == False)
+                (Expression.chat_id.in_(related_chat_ids)) & (~Expression.rejected)
             )
 
             style_exprs = [

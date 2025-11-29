@@ -83,19 +83,19 @@ class ConfigField:
             return self.input_type
 
         # 根据 type 和 choices 自动推断
-        if self.type == bool:
+        if self.type is bool:
             return "switch"
         elif self.type in (int, float):
             if self.min is not None and self.max is not None:
                 return "slider"
             return "number"
-        elif self.type == str:
+        elif self.type is str:
             if self.choices:
                 return "select"
             return "text"
-        elif self.type == list:
+        elif self.type is list:
             return "list"
-        elif self.type == dict:
+        elif self.type is dict:
             return "json"
         else:
             return "text"
