@@ -10,6 +10,33 @@ import subprocess
 from dotenv import load_dotenv
 from pathlib import Path
 from rich.traceback import install
+from src.common.logger import initialize_logging, get_logger, shutdown_logging
+
+# 设置工作目录为脚本所在目录
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+
+env_path = Path(__file__).parent / ".env"
+template_env_path = Path(__file__).parent / "template" / "template.env"
+
+if env_path.exists():
+    load_dotenv(str(env_path), override=True)
+else:
+    try:
+        if template_env_path.exists():
+            shutil.copyfile(template_env_path, env_path)
+            print("未找到.env，已从 template/template.env 自动创建")
+            load_dotenv(str(env_path), override=True)
+        else:
+            print("未找到.env文件，也未找到模板 template/template.env")
+            raise FileNotFoundError(".env 文件不存在，请创建并配置所需的环境变量")
+    except Exception as e:
+        print(f"自动创建 .env 失败: {e}")
+        raise
+
+initialize_logging()
+install(extra_lines=3)
+logger = get_logger("main")
 
 # 定义重启退出码
 RESTART_EXIT_CODE = 42
@@ -27,7 +54,7 @@ def run_runner_process():
     env["MAIBOT_WORKER_PROCESS"] = "1"
 
     while True:
-        print(f"正在启动 {script_file}...")
+        logger.info(f"正在启动 {script_file}...")
         
         # 启动子进程 (Worker)
         # 使用 sys.executable 确保使用相同的 Python 解释器
@@ -40,11 +67,11 @@ def run_runner_process():
             return_code = process.wait()
             
             if return_code == RESTART_EXIT_CODE:
-                print("检测到重启请求 (退出码 42)，正在重启...")
+                logger.info("检测到重启请求 (退出码 42)，正在重启...")
                 time.sleep(1) # 稍作等待
                 continue
             else:
-                print(f"程序已退出 (退出码 {return_code})")
+                logger.info(f"程序已退出 (退出码 {return_code})")
                 sys.exit(return_code)
                 
         except KeyboardInterrupt:
@@ -56,7 +83,7 @@ def run_runner_process():
                     process.terminate()
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    print("子进程未响应，强制关闭...")
+                    logger.warning("子进程未响应，强制关闭...")
                     process.kill()
             sys.exit(0)
 
@@ -71,42 +98,22 @@ if os.environ.get("MAIBOT_WORKER_PROCESS") != "1":
 
 # 以下是 Worker 进程的逻辑
 
-env_path = Path(__file__).parent / ".env"
-template_env_path = Path(__file__).parent / "template" / "template.env"
-
-if env_path.exists():
-    load_dotenv(str(env_path), override=True)
-    print("成功加载环境变量配置")
-else:
-    try:
-        if template_env_path.exists():
-            shutil.copyfile(template_env_path, env_path)
-            print("未找到.env，已从 template/template.env 自动创建")
-            load_dotenv(str(env_path), override=True)
-        else:
-            print("未找到.env文件，也未找到模板 template/template.env")
-            raise FileNotFoundError(".env 文件不存在，请创建并配置所需的环境变量")
-    except Exception as e:
-        print(f"自动创建 .env 失败: {e}")
-        raise
-
 # 最早期初始化日志系统，确保所有后续模块都使用正确的日志格式
-from src.common.logger import initialize_logging, get_logger, shutdown_logging  # noqa
-
-initialize_logging()
+# from src.common.logger import initialize_logging, get_logger, shutdown_logging  # noqa
+# initialize_logging()
 
 from src.main import MainSystem  # noqa
 from src.manager.async_task_manager import async_task_manager  # noqa
 
 
-logger = get_logger("main")
+# logger = get_logger("main")
 
 
-install(extra_lines=3)
+# install(extra_lines=3)
 
 # 设置工作目录为脚本所在目录
-script_dir = os.path.dirname(os.path.abspath(__file__))
-os.chdir(script_dir)
+# script_dir = os.path.dirname(os.path.abspath(__file__))
+# os.chdir(script_dir)
 logger.info(f"已设置工作目录为: {script_dir}")
 
 
