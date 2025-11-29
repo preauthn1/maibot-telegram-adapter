@@ -47,6 +47,21 @@ class LLMRequest:
         }
         """模型使用量记录，用于进行负载均衡，对应为(total_tokens, penalty, usage_penalty)，惩罚值是为了能在某个模型请求不给力或正在被使用的时候进行调整"""
 
+    def _check_slow_request(self, time_cost: float, model_name: str) -> None:
+        """检查请求是否过慢并输出警告日志
+        
+        Args:
+            time_cost: 请求耗时（秒）
+            model_name: 使用的模型名称
+        """
+        threshold = self.model_for_task.slow_threshold
+        if time_cost > threshold:
+            request_type_display = self.request_type or "未知任务"
+            logger.warning(
+                f"LLM请求耗时过长: {request_type_display} 使用模型 {model_name} 耗时 {time_cost:.1f}s（阈值: {threshold}s），请考虑使用更快的模型\n"
+                f"如果你认为该警告出现得过于频繁，请调整model_config.toml中对应任务的slow_threshold至符合你实际情况的合理值"
+            )
+
     async def generate_response_for_image(
         self,
         prompt: str,
@@ -86,6 +101,8 @@ class LLMRequest:
         if not reasoning_content and content:
             content, extracted_reasoning = self._extract_reasoning(content)
             reasoning_content = extracted_reasoning
+        time_cost = time.time() - start_time
+        self._check_slow_request(time_cost, model_info.name)
         if usage := response.usage:
             llm_usage_recorder.record_usage_to_database(
                 model_info=model_info,
@@ -93,7 +110,7 @@ class LLMRequest:
                 user_id="system",
                 request_type=self.request_type,
                 endpoint="/chat/completions",
-                time_cost=time.time() - start_time,
+                time_cost=time_cost,
             )
         return content, (reasoning_content, model_info.name, tool_calls)
 
@@ -198,7 +215,8 @@ class LLMRequest:
             tool_options=tool_built,
         )
 
-        logger.debug(f"LLM请求总耗时: {time.time() - start_time}")
+        time_cost = time.time() - start_time
+        logger.debug(f"LLM请求总耗时: {time_cost}")
         logger.debug(f"LLM生成内容: {response}")
 
         content = response.content
@@ -207,6 +225,7 @@ class LLMRequest:
         if not reasoning_content and content:
             content, extracted_reasoning = self._extract_reasoning(content)
             reasoning_content = extracted_reasoning
+        self._check_slow_request(time_cost, model_info.name)
         if usage := response.usage:
             llm_usage_recorder.record_usage_to_database(
                 model_info=model_info,
@@ -214,7 +233,7 @@ class LLMRequest:
                 user_id="system",
                 request_type=self.request_type,
                 endpoint="/chat/completions",
-                time_cost=time.time() - start_time,
+                time_cost=time_cost,
             )
         return content or "", (reasoning_content, model_info.name, tool_calls)
 
