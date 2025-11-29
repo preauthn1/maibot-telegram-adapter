@@ -212,6 +212,22 @@ class PluginBase(ABC):
 
         return value
 
+    def _format_toml_value(self, value: Any) -> str:
+        """将Python值格式化为合法的TOML字符串"""
+        if isinstance(value, str):
+            return json.dumps(value, ensure_ascii=False)
+        if isinstance(value, bool):
+            return str(value).lower()
+        if isinstance(value, (int, float)):
+            return str(value)
+        if isinstance(value, list):
+            inner = ", ".join(self._format_toml_value(item) for item in value)
+            return f"[{inner}]"
+        if isinstance(value, dict):
+            items = [f"{k} = {self._format_toml_value(v)}" for k, v in value.items()]
+            return "{ " + ", ".join(items) + " }"
+        return json.dumps(value, ensure_ascii=False)
+
     def _generate_and_save_default_config(self, config_file_path: str):
         """根据插件的Schema生成并保存默认配置文件"""
         if not self.config_schema:
@@ -251,12 +267,7 @@ class PluginBase(ABC):
 
                         # 添加字段值
                         value = field.default
-                        if isinstance(value, str):
-                            toml_str += f'{field_name} = "{value}"\n'
-                        elif isinstance(value, bool):
-                            toml_str += f"{field_name} = {str(value).lower()}\n"
-                        else:
-                            toml_str += f"{field_name} = {value}\n"
+                        toml_str += f"{field_name} = {self._format_toml_value(value)}\n"
 
                         toml_str += "\n"
             toml_str += "\n"
@@ -429,19 +440,7 @@ class PluginBase(ABC):
 
                         # 添加字段值（使用迁移后的值）
                         value = section_data.get(field_name, field.default)
-                        if isinstance(value, str):
-                            toml_str += f'{field_name} = "{value}"\n'
-                        elif isinstance(value, bool):
-                            toml_str += f"{field_name} = {str(value).lower()}\n"
-                        elif isinstance(value, list):
-                            # 格式化列表
-                            if all(isinstance(item, str) for item in value):
-                                formatted_list = "[" + ", ".join(f'"{item}"' for item in value) + "]"
-                            else:
-                                formatted_list = str(value)
-                            toml_str += f"{field_name} = {formatted_list}\n"
-                        else:
-                            toml_str += f"{field_name} = {value}\n"
+                        toml_str += f"{field_name} = {self._format_toml_value(value)}\n"
 
                         toml_str += "\n"
             toml_str += "\n"
