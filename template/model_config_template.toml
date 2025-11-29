@@ -46,7 +46,7 @@ name = "deepseek-v3"               # 模型名称（可随意命名，在后面�
 api_provider = "DeepSeek"          # API服务商名称（对应在api_providers中配置的服务商名称）
 price_in = 2.0                     # 输入价格（用于API调用统计，单位：元/ M token）（可选，若无该字段，默认值为0）
 price_out = 8.0                    # 输出价格（用于API调用统计，单位：元/ M token）（可选，若无该字段，默认值为0）
-#force_stream_mode = true          # 强制流式输出模式（若模型不支持非流式输出，请取消该注释，启用强制流式输出，若无该字段，默认值为false）
+# force_stream_mode = true          # 强制流式输出模式（若模型不支持非流式输出，请取消该注释，启用强制流式输出，若无该字段，默认值为false）
 
 [[models]]
 model_identifier = "deepseek-ai/DeepSeek-V3.2-Exp"
@@ -163,11 +163,11 @@ max_tokens = 256
 [model_task_config.voice] # 语音识别模型
 model_list = ["sensevoice-small"]
 
-#嵌入模型
+# 嵌入模型
 [model_task_config.embedding]
 model_list = ["bge-m3"]
 
-#------------LPMM知识库模型------------
+# ------------LPMM知识库模型------------
 
 [model_task_config.lpmm_entity_extract] # 实体提取模型
 model_list = ["siliconflow-deepseek-v3.2"]
