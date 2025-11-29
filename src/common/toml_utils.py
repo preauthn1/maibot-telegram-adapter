@@ -25,14 +25,11 @@ def _format_toml_value(obj: Any, threshold: int, depth: int = 0) -> Any:
 
     # 处理列表类型 (list 或 Array)
     if isinstance(obj, (list, Array)):
-        # 如果包含字典/表，视为 AoT 的列表形式或内联表数组，保持结构递归处理
-        if obj and isinstance(obj[0], (dict, Table)):
+        # 如果是纯 list (非 tomlkit Array) 且包含字典/表，视为 AoT 的列表形式
+        # 保持结构递归处理，避免转换为 Inline Table Array (因为 Inline Table 必须单行，复杂对象不友好)
+        if isinstance(obj, list) and not isinstance(obj, Array) and obj and isinstance(obj[0], (dict, Table)):
             for i, item in enumerate(obj):
-                # 原地修改或递归处理
-                if isinstance(obj, list):
-                    obj[i] = _format_toml_value(item, threshold, depth)
-                else:
-                    _format_toml_value(item, threshold, depth)
+                obj[i] = _format_toml_value(item, threshold, depth)
             return obj
 
         # 决定是否多行：仅在顶层且长度超过阈值时
