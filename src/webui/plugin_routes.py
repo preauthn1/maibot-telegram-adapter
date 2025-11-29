@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 import json
 from src.common.logger import get_logger
+from src.common.toml_utils import save_toml_with_format
 from src.config.config import MMC_VERSION
 from .git_mirror_service import get_git_mirror_service, set_update_progress_callback
 from .token_manager import get_token_manager
@@ -1416,8 +1417,7 @@ async def update_plugin_config(
         # 更新值
         for key, value in request.config.items():
             existing_doc[key] = value
-        with open(config_path, "w", encoding="utf-8") as f:
-            tomlkit.dump(existing_doc, f)
+        save_toml_with_format(existing_doc, str(config_path))
 
         logger.info(f"已更新插件配置: {plugin_id}")
 
@@ -1544,9 +1544,8 @@ async def toggle_plugin(plugin_id: str, authorization: Optional[str] = Header(No
         new_enabled = not current_enabled
         config["plugin"]["enabled"] = new_enabled
 
-        # 写入配置（保留注释）
-        with open(config_path, "w", encoding="utf-8") as f:
-            tomlkit.dump(config, f)
+        # 写入配置（保留注释，格式化数组）
+        save_toml_with_format(config, str(config_path))
 
         status = "启用" if new_enabled else "禁用"
         logger.info(f"已{status}插件: {plugin_id}")
