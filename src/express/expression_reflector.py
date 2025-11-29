@@ -29,12 +29,12 @@ class ExpressionReflector:
             logger.debug(f"[Expression Reflection] 开始检查是否需要提问 (stream_id: {self.chat_id})")
 
             if not global_config.expression.reflect:
-                logger.debug(f"[Expression Reflection] 表达反思功能未启用，跳过")
+                logger.debug("[Expression Reflection] 表达反思功能未启用，跳过")
                 return False
 
             operator_config = global_config.expression.reflect_operator_id
             if not operator_config:
-                logger.debug(f"[Expression Reflection] Operator ID 未配置，跳过")
+                logger.debug("[Expression Reflection] Operator ID 未配置，跳过")
                 return False
 
             # 检查是否在允许列表中
@@ -81,7 +81,7 @@ class ExpressionReflector:
 
             # 获取未检查的表达
             try:
-                logger.info(f"[Expression Reflection] 查询未检查且未拒绝的表达")
+                logger.info("[Expression Reflection] 查询未检查且未拒绝的表达")
                 expressions = (
                     Expression.select().where((Expression.checked == False) & (Expression.rejected == False)).limit(50)
                 )
@@ -90,7 +90,7 @@ class ExpressionReflector:
                 logger.info(f"[Expression Reflection] 找到 {len(expr_list)} 个候选表达")
 
                 if not expr_list:
-                    logger.info(f"[Expression Reflection] 没有可用的表达，跳过")
+                    logger.info("[Expression Reflection] 没有可用的表达，跳过")
                     return False
 
                 target_expr: Expression = random.choice(expr_list)
@@ -101,7 +101,7 @@ class ExpressionReflector:
                 # 生成询问文本
                 ask_text = _generate_ask_text(target_expr)
                 if not ask_text:
-                    logger.warning(f"[Expression Reflection] 生成询问文本失败，跳过")
+                    logger.warning("[Expression Reflection] 生成询问文本失败，跳过")
                     return False
 
                 logger.info(f"[Expression Reflection] 准备向 Operator {operator_config} 发送提问")

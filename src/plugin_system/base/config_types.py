@@ -4,7 +4,7 @@
 提供插件配置的类型定义，支持 WebUI 可视化配置编辑。
 """
 
-from typing import Any, Optional, List, Dict, Union, Callable
+from typing import Any, Optional, List, Dict, Union
 from dataclasses import dataclass, field
 
 

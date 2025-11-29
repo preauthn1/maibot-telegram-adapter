@@ -2,11 +2,9 @@ import json
 from typing import List, Dict, Optional, Any
 
 from src.common.logger import get_logger
-from src.common.database.database_model import Jargon
 from src.config.config import global_config
 from src.chat.utils.chat_message_builder import (
     build_readable_messages,
-    build_readable_messages_with_id,
 )
 from src.chat.utils.utils import parse_platform_accounts
 

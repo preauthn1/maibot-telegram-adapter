@@ -4,16 +4,15 @@ from src.common.logger import get_logger
 from src.common.database.database_model import Expression
 from src.llm_models.utils_model import LLMRequest
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
-from src.config.config import model_config, global_config
+from src.config.config import model_config
 from src.chat.message_receive.chat_stream import ChatStream
 from src.chat.utils.chat_message_builder import (
     get_raw_msg_by_timestamp_with_chat,
     build_readable_messages,
 )
-from datetime import datetime
 
 if TYPE_CHECKING:
-    from src.common.data_models.database_data_model import DatabaseMessages
+    pass
 
 logger = get_logger("reflect_tracker")
 

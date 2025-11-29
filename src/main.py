@@ -64,7 +64,7 @@ class MainSystem:
                 logger.info("💡 前端将运行在 http://localhost:7999")
             else:
                 logger.info("✅ WebUI 生产模式已启用")
-                logger.info(f"🌐 WebUI 将运行在 http://0.0.0.0:8001")
+                logger.info("🌐 WebUI 将运行在 http://0.0.0.0:8001")
                 logger.info("💡 请确保已构建前端: cd MaiBot-Dashboard && bun run build")
 
         except Exception as e:
