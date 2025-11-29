@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Body
 from typing import Any, Annotated
 
 from src.common.logger import get_logger
+from src.common.toml_utils import save_toml_with_format
 from src.config.config import Config, APIAdapterConfig, CONFIG_DIR, PROJECT_ROOT
 from src.config.official_configs import (
     BotConfig,
@@ -237,10 +238,9 @@ async def update_bot_config(config_data: ConfigBody):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}") from e
 
-        # 保存配置文件
+        # 保存配置文件（格式化数组为多行）
         config_path = os.path.join(CONFIG_DIR, "bot_config.toml")
-        with open(config_path, "w", encoding="utf-8") as f:
-            tomlkit.dump(config_data, f)
+        save_toml_with_format(config_data, config_path)
 
         logger.info("麦麦主程序配置已更新")
         return {"success": True, "message": "配置已保存"}
@@ -261,10 +261,9 @@ async def update_model_config(config_data: ConfigBody):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}") from e
 
-        # 保存配置文件
+        # 保存配置文件（格式化数组为多行）
         config_path = os.path.join(CONFIG_DIR, "model_config.toml")
-        with open(config_path, "w", encoding="utf-8") as f:
-            tomlkit.dump(config_data, f)
+        save_toml_with_format(config_data, config_path)
 
         logger.info("模型配置已更新")
         return {"success": True, "message": "配置已保存"}
@@ -312,9 +311,8 @@ async def update_bot_config_section(section_name: str, section_data: SectionBody
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}") from e
 
-        # 保存配置（tomlkit.dump 会保留注释）
-        with open(config_path, "w", encoding="utf-8") as f:
-            tomlkit.dump(config_data, f)
+        # 保存配置（格式化数组为多行，保留注释）
+        save_toml_with_format(config_data, config_path)
 
         logger.info(f"配置节 '{section_name}' 已更新（保留注释）")
         return {"success": True, "message": f"配置节 '{section_name}' 已保存"}
@@ -411,9 +409,8 @@ async def update_model_config_section(section_name: str, section_data: SectionBo
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}") from e
 
-        # 保存配置（tomlkit.dump 会保留注释）
-        with open(config_path, "w", encoding="utf-8") as f:
-            tomlkit.dump(config_data, f)
+        # 保存配置（格式化数组为多行，保留注释）
+        save_toml_with_format(config_data, config_path)
 
         logger.info(f"配置节 '{section_name}' 已更新（保留注释）")
         return {"success": True, "message": f"配置节 '{section_name}' 已保存"}
