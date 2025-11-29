@@ -296,7 +296,6 @@ def _match_jargon_from_text(chat_text: str, chat_id: str) -> List[str]:
         if not content:
             continue
 
-
         if not global_config.jargon.all_global and not jargon.is_global:
             chat_id_list = parse_chat_id_list(jargon.chat_id)
             if not chat_id_list_contains(chat_id_list, chat_id):
@@ -586,9 +585,7 @@ async def _react_agent_solve_question(
             step["actions"].append({"action_type": "found_answer", "action_params": {"answer": found_answer_content}})
             step["observations"] = ["从LLM输出内容中检测到found_answer"]
             thinking_steps.append(step)
-            logger.info(
-                f"ReAct Agent 第 {iteration + 1} 次迭代 找到关于问题{question}的答案: {found_answer_content}"
-            )
+            logger.info(f"ReAct Agent 第 {iteration + 1} 次迭代 找到关于问题{question}的答案: {found_answer_content}")
             return True, found_answer_content, thinking_steps, False
 
         if not_enough_info_reason:
@@ -1016,9 +1013,7 @@ async def build_memory_retrieval_prompt(
 
         if question_results:
             retrieved_memory = "\n\n".join(question_results)
-            logger.info(
-                f"记忆检索成功，耗时: {(end_time - start_time):.3f}秒，包含 {len(question_results)} 条记忆"
-            )
+            logger.info(f"记忆检索成功，耗时: {(end_time - start_time):.3f}秒，包含 {len(question_results)} 条记忆")
             return f"你回忆起了以下信息：\n{retrieved_memory}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
         else:
             logger.debug("所有问题均未找到答案")

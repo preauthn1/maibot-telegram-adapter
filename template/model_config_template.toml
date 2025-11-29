@@ -64,7 +64,7 @@ api_provider = "SiliconFlow"
 price_in = 2.0
 price_out = 3.0
 [models.extra_params] # 可选的额外参数配置
-enable_thinking = true # 不启用思考
+enable_thinking = true # 启用思考
 
 [[models]]
 model_identifier = "Qwen/Qwen3-Next-80B-A3B-Instruct"
@@ -89,8 +89,7 @@ api_provider = "SiliconFlow"
 price_in = 3.5
 price_out = 14.0
 [models.extra_params] # 可选的额外参数配置
-enable_thinking = true # 不启用思考
-
+enable_thinking = true # 启用思考
 
 [[models]]
 model_identifier = "deepseek-ai/DeepSeek-R1"

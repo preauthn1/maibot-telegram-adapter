@@ -43,7 +43,7 @@ async def restart_maibot():
     注意：此操作会使麦麦暂时离线。
     """
     import asyncio
-    
+
     try:
         # 记录重启操作
         print(f"[{datetime.now()}] WebUI 触发重启操作")
@@ -54,7 +54,7 @@ async def restart_maibot():
             python = sys.executable
             args = [python] + sys.argv
             os.execv(python, args)
-        
+
         # 创建后台任务执行重启
         asyncio.create_task(delayed_restart())
 

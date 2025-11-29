@@ -17,18 +17,16 @@ from src.chat.utils.chat_message_builder import (
 )
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.jargon.jargon_utils import (
-    is_bot_message, 
-    build_context_paragraph, 
-    contains_bot_self_name, 
-    parse_chat_id_list, 
+    is_bot_message,
+    build_context_paragraph,
+    contains_bot_self_name,
+    parse_chat_id_list,
     chat_id_list_contains,
-    update_chat_id_list
+    update_chat_id_list,
 )
 
 
 logger = get_logger("jargon")
-
-
 
 
 def _init_prompt() -> None:
@@ -126,7 +124,6 @@ _init_prompt()
 _init_inference_prompts()
 
 
-
 def _should_infer_meaning(jargon_obj: Jargon) -> bool:
     """
     判断是否需要进行含义推断
@@ -211,7 +208,9 @@ class JargonMiner:
         processed_pairs = set()
 
         for idx, msg in enumerate(messages):
-            msg_text = (getattr(msg, "display_message", None) or getattr(msg, "processed_plain_text", None) or "").strip()
+            msg_text = (
+                getattr(msg, "display_message", None) or getattr(msg, "processed_plain_text", None) or ""
+            ).strip()
             if not msg_text or is_bot_message(msg):
                 continue
 
@@ -270,7 +269,7 @@ class JargonMiner:
             prompt1 = await global_prompt_manager.format_prompt(
                 "jargon_inference_with_context_prompt",
                 content=content,
-                bot_name = global_config.bot.nickname,
+                bot_name=global_config.bot.nickname,
                 raw_content_list=raw_content_text,
             )
 
@@ -588,7 +587,6 @@ class JargonMiner:
                 content = entry["content"]
                 raw_content_list = entry["raw_content"]  # 已经是列表
 
-
                 try:
                     # 查询所有content匹配的记录
                     query = Jargon.select().where(Jargon.content == content)
@@ -782,13 +780,13 @@ def search_jargon(
             # 如果记录是is_global=True，或者chat_id列表包含目标chat_id，则包含
             if not jargon.is_global and not chat_id_list_contains(chat_id_list, chat_id):
                 continue
-        
+
         # 只返回有meaning的记录
         if not jargon.meaning or jargon.meaning.strip() == "":
             continue
-        
+
         results.append({"content": jargon.content or "", "meaning": jargon.meaning or ""})
-        
+
         # 达到限制数量后停止
         if len(results) >= limit:
             break
