@@ -301,7 +301,7 @@ class LLMRequest:
                         message_list=(compressed_messages or message_list),
                         tool_options=tool_options,
                         max_tokens=self.model_for_task.max_tokens if max_tokens is None else max_tokens,
-                        temperature=self.model_for_task.temperature if temperature is None else temperature,
+                        temperature=temperature if temperature is not None else (model_info.extra_params or {}).get("temperature", self.model_for_task.temperature),
                         response_format=response_format,
                         stream_response_handler=stream_response_handler,
                         async_response_parser=async_response_parser,

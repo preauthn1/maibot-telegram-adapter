@@ -56,6 +56,7 @@ price_in = 2.0
 price_out = 3.0
 [models.extra_params] # 可选的额外参数配置
 enable_thinking = false # 不启用思考
+# temperature = 0.5    # 可选：为该模型单独指定温度，会覆盖任务配置中的温度
 
 [[models]]
 model_identifier = "deepseek-ai/DeepSeek-V3.2-Exp"
@@ -65,6 +66,7 @@ price_in = 2.0
 price_out = 3.0
 [models.extra_params] # 可选的额外参数配置
 enable_thinking = true # 启用思考
+# temperature = 0.7    # 可选：为该模型单独指定温度，会覆盖任务配置中的温度
 
 [[models]]
 model_identifier = "Qwen/Qwen3-Next-80B-A3B-Instruct"
