@@ -323,24 +323,19 @@ class LLMRequest:
                     )
             except EmptyResponseException as e:
                 # 空回复：通常为临时问题，单独记录并重试
+                original_error_info = self._get_original_error_info(e)
                 retry_remain -= 1
                 if retry_remain <= 0:
-                    logger.error(f"模型 '{model_info.name}' 在多次出现空回复后仍然失败。")
+                    logger.error(f"模型 '{model_info.name}' 在多次出现空回复后仍然失败。{original_error_info}")
                     raise ModelAttemptFailed(f"模型 '{model_info.name}' 重试耗尽", original_exception=e) from e
 
-                logger.warning(f"模型 '{model_info.name}' 返回空回复(可重试)。剩余重试次数: {retry_remain}")
+                logger.warning(f"模型 '{model_info.name}' 返回空回复(可重试){original_error_info}。剩余重试次数: {retry_remain}")
                 await asyncio.sleep(api_provider.retry_interval)
 
             except NetworkConnectionError as e:
                 # 网络错误：单独记录并重试
                 # 尝试从链式异常中获取原始错误信息以诊断具体原因
-                original_error_info = ""
-                if e.__cause__:
-                    original_error_type = type(e.__cause__).__name__
-                    original_error_msg = str(e.__cause__)
-                    original_error_info = (
-                        f"\n  底层异常类型: {original_error_type}\n  底层异常信息: {original_error_msg}"
-                    )
+                original_error_info = self._get_original_error_info(e)
 
                 retry_remain -= 1
                 if retry_remain <= 0:
@@ -356,15 +351,17 @@ class LLMRequest:
                 await asyncio.sleep(api_provider.retry_interval)
 
             except RespNotOkException as e:
+                original_error_info = self._get_original_error_info(e)
+
                 # 可重试的HTTP错误
                 if e.status_code == 429 or e.status_code >= 500:
                     retry_remain -= 1
                     if retry_remain <= 0:
-                        logger.error(f"模型 '{model_info.name}' 在遇到 {e.status_code} 错误并用尽重试次数后仍然失败。")
+                        logger.error(f"模型 '{model_info.name}' 在遇到 {e.status_code} 错误并用尽重试次数后仍然失败。{original_error_info}")
                         raise ModelAttemptFailed(f"模型 '{model_info.name}' 重试耗尽", original_exception=e) from e
 
                     logger.warning(
-                        f"模型 '{model_info.name}' 遇到可重试的HTTP错误: {str(e)}。剩余重试次数: {retry_remain}"
+                        f"模型 '{model_info.name}' 遇到可重试的HTTP错误: {str(e)}{original_error_info}。剩余重试次数: {retry_remain}"
                     )
                     await asyncio.sleep(api_provider.retry_interval)
                     continue
@@ -377,13 +374,15 @@ class LLMRequest:
                     continue
 
                 # 不可重试的HTTP错误
-                logger.warning(f"模型 '{model_info.name}' 遇到不可重试的HTTP错误: {str(e)}")
+                logger.warning(f"模型 '{model_info.name}' 遇到不可重试的HTTP错误: {str(e)}{original_error_info}")
                 raise ModelAttemptFailed(f"模型 '{model_info.name}' 遇到硬错误", original_exception=e) from e
 
             except Exception as e:
                 logger.error(traceback.format_exc())
 
-                logger.warning(f"模型 '{model_info.name}' 遇到未知的不可重试错误: {str(e)}")
+                original_error_info = self._get_original_error_info(e)
+
+                logger.warning(f"模型 '{model_info.name}' 遇到未知的不可重试错误: {str(e)}{original_error_info}")
                 raise ModelAttemptFailed(f"模型 '{model_info.name}' 遇到硬错误", original_exception=e) from e
 
         raise ModelAttemptFailed(f"模型 '{model_info.name}' 未被尝试，因为重试次数已配置为0或更少。")
@@ -497,3 +496,14 @@ class LLMRequest:
         content = re.sub(r"(?:<think>)?.*?</think>", "", content, flags=re.DOTALL, count=1).strip()
         reasoning = match[1].strip() if match else ""
         return content, reasoning
+
+    @staticmethod
+    def _get_original_error_info(e: Exception) -> str:
+        """获取原始错误信息"""
+        if e.__cause__:
+            original_error_type = type(e.__cause__).__name__
+            original_error_msg = str(e.__cause__)
+            return (
+                f"\n  底层异常类型: {original_error_type}\n  底层异常信息: {original_error_msg}"
+            )
+        return ""
