@@ -20,10 +20,10 @@ class WebUIServer:
         self.port = port
         self.app = FastAPI(title="MaiBot WebUI")
         self._server = None
-        
+
         # 显示 Access Token
         self._show_access_token()
-        
+
         # 重要：先注册 API 路由，再设置静态文件
         self._register_api_routes()
         self._setup_static_files()
@@ -32,7 +32,7 @@ class WebUIServer:
         """显示 WebUI Access Token"""
         try:
             from src.webui.token_manager import get_token_manager
-            
+
             token_manager = get_token_manager()
             current_token = token_manager.get_token()
             logger.info(f"🔑 WebUI Access Token: {current_token}")
@@ -69,7 +69,7 @@ class WebUIServer:
             # 如果是根路径，直接返回 index.html
             if not full_path or full_path == "/":
                 return FileResponse(static_path / "index.html", media_type="text/html")
-            
+
             # 检查是否是静态文件
             file_path = static_path / full_path
             if file_path.is_file() and file_path.exists():
@@ -88,13 +88,15 @@ class WebUIServer:
             # 导入所有 WebUI 路由
             from src.webui.routes import router as webui_router
             from src.webui.logs_ws import router as logs_router
-            
+
             logger.info("开始导入 knowledge_routes...")
             from src.webui.knowledge_routes import router as knowledge_router
+
             logger.info("knowledge_routes 导入成功")
-            
+
             # 导入本地聊天室路由
             from src.webui.chat_routes import router as chat_router
+
             logger.info("chat_routes 导入成功")
 
             # 注册路由

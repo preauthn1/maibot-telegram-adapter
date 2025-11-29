@@ -3,19 +3,24 @@
 from fastapi import APIRouter, HTTPException, Header, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from src.common.logger import get_logger
 from src.common.database.database_model import Emoji
 from .token_manager import get_token_manager
-import json
 import time
 import os
 import hashlib
-import base64
 from PIL import Image
 import io
 
 logger = get_logger("webui.emoji")
+
+# 模块级别的类型别名（解决 B008 ruff 错误）
+EmojiFile = Annotated[UploadFile, File(description="表情包图片文件")]
+EmojiFiles = Annotated[List[UploadFile], File(description="多个表情包图片文件")]
+DescriptionForm = Annotated[str, Form(description="表情包描述")]
+EmotionForm = Annotated[str, Form(description="情感标签，多个用逗号分隔")]
+IsRegisteredForm = Annotated[bool, Form(description="是否直接注册")]
 
 # 创建路由器
 router = APIRouter(prefix="/emoji", tags=["Emoji"])
@@ -592,10 +597,10 @@ class EmojiUploadResponse(BaseModel):
 
 @router.post("/upload", response_model=EmojiUploadResponse)
 async def upload_emoji(
-    file: UploadFile = File(..., description="表情包图片文件"),
-    description: str = Form("", description="表情包描述"),
-    emotion: str = Form("", description="情感标签，多个用逗号分隔"),
-    is_registered: bool = Form(True, description="是否直接注册"),
+    file: EmojiFile,
+    description: DescriptionForm = "",
+    emotion: EmotionForm = "",
+    is_registered: IsRegisteredForm = True,
     authorization: Optional[str] = Header(None),
 ):
     """
@@ -713,9 +718,9 @@ async def upload_emoji(
 
 @router.post("/batch/upload")
 async def batch_upload_emoji(
-    files: List[UploadFile] = File(..., description="多个表情包图片文件"),
-    emotion: str = Form("", description="情感标签，多个用逗号分隔"),
-    is_registered: bool = Form(True, description="是否直接注册"),
+    files: EmojiFiles,
+    emotion: EmotionForm = "",
+    is_registered: IsRegisteredForm = True,
     authorization: Optional[str] = Header(None),
 ):
     """
@@ -749,11 +754,13 @@ async def batch_upload_emoji(
                 # 验证文件类型
                 if file.content_type not in allowed_types:
                     results["failed"] += 1
-                    results["details"].append({
-                        "filename": file.filename,
-                        "success": False,
-                        "error": f"不支持的文件类型: {file.content_type}",
-                    })
+                    results["details"].append(
+                        {
+                            "filename": file.filename,
+                            "success": False,
+                            "error": f"不支持的文件类型: {file.content_type}",
+                        }
+                    )
                     continue
 
                 # 读取文件内容
@@ -761,11 +768,13 @@ async def batch_upload_emoji(
 
                 if not file_content:
                     results["failed"] += 1
-                    results["details"].append({
-                        "filename": file.filename,
-                        "success": False,
-                        "error": "文件内容为空",
-                    })
+                    results["details"].append(
+                        {
+                            "filename": file.filename,
+                            "success": False,
+                            "error": "文件内容为空",
+                        }
+                    )
                     continue
 
                 # 验证图片
@@ -774,11 +783,13 @@ async def batch_upload_emoji(
                         img_format = img.format.lower() if img.format else "png"
                 except Exception as e:
                     results["failed"] += 1
-                    results["details"].append({
-                        "filename": file.filename,
-                        "success": False,
-                        "error": f"无效的图片: {str(e)}",
-                    })
+                    results["details"].append(
+                        {
+                            "filename": file.filename,
+                            "success": False,
+                            "error": f"无效的图片: {str(e)}",
+                        }
+                    )
                     continue
 
                 # 计算哈希
@@ -787,11 +798,13 @@ async def batch_upload_emoji(
                 # 检查重复
                 if Emoji.get_or_none(Emoji.emoji_hash == emoji_hash):
                     results["failed"] += 1
-                    results["details"].append({
-                        "filename": file.filename,
-                        "success": False,
-                        "error": "已存在相同的表情包",
-                    })
+                    results["details"].append(
+                        {
+                            "filename": file.filename,
+                            "success": False,
+                            "error": "已存在相同的表情包",
+                        }
+                    )
                     continue
 
                 # 生成文件名并保存
@@ -829,19 +842,23 @@ async def batch_upload_emoji(
                 )
 
                 results["uploaded"] += 1
-                results["details"].append({
-                    "filename": file.filename,
-                    "success": True,
-                    "id": emoji.id,
-                })
+                results["details"].append(
+                    {
+                        "filename": file.filename,
+                        "success": True,
+                        "id": emoji.id,
+                    }
+                )
 
             except Exception as e:
                 results["failed"] += 1
-                results["details"].append({
-                    "filename": file.filename,
-                    "success": False,
-                    "error": str(e),
-                })
+                results["details"].append(
+                    {
+                        "filename": file.filename,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
 
         results["message"] = f"成功上传 {results['uploaded']} 个，失败 {results['failed']} 个"
         return results

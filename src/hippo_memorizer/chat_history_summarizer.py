@@ -315,7 +315,9 @@ class ChatHistorySummarizer:
                 before_count = len(self.current_batch.messages)
                 self.current_batch.messages.extend(new_messages)
                 self.current_batch.end_time = current_time
-                logger.info(f"{self.log_prefix} 更新聊天检查批次: {before_count} -> {len(self.current_batch.messages)} 条消息")
+                logger.info(
+                    f"{self.log_prefix} 更新聊天检查批次: {before_count} -> {len(self.current_batch.messages)} 条消息"
+                )
                 # 更新批次后持久化
                 self._persist_topic_cache()
             else:
@@ -361,9 +363,7 @@ class ChatHistorySummarizer:
         else:
             time_str = f"{time_since_last_check / 3600:.1f}小时"
 
-        logger.info(
-            f"{self.log_prefix} 批次状态检查 | 消息数: {message_count} | 距上次检查: {time_str}"
-        )
+        logger.info(f"{self.log_prefix} 批次状态检查 | 消息数: {message_count} | 距上次检查: {time_str}")
 
         # 检查“话题检查”触发条件
         should_check = False
@@ -413,7 +413,7 @@ class ChatHistorySummarizer:
         # 说明 bot 没有参与这段对话，不应该记录
         bot_user_id = str(global_config.bot.qq_account)
         has_bot_message = False
-        
+
         for msg in messages:
             if msg.user_info.user_id == bot_user_id:
                 has_bot_message = True
@@ -426,7 +426,9 @@ class ChatHistorySummarizer:
             return
 
         # 2. 构造编号后的消息字符串和参与者信息
-        numbered_lines, index_to_msg_str, index_to_msg_text, index_to_participants = self._build_numbered_messages_for_llm(messages)
+        numbered_lines, index_to_msg_str, index_to_msg_text, index_to_participants = (
+            self._build_numbered_messages_for_llm(messages)
+        )
 
         # 3. 调用 LLM 识别话题，并得到 topic -> indices
         existing_topics = list(self.topic_cache.keys())
@@ -588,9 +590,7 @@ class ChatHistorySummarizer:
         if not numbered_lines:
             return False, {}
 
-        history_topics_block = (
-            "\n".join(f"- {t}" for t in existing_topics) if existing_topics else "（当前无历史话题）"
-        )
+        history_topics_block = "\n".join(f"- {t}" for t in existing_topics) if existing_topics else "（当前无历史话题）"
         messages_block = "\n".join(numbered_lines)
 
         prompt = await global_prompt_manager.format_prompt(
@@ -607,6 +607,7 @@ class ChatHistorySummarizer:
             )
 
             import re
+
             logger.info(f"{self.log_prefix} 话题识别LLM Prompt: {prompt}")
             logger.info(f"{self.log_prefix} 话题识别LLM Response: {response}")
 
@@ -895,4 +896,3 @@ class ChatHistorySummarizer:
 
 
 init_prompt()
-

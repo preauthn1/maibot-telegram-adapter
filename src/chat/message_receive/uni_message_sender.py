@@ -25,6 +25,7 @@ def get_webui_chat_broadcaster():
     if _webui_chat_broadcaster is None:
         try:
             from src.webui.chat_routes import chat_manager, WEBUI_CHAT_PLATFORM
+
             _webui_chat_broadcaster = (chat_manager, WEBUI_CHAT_PLATFORM)
         except ImportError:
             _webui_chat_broadcaster = (None, None)
@@ -43,26 +44,28 @@ async def _send_message(message: MessageSending, show_log=True) -> bool:
             # WebUI 聊天室消息，通过 WebSocket 广播
             import time
             from src.config.config import global_config
-            
-            await chat_manager.broadcast({
-                "type": "bot_message",
-                "content": message.processed_plain_text,
-                "message_type": "text",
-                "timestamp": time.time(),
-                "sender": {
-                    "name": global_config.bot.nickname,
-                    "avatar": None,
-                    "is_bot": True,
+
+            await chat_manager.broadcast(
+                {
+                    "type": "bot_message",
+                    "content": message.processed_plain_text,
+                    "message_type": "text",
+                    "timestamp": time.time(),
+                    "sender": {
+                        "name": global_config.bot.nickname,
+                        "avatar": None,
+                        "is_bot": True,
+                    },
                 }
-            })
-            
+            )
+
             # 注意：机器人消息会由 MessageStorage.store_message 自动保存到数据库
             # 无需手动保存
-            
+
             if show_log:
                 logger.info(f"已将消息  '{message_preview}'  发往 WebUI 聊天室")
             return True
-        
+
         # 直接调用API发送消息
         await get_global_api().send_message(message)
         if show_log:

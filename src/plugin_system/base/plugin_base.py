@@ -574,14 +574,14 @@ class PluginBase(ABC):
     def get_webui_config_schema(self) -> Dict[str, Any]:
         """
         获取 WebUI 配置 Schema
-        
+
         返回完整的配置 schema，包含：
         - 插件基本信息
         - 所有 section 及其字段定义
         - 布局配置
-        
+
         用于 WebUI 动态生成配置表单。
-        
+
         Returns:
             Dict: 完整的配置 schema
         """
@@ -596,12 +596,12 @@ class PluginBase(ABC):
             "sections": {},
             "layout": None,
         }
-        
+
         # 处理 sections
         for section_name, fields in self.config_schema.items():
             if not isinstance(fields, dict):
                 continue
-                
+
             section_data = {
                 "name": section_name,
                 "title": section_name,
@@ -611,7 +611,7 @@ class PluginBase(ABC):
                 "order": 0,
                 "fields": {},
             }
-            
+
             # 获取 section 元数据
             section_meta = self.config_section_descriptions.get(section_name)
             if section_meta:
@@ -625,16 +625,16 @@ class PluginBase(ABC):
                     section_data["order"] = section_meta.order
                 elif isinstance(section_meta, dict):
                     section_data.update(section_meta)
-            
+
             # 处理字段
             for field_name, field_def in fields.items():
                 if isinstance(field_def, ConfigField):
                     field_data = field_def.to_dict()
                     field_data["name"] = field_name
                     section_data["fields"][field_name] = field_data
-            
+
             schema["sections"][section_name] = section_data
-        
+
         # 处理布局
         if self.config_layout:
             schema["layout"] = self.config_layout.to_dict()
@@ -644,15 +644,15 @@ class PluginBase(ABC):
                 "type": "auto",
                 "tabs": [],
             }
-        
+
         return schema
 
     def get_current_config_values(self) -> Dict[str, Any]:
         """
         获取当前配置值
-        
+
         返回插件当前的配置值（已从配置文件加载）。
-        
+
         Returns:
             Dict: 当前配置值
         """

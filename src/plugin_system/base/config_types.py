@@ -12,12 +12,12 @@ from dataclasses import dataclass, field
 class ConfigField:
     """
     配置字段定义
-    
+
     用于定义插件配置项的元数据，支持类型验证、UI 渲染等功能。
-    
+
     基础示例:
         ConfigField(type=str, default="", description="API密钥")
-    
+
     完整示例:
         ConfigField(
             type=str,
@@ -73,9 +73,9 @@ class ConfigField:
     def get_ui_type(self) -> str:
         """
         获取 UI 控件类型
-        
+
         如果指定了 input_type 则直接返回，否则根据 type 和 choices 自动推断。
-        
+
         Returns:
             控件类型字符串
         """
@@ -103,7 +103,7 @@ class ConfigField:
     def to_dict(self) -> Dict[str, Any]:
         """
         转换为可序列化的字典（用于 API 传输）
-        
+
         Returns:
             包含所有配置信息的字典
         """
@@ -139,9 +139,9 @@ class ConfigField:
 class ConfigSection:
     """
     配置节定义
-    
+
     用于描述配置文件中一个 section 的元数据。
-    
+
     示例:
         ConfigSection(
             title="API配置",
@@ -150,6 +150,7 @@ class ConfigSection:
             order=1
         )
     """
+
     title: str  # 显示标题
     description: Optional[str] = None  # 详细描述
     icon: Optional[str] = None  # 图标名称
@@ -171,9 +172,9 @@ class ConfigSection:
 class ConfigTab:
     """
     配置标签页定义
-    
+
     用于将多个 section 组织到一个标签页中。
-    
+
     示例:
         ConfigTab(
             id="general",
@@ -182,6 +183,7 @@ class ConfigTab:
             sections=["plugin", "api"]
         )
     """
+
     id: str  # 标签页 ID
     title: str  # 显示标题
     sections: List[str] = field(default_factory=list)  # 包含的 section 名称列表
@@ -201,18 +203,18 @@ class ConfigTab:
         }
 
 
-@dataclass 
+@dataclass
 class ConfigLayout:
     """
     配置页面布局定义
-    
+
     用于定义插件配置页面的整体布局结构。
-    
+
     布局类型:
         - "auto": 自动布局，sections 作为折叠面板显示
         - "tabs": 标签页布局
         - "pages": 分页布局（左侧导航 + 右侧内容）
-    
+
     简单示例（标签页布局）:
         ConfigLayout(
             type="tabs",
@@ -222,9 +224,10 @@ class ConfigLayout:
             ]
         )
     """
+
     type: str = "auto"  # 布局类型: auto, tabs, pages
     tabs: List[ConfigTab] = field(default_factory=list)  # 标签页列表
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为可序列化的字典"""
         return {
@@ -234,37 +237,27 @@ class ConfigLayout:
 
 
 def section_meta(
-    title: str,
-    description: Optional[str] = None,
-    icon: Optional[str] = None,
-    collapsed: bool = False,
-    order: int = 0
+    title: str, description: Optional[str] = None, icon: Optional[str] = None, collapsed: bool = False, order: int = 0
 ) -> Union[str, ConfigSection]:
     """
     便捷函数：创建 section 元数据
-    
+
     可以在 config_section_descriptions 中使用，提供比纯字符串更丰富的信息。
-    
+
     Args:
         title: 显示标题
         description: 详细描述
         icon: 图标名称
         collapsed: 默认是否折叠
         order: 排序权重
-    
+
     Returns:
         ConfigSection 实例
-    
+
     示例:
         config_section_descriptions = {
             "api": section_meta("API配置", icon="cloud", order=1),
             "debug": section_meta("调试设置", collapsed=True, order=99),
         }
     """
-    return ConfigSection(
-        title=title,
-        description=description,
-        icon=icon,
-        collapsed=collapsed,
-        order=order
-    )
+    return ConfigSection(title=title, description=description, icon=icon, collapsed=collapsed, order=order)

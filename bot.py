@@ -78,6 +78,7 @@ async def graceful_shutdown():  # sourcery skip: use-named-expression
         # 关闭 WebUI 服务器
         try:
             from src.webui.webui_server import get_webui_server
+
             webui_server = get_webui_server()
             if webui_server and webui_server._server:
                 await webui_server.shutdown()
@@ -236,15 +237,15 @@ if __name__ == "__main__":
 
         except KeyboardInterrupt:
             logger.warning("收到中断信号，正在优雅关闭...")
-            
+
             # 取消主任务
-            if 'main_tasks' in locals() and main_tasks and not main_tasks.done():
+            if "main_tasks" in locals() and main_tasks and not main_tasks.done():
                 main_tasks.cancel()
                 try:
                     loop.run_until_complete(main_tasks)
                 except asyncio.CancelledError:
                     pass
-            
+
             # 执行优雅关闭
             if loop and not loop.is_closed():
                 try:

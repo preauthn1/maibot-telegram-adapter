@@ -338,8 +338,10 @@ class LLMRequest:
                 if e.__cause__:
                     original_error_type = type(e.__cause__).__name__
                     original_error_msg = str(e.__cause__)
-                    original_error_info = f"\n  底层异常类型: {original_error_type}\n  底层异常信息: {original_error_msg}"
-                
+                    original_error_info = (
+                        f"\n  底层异常类型: {original_error_type}\n  底层异常信息: {original_error_msg}"
+                    )
+
                 retry_remain -= 1
                 if retry_remain <= 0:
                     logger.error(f"模型 '{model_info.name}' 在网络错误重试用尽后仍然失败。{original_error_info}")

@@ -54,7 +54,9 @@ async def search_chat_history(
                 if record.participants:
                     try:
                         participants_data = (
-                            json.loads(record.participants) if isinstance(record.participants, str) else record.participants
+                            json.loads(record.participants)
+                            if isinstance(record.participants, str)
+                            else record.participants
                         )
                         if isinstance(participants_data, list):
                             participants_list = [str(p).lower() for p in participants_data]
@@ -156,9 +158,7 @@ async def search_chat_history(
             # 添加关键词
             if record.keywords:
                 try:
-                    keywords_data = (
-                        json.loads(record.keywords) if isinstance(record.keywords, str) else record.keywords
-                    )
+                    keywords_data = json.loads(record.keywords) if isinstance(record.keywords, str) else record.keywords
                     if isinstance(keywords_data, list) and keywords_data:
                         keywords_str = "、".join([str(k) for k in keywords_data])
                         result_parts.append(f"关键词：{keywords_str}")
@@ -208,9 +208,7 @@ async def get_chat_history_detail(chat_id: str, memory_ids: str) -> str:
             return "未提供有效的记忆ID"
 
         # 查询记录
-        query = ChatHistory.select().where(
-            (ChatHistory.chat_id == chat_id) & (ChatHistory.id.in_(id_list))
-        )
+        query = ChatHistory.select().where((ChatHistory.chat_id == chat_id) & (ChatHistory.id.in_(id_list)))
         records = list(query.order_by(ChatHistory.start_time.desc()))
 
         if not records:
@@ -256,9 +254,7 @@ async def get_chat_history_detail(chat_id: str, memory_ids: str) -> str:
             # 添加关键词
             if record.keywords:
                 try:
-                    keywords_data = (
-                        json.loads(record.keywords) if isinstance(record.keywords, str) else record.keywords
-                    )
+                    keywords_data = json.loads(record.keywords) if isinstance(record.keywords, str) else record.keywords
                     if isinstance(keywords_data, list) and keywords_data:
                         keywords_str = "、".join([str(k) for k in keywords_data])
                         result_parts.append(f"关键词：{keywords_str}")

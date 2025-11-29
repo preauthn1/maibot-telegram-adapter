@@ -31,8 +31,9 @@ def parse_version(version_str: str) -> tuple[int, int, int]:
     """
     # 移除 snapshot、dev、alpha、beta 等后缀（支持 - 和 . 分隔符）
     import re
+
     # 匹配 -snapshot.X, .snapshot, -dev, .dev, -alpha, .alpha, -beta, .beta 等后缀
-    base_version = re.split(r'[-.](?:snapshot|dev|alpha|beta|rc)', version_str, flags=re.IGNORECASE)[0]
+    base_version = re.split(r"[-.](?:snapshot|dev|alpha|beta|rc)", version_str, flags=re.IGNORECASE)[0]
 
     parts = base_version.split(".")
     if len(parts) < 3:
@@ -613,7 +614,7 @@ async def install_plugin(request: InstallPluginRequest, authorization: Optional[
             for field in required_fields:
                 if field not in manifest:
                     raise ValueError(f"缺少必需字段: {field}")
-            
+
             # 将插件 ID 写入 manifest（用于后续准确识别）
             # 这样即使文件夹名称改变，也能通过 manifest 准确识别插件
             manifest["id"] = request.plugin_id
@@ -705,7 +706,7 @@ async def uninstall_plugin(
         plugin_path = plugins_dir / folder_name
         # 旧格式：点
         old_format_path = plugins_dir / request.plugin_id
-        
+
         # 优先使用新格式，如果不存在则尝试旧格式
         if not plugin_path.exists():
             if old_format_path.exists():
@@ -839,7 +840,7 @@ async def update_plugin(request: UpdatePluginRequest, authorization: Optional[st
         plugin_path = plugins_dir / folder_name
         # 旧格式：点
         old_format_path = plugins_dir / request.plugin_id
-        
+
         # 优先使用新格式，如果不存在则尝试旧格式
         if not plugin_path.exists():
             if old_format_path.exists():
@@ -1092,21 +1093,21 @@ async def get_installed_plugins(authorization: Optional[str] = Header(None)) -> 
                     # 尝试从 author.name 和 repository_url 构建标准 ID
                     author_name = None
                     repo_name = None
-                    
+
                     # 获取作者名
                     if "author" in manifest:
                         if isinstance(manifest["author"], dict) and "name" in manifest["author"]:
                             author_name = manifest["author"]["name"]
                         elif isinstance(manifest["author"], str):
                             author_name = manifest["author"]
-                    
+
                     # 从 repository_url 获取仓库名
                     if "repository_url" in manifest:
                         repo_url = manifest["repository_url"].rstrip("/")
                         if repo_url.endswith(".git"):
                             repo_url = repo_url[:-4]
                         repo_name = repo_url.split("/")[-1]
-                    
+
                     # 构建 ID
                     if author_name and repo_name:
                         # 标准格式: Author.RepoName
@@ -1122,7 +1123,7 @@ async def get_installed_plugins(authorization: Optional[str] = Header(None)) -> 
                         else:
                             # 直接使用文件夹名
                             plugin_id = folder_name
-                    
+
                     # 将推断的 ID 写入 manifest（方便下次识别）
                     logger.info(f"为插件 {folder_name} 自动生成 ID: {plugin_id}")
                     manifest["id"] = plugin_id
@@ -1167,12 +1168,10 @@ class UpdatePluginConfigRequest(BaseModel):
 
 
 @router.get("/config/{plugin_id}/schema")
-async def get_plugin_config_schema(
-    plugin_id: str, authorization: Optional[str] = Header(None)
-) -> Dict[str, Any]:
+async def get_plugin_config_schema(plugin_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     获取插件配置 Schema
-    
+
     返回插件的完整配置 schema，包含所有 section、字段定义和布局信息。
     用于前端动态生成配置表单。
     """
@@ -1187,10 +1186,10 @@ async def get_plugin_config_schema(
     try:
         # 尝试从已加载的插件中获取
         from src.plugin_system.core.plugin_manager import plugin_manager
-        
+
         # 查找插件实例
         plugin_instance = None
-        
+
         # 遍历所有已加载的插件
         for loaded_plugin_name in plugin_manager.list_loaded_plugins():
             instance = plugin_manager.get_plugin_instance(loaded_plugin_name)
@@ -1204,17 +1203,17 @@ async def get_plugin_config_schema(
                 if manifest_id == plugin_id:
                     plugin_instance = instance
                     break
-        
-        if plugin_instance and hasattr(plugin_instance, 'get_webui_config_schema'):
+
+        if plugin_instance and hasattr(plugin_instance, "get_webui_config_schema"):
             # 从插件实例获取 schema
             schema = plugin_instance.get_webui_config_schema()
             return {"success": True, "schema": schema}
-        
+
         # 如果插件未加载，尝试从文件系统读取
         # 查找插件目录
         plugins_dir = Path("plugins")
         plugin_path = None
-        
+
         for p in plugins_dir.iterdir():
             if p.is_dir():
                 manifest_path = p / "_manifest.json"
@@ -1227,18 +1226,19 @@ async def get_plugin_config_schema(
                             break
                     except Exception:
                         continue
-        
+
         if not plugin_path:
             raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
-        
+
         # 读取配置文件获取当前配置
         config_path = plugin_path / "config.toml"
         current_config = {}
         if config_path.exists():
             import tomlkit
+
             with open(config_path, "r", encoding="utf-8") as f:
                 current_config = tomlkit.load(f)
-        
+
         # 构建基础 schema（无法获取完整的 ConfigField 信息）
         schema = {
             "plugin_id": plugin_id,
@@ -1252,7 +1252,7 @@ async def get_plugin_config_schema(
             "layout": {"type": "auto", "tabs": []},
             "_note": "插件未加载，仅返回当前配置结构",
         }
-        
+
         # 从当前配置推断 schema
         for section_name, section_data in current_config.items():
             if isinstance(section_data, dict):
@@ -1277,7 +1277,7 @@ async def get_plugin_config_schema(
                         ui_type = "list"
                     elif isinstance(field_value, dict):
                         ui_type = "json"
-                    
+
                     schema["sections"][section_name]["fields"][field_name] = {
                         "name": field_name,
                         "type": field_type,
@@ -1290,7 +1290,7 @@ async def get_plugin_config_schema(
                         "disabled": False,
                         "order": 0,
                     }
-        
+
         return {"success": True, "schema": schema}
 
     except HTTPException:
@@ -1301,12 +1301,10 @@ async def get_plugin_config_schema(
 
 
 @router.get("/config/{plugin_id}")
-async def get_plugin_config(
-    plugin_id: str, authorization: Optional[str] = Header(None)
-) -> Dict[str, Any]:
+async def get_plugin_config(plugin_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     获取插件当前配置值
-    
+
     返回插件的当前配置值。
     """
     # Token 验证
@@ -1321,7 +1319,7 @@ async def get_plugin_config(
         # 查找插件目录
         plugins_dir = Path("plugins")
         plugin_path = None
-        
+
         for p in plugins_dir.iterdir():
             if p.is_dir():
                 manifest_path = p / "_manifest.json"
@@ -1334,19 +1332,20 @@ async def get_plugin_config(
                             break
                     except Exception:
                         continue
-        
+
         if not plugin_path:
             raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
-        
+
         # 读取配置文件
         config_path = plugin_path / "config.toml"
         if not config_path.exists():
             return {"success": True, "config": {}, "message": "配置文件不存在"}
-        
+
         import tomlkit
+
         with open(config_path, "r", encoding="utf-8") as f:
             config = tomlkit.load(f)
-        
+
         return {"success": True, "config": dict(config)}
 
     except HTTPException:
@@ -1358,13 +1357,11 @@ async def get_plugin_config(
 
 @router.put("/config/{plugin_id}")
 async def update_plugin_config(
-    plugin_id: str,
-    request: UpdatePluginConfigRequest,
-    authorization: Optional[str] = Header(None)
+    plugin_id: str, request: UpdatePluginConfigRequest, authorization: Optional[str] = Header(None)
 ) -> Dict[str, Any]:
     """
     更新插件配置
-    
+
     保存新的配置值到插件的配置文件。
     """
     # Token 验证
@@ -1379,7 +1376,7 @@ async def update_plugin_config(
         # 查找插件目录
         plugins_dir = Path("plugins")
         plugin_path = None
-        
+
         for p in plugins_dir.iterdir():
             if p.is_dir():
                 manifest_path = p / "_manifest.json"
@@ -1392,23 +1389,25 @@ async def update_plugin_config(
                             break
                     except Exception:
                         continue
-        
+
         if not plugin_path:
             raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
-        
+
         config_path = plugin_path / "config.toml"
-        
+
         # 备份旧配置
         import shutil
         import datetime
+
         if config_path.exists():
             backup_name = f"config.toml.backup.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
             backup_path = plugin_path / backup_name
             shutil.copy(config_path, backup_path)
             logger.info(f"已备份配置文件: {backup_path}")
-        
+
         # 写入新配置（使用 tomlkit 保留注释）
         import tomlkit
+
         # 先读取原配置以保留注释和格式
         existing_doc = tomlkit.document()
         if config_path.exists():
@@ -1419,14 +1418,10 @@ async def update_plugin_config(
             existing_doc[key] = value
         with open(config_path, "w", encoding="utf-8") as f:
             tomlkit.dump(existing_doc, f)
-        
+
         logger.info(f"已更新插件配置: {plugin_id}")
-        
-        return {
-            "success": True,
-            "message": "配置已保存",
-            "note": "配置更改将在插件重新加载后生效"
-        }
+
+        return {"success": True, "message": "配置已保存", "note": "配置更改将在插件重新加载后生效"}
 
     except HTTPException:
         raise
@@ -1436,12 +1431,10 @@ async def update_plugin_config(
 
 
 @router.post("/config/{plugin_id}/reset")
-async def reset_plugin_config(
-    plugin_id: str, authorization: Optional[str] = Header(None)
-) -> Dict[str, Any]:
+async def reset_plugin_config(plugin_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     重置插件配置为默认值
-    
+
     删除当前配置文件，下次加载插件时将使用默认配置。
     """
     # Token 验证
@@ -1456,7 +1449,7 @@ async def reset_plugin_config(
         # 查找插件目录
         plugins_dir = Path("plugins")
         plugin_path = None
-        
+
         for p in plugins_dir.iterdir():
             if p.is_dir():
                 manifest_path = p / "_manifest.json"
@@ -1469,29 +1462,26 @@ async def reset_plugin_config(
                             break
                     except Exception:
                         continue
-        
+
         if not plugin_path:
             raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
-        
+
         config_path = plugin_path / "config.toml"
-        
+
         if not config_path.exists():
             return {"success": True, "message": "配置文件不存在，无需重置"}
-        
+
         # 备份并删除
         import shutil
         import datetime
+
         backup_name = f"config.toml.reset.{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
         backup_path = plugin_path / backup_name
         shutil.move(config_path, backup_path)
-        
+
         logger.info(f"已重置插件配置: {plugin_id}，备份: {backup_path}")
-        
-        return {
-            "success": True,
-            "message": "配置已重置，下次加载插件时将使用默认配置",
-            "backup": str(backup_path)
-        }
+
+        return {"success": True, "message": "配置已重置，下次加载插件时将使用默认配置", "backup": str(backup_path)}
 
     except HTTPException:
         raise
@@ -1501,12 +1491,10 @@ async def reset_plugin_config(
 
 
 @router.post("/config/{plugin_id}/toggle")
-async def toggle_plugin(
-    plugin_id: str, authorization: Optional[str] = Header(None)
-) -> Dict[str, Any]:
+async def toggle_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     切换插件启用状态
-    
+
     切换插件配置中的 enabled 字段。
     """
     # Token 验证
@@ -1521,7 +1509,7 @@ async def toggle_plugin(
         # 查找插件目录
         plugins_dir = Path("plugins")
         plugin_path = None
-        
+
         for p in plugins_dir.iterdir():
             if p.is_dir():
                 manifest_path = p / "_manifest.json"
@@ -1534,40 +1522,40 @@ async def toggle_plugin(
                             break
                     except Exception:
                         continue
-        
+
         if not plugin_path:
             raise HTTPException(status_code=404, detail=f"未找到插件: {plugin_id}")
-        
+
         config_path = plugin_path / "config.toml"
-        
+
         import tomlkit
-        
+
         # 读取当前配置（保留注释和格式）
         config = tomlkit.document()
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
                 config = tomlkit.load(f)
-        
+
         # 切换 enabled 状态
         if "plugin" not in config:
             config["plugin"] = tomlkit.table()
-        
+
         current_enabled = config["plugin"].get("enabled", True)
         new_enabled = not current_enabled
         config["plugin"]["enabled"] = new_enabled
-        
+
         # 写入配置（保留注释）
         with open(config_path, "w", encoding="utf-8") as f:
             tomlkit.dump(config, f)
-        
+
         status = "启用" if new_enabled else "禁用"
         logger.info(f"已{status}插件: {plugin_id}")
-        
+
         return {
             "success": True,
             "enabled": new_enabled,
             "message": f"插件已{status}",
-            "note": "状态更改将在下次加载插件时生效"
+            "note": "状态更改将在下次加载插件时生效",
         }
 
     except HTTPException:

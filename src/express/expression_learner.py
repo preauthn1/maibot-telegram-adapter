@@ -226,19 +226,19 @@ class ExpressionLearner:
         match_responses = []
         try:
             response = response.strip()
-            
+
             # 尝试提取JSON代码块（如果存在）
             json_pattern = r"```json\s*(.*?)\s*```"
             matches = re.findall(json_pattern, response, re.DOTALL)
             if matches:
                 response = matches[0].strip()
-            
+
             # 移除可能的markdown代码块标记（如果没有找到```json，但可能有```）
             if not matches:
                 response = re.sub(r"^```\s*", "", response, flags=re.MULTILINE)
                 response = re.sub(r"```\s*$", "", response, flags=re.MULTILINE)
                 response = response.strip()
-            
+
             # 检查是否已经是标准JSON数组格式
             if response.startswith("[") and response.endswith("]"):
                 match_responses = json.loads(response)

@@ -130,12 +130,10 @@ class ImageManager:
         try:
             # 清理Images表中type为emoji的记录
             deleted_images = Images.delete().where(Images.type == "emoji").execute()
-            
+
             # 清理ImageDescriptions表中type为emoji的记录
-            deleted_descriptions = (
-                ImageDescriptions.delete().where(ImageDescriptions.type == "emoji").execute()
-            )
-            
+            deleted_descriptions = ImageDescriptions.delete().where(ImageDescriptions.type == "emoji").execute()
+
             total_deleted = deleted_images + deleted_descriptions
             if total_deleted > 0:
                 logger.info(
@@ -194,10 +192,14 @@ class ImageManager:
                 if cache_record:
                     # 优先使用情感标签，如果没有则使用详细描述
                     if cache_record.emotion_tags:
-                        logger.info(f"[缓存命中] 使用EmojiDescriptionCache表中的情感标签: {cache_record.emotion_tags[:50]}...")
+                        logger.info(
+                            f"[缓存命中] 使用EmojiDescriptionCache表中的情感标签: {cache_record.emotion_tags[:50]}..."
+                        )
                         return f"[表情包：{cache_record.emotion_tags}]"
                     elif cache_record.description:
-                        logger.info(f"[缓存命中] 使用EmojiDescriptionCache表中的描述: {cache_record.description[:50]}...")
+                        logger.info(
+                            f"[缓存命中] 使用EmojiDescriptionCache表中的描述: {cache_record.description[:50]}..."
+                        )
                         return f"[表情包：{cache_record.description}]"
             except Exception as e:
                 logger.debug(f"查询EmojiDescriptionCache时出错: {e}")
