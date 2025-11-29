@@ -5,9 +5,71 @@ import time
 import platform
 import traceback
 import shutil
+import sys
+import subprocess
 from dotenv import load_dotenv
 from pathlib import Path
 from rich.traceback import install
+
+# 定义重启退出码
+RESTART_EXIT_CODE = 42
+
+def run_runner_process():
+    """
+    Runner 进程逻辑：作为守护进程运行，负责启动和监控 Worker 进程。
+    处理重启请求 (退出码 42) 和 Ctrl+C 信号。
+    """
+    script_file = sys.argv[0]
+    python_executable = sys.executable
+
+    # 设置环境变量，标记子进程为 Worker 进程
+    env = os.environ.copy()
+    env["MAIBOT_WORKER_PROCESS"] = "1"
+
+    while True:
+        print(f"正在启动 {script_file}...")
+        
+        # 启动子进程 (Worker)
+        # 使用 sys.executable 确保使用相同的 Python 解释器
+        cmd = [python_executable, script_file] + sys.argv[1:]
+        
+        process = subprocess.Popen(cmd, env=env)
+        
+        try:
+            # 等待子进程结束
+            return_code = process.wait()
+            
+            if return_code == RESTART_EXIT_CODE:
+                print("检测到重启请求 (退出码 42)，正在重启...")
+                time.sleep(1) # 稍作等待
+                continue
+            else:
+                print(f"程序已退出 (退出码 {return_code})")
+                sys.exit(return_code)
+                
+        except KeyboardInterrupt:
+            # 向子进程发送终止信号
+            if process.poll() is None:
+                # 在 Windows 上，Ctrl+C 通常已经发送给了子进程（如果它们共享控制台）
+                # 但为了保险，我们可以尝试 terminate
+                try:
+                    process.terminate()
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print("子进程未响应，强制关闭...")
+                    process.kill()
+            sys.exit(0)
+
+# 检查是否是 Worker 进程
+# 如果没有设置 MAIBOT_WORKER_PROCESS 环境变量，说明是直接运行的脚本，
+# 此时应该作为 Runner 运行。
+if os.environ.get("MAIBOT_WORKER_PROCESS") != "1":
+    if __name__ == "__main__":
+        run_runner_process()
+    # 如果作为模块导入，不执行 Runner 逻辑，但也不应该执行下面的 Worker 逻辑
+    sys.exit(0)
+
+# 以下是 Worker 进程的逻辑
 
 env_path = Path(__file__).parent / ".env"
 template_env_path = Path(__file__).parent / "template" / "template.env"
@@ -253,6 +315,15 @@ if __name__ == "__main__":
                 except Exception as ge:
                     logger.error(f"优雅关闭时发生错误: {ge}")
         # 新增：检测外部请求关闭
+
+    except SystemExit as e:
+        # 捕获 SystemExit (例如 sys.exit()) 并保留退出代码
+        if isinstance(e.code, int):
+            exit_code = e.code
+        else:
+            exit_code = 1 if e.code else 0
+        if exit_code == RESTART_EXIT_CODE:
+            logger.info("收到重启信号，准备退出并请求重启...")
 
     except Exception as e:
         logger.error(f"主程序发生异常: {str(e)} {str(traceback.format_exc())}")
