@@ -1,7 +1,7 @@
-"""表情包管理 API 路由"""
+""" 表情包管理 API 路由"""
 
 from fastapi import APIRouter, HTTPException, Header, Query, UploadFile, File, Form, Cookie
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Annotated
 from src.common.logger import get_logger
@@ -15,6 +15,8 @@ from PIL import Image
 import io
 from pathlib import Path
 import threading
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 logger = get_logger("webui.emoji")
 
@@ -28,6 +30,11 @@ THUMBNAIL_QUALITY = 80
 # 缓存锁，防止并发生成同一缩略图
 _thumbnail_locks: dict[str, threading.Lock] = {}
 _locks_lock = threading.Lock()
+# 缩略图生成专用线程池（避免阻塞事件循环）
+_thumbnail_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="thumbnail")
+# 正在生成中的缩略图哈希集合（防止重复提交任务）
+_generating_thumbnails: set[str] = set()
+_generating_lock = threading.Lock()
 
 
 def _get_thumbnail_lock(file_hash: str) -> threading.Lock:
@@ -36,6 +43,21 @@ def _get_thumbnail_lock(file_hash: str) -> threading.Lock:
         if file_hash not in _thumbnail_locks:
             _thumbnail_locks[file_hash] = threading.Lock()
         return _thumbnail_locks[file_hash]
+
+
+def _background_generate_thumbnail(source_path: str, file_hash: str) -> None:
+    """
+    后台生成缩略图（在线程池中执行）
+    
+    生成完成后自动从 generating 集合中移除
+    """
+    try:
+        _generate_thumbnail(source_path, file_hash)
+    except Exception as e:
+        logger.warning(f"后台生成缩略图失败 {file_hash}: {e}")
+    finally:
+        with _generating_lock:
+            _generating_thumbnails.discard(file_hash)
 
 
 def _ensure_thumbnail_cache_dir() -> Path:
@@ -667,33 +689,37 @@ async def get_emoji_thumbnail(
         cache_path = _get_thumbnail_cache_path(emoji.emoji_hash)
         
         # 检查缓存是否存在
-        if not cache_path.exists():
-            try:
-                # 生成缩略图
-                _generate_thumbnail(emoji.full_path, emoji.emoji_hash)
-            except Exception as e:
-                # 生成失败，回退到原图
-                logger.warning(f"缩略图生成失败，返回原图: {e}")
-                mime_types = {
-                    "png": "image/png",
-                    "jpg": "image/jpeg",
-                    "jpeg": "image/jpeg",
-                    "gif": "image/gif",
-                    "webp": "image/webp",
-                    "bmp": "image/bmp",
-                }
-                media_type = mime_types.get(emoji.format.lower(), "application/octet-stream")
-                return FileResponse(
-                    path=emoji.full_path, 
-                    media_type=media_type, 
-                    filename=f"{emoji.emoji_hash}.{emoji.format}"
+        if cache_path.exists():
+            # 缓存命中，直接返回
+            return FileResponse(
+                path=str(cache_path), 
+                media_type="image/webp", 
+                filename=f"{emoji.emoji_hash}_thumb.webp"
+            )
+        
+        # 缓存未命中，触发后台生成并返回 202
+        with _generating_lock:
+            if emoji.emoji_hash not in _generating_thumbnails:
+                # 标记为正在生成
+                _generating_thumbnails.add(emoji.emoji_hash)
+                # 提交到线程池后台生成
+                _thumbnail_executor.submit(
+                    _background_generate_thumbnail,
+                    emoji.full_path,
+                    emoji.emoji_hash
                 )
         
-        # 返回缩略图
-        return FileResponse(
-            path=str(cache_path), 
-            media_type="image/webp", 
-            filename=f"{emoji.emoji_hash}_thumb.webp"
+        # 返回 202 Accepted，告诉前端缩略图正在生成中
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "generating",
+                "message": "缩略图正在生成中，请稍后重试",
+                "emoji_id": emoji_id,
+            },
+            headers={
+                "Retry-After": "1",  # 建议 1 秒后重试
+            }
         )
 
     except HTTPException:
@@ -1206,7 +1232,14 @@ async def preheat_thumbnail_cache(
                 continue
             
             try:
-                _generate_thumbnail(emoji.full_path, emoji.emoji_hash)
+                # 使用线程池异步生成缩略图，避免阻塞事件循环
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    _thumbnail_executor,
+                    _generate_thumbnail,
+                    emoji.full_path,
+                    emoji.emoji_hash
+                )
                 generated += 1
             except Exception as e:
                 logger.warning(f"预热缩略图失败 {emoji.emoji_hash}: {e}")
