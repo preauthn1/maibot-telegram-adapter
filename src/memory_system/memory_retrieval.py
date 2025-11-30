@@ -114,9 +114,9 @@ def init_memory_retrieval_prompt():
 **执行步骤：**
 **第一步：思考（Think）**
 在思考中分析：
-- 当前信息是否足够回答问题？
+- 当前信息是否足够回答问题({question})？
 - **如果信息足够且能找到明确答案**，在思考中直接给出答案，格式为：found_answer(answer="你的答案内容")
-- **如果需要尝试搜集更多信息，进一步调用工具，进入第二步行动环节
+- **如果信息不足以解答问题，需要尝试搜集更多信息，进一步调用工具，进入第二步行动环节
 - **如果已有信息不足或无法找到答案，决定结束查询**，在思考中给出：not_enough_info(reason="结束查询的原因")
 
 **第二步：行动（Action）**
@@ -229,6 +229,7 @@ async def _retrieve_concepts_with_jargon(concepts: List[str], chat_id: str) -> s
     from src.jargon.jargon_miner import search_jargon
 
     results = []
+    exact_matches = []  # 收集所有精确匹配的概念
     for concept in concepts:
         concept = concept.strip()
         if not concept:
@@ -264,10 +265,14 @@ async def _retrieve_concepts_with_jargon(concepts: List[str], chat_id: str) -> s
                     if meaning:
                         output_parts.append(f"'{concept}' 为黑话或者网络简写，含义为：{meaning}")
                 results.append("；".join(output_parts) if len(output_parts) > 1 else output_parts[0])
-                logger.info(f"在jargon库中找到匹配（精确匹配）: {concept}，找到{len(jargon_results)}条结果")
+                exact_matches.append(concept)  # 收集精确匹配的概念，稍后统一打印
         else:
             # 未找到，不返回占位信息，只记录日志
             logger.info(f"在jargon库中未找到匹配: {concept}")
+
+    # 合并所有精确匹配的日志
+    if exact_matches:
+        logger.info(f"找到黑话: {', '.join(exact_matches)}，共找到{len(exact_matches)}条结果")
 
     if results:
         return "【概念检索结果】\n" + "\n".join(results) + "\n"
@@ -276,7 +281,7 @@ async def _retrieve_concepts_with_jargon(concepts: List[str], chat_id: str) -> s
 
 def _match_jargon_from_text(chat_text: str, chat_id: str) -> List[str]:
     """直接在聊天文本中匹配已知的jargon，返回出现过的黑话列表"""
-    print(chat_text)
+    # print(chat_text)
     if not chat_text or not chat_text.strip():
         return []
 
@@ -310,10 +315,10 @@ def _match_jargon_from_text(chat_text: str, chat_id: str) -> List[str]:
         if re.search(search_pattern, chat_text, re.IGNORECASE):
             matched[content] = None
 
-    end_time = time.time()
+    # end_time = time.time()
     logger.info(
-        f"记忆检索黑话匹配: 查询耗时 {(query_time - start_time):.3f}s, "
-        f"匹配耗时 {(end_time - query_time):.3f}s, 总耗时 {(end_time - start_time):.3f}s, "
+        # f"记忆检索黑话匹配: 查询耗时 {(query_time - start_time):.3f}s, "
+        # f"匹配耗时 {(end_time - query_time):.3f}s, 总耗时 {(end_time - start_time):.3f}s, "
         f"匹配到 {len(matched)} 个黑话"
     )
 
@@ -827,7 +832,7 @@ def _store_thinking_back(
                 create_time=now,
                 update_time=now,
             )
-            logger.info(f"已创建思考过程到数据库，问题: {question[:50]}...")
+            # logger.info(f"已创建思考过程到数据库，问题: {question[:50]}...")
     except Exception as e:
         logger.error(f"存储思考过程失败: {e}")
 
@@ -851,14 +856,14 @@ async def _process_single_question(
     Returns:
         Optional[str]: 如果找到答案，返回格式化的结果字符串，否则返回None
     """
-    logger.info(f"开始处理问题: {question}")
+    # logger.info(f"开始处理问题: {question}")
 
     _cleanup_stale_not_found_thinking_back()
 
     question_initial_info = initial_info or ""
 
     # 直接使用ReAct Agent查询（不再从thinking_back获取缓存）
-    logger.info(f"使用ReAct Agent查询，问题: {question[:50]}...")
+    # logger.info(f"使用ReAct Agent查询，问题: {question[:50]}...")
 
     jargon_concepts_for_agent = initial_jargon_concepts if global_config.memory.enable_jargon_detection else None
 
@@ -942,7 +947,7 @@ async def build_memory_retrieval_prompt(
 
         if global_config.debug.show_memory_prompt:
             logger.info(f"记忆检索问题生成提示词: {question_prompt}")
-        logger.info(f"记忆检索问题生成响应: {response}")
+        # logger.info(f"记忆检索问题生成响应: {response}")
 
         if not success:
             logger.error(f"LLM生成问题失败: {response}")
@@ -972,7 +977,7 @@ async def build_memory_retrieval_prompt(
             concept_info = await _retrieve_concepts_with_jargon(concepts, chat_id)
             if concept_info:
                 initial_info += concept_info
-                logger.info(f"概念检索完成，结果: {concept_info[:200]}...")
+                logger.info(f"概念检索完成，结果: {concept_info}")
             else:
                 logger.info("概念检索未找到任何结果")
 
@@ -984,7 +989,7 @@ async def build_memory_retrieval_prompt(
 
         # 第二步：并行处理所有问题（使用配置的最大迭代次数/120秒超时）
         max_iterations = global_config.memory.max_agent_iterations
-        logger.info(f"问题数量: {len(questions)}，设置最大迭代次数: {max_iterations}，超时时间: 120秒")
+        logger.debug(f"问题数量: {len(questions)}，设置最大迭代次数: {max_iterations}，超时时间: 120秒")
 
         # 并行处理所有问题，将概念检索结果作为初始信息传递
         question_tasks = [

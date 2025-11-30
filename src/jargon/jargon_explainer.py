@@ -138,7 +138,7 @@ class JargonExplainer:
         query_duration = query_time - start_time
         match_duration = match_time - query_time
 
-        logger.info(
+        logger.debug(
             f"黑话匹配完成: 查询耗时 {query_duration:.3f}s, 匹配耗时 {match_duration:.3f}s, "
             f"总耗时 {total_time:.3f}s, 匹配到 {len(matched_jargon)} 个黑话"
         )
