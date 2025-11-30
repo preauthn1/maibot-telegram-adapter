@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Cookie
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from pathlib import Path
@@ -17,6 +17,20 @@ router = APIRouter(prefix="/plugins", tags=["插件管理"])
 
 # 设置进度更新回调
 set_update_progress_callback(update_progress)
+
+
+def get_token_from_cookie_or_header(
+    maibot_session: Optional[str] = None,
+    authorization: Optional[str] = None,
+) -> Optional[str]:
+    """从 Cookie 或 Header 获取 token"""
+    # 优先从 Cookie 获取
+    if maibot_session:
+        return maibot_session
+    # 其次从 Header 获取
+    if authorization and authorization.startswith("Bearer "):
+        return authorization.replace("Bearer ", "")
+    return None
 
 
 def parse_version(version_str: str) -> tuple[int, int, int]:
@@ -210,12 +224,12 @@ async def check_git_status() -> GitStatusResponse:
 
 
 @router.get("/mirrors", response_model=AvailableMirrorsResponse)
-async def get_available_mirrors(authorization: Optional[str] = Header(None)) -> AvailableMirrorsResponse:
+async def get_available_mirrors(maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> AvailableMirrorsResponse:
     """
     获取所有可用的镜像源配置
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -240,12 +254,12 @@ async def get_available_mirrors(authorization: Optional[str] = Header(None)) -> 
 
 
 @router.post("/mirrors", response_model=MirrorConfigResponse)
-async def add_mirror(request: AddMirrorRequest, authorization: Optional[str] = Header(None)) -> MirrorConfigResponse:
+async def add_mirror(request: AddMirrorRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> MirrorConfigResponse:
     """
     添加新的镜像源
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -280,13 +294,13 @@ async def add_mirror(request: AddMirrorRequest, authorization: Optional[str] = H
 
 @router.put("/mirrors/{mirror_id}", response_model=MirrorConfigResponse)
 async def update_mirror(
-    mirror_id: str, request: UpdateMirrorRequest, authorization: Optional[str] = Header(None)
+    mirror_id: str, request: UpdateMirrorRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
 ) -> MirrorConfigResponse:
     """
     更新镜像源配置
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -323,12 +337,12 @@ async def update_mirror(
 
 
 @router.delete("/mirrors/{mirror_id}")
-async def delete_mirror(mirror_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def delete_mirror(mirror_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     删除镜像源
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -346,7 +360,7 @@ async def delete_mirror(mirror_id: str, authorization: Optional[str] = Header(No
 
 @router.post("/fetch-raw", response_model=FetchRawFileResponse)
 async def fetch_raw_file(
-    request: FetchRawFileRequest, authorization: Optional[str] = Header(None)
+    request: FetchRawFileRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
 ) -> FetchRawFileResponse:
     """
     获取 GitHub 仓库的 Raw 文件内容
@@ -356,7 +370,7 @@ async def fetch_raw_file(
     注意：此接口可公开访问，用于获取插件仓库等公开资源
     """
     # Token 验证（可选，用于日志记录）
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     is_authenticated = token and token_manager.verify_token(token)
 
@@ -431,7 +445,7 @@ async def fetch_raw_file(
 
 @router.post("/clone", response_model=CloneRepositoryResponse)
 async def clone_repository(
-    request: CloneRepositoryRequest, authorization: Optional[str] = Header(None)
+    request: CloneRepositoryRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
 ) -> CloneRepositoryResponse:
     """
     克隆 GitHub 仓库到本地
@@ -439,7 +453,7 @@ async def clone_repository(
     支持多镜像源自动切换和错误重试
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -471,14 +485,14 @@ async def clone_repository(
 
 
 @router.post("/install")
-async def install_plugin(request: InstallPluginRequest, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def install_plugin(request: InstallPluginRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     安装插件
 
     从 Git 仓库克隆插件到本地插件目录
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -675,7 +689,7 @@ async def install_plugin(request: InstallPluginRequest, authorization: Optional[
 
 @router.post("/uninstall")
 async def uninstall_plugin(
-    request: UninstallPluginRequest, authorization: Optional[str] = Header(None)
+    request: UninstallPluginRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
 ) -> Dict[str, Any]:
     """
     卸载插件
@@ -683,7 +697,7 @@ async def uninstall_plugin(
     删除插件目录及其所有文件
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -810,14 +824,14 @@ async def uninstall_plugin(
 
 
 @router.post("/update")
-async def update_plugin(request: UpdatePluginRequest, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def update_plugin(request: UpdatePluginRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     更新插件
 
     删除旧版本，重新克隆新版本
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -1029,14 +1043,14 @@ async def update_plugin(request: UpdatePluginRequest, authorization: Optional[st
 
 
 @router.get("/installed")
-async def get_installed_plugins(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_installed_plugins(maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     获取已安装的插件列表
 
     扫描 plugins 目录，返回所有已安装插件的 ID 和基本信息
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -1169,7 +1183,7 @@ class UpdatePluginConfigRequest(BaseModel):
 
 
 @router.get("/config/{plugin_id}/schema")
-async def get_plugin_config_schema(plugin_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_plugin_config_schema(plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     获取插件配置 Schema
 
@@ -1177,7 +1191,7 @@ async def get_plugin_config_schema(plugin_id: str, authorization: Optional[str] 
     用于前端动态生成配置表单。
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -1302,14 +1316,14 @@ async def get_plugin_config_schema(plugin_id: str, authorization: Optional[str] 
 
 
 @router.get("/config/{plugin_id}")
-async def get_plugin_config(plugin_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_plugin_config(plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     获取插件当前配置值
 
     返回插件的当前配置值。
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -1358,7 +1372,7 @@ async def get_plugin_config(plugin_id: str, authorization: Optional[str] = Heade
 
 @router.put("/config/{plugin_id}")
 async def update_plugin_config(
-    plugin_id: str, request: UpdatePluginConfigRequest, authorization: Optional[str] = Header(None)
+    plugin_id: str, request: UpdatePluginConfigRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
 ) -> Dict[str, Any]:
     """
     更新插件配置
@@ -1366,7 +1380,7 @@ async def update_plugin_config(
     保存新的配置值到插件的配置文件。
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -1431,14 +1445,14 @@ async def update_plugin_config(
 
 
 @router.post("/config/{plugin_id}/reset")
-async def reset_plugin_config(plugin_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def reset_plugin_config(plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     重置插件配置为默认值
 
     删除当前配置文件，下次加载插件时将使用默认配置。
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")
@@ -1491,14 +1505,14 @@ async def reset_plugin_config(plugin_id: str, authorization: Optional[str] = Hea
 
 
 @router.post("/config/{plugin_id}/toggle")
-async def toggle_plugin(plugin_id: str, authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def toggle_plugin(plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     切换插件启用状态
 
     切换插件配置中的 enabled 字段。
     """
     # Token 验证
-    token = authorization.replace("Bearer ", "") if authorization else None
+    token = get_token_from_cookie_or_header(maibot_session, authorization)
     token_manager = get_token_manager()
     if not token or not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="未授权：无效的访问令牌")

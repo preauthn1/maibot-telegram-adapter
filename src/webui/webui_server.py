@@ -5,6 +5,7 @@ import asyncio
 import mimetypes
 from pathlib import Path
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from uvicorn import Config, Server as UvicornServer
 from src.common.logger import get_logger
@@ -21,12 +22,32 @@ class WebUIServer:
         self.app = FastAPI(title="MaiBot WebUI")
         self._server = None
 
+        # 配置 CORS（支持开发环境跨域请求）
+        self._setup_cors()
+
         # 显示 Access Token
         self._show_access_token()
 
         # 重要：先注册 API 路由，再设置静态文件
         self._register_api_routes()
         self._setup_static_files()
+
+    def _setup_cors(self):
+        """配置 CORS 中间件"""
+        # 开发环境需要允许前端开发服务器的跨域请求
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[
+                "http://localhost:5173",  # Vite 开发服务器
+                "http://127.0.0.1:5173",
+                "http://localhost:8001",  # 生产环境
+                "http://127.0.0.1:8001",
+            ],
+            allow_credentials=True,  # 允许携带 Cookie
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        logger.debug("✅ CORS 中间件已配置")
 
     def _show_access_token(self):
         """显示 WebUI Access Token"""
