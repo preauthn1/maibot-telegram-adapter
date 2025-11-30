@@ -326,7 +326,7 @@ class ChatHistorySummarizer:
                     start_time=new_messages[0].time if new_messages else current_time,
                     end_time=current_time,
                 )
-                logger.info(f"{self.log_prefix} 新建聊天检查批次: {len(new_messages)} 条消息")
+                logger.debug(f"{self.log_prefix} 新建聊天检查批次: {len(new_messages)} 条消息")
                 # 创建批次后持久化
                 self._persist_topic_cache()
 
@@ -362,7 +362,7 @@ class ChatHistorySummarizer:
         else:
             time_str = f"{time_since_last_check / 3600:.1f}小时"
 
-        logger.info(
+        logger.debug(
             f"{self.log_prefix} 批次状态检查 | 消息数: {message_count} | 距上次检查: {time_str}"
         )
 
