@@ -127,6 +127,33 @@ app = None
 loop = None
 
 
+def print_opensource_notice():
+    """打印开源项目提示，防止倒卖"""
+    from colorama import init, Fore, Style
+
+    init()
+
+    notice_lines = [
+        "",
+        f"{Fore.CYAN}{'═' * 70}{Style.RESET_ALL}",
+        f"{Fore.GREEN}  ★ MaiBot - 开源 AI 聊天机器人 ★{Style.RESET_ALL}",
+        f"{Fore.CYAN}{'─' * 70}{Style.RESET_ALL}",
+        f"{Fore.YELLOW}  本项目是完全免费的开源软件，基于 GPL-3.0 协议发布{Style.RESET_ALL}",
+        f"{Fore.WHITE}  如果有人向你「出售本软件」，你被骗了！{Style.RESET_ALL}",
+        "",
+        f"{Fore.WHITE}  官方仓库: {Fore.BLUE}https://github.com/MaiM-with-u/MaiBot {Style.RESET_ALL}",
+        f"{Fore.WHITE}  官方文档: {Fore.BLUE}https://docs.mai-mai.org {Style.RESET_ALL}",
+        f"{Fore.WHITE}  官方群聊: {Fore.BLUE}123456780{Style.RESET_ALL}",
+        f"{Fore.CYAN}{'─' * 70}{Style.RESET_ALL}",
+        f"{Fore.RED}  ⚠ 将本软件作为「商品」倒卖、隐瞒开源性质均违反协议！{Style.RESET_ALL}",
+        f"{Fore.CYAN}{'═' * 70}{Style.RESET_ALL}",
+        "",
+    ]
+
+    for line in notice_lines:
+        print(line)
+
+
 def easter_egg():
     # 彩蛋
     from colorama import init, Fore
@@ -271,6 +298,9 @@ def raw_main():
     # 利用 TZ 环境变量设定程序工作的时区
     if platform.system().lower() != "windows":
         time.tzset()  # type: ignore
+
+    # 打印开源提示（防止倒卖）
+    print_opensource_notice()
 
     check_eula()
     logger.info("检查EULA和隐私条款完成")
