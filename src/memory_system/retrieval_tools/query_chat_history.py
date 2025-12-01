@@ -15,17 +15,14 @@ logger = get_logger("memory_retrieval_tools")
 
 
 async def search_chat_history(
-    chat_id: str, keyword: Optional[str] = None, participant: Optional[str] = None, fuzzy: bool = True
+    chat_id: str, keyword: Optional[str] = None, participant: Optional[str] = None
 ) -> str:
     """根据关键词或参与人查询记忆，返回匹配的记忆id、记忆标题theme和关键词keywords
 
     Args:
         chat_id: 聊天ID
-        keyword: 关键词（可选，支持多个关键词，可用空格、逗号等分隔）
+        keyword: 关键词（可选，支持多个关键词，可用空格、逗号等分隔。匹配规则：如果关键词数量<=2，必须全部匹配；如果关键词数量>2，允许n-1个关键词匹配）
         participant: 参与人昵称（可选）
-        fuzzy: 是否使用模糊匹配模式（默认True）
-            - True: 模糊匹配，只要包含任意一个关键词即匹配（OR关系）
-            - False: 全匹配，必须包含所有关键词才匹配（AND关系）
 
     Returns:
         str: 查询结果，包含记忆id、theme和keywords
@@ -96,31 +93,28 @@ async def search_chat_history(
                         except (json.JSONDecodeError, TypeError, ValueError):
                             pass
 
-                    # 根据匹配模式检查关键词
-                    if fuzzy:
-                        # 模糊匹配：只要包含任意一个关键词即匹配（OR关系）
-                        for kw in keywords_lower:
-                            if (
-                                kw in theme
-                                or kw in summary
-                                or kw in original_text
-                                or any(kw in k for k in record_keywords_list)
-                            ):
-                                keyword_matched = True
-                                break
+                    # 有容错的全匹配：如果关键词数量>2，允许n-1个关键词匹配；否则必须全部匹配
+                    matched_count = 0
+                    for kw in keywords_lower:
+                        kw_matched = (
+                            kw in theme
+                            or kw in summary
+                            or kw in original_text
+                            or any(kw in k for k in record_keywords_list)
+                        )
+                        if kw_matched:
+                            matched_count += 1
+                    
+                    # 计算需要匹配的关键词数量
+                    total_keywords = len(keywords_lower)
+                    if total_keywords > 2:
+                        # 关键词数量>2，允许n-1个关键词匹配
+                        required_matches = total_keywords - 1
                     else:
-                        # 全匹配：必须包含所有关键词才匹配（AND关系）
-                        keyword_matched = True
-                        for kw in keywords_lower:
-                            kw_matched = (
-                                kw in theme
-                                or kw in summary
-                                or kw in original_text
-                                or any(kw in k for k in record_keywords_list)
-                            )
-                            if not kw_matched:
-                                keyword_matched = False
-                                break
+                        # 关键词数量<=2，必须全部匹配
+                        required_matches = total_keywords
+                    
+                    keyword_matched = matched_count >= required_matches
 
             # 两者都匹配（如果同时有participant和keyword，需要两者都匹配；如果只有一个条件，只需要该条件匹配）
             matched = participant_matched and keyword_matched
@@ -134,8 +128,12 @@ async def search_chat_history(
                 return f"未找到包含关键词'{keywords_str}'且参与人包含'{participant}'的聊天记录"
             elif keyword:
                 keywords_str = "、".join(parse_keywords_string(keyword))
-                match_mode = "包含任意一个关键词" if fuzzy else "包含所有关键词"
-                return f"未找到{match_mode}'{keywords_str}'的聊天记录"
+                keywords_list = parse_keywords_string(keyword)
+                if len(keywords_list) > 2:
+                    required_count = len(keywords_list) - 1
+                    return f"未找到包含至少{required_count}个关键词（共{len(keywords_list)}个）'{keywords_str}'的聊天记录"
+                else:
+                    return f"未找到包含所有关键词'{keywords_str}'的聊天记录"
             elif participant:
                 return f"未找到参与人包含'{participant}'的聊天记录"
             else:
@@ -299,24 +297,18 @@ def register_tool():
     # 注册工具1：搜索记忆
     register_memory_retrieval_tool(
         name="search_chat_history",
-        description="根据关键词或参与人查询记忆，返回匹配的记忆id、记忆标题theme和关键词keywords。用于快速搜索和定位相关记忆。",
+        description="根据关键词或参与人查询记忆，返回匹配的记忆id、记忆标题theme和关键词keywords。用于快速搜索和定位相关记忆。匹配规则：如果关键词数量<=2，必须全部匹配；如果关键词数量>2，允许n-1个关键词匹配（容错匹配）。",
         parameters=[
             {
                 "name": "keyword",
                 "type": "string",
-                "description": "关键词（可选，支持多个关键词，可用空格、逗号、斜杠等分隔，如：'麦麦 百度网盘' 或 '麦麦,百度网盘'。用于在主题、关键词、概括、原文中搜索）",
+                "description": "关键词（可选，支持多个关键词，可用空格、逗号、斜杠等分隔，如：'麦麦 百度网盘' 或 '麦麦,百度网盘'。用于在主题、关键词、概括、原文中搜索。匹配规则：如果关键词数量<=2，必须全部匹配；如果关键词数量>2，允许n-1个关键词匹配）",
                 "required": False,
             },
             {
                 "name": "participant",
                 "type": "string",
                 "description": "参与人昵称（可选），用于查询包含该参与人的记忆",
-                "required": False,
-            },
-            {
-                "name": "fuzzy",
-                "type": "boolean",
-                "description": "是否使用模糊匹配模式（默认True）。True表示模糊匹配（只要包含任意一个关键词即匹配，OR关系），False表示全匹配（必须包含所有关键词才匹配，AND关系）",
                 "required": False,
             },
         ],
