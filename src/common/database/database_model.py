@@ -324,7 +324,6 @@ class Expression(BaseModel):
 
     # new mode fields
     context = TextField(null=True)
-    up_content = TextField(null=True)
 
     content_list = TextField(null=True)
     count = IntegerField(default=1)
