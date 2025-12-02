@@ -10,6 +10,7 @@ from .config_routes import router as config_router
 from .statistics_routes import router as statistics_router
 from .person_routes import router as person_router
 from .expression_routes import router as expression_router
+from .jargon_routes import router as jargon_router
 from .emoji_routes import router as emoji_router
 from .plugin_routes import router as plugin_router
 from .plugin_progress_ws import get_progress_router
@@ -29,6 +30,8 @@ router.include_router(statistics_router)
 router.include_router(person_router)
 # 注册表达方式管理路由
 router.include_router(expression_router)
+# 注册黑话管理路由
+router.include_router(jargon_router)
 # 注册表情包管理路由
 router.include_router(emoji_router)
 # 注册插件管理路由
