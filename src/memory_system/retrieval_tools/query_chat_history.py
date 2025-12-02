@@ -275,10 +275,6 @@ async def get_chat_history_detail(chat_id: str, memory_ids: str) -> str:
                 except (json.JSONDecodeError, TypeError, ValueError):
                     pass
 
-            # 添加原文内容
-            if record.original_text:
-                result_parts.append(f"原文内容：\n{record.original_text}")
-
             results.append("\n".join(result_parts))
 
         if not results:
@@ -318,7 +314,7 @@ def register_tool():
     # 注册工具2：获取记忆详情
     register_memory_retrieval_tool(
         name="get_chat_history_detail",
-        description="根据记忆ID，展示某条或某几条记忆的具体内容。包括主题、时间、参与人、关键词、概括、关键信息点和原文内容等详细信息。需要先使用search_chat_history工具获取记忆ID。",
+        description="根据记忆ID，展示某条或某几条记忆的具体内容。包括主题、时间、参与人、关键词、概括和关键信息点等详细信息。需要先使用search_chat_history工具获取记忆ID。",
         parameters=[
             {
                 "name": "memory_ids",
