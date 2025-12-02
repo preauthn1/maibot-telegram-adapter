@@ -714,3 +714,21 @@ class JargonConfig(ConfigBase):
 
     all_global: bool = False
     """是否将所有新增的jargon项目默认为全局（is_global=True），chat_id记录第一次存储时的id"""
+
+
+@dataclass
+class DreamConfig(ConfigBase):
+    """Dream配置类"""
+
+    interval_minutes: int = 30
+    """做梦时间间隔（分钟），默认30分钟"""
+
+    max_iterations: int = 20
+    """做梦最大轮次，默认20轮"""
+
+    def __post_init__(self):
+        """验证配置值"""
+        if self.interval_minutes < 1:
+            raise ValueError(f"interval_minutes 必须至少为1，当前值: {self.interval_minutes}")
+        if self.max_iterations < 1:
+            raise ValueError(f"max_iterations 必须至少为1，当前值: {self.max_iterations}")

@@ -1,5 +1,5 @@
 [inner]
-version = "6.23.5"
+version = "7.0.0"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 # 如果你想要修改配置文件，请递增version的值
@@ -110,6 +110,10 @@ include_planner_reasoning = false # 是否将planner推理加入replyer，默认
 [memory]
 max_agent_iterations = 3 # 记忆思考深度（最低为1（不深入思考））
 enable_jargon_detection = true # 记忆检索过程中是否启用黑话识别
+
+[dream]
+interval_minutes = 30 # 做梦时间间隔（分钟），默认30分钟
+max_iterations = 20 # 做梦最大轮次，默认20轮
 
 [jargon]
 all_global = true # 是否开启全局黑话模式，注意，此功能关闭后，已经记录的全局黑话不会改变，需要手动删除

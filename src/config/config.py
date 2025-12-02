@@ -35,6 +35,7 @@ from src.config.official_configs import (
     MemoryConfig,
     DebugConfig,
     JargonConfig,
+    DreamConfig,
 )
 
 from .api_ada_configs import (
@@ -357,6 +358,7 @@ class Config(ConfigBase):
     mood: MoodConfig
     voice: VoiceConfig
     jargon: JargonConfig
+    dream: DreamConfig
 
 
 @dataclass
