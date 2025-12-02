@@ -1,7 +1,7 @@
 """黑话（俚语）管理路由"""
 
 import json
-from typing import Optional, List
+from typing import Optional, List, Annotated
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from peewee import fn
@@ -331,19 +331,19 @@ async def get_jargon_stats():
         total = Jargon.select().count()
 
         # 已确认是黑话的数量
-        confirmed_jargon = Jargon.select().where(Jargon.is_jargon == True).count()
+        confirmed_jargon = Jargon.select().where(Jargon.is_jargon).count()
 
         # 已确认不是黑话的数量
-        confirmed_not_jargon = Jargon.select().where(Jargon.is_jargon == False).count()
+        confirmed_not_jargon = Jargon.select().where(~Jargon.is_jargon).count()
 
         # 未判定的数量
         pending = Jargon.select().where(Jargon.is_jargon.is_null()).count()
 
         # 全局黑话数量
-        global_count = Jargon.select().where(Jargon.is_global == True).count()
+        global_count = Jargon.select().where(Jargon.is_global).count()
 
         # 已完成推断的数量
-        complete_count = Jargon.select().where(Jargon.is_complete == True).count()
+        complete_count = Jargon.select().where(Jargon.is_complete).count()
 
         # 关联的聊天数量
         chat_count = (
@@ -519,8 +519,8 @@ async def batch_delete_jargons(request: BatchDeleteRequest):
 
 @router.post("/batch/set-jargon", response_model=JargonUpdateResponse)
 async def batch_set_jargon_status(
-    ids: List[int] = Query(..., description="黑话ID列表"),
-    is_jargon: bool = Query(..., description="是否是黑话"),
+    ids: Annotated[List[int], Query(description="黑话ID列表")],
+    is_jargon: Annotated[bool, Query(description="是否是黑话")],
 ):
     """批量设置黑话状态"""
     try:
