@@ -2,7 +2,6 @@
 found_answer工具 - 用于在记忆检索过程中标记找到答案
 """
 
-from typing import Dict, Any
 from src.common.logger import get_logger
 from .tool_registry import register_memory_retrieval_tool
 
