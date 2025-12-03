@@ -324,11 +324,20 @@ class LLMRequest:
                     if effective_temperature is None:
                         effective_temperature = self.model_for_task.temperature
                     
+                    # max_tokens 优先级：参数传入 > 模型级别配置 > extra_params > 任务配置
+                    effective_max_tokens = max_tokens
+                    if effective_max_tokens is None:
+                        effective_max_tokens = model_info.max_tokens
+                    if effective_max_tokens is None:
+                        effective_max_tokens = (model_info.extra_params or {}).get("max_tokens")
+                    if effective_max_tokens is None:
+                        effective_max_tokens = self.model_for_task.max_tokens
+                    
                     return await client.get_response(
                         model_info=model_info,
                         message_list=(compressed_messages or message_list),
                         tool_options=tool_options,
-                        max_tokens=self.model_for_task.max_tokens if max_tokens is None else max_tokens,
+                        max_tokens=effective_max_tokens,
                         temperature=effective_temperature,
                         response_format=response_format,
                         stream_response_handler=stream_response_handler,
