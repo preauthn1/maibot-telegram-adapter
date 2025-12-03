@@ -122,7 +122,7 @@ class MessageRecv(Message):
         self.is_notify = False
 
         self.is_command = False
-        self.is_no_read_command = False
+        self.intercept_message_level = 0
 
         self.priority_mode = "interest"
         self.priority_info = None

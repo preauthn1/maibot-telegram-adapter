@@ -751,14 +751,14 @@ class DefaultReplyer:
             chat_id=chat_id,
             timestamp=reply_time_point,
             limit=global_config.chat.max_context_size * 1,
-            filter_no_read_command=True,
+            filter_intercept_message_level=1,
         )
 
         message_list_before_short = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,
             timestamp=reply_time_point,
             limit=int(global_config.chat.max_context_size * 0.33),
-            filter_no_read_command=True,
+            filter_intercept_message_level=1,
         )
 
         person_list_short: List[Person] = []
@@ -941,7 +941,7 @@ class DefaultReplyer:
             chat_id=chat_id,
             timestamp=time.time(),
             limit=min(int(global_config.chat.max_context_size * 0.33), 15),
-            filter_no_read_command=True,
+            filter_intercept_message_level=1,
         )
         chat_talking_prompt_half = build_readable_messages(
             message_list_before_now_half,

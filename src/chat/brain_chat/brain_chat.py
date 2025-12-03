@@ -165,7 +165,7 @@ class BrainChatting:
             limit_mode="latest",
             filter_mai=True,
             filter_command=False,
-            filter_no_read_command=True,
+            filter_intercept_message_level=1,
         )
 
         if len(recent_messages_list) >= 1:
@@ -279,7 +279,7 @@ class BrainChatting:
                 chat_id=self.stream_id,
                 timestamp=time.time(),
                 limit=int(global_config.chat.max_context_size * 0.6),
-                filter_no_read_command=True,
+                filter_intercept_message_level=1,
             )
             chat_content_block, message_id_list = build_readable_messages_with_id(
                 messages=message_list_before_now,
