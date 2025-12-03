@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Body
 from typing import Any, Annotated
 
 from src.common.logger import get_logger
-from src.common.toml_utils import save_toml_with_format
+from src.common.toml_utils import save_toml_with_format, _update_toml_doc
 from src.config.config import Config, APIAdapterConfig, CONFIG_DIR, PROJECT_ROOT
 from src.config.official_configs import (
     BotConfig,
@@ -49,40 +49,6 @@ RawContentBody = Annotated[str, Body(embed=True)]
 PathBody = Annotated[dict[str, str], Body()]
 
 router = APIRouter(prefix="/config", tags=["config"])
-
-
-# ===== 辅助函数 =====
-
-
-def _update_dict_preserve_comments(target: Any, source: Any) -> None:
-    """
-    递归合并字典，保留 target 中的注释和格式
-    将 source 的值更新到 target 中（仅更新已存在的键）
-
-    Args:
-        target: 目标字典（tomlkit 对象，包含注释）
-        source: 源字典（普通 dict 或 list）
-    """
-    # 如果 source 是列表，直接替换（数组表没有注释保留的意义）
-    if isinstance(source, list):
-        return  # 调用者需要直接赋值
-
-    # 如果都是字典，递归合并
-    if isinstance(source, dict) and isinstance(target, dict):
-        for key, value in source.items():
-            if key == "version":
-                continue  # 跳过版本号
-            if key in target:
-                target_value = target[key]
-                # 递归处理嵌套字典
-                if isinstance(value, dict) and isinstance(target_value, dict):
-                    _update_dict_preserve_comments(target_value, value)
-                else:
-                    # 使用 tomlkit.item 保持类型
-                    try:
-                        target[key] = tomlkit.item(value)
-                    except (TypeError, ValueError):
-                        target[key] = value
 
 
 # ===== 架构获取接口 =====
@@ -238,7 +204,7 @@ async def update_bot_config(config_data: ConfigBody):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}") from e
 
-        # 保存配置文件（格式化数组为多行）
+        # 保存配置文件（自动保留注释和格式）
         config_path = os.path.join(CONFIG_DIR, "bot_config.toml")
         save_toml_with_format(config_data, config_path)
 
@@ -261,7 +227,7 @@ async def update_model_config(config_data: ConfigBody):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}") from e
 
-        # 保存配置文件（格式化数组为多行）
+        # 保存配置文件（自动保留注释和格式）
         config_path = os.path.join(CONFIG_DIR, "model_config.toml")
         save_toml_with_format(config_data, config_path)
 
@@ -300,7 +266,7 @@ async def update_bot_config_section(section_name: str, section_data: SectionBody
             config_data[section_name] = section_data
         elif isinstance(section_data, dict) and isinstance(config_data[section_name], dict):
             # 字典递归合并
-            _update_dict_preserve_comments(config_data[section_name], section_data)
+            _update_toml_doc(config_data[section_name], section_data)
         else:
             # 其他类型直接替换
             config_data[section_name] = section_data
@@ -398,7 +364,7 @@ async def update_model_config_section(section_name: str, section_data: SectionBo
             config_data[section_name] = section_data
         elif isinstance(section_data, dict) and isinstance(config_data[section_name], dict):
             # 字典递归合并
-            _update_dict_preserve_comments(config_data[section_name], section_data)
+            _update_toml_doc(config_data[section_name], section_data)
         else:
             # 其他类型直接替换
             config_data[section_name] = section_data
