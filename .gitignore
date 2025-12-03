@@ -334,4 +334,4 @@ config.toml
 
 interested_rates.txt
 MaiBot.code-workspace
-*.lock
+*.lock!/plugins/MaiBot_MCPBridgePlugin
