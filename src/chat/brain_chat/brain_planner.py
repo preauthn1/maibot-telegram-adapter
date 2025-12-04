@@ -35,6 +35,7 @@ install(extra_lines=3)
 
 
 def init_prompt():
+    # 初次 / 非连续回复时使用的 Planner Prompt
     Prompt(
         """
 {time_block}
@@ -62,6 +63,33 @@ no_reply
 等待，保持沉默，等待对方发言
 {{
     "action": "no_reply",
+}}
+
+wait
+动作描述：
+在当前轮次暂时不再发言，等待对方进一步发言或后续更合适的时机再回复。这通常用于你已经表达清楚一轮，想给对方留出空间。
+{{
+    "action": "wait",
+    "target_message_id":"想要作为这次等待依据的消息id（通常是对方的最新消息）",
+    "reason":"选择等待的原因"
+}}
+
+listening
+动作描述：
+倾听对方继续说话，你感觉对方的话还没说完，或者刚刚发了好几条连续消息，这时你可以选择保持安静，专注“听”而不是马上回复。
+{{
+    "action": "listening",
+    "target_message_id":"你正在倾听的那条消息id（通常是对方的最新消息）",
+    "reason":"选择倾听的原因"
+}}
+
+block_and_ignore
+动作描述：
+当你觉得当前对话让你非常不适、存在明显骚扰或恶意时，可以选择在一段时间内不再主动回应该对话（对方再发消息你也先不理）。
+{{
+    "action": "block_and_ignore",
+    "target_message_id":"触发你做出这一决定的消息id",
+    "reason":"为什么你认为需要暂时屏蔽这段对话"
 }}
 
 {action_options_text}
@@ -92,7 +120,97 @@ no_reply
 ```
 
 """,
-        "brain_planner_prompt",
+        "brain_planner_prompt_initial",
+    )
+
+    # 刚刚已经回复过，对“要不要继续说 / 追问”更敏感的 Planner Prompt
+    Prompt(
+        """
+{time_block}
+{name_block}
+你的兴趣是：{interest}
+{chat_context_description}，以下是具体的聊天内容
+**聊天内容**
+{chat_content_block}
+
+**动作记录**
+{actions_before_now_block}
+
+**可用的action**
+reply
+动作描述：
+在你刚刚已经进行过一次或多次回复的前提下，你可以选择：
+- 继续顺着正在进行的聊天内容进行补充或追问
+- 也可以选择暂时不再回复，给对方留出回复空间
+{{
+    "action": "reply",
+    "target_message_id":"想要回复的消息id",
+    "reason":"继续回复的原因（或者解释为什么当前仍然适合连续发言）"
+}}
+
+no_reply
+动作描述：
+保持沉默，等待对方发言，特别是在你已经连续发言或对方长时间未回复的情况下可以更多考虑这一选项
+{{
+    "action": "no_reply",
+}}
+
+wait
+动作描述：
+你刚刚已经发过一轮，现在选择暂时不再继续追问或补充，给对方更多时间和空间来回应。
+{{
+    "action": "wait",
+    "target_message_id":"想要作为这次等待依据的消息id（通常是你刚刚回复的那条或对方的最新消息）",
+    "reason":"为什么此时更适合等待而不是继续连续发言"
+}}
+
+listening
+动作描述：
+你感觉对方还有话要说，或者刚刚连续发送了多条消息，这时你可以选择继续“听”而不是马上再插话。
+{{
+    "action": "listening",
+    "target_message_id":"你正在倾听的那条消息id（通常是对方的最新消息）",
+    "reason":"你为什么认为对方还需要继续表达"
+}}
+
+block_and_ignore
+动作描述：
+如果你在连续若干轮对话后，明确感到这是不友善的骚扰或让你极度不适的对话，可以选择在一段时间内不再回应这条对话。
+{{
+    "action": "block_and_ignore",
+    "target_message_id":"触发你做出这一决定的消息id",
+    "reason":"为什么你认为需要暂时屏蔽这段对话"
+}}
+
+{action_options_text}
+
+请选择合适的action，并说明触发action的消息id和选择该action的原因。消息id格式:m+数字
+先输出你的选择思考理由，再输出你选择的action，理由是一段平文本，不要分点，精简。
+**动作选择要求**
+请你根据聊天内容,用户的最新消息和以下标准选择合适的动作:
+{plan_style}
+{moderation_prompt}
+
+请选择所有符合使用要求的action，动作用json格式输出，如果输出多个json，每个json都要单独用```json包裹，你可以重复使用同一个动作或不同动作:
+**示例**
+// 理由文本
+```json
+{{
+    "action":"动作名",
+    "target_message_id":"触发动作的消息id",
+    //对应参数
+}}
+```
+```json
+{{
+    "action":"动作名",
+    "target_message_id":"触发动作的消息id",
+    //对应参数
+}}
+```
+
+""",
+        "brain_planner_prompt_follow_up",
     )
 
     Prompt(
@@ -171,7 +289,8 @@ class BrainPlanner:
 
             # 验证action是否可用
             available_action_names = [action_name for action_name, _ in current_available_actions]
-            internal_action_names = ["no_reply", "reply", "wait_time"]
+            # 内部保留动作（不依赖插件系统）
+            internal_action_names = ["no_reply", "reply", "wait_time", "wait", "listening", "block_and_ignore"]
 
             if action not in internal_action_names and action not in available_action_names:
                 logger.warning(
@@ -215,6 +334,7 @@ class BrainPlanner:
         self,
         available_actions: Dict[str, ActionInfo],
         loop_start_time: float = 0.0,
+        last_successful_reply: bool = False,
     ) -> List[ActionPlannerInfo]:
         # sourcery skip: use-named-expression
         """
@@ -257,7 +377,11 @@ class BrainPlanner:
 
         logger.debug(f"{self.log_prefix}过滤后有{len(filtered_actions)}个可用动作")
 
-        # 构建包含所有动作的提示词
+        # 构建包含所有动作的提示词：根据是否刚刚成功回复来选择不同的 Prompt
+        prompt_key = (
+            "brain_planner_prompt_follow_up" if last_successful_reply else "brain_planner_prompt_initial"
+        )
+        # 这里不记录日志，避免重复打印，由调用方按需控制 log_prompt
         prompt, message_id_list = await self.build_planner_prompt(
             is_group_chat=is_group_chat,
             chat_target_info=chat_target_info,
@@ -265,6 +389,8 @@ class BrainPlanner:
             chat_content_block=chat_content_block,
             message_id_list=message_id_list,
             interest=global_config.personality.interest,
+            prompt_key=prompt_key,
+            log_prompt=False,
         )
 
         # 调用LLM获取决策
@@ -286,6 +412,8 @@ class BrainPlanner:
         message_id_list: List[Tuple[str, "DatabaseMessages"]],
         chat_content_block: str = "",
         interest: str = "",
+        prompt_key: str = "brain_planner_prompt_initial",
+        log_prompt: bool = False,
     ) -> tuple[str, List[Tuple[str, "DatabaseMessages"]]]:
         """构建 Planner LLM 的提示词 (获取模板并填充数据)"""
         try:
@@ -321,7 +449,7 @@ class BrainPlanner:
             name_block = f"你的名字是{bot_name}{bot_nickname}，请注意哪些是你自己的发言。"
 
             # 获取主规划器模板并填充
-            planner_prompt_template = await global_prompt_manager.get_prompt_async("brain_planner_prompt")
+            planner_prompt_template = await global_prompt_manager.get_prompt_async(prompt_key)
             prompt = planner_prompt_template.format(
                 time_block=time_block,
                 chat_context_description=chat_context_description,
@@ -333,6 +461,10 @@ class BrainPlanner:
                 interest=interest,
                 plan_style=global_config.personality.private_plan_style,
             )
+
+            # 调试：按需展示本次 Planner 使用的 Prompt
+            if log_prompt:
+                logger.info(f"{self.log_prefix} BrainPlanner Prompt [{prompt_key}]:\n{prompt}")
 
             return prompt, message_id_list
         except Exception as e:
