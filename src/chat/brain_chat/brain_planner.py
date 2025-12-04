@@ -35,13 +35,14 @@ install(extra_lines=3)
 
 
 def init_prompt():
-    # 初次 / 非连续回复时使用的 Planner Prompt
+    # ReAct 形式的 Planner Prompt
     Prompt(
         """
 {time_block}
 {name_block}
 你的兴趣是：{interest}
 {chat_context_description}，以下是具体的聊天内容
+
 **聊天内容**
 {chat_content_block}
 
@@ -58,40 +59,20 @@ reply
     "reason":"回复的原因"
 }}
 
-no_reply
-动作描述：
-等待，保持沉默，等待对方发言
-{{
-    "action": "no_reply",
-}}
-
 wait
 动作描述：
-在当前轮次暂时不再发言，等待对方进一步发言或后续更合适的时机再回复。这通常用于你已经表达清楚一轮，想给对方留出空间。
+暂时不再发言，等待指定时间后再继续下一次思考。适用于以下情况：
+- 你已经表达清楚一轮，想给对方留出空间
+- 你感觉对方的话还没说完，或者刚刚发了好几条连续消息
+- 你想保持安静，专注"听"而不是马上回复
+请你根据上下文来判断要等待多久，请你灵活判断
 {{
     "action": "wait",
     "target_message_id":"想要作为这次等待依据的消息id（通常是对方的最新消息）",
+    "wait_seconds": 等待的秒数（必填，例如：5 表示等待5秒）,
     "reason":"选择等待的原因"
 }}
 
-listening
-动作描述：
-倾听对方继续说话，你感觉对方的话还没说完，或者刚刚发了好几条连续消息，这时你可以选择保持安静，专注“听”而不是马上回复。
-{{
-    "action": "listening",
-    "target_message_id":"你正在倾听的那条消息id（通常是对方的最新消息）",
-    "reason":"选择倾听的原因"
-}}
-
-block_and_ignore
-动作描述：
-当你觉得当前对话让你非常不适、存在明显骚扰或恶意时，可以选择在一段时间内不再主动回应该对话（对方再发消息你也先不理）。
-{{
-    "action": "block_and_ignore",
-    "target_message_id":"触发你做出这一决定的消息id",
-    "reason":"为什么你认为需要暂时屏蔽这段对话"
-}}
-
 {action_options_text}
 
 请选择合适的action，并说明触发action的消息id和选择该action的原因。消息id格式:m+数字
@@ -120,97 +101,7 @@ block_and_ignore
 ```
 
 """,
-        "brain_planner_prompt_initial",
-    )
-
-    # 刚刚已经回复过，对“要不要继续说 / 追问”更敏感的 Planner Prompt
-    Prompt(
-        """
-{time_block}
-{name_block}
-你的兴趣是：{interest}
-{chat_context_description}，以下是具体的聊天内容
-**聊天内容**
-{chat_content_block}
-
-**动作记录**
-{actions_before_now_block}
-
-**可用的action**
-reply
-动作描述：
-在你刚刚已经进行过一次或多次回复的前提下，你可以选择：
-- 继续顺着正在进行的聊天内容进行补充或追问
-- 也可以选择暂时不再回复，给对方留出回复空间
-{{
-    "action": "reply",
-    "target_message_id":"想要回复的消息id",
-    "reason":"继续回复的原因（或者解释为什么当前仍然适合连续发言）"
-}}
-
-no_reply
-动作描述：
-保持沉默，等待对方发言，特别是在你已经连续发言或对方长时间未回复的情况下可以更多考虑这一选项
-{{
-    "action": "no_reply",
-}}
-
-wait
-动作描述：
-你刚刚已经发过一轮，现在选择暂时不再继续追问或补充，给对方更多时间和空间来回应。
-{{
-    "action": "wait",
-    "target_message_id":"想要作为这次等待依据的消息id（通常是你刚刚回复的那条或对方的最新消息）",
-    "reason":"为什么此时更适合等待而不是继续连续发言"
-}}
-
-listening
-动作描述：
-你感觉对方还有话要说，或者刚刚连续发送了多条消息，这时你可以选择继续“听”而不是马上再插话。
-{{
-    "action": "listening",
-    "target_message_id":"你正在倾听的那条消息id（通常是对方的最新消息）",
-    "reason":"你为什么认为对方还需要继续表达"
-}}
-
-block_and_ignore
-动作描述：
-如果你在连续若干轮对话后，明确感到这是不友善的骚扰或让你极度不适的对话，可以选择在一段时间内不再回应这条对话。
-{{
-    "action": "block_and_ignore",
-    "target_message_id":"触发你做出这一决定的消息id",
-    "reason":"为什么你认为需要暂时屏蔽这段对话"
-}}
-
-{action_options_text}
-
-请选择合适的action，并说明触发action的消息id和选择该action的原因。消息id格式:m+数字
-先输出你的选择思考理由，再输出你选择的action，理由是一段平文本，不要分点，精简。
-**动作选择要求**
-请你根据聊天内容,用户的最新消息和以下标准选择合适的动作:
-{plan_style}
-{moderation_prompt}
-
-请选择所有符合使用要求的action，动作用json格式输出，如果输出多个json，每个json都要单独用```json包裹，你可以重复使用同一个动作或不同动作:
-**示例**
-// 理由文本
-```json
-{{
-    "action":"动作名",
-    "target_message_id":"触发动作的消息id",
-    //对应参数
-}}
-```
-```json
-{{
-    "action":"动作名",
-    "target_message_id":"触发动作的消息id",
-    //对应参数
-}}
-```
-
-""",
-        "brain_planner_prompt_follow_up",
+        "brain_planner_prompt_react",
     )
 
     Prompt(
@@ -270,10 +161,10 @@ class BrainPlanner:
         action_planner_infos = []
 
         try:
-            action = action_json.get("action", "no_reply")
+            action = action_json.get("action", "complete_talk")
             reasoning = action_json.get("reason", "未提供原因")
             action_data = {key: value for key, value in action_json.items() if key not in ["action", "reason"]}
-            # 非no_reply动作需要target_message_id
+            # 非complete_talk动作需要target_message_id
             target_message = None
 
             if target_message_id := action_json.get("target_message_id"):
@@ -290,16 +181,22 @@ class BrainPlanner:
             # 验证action是否可用
             available_action_names = [action_name for action_name, _ in current_available_actions]
             # 内部保留动作（不依赖插件系统）
-            internal_action_names = ["no_reply", "reply", "wait_time", "wait", "listening", "block_and_ignore"]
+            # 注意：listening 已合并到 wait 中，如果遇到 listening 则转换为 wait
+            internal_action_names = ["complete_talk", "reply", "wait_time", "wait", "listening"]
+            
+            # 将 listening 转换为 wait（向后兼容）
+            if action == "listening":
+                logger.debug(f"{self.log_prefix}检测到 listening 动作，已合并到 wait，自动转换")
+                action = "wait"
 
             if action not in internal_action_names and action not in available_action_names:
                 logger.warning(
-                    f"{self.log_prefix}LLM 返回了当前不可用或无效的动作: '{action}' (可用: {available_action_names})，将强制使用 'no_reply'"
+                    f"{self.log_prefix}LLM 返回了当前不可用或无效的动作: '{action}' (可用: {available_action_names})，将强制使用 'complete_talk'"
                 )
                 reasoning = (
                     f"LLM 返回了当前不可用的动作 '{action}' (可用: {available_action_names})。原始理由: {reasoning}"
                 )
-                action = "no_reply"
+                action = "complete_talk"
 
             # 创建ActionPlannerInfo对象
             # 将列表转换为字典格式
@@ -320,7 +217,7 @@ class BrainPlanner:
             available_actions_dict = dict(current_available_actions)
             action_planner_infos.append(
                 ActionPlannerInfo(
-                    action_type="no_reply",
+                    action_type="complete_talk",
                     reasoning=f"解析单个action时出错: {e}",
                     action_data={},
                     action_message=None,
@@ -334,11 +231,10 @@ class BrainPlanner:
         self,
         available_actions: Dict[str, ActionInfo],
         loop_start_time: float = 0.0,
-        last_successful_reply: bool = False,
     ) -> List[ActionPlannerInfo]:
         # sourcery skip: use-named-expression
         """
-        规划器 (Planner): 使用LLM根据上下文决定做出什么动作。
+        规划器 (Planner): 使用LLM根据上下文决定做出什么动作（ReAct模式）。
         """
 
         # 获取聊天上下文
@@ -377,10 +273,8 @@ class BrainPlanner:
 
         logger.debug(f"{self.log_prefix}过滤后有{len(filtered_actions)}个可用动作")
 
-        # 构建包含所有动作的提示词：根据是否刚刚成功回复来选择不同的 Prompt
-        prompt_key = (
-            "brain_planner_prompt_follow_up" if last_successful_reply else "brain_planner_prompt_initial"
-        )
+        # 构建包含所有动作的提示词：使用统一的 ReAct Prompt
+        prompt_key = "brain_planner_prompt_react"
         # 这里不记录日志，避免重复打印，由调用方按需控制 log_prompt
         prompt, message_id_list = await self.build_planner_prompt(
             is_group_chat=is_group_chat,
@@ -412,7 +306,7 @@ class BrainPlanner:
         message_id_list: List[Tuple[str, "DatabaseMessages"]],
         chat_content_block: str = "",
         interest: str = "",
-        prompt_key: str = "brain_planner_prompt_initial",
+        prompt_key: str = "brain_planner_prompt_react",
         log_prompt: bool = False,
     ) -> tuple[str, List[Tuple[str, "DatabaseMessages"]]]:
         """构建 Planner LLM 的提示词 (获取模板并填充数据)"""
@@ -590,7 +484,7 @@ class BrainPlanner:
             logger.error(f"{self.log_prefix}LLM 请求执行失败: {req_e}")
             return [
                 ActionPlannerInfo(
-                    action_type="no_reply",
+                    action_type="complete_talk",
                     reasoning=f"LLM 请求失败，模型出现问题: {req_e}",
                     action_data={},
                     action_message=None,
@@ -609,16 +503,16 @@ class BrainPlanner:
                 else:
                     # 尝试解析为直接的JSON
                     logger.warning(f"{self.log_prefix}LLM没有返回可用动作: {llm_content}")
-                    actions = self._create_no_reply("LLM没有返回可用动作", available_actions)
+                    actions = self._create_complete_talk("LLM没有返回可用动作", available_actions)
 
             except Exception as json_e:
                 logger.warning(f"{self.log_prefix}解析LLM响应JSON失败 {json_e}. LLM原始输出: '{llm_content}'")
-                actions = self._create_no_reply(f"解析LLM响应JSON失败: {json_e}", available_actions)
+                actions = self._create_complete_talk(f"解析LLM响应JSON失败: {json_e}", available_actions)
                 traceback.print_exc()
         else:
-            actions = self._create_no_reply("规划器没有获得LLM响应", available_actions)
+            actions = self._create_complete_talk("规划器没有获得LLM响应", available_actions)
 
-        # 添加循环开始时间到所有非no_reply动作
+        # 添加循环开始时间到所有动作
         for action in actions:
             action.action_data = action.action_data or {}
             action.action_data["loop_start_time"] = loop_start_time
@@ -629,11 +523,11 @@ class BrainPlanner:
 
         return actions
 
-    def _create_no_reply(self, reasoning: str, available_actions: Dict[str, ActionInfo]) -> List[ActionPlannerInfo]:
-        """创建no_reply"""
+    def _create_complete_talk(self, reasoning: str, available_actions: Dict[str, ActionInfo]) -> List[ActionPlannerInfo]:
+        """创建complete_talk"""
         return [
             ActionPlannerInfo(
-                action_type="no_reply",
+                action_type="complete_talk",
                 reasoning=reasoning,
                 action_data={},
                 action_message=None,

@@ -25,7 +25,6 @@ from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
 )
-from src.chat.brain_chat.brain_reply_checker import BrainReplyChecker, BrainLLMReplyChecker
 
 if TYPE_CHECKING:
     from src.common.data_models.database_data_model import DatabaseMessages
@@ -88,11 +87,6 @@ class BrainChatting:
         self.running: bool = False
         self._loop_task: Optional[asyncio.Task] = None  # 主循环任务
 
-        # 轻量级回复检查器（比 PFC 更宽松）
-        self.reply_checker = BrainReplyChecker(chat_id=self.stream_id)
-        # 使用 planner 模型的一次性 LLM 检查器
-        self.llm_reply_checker = BrainLLMReplyChecker(chat_id=self.stream_id, max_retries=1)
-
         # 添加循环信息管理相关的属性
         self.history_loop: List[CycleDetail] = []
         self._cycle_counter = 0
@@ -104,9 +98,6 @@ class BrainChatting:
 
         # 最近一次是否成功进行了 reply，用于选择 BrainPlanner 的 Prompt
         self._last_successful_reply: bool = False
-
-        # 类似 PFC 的 block_and_ignore：在该时间点之前不主动参与该聊天
-        self._ignore_until_timestamp: Optional[float] = None
 
     async def start(self):
         """检查是否需要启动主循环，如果未激活则启动。"""
@@ -169,14 +160,7 @@ class BrainChatting:
         )
 
     async def _loopbody(self):  # sourcery skip: hoist-if-from-if
-        # 如果当前处于 block_and_ignore 冷却期，直接跳过本轮思考
-        if self._ignore_until_timestamp and time.time() < self._ignore_until_timestamp:
-            await asyncio.sleep(0.5)
-            return True
-        elif self._ignore_until_timestamp and time.time() >= self._ignore_until_timestamp:
-            logger.info(f"{self.log_prefix} block_and_ignore 冷却结束，恢复该聊天的正常思考")
-            self._ignore_until_timestamp = None
-
+        # 获取最新消息（用于上下文，但不影响是否调用 observe）
         recent_messages_list = message_api.get_messages_by_time_in_chat(
             chat_id=self.stream_id,
             start_time=self.last_read_time,
@@ -188,14 +172,22 @@ class BrainChatting:
             filter_intercept_message_level=1,
         )
 
+        # 如果有新消息，更新 last_read_time
         if len(recent_messages_list) >= 1:
             self.last_read_time = time.time()
-            await self._observe(recent_messages_list=recent_messages_list)
-
-        else:
-            # Normal模式：消息数量不足，等待
-            await asyncio.sleep(0.2)
+        
+        # 总是执行一次思考迭代（不管有没有新消息）
+        # wait 动作会在其内部等待，不需要在这里处理
+        should_continue = await self._observe(recent_messages_list=recent_messages_list)
+        
+        if not should_continue:
+            # 选择了 complete_talk，停止循环
             return True
+        
+        # 继续下一次迭代（除非选择了 complete_talk）
+        # 短暂等待后再继续，避免过于频繁的循环
+        await asyncio.sleep(0.1)
+        
         return True
 
     async def _send_and_store_reply(
@@ -292,9 +284,11 @@ class BrainChatting:
             except Exception as e:
                 logger.error(f"{self.log_prefix} 动作修改失败: {e}")
 
-            # 执行planner
+            # 获取必要信息
             is_group_chat, chat_target_info, _ = self.action_planner.get_necessary_info()
 
+            # 一次思考迭代：Think - Act - Observe
+            # 获取聊天上下文
             message_list_before_now = get_raw_msg_before_timestamp_with_chat(
                 chat_id=self.stream_id,
                 timestamp=time.time(),
@@ -316,9 +310,7 @@ class BrainChatting:
                 chat_content_block=chat_content_block,
                 message_id_list=message_id_list,
                 interest=global_config.personality.interest,
-                prompt_key=(
-                    "brain_planner_prompt_follow_up" if self._last_successful_reply else "brain_planner_prompt_initial"
-                ),
+                prompt_key="brain_planner_prompt_react",
                 log_prompt=True,
             )
             continue_flag, modified_message = await events_manager.handle_mai_events(
@@ -333,10 +325,14 @@ class BrainChatting:
                 action_to_use_info = await self.action_planner.plan(
                     loop_start_time=self.last_read_time,
                     available_actions=available_actions,
-                    last_successful_reply=self._last_successful_reply,
                 )
 
-            # 3. 并行执行所有动作
+            # 检查是否有 complete_talk 动作（会停止后续迭代）
+            has_complete_talk = any(
+                action.action_type == "complete_talk" for action in action_to_use_info
+            )
+
+            # 并行执行所有动作
             action_tasks = [
                 asyncio.create_task(
                     self._execute_action(action, action_to_use_info, thinking_id, available_actions, cycle_timers)
@@ -368,7 +364,14 @@ class BrainChatting:
                     else:
                         logger.warning(f"{self.log_prefix} 回复动作执行失败")
 
-            # 构建最终的循环信息
+            # 更新观察时间标记
+            self.action_planner.last_obs_time_mark = time.time()
+
+            # 如果选择了 complete_talk，标记为完成，不再继续迭代
+            if has_complete_talk:
+                logger.info(f"{self.log_prefix} 检测到 complete_talk 动作，本次思考完成")
+
+            # 构建循环信息
             if reply_loop_info:
                 # 如果有回复信息，使用回复的loop_info作为基础
                 loop_info = reply_loop_info
@@ -394,10 +397,16 @@ class BrainChatting:
                 }
                 _reply_text = action_reply_text
 
+            # 如果选择了 complete_talk，返回 False 以停止 _loopbody 的循环
+            # 否则返回 True，让 _loopbody 继续下一次迭代
+            should_continue = not has_complete_talk
+
             self.end_cycle(loop_info, cycle_timers)
             self.print_cycle_info(cycle_timers)
 
-            return True
+            # 如果选择了 complete_talk，返回 False 停止循环
+            # 否则返回 True，继续下一次思考迭代
+            return should_continue
 
     async def _main_chat_loop(self):
         """主循环，持续进行计划并可能回复消息，直到被外部取消。"""
@@ -531,12 +540,12 @@ class BrainChatting:
         """执行单个动作的通用函数"""
         try:
             with Timer(f"动作{action_planner_info.action_type}", cycle_timers):
-                if action_planner_info.action_type == "no_reply":
-                    # 直接处理no_reply逻辑，不再通过动作系统
-                    reason = action_planner_info.reasoning or "选择不回复"
-                    # logger.info(f"{self.log_prefix} 选择不回复，原因: {reason}")
+                if action_planner_info.action_type == "complete_talk":
+                    # 直接处理complete_talk逻辑，不再通过动作系统
+                    reason = action_planner_info.reasoning or "选择完成对话"
+                    logger.info(f"{self.log_prefix} 选择完成对话，原因: {reason}")
 
-                    # 存储no_reply信息到数据库
+                    # 存储complete_talk信息到数据库
                     await database_api.store_action_info(
                         chat_stream=self.chat_stream,
                         action_build_into_prompt=False,
@@ -544,134 +553,142 @@ class BrainChatting:
                         action_done=True,
                         thinking_id=thinking_id,
                         action_data={"reason": reason},
-                        action_name="no_reply",
+                        action_name="complete_talk",
                     )
-                    return {"action_type": "no_reply", "success": True, "reply_text": "", "command": ""}
+                    return {"action_type": "complete_talk", "success": True, "reply_text": "", "command": ""}
 
                 elif action_planner_info.action_type == "reply":
-                    # 使用规则 + 一次 LLM ReplyChecker 包一层重试逻辑
-                    retry_count = 0
-
-                    while True:
-                        try:
-                            success, llm_response = await generator_api.generate_reply(
-                                chat_stream=self.chat_stream,
-                                reply_message=action_planner_info.action_message,
-                                available_actions=available_actions,
-                                chosen_actions=chosen_action_plan_infos,
-                                reply_reason=action_planner_info.reasoning or "",
-                                enable_tool=global_config.tool.enable_tool,
-                                request_type="replyer",
-                                from_plugin=False,
-                            )
-
-                            if not success or not llm_response or not llm_response.reply_set:
-                                if action_planner_info.action_message:
-                                    logger.info(
-                                        f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败"
-                                    )
-                                else:
-                                    logger.info("回复生成失败")
-                                return {
-                                    "action_type": "reply",
-                                    "success": False,
-                                    "reply_text": "",
-                                    "loop_info": None,
-                                }
-
-                        except asyncio.CancelledError:
-                            logger.debug(f"{self.log_prefix} 并行执行：回复生成任务已被取消")
-                            return {"action_type": "reply", "success": False, "reply_text": "", "loop_info": None}
-
-                        response_set = llm_response.reply_set
-
-                        # 预先拼接一次纯文本，供检查使用（与发送逻辑解耦）
-                        preview_text = ""
-                        for reply_content in response_set.reply_data:
-                            if reply_content.content_type != ReplyContentType.TEXT:
-                                continue
-                            data: str = reply_content.content  # type: ignore
-                            preview_text += data
-
-                        # 规则检查（不调用 LLM）
-                        rule_suitable, rule_reason, rule_need_retry = self.reply_checker.check(
-                            reply_text=preview_text, retry_count=retry_count
+                    try:
+                        success, llm_response = await generator_api.generate_reply(
+                            chat_stream=self.chat_stream,
+                            reply_message=action_planner_info.action_message,
+                            available_actions=available_actions,
+                            chosen_actions=chosen_action_plan_infos,
+                            reply_reason=action_planner_info.reasoning or "",
+                            enable_tool=global_config.tool.enable_tool,
+                            request_type="replyer",
+                            from_plugin=False,
                         )
 
-                        # LLM 检查（使用 planner 模型，一次机会）
-                        llm_suitable, llm_reason, llm_need_retry = await self.llm_reply_checker.check(
-                            reply_text=preview_text, retry_count=retry_count
-                        )
+                        if not success or not llm_response or not llm_response.reply_set:
+                            if action_planner_info.action_message:
+                                logger.info(
+                                    f"对 {action_planner_info.action_message.processed_plain_text} 的回复生成失败"
+                                )
+                            else:
+                                logger.info("回复生成失败")
+                            return {
+                                "action_type": "reply",
+                                "success": False,
+                                "reply_text": "",
+                                "loop_info": None,
+                            }
 
-                        # 是否需要重生成：只要有一方建议重试，且还在重试次数之内
-                        if (rule_need_retry or llm_need_retry) and retry_count < max(
-                            self.reply_checker.max_retries, self.llm_reply_checker.max_retries
-                        ):
-                            retry_count += 1
-                            logger.info(
-                                f"{self.log_prefix} ReplyChecker 建议重试（第 {retry_count} 次），"
-                                f"rule: {rule_reason}; llm: {llm_reason}"
-                            )
-                            continue
+                    except asyncio.CancelledError:
+                        logger.debug(f"{self.log_prefix} 并行执行：回复生成任务已被取消")
+                        return {"action_type": "reply", "success": False, "reply_text": "", "loop_info": None}
 
-                        # 到这里为止，不再重试：即使有一方认为“不太理想”，也只记录原因并放行
-                        if not rule_suitable or not llm_suitable:
-                            logger.info(
-                                f"{self.log_prefix} ReplyChecker 判断回复可能不太理想，"
-                                f"rule: {rule_reason}; llm: {llm_reason}，本次仍将发送。"
-                            )
-
-                        selected_expressions = llm_response.selected_expressions
-                        loop_info, reply_text, _ = await self._send_and_store_reply(
-                            response_set=response_set,
-                            action_message=action_planner_info.action_message,  # type: ignore
-                            cycle_timers=cycle_timers,
-                            thinking_id=thinking_id,
-                            actions=chosen_action_plan_infos,
-                            selected_expressions=selected_expressions,
-                        )
-                        # 标记这次循环已经成功进行了回复，下一轮 Planner 使用 follow_up Prompt
-                        self._last_successful_reply = True
-                        return {
-                            "action_type": "reply",
-                            "success": True,
-                            "reply_text": reply_text,
-                            "loop_info": loop_info,
-                        }
+                    response_set = llm_response.reply_set
+                    selected_expressions = llm_response.selected_expressions
+                    loop_info, reply_text, _ = await self._send_and_store_reply(
+                        response_set=response_set,
+                        action_message=action_planner_info.action_message,  # type: ignore
+                        cycle_timers=cycle_timers,
+                        thinking_id=thinking_id,
+                        actions=chosen_action_plan_infos,
+                        selected_expressions=selected_expressions,
+                    )
+                    # 标记这次循环已经成功进行了回复
+                    self._last_successful_reply = True
+                    return {
+                        "action_type": "reply",
+                        "success": True,
+                        "reply_text": reply_text,
+                        "loop_info": loop_info,
+                    }
 
                 # 其他动作
                 else:
-                    # 内建 wait / listening / block_and_ignore：不通过插件系统，直接在这里处理
-                    if action_planner_info.action_type in ["wait", "listening", "block_and_ignore"]:
+                    # 内建 wait / listening：不通过插件系统，直接在这里处理
+                    if action_planner_info.action_type in ["wait", "listening"]:
                         reason = action_planner_info.reasoning or ""
+                        action_data = action_planner_info.action_data or {}
 
-                        if action_planner_info.action_type == "block_and_ignore":
-                            # 设置一段时间的忽略窗口，例如 10 分钟
-                            ignore_minutes = 10
-                            self._ignore_until_timestamp = time.time() + ignore_minutes * 60
-                            logger.info(
-                                f"{self.log_prefix} 收到 block_and_ignore 动作，将在接下来 {ignore_minutes} 分钟内不再主动参与该聊天"
+                        if action_planner_info.action_type == "wait":
+                            # 获取等待时间（必填）
+                            wait_seconds = action_data.get("wait_seconds")
+                            if wait_seconds is None:
+                                logger.warning(f"{self.log_prefix} wait 动作缺少 wait_seconds 参数，使用默认值 5 秒")
+                                wait_seconds = 5
+                            else:
+                                try:
+                                    wait_seconds = float(wait_seconds)
+                                    if wait_seconds < 0:
+                                        logger.warning(f"{self.log_prefix} wait_seconds 不能为负数，使用默认值 5 秒")
+                                        wait_seconds = 5
+                                except (ValueError, TypeError):
+                                    logger.warning(f"{self.log_prefix} wait_seconds 参数格式错误，使用默认值 5 秒")
+                                    wait_seconds = 5
+                            
+                            logger.info(f"{self.log_prefix} 执行 wait 动作，等待 {wait_seconds} 秒")
+                            
+                            # 记录动作信息
+                            await database_api.store_action_info(
+                                chat_stream=self.chat_stream,
+                                action_build_into_prompt=False,
+                                action_prompt_display=reason or f"等待 {wait_seconds} 秒",
+                                action_done=True,
+                                thinking_id=thinking_id,
+                                action_data={"reason": reason, "wait_seconds": wait_seconds},
+                                action_name="wait",
                             )
+                            
+                            # 等待指定时间
+                            await asyncio.sleep(wait_seconds)
+                            
+                            logger.info(f"{self.log_prefix} wait 动作完成，继续下一次思考")
+                            
+                            # 这些动作本身不产生文本回复
+                            self._last_successful_reply = False
+                            return {
+                                "action_type": "wait",
+                                "success": True,
+                                "reply_text": "",
+                                "command": "",
+                            }
 
-                        # 统一将这三种策略动作记录到数据库，便于后续分析
-                        await database_api.store_action_info(
-                            chat_stream=self.chat_stream,
-                            action_build_into_prompt=False,
-                            action_prompt_display=reason or f"执行动作: {action_planner_info.action_type}",
-                            action_done=True,
-                            thinking_id=thinking_id,
-                            action_data={"reason": reason},
-                            action_name=action_planner_info.action_type,
-                        )
-
-                        # 这些动作本身不产生文本回复
-                        self._last_successful_reply = False
-                        return {
-                            "action_type": action_planner_info.action_type,
-                            "success": True,
-                            "reply_text": "",
-                            "command": "",
-                        }
+                        # listening 已合并到 wait，如果遇到则转换为 wait（向后兼容）
+                        elif action_planner_info.action_type == "listening":
+                            logger.debug(f"{self.log_prefix} 检测到 listening 动作，已合并到 wait，自动转换")
+                            # 使用默认等待时间
+                            wait_seconds = 3
+                            
+                            logger.info(f"{self.log_prefix} 执行 listening（转换为 wait）动作，等待 {wait_seconds} 秒")
+                            
+                            # 记录动作信息
+                            await database_api.store_action_info(
+                                chat_stream=self.chat_stream,
+                                action_build_into_prompt=False,
+                                action_prompt_display=reason or f"倾听并等待 {wait_seconds} 秒",
+                                action_done=True,
+                                thinking_id=thinking_id,
+                                action_data={"reason": reason, "wait_seconds": wait_seconds},
+                                action_name="listening",
+                            )
+                            
+                            # 等待指定时间
+                            await asyncio.sleep(wait_seconds)
+                            
+                            logger.info(f"{self.log_prefix} listening 动作完成，继续下一次思考")
+                            
+                            # 这些动作本身不产生文本回复
+                            self._last_successful_reply = False
+                            return {
+                                "action_type": "listening",
+                                "success": True,
+                                "reply_text": "",
+                                "command": "",
+                            }
 
                     # 其余动作：走原有插件 Action 体系
                     with Timer("动作执行", cycle_timers):
