@@ -247,6 +247,9 @@ class MemoryConfig(ConfigBase):
     enable_jargon_detection: bool = True
     """记忆检索过程中是否启用黑话识别"""
 
+    global_memory: bool = False
+    """是否允许记忆检索在聊天记录中进行全局查询（忽略当前chat_id，仅对 search_chat_history 等工具生效）"""
+
     def __post_init__(self):
         """验证配置值"""
         if self.max_agent_iterations < 1:
@@ -726,9 +729,14 @@ class DreamConfig(ConfigBase):
     max_iterations: int = 20
     """做梦最大轮次，默认20轮"""
 
+    first_delay_seconds: int = 60
+    """程序启动后首次做梦前的延迟时间（秒），默认60秒"""
+
     def __post_init__(self):
         """验证配置值"""
         if self.interval_minutes < 1:
             raise ValueError(f"interval_minutes 必须至少为1，当前值: {self.interval_minutes}")
         if self.max_iterations < 1:
             raise ValueError(f"max_iterations 必须至少为1，当前值: {self.max_iterations}")
+        if self.first_delay_seconds < 0:
+            raise ValueError(f"first_delay_seconds 不能为负数，当前值: {self.first_delay_seconds}")

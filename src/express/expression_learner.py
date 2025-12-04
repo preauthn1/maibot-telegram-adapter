@@ -40,9 +40,9 @@ def init_prompt() -> None:
 [
   {{"situation": "AAAAA", "style": "BBBBB", "source_id": "3"}},
   {{"situation": "CCCC", "style": "DDDD", "source_id": "7"}}
-  {{"situation": "对某件事表示十分惊叹", "style": "我嘞个xxxx", "source_id": "[消息编号]"}},
+  {{"situation": "对某件事表示十分惊叹", "style": "使用 我嘞个xxxx", "source_id": "[消息编号]"}},
   {{"situation": "表示讽刺的赞同，不讲道理", "style": "对对对", "source_id": "[消息编号]"}},
-  {{"situation": "当涉及游戏相关时，夸赞，略带戏谑意味", "style": "这么强！", "source_id": "[消息编号]"}},
+  {{"situation": "当涉及游戏相关时，夸赞，略带戏谑意味", "style": "使用 这么强！", "source_id": "[消息编号]"}},
 ]
 
 请注意：
