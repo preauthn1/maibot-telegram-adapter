@@ -256,7 +256,7 @@ class DefaultReplyer:
             logger.debug(f"使用处理器选中的{len(selected_expressions)}个表达方式")
             for expr in selected_expressions:
                 if isinstance(expr, dict) and "situation" in expr and "style" in expr:
-                    style_habits.append(f"当{expr['situation']}时，使用 {expr['style']}")
+                    style_habits.append(f"当{expr['situation']}时：{expr['style']}")
         else:
             logger.debug("没有从处理器获得表达方式，将使用空的表达方式")
             # 不再在replyer中进行随机选择，全部交给处理器处理
@@ -751,14 +751,14 @@ class DefaultReplyer:
             chat_id=chat_id,
             timestamp=reply_time_point,
             limit=global_config.chat.max_context_size * 1,
-            filter_no_read_command=True,
+            filter_intercept_message_level=1,
         )
 
         message_list_before_short = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,
             timestamp=reply_time_point,
             limit=int(global_config.chat.max_context_size * 0.33),
-            filter_no_read_command=True,
+            filter_intercept_message_level=1,
         )
 
         person_list_short: List[Person] = []
@@ -941,7 +941,7 @@ class DefaultReplyer:
             chat_id=chat_id,
             timestamp=time.time(),
             limit=min(int(global_config.chat.max_context_size * 0.33), 15),
-            filter_no_read_command=True,
+            filter_intercept_message_level=1,
         )
         chat_talking_prompt_half = build_readable_messages(
             message_list_before_now_half,

@@ -5,11 +5,13 @@
 
 import json
 from typing import Optional
+from datetime import datetime
+
 from src.common.logger import get_logger
 from src.common.database.database_model import ChatHistory
 from src.chat.utils.utils import parse_keywords_string
+from src.config.config import global_config
 from .tool_registry import register_memory_retrieval_tool
-from datetime import datetime
 
 logger = get_logger("memory_retrieval_tools")
 
@@ -33,7 +35,18 @@ async def search_chat_history(
             return "未指定查询参数（需要提供keyword或participant之一）"
 
         # 构建查询条件
-        query = ChatHistory.select().where(ChatHistory.chat_id == chat_id)
+        # 根据配置决定是否限制在当前 chat_id 内查询
+        use_global_search = global_config.memory.global_memory
+
+        if use_global_search:
+            # 全局查询所有聊天记录
+            query = ChatHistory.select()
+            logger.debug(
+                f"search_chat_history 启用全局查询模式，忽略 chat_id 过滤，keyword={keyword}, participant={participant}"
+            )
+        else:
+            # 仅在当前聊天流内查询
+            query = ChatHistory.select().where(ChatHistory.chat_id == chat_id)
 
         # 执行查询
         records = list(query.order_by(ChatHistory.start_time.desc()).limit(50))
@@ -139,9 +152,45 @@ async def search_chat_history(
             else:
                 return "未找到相关聊天记录"
 
-        # 构建结果文本，返回id、theme和keywords
+        # 如果匹配结果超过20条，不返回具体记录，只返回提示和所有相关关键词
+        if len(filtered_records) > 20:
+            # 统计所有记录上的关键词并去重
+            all_keywords_set = set()
+            for record in filtered_records:
+                if record.keywords:
+                    try:
+                        keywords_data = (
+                            json.loads(record.keywords)
+                            if isinstance(record.keywords, str)
+                            else record.keywords
+                        )
+                        if isinstance(keywords_data, list):
+                            for k in keywords_data:
+                                k_str = str(k).strip()
+                                if k_str:
+                                    all_keywords_set.add(k_str)
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        continue
+
+            # xxx 使用用户原始查询词，优先 keyword，其次 participant，最后退化成“当前条件”
+            search_label = keyword or participant or "当前条件"
+
+            if all_keywords_set:
+                keywords_str = "、".join(sorted(all_keywords_set))
+                return (
+                    f"包含“{search_label}”的结果过多，请尝试更多关键词精确查找\n\n"
+                    f"有关\"{search_label}\"的关键词：\n"
+                    f"{keywords_str}"
+                )
+            else:
+                return (
+                    f"包含“{search_label}”的结果过多，请尝试更多关键词精确查找\n\n"
+                    f"有关\"{search_label}\"的关键词信息为空"
+                )
+
+        # 构建结果文本，返回id、theme和keywords（最多20条）
         results = []
-        for record in filtered_records[:20]:  # 最多返回20条记录
+        for record in filtered_records[:20]:
             result_parts = []
 
             # 添加记忆ID
@@ -173,9 +222,6 @@ async def search_chat_history(
             return "未找到相关聊天记录"
 
         response_text = "\n\n---\n\n".join(results)
-        if len(filtered_records) > 20:
-            omitted_count = len(filtered_records) - 20
-            response_text += f"\n\n(还有{omitted_count}条记录已省略，可使用记忆ID查询详细信息)"
         return response_text
 
     except Exception as e:

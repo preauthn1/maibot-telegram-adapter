@@ -173,7 +173,11 @@ class ChatConfig(ConfigBase):
     def get_talk_value(self, chat_id: Optional[str]) -> float:
         """根据规则返回当前 chat 的动态 talk_value，未匹配则回退到基础值。"""
         if not self.enable_talk_value_rules or not self.talk_value_rules:
-            return self.talk_value
+            result = self.talk_value
+            # 防止返回0值，自动转换为0.0001
+            if result == 0:
+                return 0.0000001
+            return result
 
         now_min = self._now_minutes()
 
@@ -199,7 +203,11 @@ class ChatConfig(ConfigBase):
                 start_min, end_min = parsed
                 if self._in_range(now_min, start_min, end_min):
                     try:
-                        return float(value)
+                        result = float(value)
+                        # 防止返回0值，自动转换为0.0001
+                        if result == 0:
+                            return 0.0000001
+                        return result
                     except Exception:
                         continue
 
@@ -218,12 +226,20 @@ class ChatConfig(ConfigBase):
             start_min, end_min = parsed
             if self._in_range(now_min, start_min, end_min):
                 try:
-                    return float(value)
+                    result = float(value)
+                    # 防止返回0值，自动转换为0.0001
+                    if result == 0:
+                        return 0.0000001
+                    return result
                 except Exception:
                     continue
 
         # 3) 未命中规则返回基础值
-        return self.talk_value
+        result = self.talk_value
+        # 防止返回0值，自动转换为0.0001
+        if result == 0:
+            return 0.0000001
+        return result
 
 
 @dataclass
@@ -246,6 +262,9 @@ class MemoryConfig(ConfigBase):
 
     enable_jargon_detection: bool = True
     """记忆检索过程中是否启用黑话识别"""
+
+    global_memory: bool = False
+    """是否允许记忆检索在聊天记录中进行全局查询（忽略当前chat_id，仅对 search_chat_history 等工具生效）"""
 
     def __post_init__(self):
         """验证配置值"""
@@ -342,22 +361,30 @@ class ExpressionConfig(ConfigBase):
             tuple: (是否使用表达, 是否学习表达, 学习间隔)
         """
         if not self.learning_list:
-            # 如果没有配置，使用默认值：启用表达，启用学习，300秒间隔
-            return True, True, 300
+            # 如果没有配置，使用默认值：启用表达，启用学习，学习强度1.0（对应300秒间隔）
+            return True, True, 1.0
 
         # 优先检查聊天流特定的配置
         if chat_stream_id:
             specific_expression_config = self._get_stream_specific_config(chat_stream_id)
             if specific_expression_config is not None:
-                return specific_expression_config
+                use_expression, enable_learning, learning_intensity = specific_expression_config
+                # 防止学习强度为0，自动转换为0.0001
+                if learning_intensity == 0:
+                    learning_intensity = 0.0000001
+                return use_expression, enable_learning, learning_intensity
 
         # 检查全局配置（第一个元素为空字符串的配置）
         global_expression_config = self._get_global_config()
         if global_expression_config is not None:
-            return global_expression_config
+            use_expression, enable_learning, learning_intensity = global_expression_config
+            # 防止学习强度为0，自动转换为0.0001
+            if learning_intensity == 0:
+                learning_intensity = 0.0000001
+            return use_expression, enable_learning, learning_intensity
 
-        # 如果都没有匹配，返回默认值
-        return True, True, 300
+        # 如果都没有匹配，返回默认值：启用表达，启用学习，学习强度1.0（对应300秒间隔）
+        return True, True, 1.0
 
     def _get_stream_specific_config(self, chat_stream_id: str) -> Optional[tuple[bool, bool, int]]:
         """
@@ -393,6 +420,9 @@ class ExpressionConfig(ConfigBase):
                 use_expression: bool = config_item[1].lower() == "enable"
                 enable_learning: bool = config_item[2].lower() == "enable"
                 learning_intensity: float = float(config_item[3])
+                # 防止学习强度为0，自动转换为0.0001
+                if learning_intensity == 0:
+                    learning_intensity = 0.0000001
                 return use_expression, enable_learning, learning_intensity  # type: ignore
             except (ValueError, IndexError):
                 continue
@@ -416,6 +446,9 @@ class ExpressionConfig(ConfigBase):
                     use_expression: bool = config_item[1].lower() == "enable"
                     enable_learning: bool = config_item[2].lower() == "enable"
                     learning_intensity = float(config_item[3])
+                    # 防止学习强度为0，自动转换为0.0001
+                    if learning_intensity == 0:
+                        learning_intensity = 0.0000001
                     return use_expression, enable_learning, learning_intensity  # type: ignore
                 except (ValueError, IndexError):
                     continue
@@ -714,3 +747,89 @@ class JargonConfig(ConfigBase):
 
     all_global: bool = False
     """是否将所有新增的jargon项目默认为全局（is_global=True），chat_id记录第一次存储时的id"""
+
+
+@dataclass
+class DreamConfig(ConfigBase):
+    """Dream配置类"""
+
+    interval_minutes: int = 30
+    """做梦时间间隔（分钟），默认30分钟"""
+
+    max_iterations: int = 20
+    """做梦最大轮次，默认20轮"""
+
+    first_delay_seconds: int = 60
+    """程序启动后首次做梦前的延迟时间（秒），默认60秒"""
+
+    dream_time_ranges: list[str] = field(default_factory=lambda: [])
+    """
+    做梦时间段配置列表，格式：["HH:MM-HH:MM", ...]
+    如果列表为空，则表示全天允许做梦。
+    如果配置了时间段，则只有在这些时间段内才会实际执行做梦流程。
+    时间段外，调度器仍会按间隔检查，但不会进入做梦流程。
+    
+    示例:
+    [
+        "09:00-22:00",      # 白天允许做梦
+        "23:00-02:00",      # 跨夜时间段（23:00到次日02:00）
+    ]
+    
+    支持跨夜区间，例如 "23:00-02:00" 表示从23:00到次日02:00。
+    """
+
+    def _now_minutes(self) -> int:
+        """返回本地时间的分钟数(0-1439)。"""
+        lt = time.localtime()
+        return lt.tm_hour * 60 + lt.tm_min
+
+    def _parse_range(self, range_str: str) -> Optional[tuple[int, int]]:
+        """解析 "HH:MM-HH:MM" 到 (start_min, end_min)。"""
+        try:
+            start_str, end_str = [s.strip() for s in range_str.split("-")]
+            sh, sm = [int(x) for x in start_str.split(":")]
+            eh, em = [int(x) for x in end_str.split(":")]
+            return sh * 60 + sm, eh * 60 + em
+        except Exception:
+            return None
+
+    def _in_range(self, now_min: int, start_min: int, end_min: int) -> bool:
+        """
+        判断 now_min 是否在 [start_min, end_min] 区间内。
+        支持跨夜：如果 start > end，则表示跨越午夜。
+        """
+        if start_min <= end_min:
+            return start_min <= now_min <= end_min
+        # 跨夜：例如 23:00-02:00
+        return now_min >= start_min or now_min <= end_min
+
+    def is_in_dream_time(self) -> bool:
+        """
+        检查当前时间是否在允许做梦的时间段内。
+        如果 dream_time_ranges 为空，则返回 True（全天允许）。
+        """
+        if not self.dream_time_ranges:
+            return True
+        
+        now_min = self._now_minutes()
+        
+        for time_range in self.dream_time_ranges:
+            if not isinstance(time_range, str):
+                continue
+            parsed = self._parse_range(time_range)
+            if not parsed:
+                continue
+            start_min, end_min = parsed
+            if self._in_range(now_min, start_min, end_min):
+                return True
+        
+        return False
+
+    def __post_init__(self):
+        """验证配置值"""
+        if self.interval_minutes < 1:
+            raise ValueError(f"interval_minutes 必须至少为1，当前值: {self.interval_minutes}")
+        if self.max_iterations < 1:
+            raise ValueError(f"max_iterations 必须至少为1，当前值: {self.max_iterations}")
+        if self.first_delay_seconds < 0:
+            raise ValueError(f"first_delay_seconds 不能为负数，当前值: {self.first_delay_seconds}")

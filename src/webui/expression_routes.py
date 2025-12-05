@@ -1,7 +1,7 @@
 """表达方式管理 API 路由"""
 
 from fastapi import APIRouter, HTTPException, Header, Query, Cookie
-from pydantic import BaseModel
+from pydantic import BaseModel, NonNegativeFloat
 from typing import Optional, List, Dict
 from src.common.logger import get_logger
 from src.common.database.database_model import Expression, ChatStreams
@@ -21,7 +21,6 @@ class ExpressionResponse(BaseModel):
     situation: str
     style: str
     context: Optional[str]
-    up_content: Optional[str]
     last_active_time: float
     chat_id: str
     create_date: Optional[float]
@@ -49,8 +48,7 @@ class ExpressionCreateRequest(BaseModel):
 
     situation: str
     style: str
-    context: Optional[str] = None
-    up_content: Optional[str] = None
+    context: Optional[str] = NonNegativeFloat
     chat_id: str
 
 
@@ -60,7 +58,6 @@ class ExpressionUpdateRequest(BaseModel):
     situation: Optional[str] = None
     style: Optional[str] = None
     context: Optional[str] = None
-    up_content: Optional[str] = None
     chat_id: Optional[str] = None
 
 
@@ -102,7 +99,6 @@ def expression_to_response(expression: Expression) -> ExpressionResponse:
         situation=expression.situation,
         style=expression.style,
         context=expression.context,
-        up_content=expression.up_content,
         last_active_time=expression.last_active_time,
         chat_id=expression.chat_id,
         create_date=expression.create_date,
@@ -310,7 +306,6 @@ async def create_expression(request: ExpressionCreateRequest, maibot_session: Op
             situation=request.situation,
             style=request.style,
             context=request.context,
-            up_content=request.up_content,
             chat_id=request.chat_id,
             last_active_time=current_time,
             create_date=current_time,

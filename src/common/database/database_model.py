@@ -170,7 +170,7 @@ class Messages(BaseModel):
     is_emoji = BooleanField(default=False)
     is_picid = BooleanField(default=False)
     is_command = BooleanField(default=False)
-    is_no_read_command = BooleanField(default=False)
+    intercept_message_level = IntegerField(default=0)
     is_notify = BooleanField(default=False)
 
     selected_expressions = TextField(null=True)
@@ -324,7 +324,6 @@ class Expression(BaseModel):
 
     # new mode fields
     context = TextField(null=True)
-    up_content = TextField(null=True)
 
     content_list = TextField(null=True)
     count = IntegerField(default=1)

@@ -429,15 +429,36 @@ class ChatHistorySummarizer:
         # 2. 构造编号后的消息字符串和参与者信息
         numbered_lines, index_to_msg_str, index_to_msg_text, index_to_participants = self._build_numbered_messages_for_llm(messages)
 
-        # 3. 调用 LLM 识别话题，并得到 topic -> indices
+        # 3. 调用 LLM 识别话题，并得到 topic -> indices（失败时最多重试 3 次）
         existing_topics = list(self.topic_cache.keys())
-        success, topic_to_indices = await self._analyze_topics_with_llm(
-            numbered_lines=numbered_lines,
-            existing_topics=existing_topics,
-        )
+        max_retries = 3
+        attempt = 0
+        success = False
+        topic_to_indices: Dict[str, List[int]] = {}
+
+        while attempt < max_retries:
+            attempt += 1
+            success, topic_to_indices = await self._analyze_topics_with_llm(
+                numbered_lines=numbered_lines,
+                existing_topics=existing_topics,
+            )
+
+            if success and topic_to_indices:
+                if attempt > 1:
+                    logger.info(
+                        f"{self.log_prefix} 话题识别在第 {attempt} 次重试后成功 | 话题数: {len(topic_to_indices)}"
+                    )
+                break
+
+            logger.warning(
+                f"{self.log_prefix} 话题识别失败或无有效话题，第 {attempt} 次尝试失败"
+                + ("" if attempt >= max_retries else "，准备重试")
+            )
 
         if not success or not topic_to_indices:
-            logger.warning(f"{self.log_prefix} 话题识别失败或无有效话题，本次检查忽略")
+            logger.error(
+                f"{self.log_prefix} 话题识别连续 {max_retries} 次失败或始终无有效话题，本次检查放弃"
+            )
             # 即使识别失败，也认为是一次“检查”，但不更新 no_update_checks（保持原状）
             return
 

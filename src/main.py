@@ -16,6 +16,7 @@ from src.common.server import get_global_server, Server
 from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
 from rich.traceback import install
+
 # from src.api.main import start_api_server
 
 # 导入新的插件管理器
@@ -23,6 +24,7 @@ from src.plugin_system.core.plugin_manager import plugin_manager
 
 # 导入消息API和traceback模块
 from src.common.message import get_global_api
+from src.dream.dream_agent import start_dream_scheduler
 
 # 插件系统现在使用统一的插件加载器
 
@@ -106,7 +108,7 @@ class MainSystem:
         await async_task_manager.add_task(TelemetryHeartBeatTask())
 
         # 添加记忆遗忘任务
-        from src.chat.utils.memory_forget_task import MemoryForgetTask
+        from src.hippo_memorizer.memory_forget_task import MemoryForgetTask
 
         await async_task_manager.add_task(MemoryForgetTask())
 
@@ -159,6 +161,7 @@ class MainSystem:
         try:
             tasks = [
                 get_emoji_manager().start_periodic_check_register(),
+                start_dream_scheduler(),
                 self.app.run(),
                 self.server.run(),
             ]

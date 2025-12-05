@@ -223,9 +223,9 @@ async def update_token(
         # 更新 token
         success, message = token_manager.update_token(request.new_token)
         
-        # 如果更新成功，更新 Cookie
+        # 如果更新成功，清除 Cookie，要求用户重新登录
         if success:
-            set_auth_cookie(response, request.new_token)
+            clear_auth_cookie(response)
 
         return TokenUpdateResponse(success=success, message=message)
     except HTTPException:
@@ -272,8 +272,8 @@ async def regenerate_token(
         # 重新生成 token
         new_token = token_manager.regenerate_token()
         
-        # 更新 Cookie
-        set_auth_cookie(response, new_token)
+        # 清除 Cookie，要求用户重新登录
+        clear_auth_cookie(response)
 
         return TokenRegenerateResponse(success=True, token=new_token, message="Token 已重新生成")
     except HTTPException:

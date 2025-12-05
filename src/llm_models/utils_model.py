@@ -315,12 +315,30 @@ class LLMRequest:
         while retry_remain > 0:
             try:
                 if request_type == RequestType.RESPONSE:
+                    # 温度优先级：参数传入 > 模型级别配置 > extra_params > 任务配置
+                    effective_temperature = temperature
+                    if effective_temperature is None:
+                        effective_temperature = model_info.temperature
+                    if effective_temperature is None:
+                        effective_temperature = (model_info.extra_params or {}).get("temperature")
+                    if effective_temperature is None:
+                        effective_temperature = self.model_for_task.temperature
+                    
+                    # max_tokens 优先级：参数传入 > 模型级别配置 > extra_params > 任务配置
+                    effective_max_tokens = max_tokens
+                    if effective_max_tokens is None:
+                        effective_max_tokens = model_info.max_tokens
+                    if effective_max_tokens is None:
+                        effective_max_tokens = (model_info.extra_params or {}).get("max_tokens")
+                    if effective_max_tokens is None:
+                        effective_max_tokens = self.model_for_task.max_tokens
+                    
                     return await client.get_response(
                         model_info=model_info,
                         message_list=(compressed_messages or message_list),
                         tool_options=tool_options,
-                        max_tokens=self.model_for_task.max_tokens if max_tokens is None else max_tokens,
-                        temperature=temperature if temperature is not None else (model_info.extra_params or {}).get("temperature", self.model_for_task.temperature),
+                        max_tokens=effective_max_tokens,
+                        temperature=effective_temperature,
                         response_format=response_format,
                         stream_response_handler=stream_response_handler,
                         async_response_parser=async_response_parser,

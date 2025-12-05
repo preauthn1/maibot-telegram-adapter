@@ -1420,18 +1420,8 @@ async def update_plugin_config(
             shutil.copy(config_path, backup_path)
             logger.info(f"已备份配置文件: {backup_path}")
 
-        # 写入新配置（使用 tomlkit 保留注释）
-        import tomlkit
-
-        # 先读取原配置以保留注释和格式
-        existing_doc = tomlkit.document()
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                existing_doc = tomlkit.load(f)
-        # 更新值
-        for key, value in request.config.items():
-            existing_doc[key] = value
-        save_toml_with_format(existing_doc, str(config_path))
+        # 写入新配置（自动保留注释和格式）
+        save_toml_with_format(request.config, str(config_path))
 
         logger.info(f"已更新插件配置: {plugin_id}")
 
