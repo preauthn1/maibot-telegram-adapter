@@ -1746,7 +1746,7 @@ class MCPBridgePlugin(BasePlugin):
         "plugin": {
             "enabled": ConfigField(
                 type=bool,
-                default=True,
+                default=False,
                 description="是否启用插件",
                 label="启用插件",
             ),
