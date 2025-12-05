@@ -304,14 +304,12 @@ class BrainChatting:
             )
 
             prompt_info = await self.action_planner.build_planner_prompt(
-                is_group_chat=is_group_chat,
                 chat_target_info=chat_target_info,
                 current_available_actions=available_actions,
                 chat_content_block=chat_content_block,
                 message_id_list=message_id_list,
                 interest=global_config.personality.interest,
                 prompt_key="brain_planner_prompt_react",
-                log_prompt=True,
             )
             continue_flag, modified_message = await events_manager.handle_mai_events(
                 EventType.ON_PLAN, None, prompt_info[0], None, self.chat_stream.stream_id
