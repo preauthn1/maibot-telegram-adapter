@@ -86,6 +86,10 @@ class ExpressionLearner:
         _, self.enable_learning, self.learning_intensity = global_config.expression.get_expression_config_for_chat(
             self.chat_id
         )
+        # 防止除以零：如果学习强度为0或负数，使用最小值0.0001
+        if self.learning_intensity <= 0:
+            logger.warning(f"学习强度为 {self.learning_intensity}，已自动调整为 0.0001 以避免除以零错误")
+            self.learning_intensity = 0.0000001
         self.min_messages_for_learning = 15 / self.learning_intensity  # 触发学习所需的最少消息数
         self.min_learning_interval = 120 / self.learning_intensity
 

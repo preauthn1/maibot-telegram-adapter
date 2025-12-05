@@ -173,7 +173,11 @@ class ChatConfig(ConfigBase):
     def get_talk_value(self, chat_id: Optional[str]) -> float:
         """根据规则返回当前 chat 的动态 talk_value，未匹配则回退到基础值。"""
         if not self.enable_talk_value_rules or not self.talk_value_rules:
-            return self.talk_value
+            result = self.talk_value
+            # 防止返回0值，自动转换为0.0001
+            if result == 0:
+                return 0.0000001
+            return result
 
         now_min = self._now_minutes()
 
@@ -199,7 +203,11 @@ class ChatConfig(ConfigBase):
                 start_min, end_min = parsed
                 if self._in_range(now_min, start_min, end_min):
                     try:
-                        return float(value)
+                        result = float(value)
+                        # 防止返回0值，自动转换为0.0001
+                        if result == 0:
+                            return 0.0000001
+                        return result
                     except Exception:
                         continue
 
@@ -218,12 +226,20 @@ class ChatConfig(ConfigBase):
             start_min, end_min = parsed
             if self._in_range(now_min, start_min, end_min):
                 try:
-                    return float(value)
+                    result = float(value)
+                    # 防止返回0值，自动转换为0.0001
+                    if result == 0:
+                        return 0.0000001
+                    return result
                 except Exception:
                     continue
 
         # 3) 未命中规则返回基础值
-        return self.talk_value
+        result = self.talk_value
+        # 防止返回0值，自动转换为0.0001
+        if result == 0:
+            return 0.0000001
+        return result
 
 
 @dataclass
@@ -345,22 +361,30 @@ class ExpressionConfig(ConfigBase):
             tuple: (是否使用表达, 是否学习表达, 学习间隔)
         """
         if not self.learning_list:
-            # 如果没有配置，使用默认值：启用表达，启用学习，300秒间隔
-            return True, True, 300
+            # 如果没有配置，使用默认值：启用表达，启用学习，学习强度1.0（对应300秒间隔）
+            return True, True, 1.0
 
         # 优先检查聊天流特定的配置
         if chat_stream_id:
             specific_expression_config = self._get_stream_specific_config(chat_stream_id)
             if specific_expression_config is not None:
-                return specific_expression_config
+                use_expression, enable_learning, learning_intensity = specific_expression_config
+                # 防止学习强度为0，自动转换为0.0001
+                if learning_intensity == 0:
+                    learning_intensity = 0.0000001
+                return use_expression, enable_learning, learning_intensity
 
         # 检查全局配置（第一个元素为空字符串的配置）
         global_expression_config = self._get_global_config()
         if global_expression_config is not None:
-            return global_expression_config
+            use_expression, enable_learning, learning_intensity = global_expression_config
+            # 防止学习强度为0，自动转换为0.0001
+            if learning_intensity == 0:
+                learning_intensity = 0.0000001
+            return use_expression, enable_learning, learning_intensity
 
-        # 如果都没有匹配，返回默认值
-        return True, True, 300
+        # 如果都没有匹配，返回默认值：启用表达，启用学习，学习强度1.0（对应300秒间隔）
+        return True, True, 1.0
 
     def _get_stream_specific_config(self, chat_stream_id: str) -> Optional[tuple[bool, bool, int]]:
         """
@@ -396,6 +420,9 @@ class ExpressionConfig(ConfigBase):
                 use_expression: bool = config_item[1].lower() == "enable"
                 enable_learning: bool = config_item[2].lower() == "enable"
                 learning_intensity: float = float(config_item[3])
+                # 防止学习强度为0，自动转换为0.0001
+                if learning_intensity == 0:
+                    learning_intensity = 0.0000001
                 return use_expression, enable_learning, learning_intensity  # type: ignore
             except (ValueError, IndexError):
                 continue
@@ -419,6 +446,9 @@ class ExpressionConfig(ConfigBase):
                     use_expression: bool = config_item[1].lower() == "enable"
                     enable_learning: bool = config_item[2].lower() == "enable"
                     learning_intensity = float(config_item[3])
+                    # 防止学习强度为0，自动转换为0.0001
+                    if learning_intensity == 0:
+                        learning_intensity = 0.0000001
                     return use_expression, enable_learning, learning_intensity  # type: ignore
                 except (ValueError, IndexError):
                     continue

@@ -69,6 +69,7 @@ learning_list = [ # 表达学习配置列表，支持按聊天流配置
     # 第三位: 是否学习表达 ("enable"/"disable") 
     # 第四位: 学习强度（浮点数），影响学习频率，最短学习时间间隔 = 300/学习强度（秒）
     # 学习强度越高，学习越频繁；学习强度越低，学习越少
+    # 如果学习强度设置为0会自动转换为0.0001以避免除以零错误
 ]
 
 expression_groups = [
@@ -86,7 +87,7 @@ allow_reflect = [] # 允许进行表达反思的聊天流ID列表，格式：["q
 
 
 [chat] # 麦麦的聊天设置
-talk_value = 1 # 聊天频率，越小越沉默，范围0-1
+talk_value = 1 # 聊天频率，越小越沉默，范围0-1，如果设置为0会自动转换为0.0001以避免除以零错误
 mentioned_bot_reply = true # 是否启用提及必回复
 max_context_size = 30 # 上下文长度
 planner_smooth = 2 # 规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐1-5，0为关闭，必须大于等于0
@@ -97,7 +98,7 @@ enable_talk_value_rules = true # 是否启用动态发言频率规则
 # 推荐格式（对象数组）：{ target="platform:id:type" 或 "", time="HH:MM-HH:MM", value=0.5 }
 # 说明:
 # - target 为空字符串表示全局；type 为 group/private，例如："qq:1919810:group" 或 "qq:114514:private"；
-# - 支持跨夜区间，例如 "23:00-02:00"；数值范围建议 0-1。
+# - 支持跨夜区间，例如 "23:00-02:00"；数值范围建议 0-1，如果 value 设置为0会自动转换为0.0001以避免除以零错误。
 talk_value_rules = [
     { target = "", time = "00:00-08:59", value = 0.8 },
     { target = "", time = "09:00-22:59", value = 1.0 },
