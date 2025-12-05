@@ -181,8 +181,8 @@ class BrainChatting:
         should_continue = await self._observe(recent_messages_list=recent_messages_list)
         
         if not should_continue:
-            # 选择了 complete_talk，停止循环
-            return True
+            # 选择了 complete_talk，返回 False 表示需要等待新消息
+            return False
         
         # 继续下一次迭代（除非选择了 complete_talk）
         # 短暂等待后再继续，避免过于频繁的循环
@@ -414,9 +414,13 @@ class BrainChatting:
             while self.running:
                 # 主循环
                 success = await self._loopbody()
-                await asyncio.sleep(0.1)
                 if not success:
-                    break
+                    # 选择了 complete，等待新消息
+                    logger.info(f"{self.log_prefix} 选择了 complete，等待新消息...")
+                    await self._wait_for_new_message()
+                    # 有新消息后继续循环
+                    continue
+                await asyncio.sleep(0.1)
         except asyncio.CancelledError:
             # 设置了关闭标志位后被取消是正常流程
             logger.info(f"{self.log_prefix} 麦麦已关闭聊天")
@@ -426,6 +430,33 @@ class BrainChatting:
             await asyncio.sleep(3)
             self._loop_task = asyncio.create_task(self._main_chat_loop())
         logger.error(f"{self.log_prefix} 结束了当前聊天循环")
+    
+    async def _wait_for_new_message(self):
+        """等待新消息到达"""
+        last_check_time = self.last_read_time
+        check_interval = 1.0  # 每秒检查一次
+        
+        while self.running:
+            # 检查是否有新消息
+            recent_messages_list = message_api.get_messages_by_time_in_chat(
+                chat_id=self.stream_id,
+                start_time=last_check_time,
+                end_time=time.time(),
+                limit=20,
+                limit_mode="latest",
+                filter_mai=True,
+                filter_command=False,
+                filter_intercept_message_level=1,
+            )
+            
+            # 如果有新消息，更新 last_read_time 并返回
+            if len(recent_messages_list) >= 1:
+                self.last_read_time = time.time()
+                logger.info(f"{self.log_prefix} 检测到新消息，恢复循环")
+                return
+            
+            # 等待一段时间后再次检查
+            await asyncio.sleep(check_interval)
 
     async def _handle_action(
         self,
