@@ -732,6 +732,69 @@ class DreamConfig(ConfigBase):
     first_delay_seconds: int = 60
     """程序启动后首次做梦前的延迟时间（秒），默认60秒"""
 
+    dream_time_ranges: list[str] = field(default_factory=lambda: [])
+    """
+    做梦时间段配置列表，格式：["HH:MM-HH:MM", ...]
+    如果列表为空，则表示全天允许做梦。
+    如果配置了时间段，则只有在这些时间段内才会实际执行做梦流程。
+    时间段外，调度器仍会按间隔检查，但不会进入做梦流程。
+    
+    示例:
+    [
+        "09:00-22:00",      # 白天允许做梦
+        "23:00-02:00",      # 跨夜时间段（23:00到次日02:00）
+    ]
+    
+    支持跨夜区间，例如 "23:00-02:00" 表示从23:00到次日02:00。
+    """
+
+    def _now_minutes(self) -> int:
+        """返回本地时间的分钟数(0-1439)。"""
+        lt = time.localtime()
+        return lt.tm_hour * 60 + lt.tm_min
+
+    def _parse_range(self, range_str: str) -> Optional[tuple[int, int]]:
+        """解析 "HH:MM-HH:MM" 到 (start_min, end_min)。"""
+        try:
+            start_str, end_str = [s.strip() for s in range_str.split("-")]
+            sh, sm = [int(x) for x in start_str.split(":")]
+            eh, em = [int(x) for x in end_str.split(":")]
+            return sh * 60 + sm, eh * 60 + em
+        except Exception:
+            return None
+
+    def _in_range(self, now_min: int, start_min: int, end_min: int) -> bool:
+        """
+        判断 now_min 是否在 [start_min, end_min] 区间内。
+        支持跨夜：如果 start > end，则表示跨越午夜。
+        """
+        if start_min <= end_min:
+            return start_min <= now_min <= end_min
+        # 跨夜：例如 23:00-02:00
+        return now_min >= start_min or now_min <= end_min
+
+    def is_in_dream_time(self) -> bool:
+        """
+        检查当前时间是否在允许做梦的时间段内。
+        如果 dream_time_ranges 为空，则返回 True（全天允许）。
+        """
+        if not self.dream_time_ranges:
+            return True
+        
+        now_min = self._now_minutes()
+        
+        for time_range in self.dream_time_ranges:
+            if not isinstance(time_range, str):
+                continue
+            parsed = self._parse_range(time_range)
+            if not parsed:
+                continue
+            start_min, end_min = parsed
+            if self._in_range(now_min, start_min, end_min):
+                return True
+        
+        return False
+
     def __post_init__(self):
         """验证配置值"""
         if self.interval_minutes < 1:

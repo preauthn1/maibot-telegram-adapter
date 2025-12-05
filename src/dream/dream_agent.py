@@ -535,10 +535,14 @@ async def start_dream_scheduler(
                 break
 
             start_ts = time.time()
-            try:
-                await run_dream_cycle_once()
-            except Exception as e:
-                logger.error(f"[dream] 单次 dream 周期执行异常: {e}")
+            # 检查当前时间是否在允许做梦的时间段内
+            if not global_config.dream.is_in_dream_time():
+                logger.debug("[dream] 当前时间不在允许做梦的时间段内，跳过本次执行")
+            else:
+                try:
+                    await run_dream_cycle_once()
+                except Exception as e:
+                    logger.error(f"[dream] 单次 dream 周期执行异常: {e}")
 
             elapsed = time.time() - start_ts
             # 保证两次执行之间至少间隔 interval_seconds
