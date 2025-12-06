@@ -69,6 +69,15 @@ def parse_version(version_str: str) -> tuple[int, int, int]:
 # ============ 工具函数（避免在请求内重复定义） ============
 
 
+def _deep_merge(dst: Dict[str, Any], src: Dict[str, Any]) -> None:
+    """深度合并两个字典，src 的值会覆盖或合并到 dst 中。"""
+    for k, v in src.items():
+        if k in dst and isinstance(dst[k], dict) and isinstance(v, dict):
+            _deep_merge(dst[k], v)
+        else:
+            dst[k] = v
+
+
 def normalize_dotted_keys(obj: Dict[str, Any]) -> Dict[str, Any]:
     """
     将形如 {'a.b': 1} 的键展开为嵌套结构 {'a': {'b': 1}}。
@@ -94,15 +103,19 @@ def normalize_dotted_keys(obj: Dict[str, Any]) -> Dict[str, Any]:
     # 再处理点号键
     for dotted_key, v in dotted_items:
         value = normalize_dotted_keys(v) if isinstance(v, dict) else v
-        parts = [p for p in dotted_key.split(".") if p]
+        parts = dotted_key.split(".")
+        if "" in parts:
+            logger.warning(f"键路径包含空段: '{dotted_key}'")
+            parts = [p for p in parts if p]
         if not parts:
             logger.warning(f"忽略空键路径: '{dotted_key}'")
             continue
         current = result
         # 中间层
-        for part in parts[:-1]:
+        for idx, part in enumerate(parts[:-1]):
             if part in current and not isinstance(current[part], dict):
-                logger.warning(f"键冲突：{part} 已存在且非字典，覆盖为字典以展开 {dotted_key}")
+                path_ctx = ".".join(parts[: idx + 1])
+                logger.warning(f"键冲突：{part} 已存在且非字典，覆盖为字典以展开 {dotted_key} (路径 {path_ctx})")
                 current[part] = {}
             current = current.setdefault(part, {})
         # 最后一层
