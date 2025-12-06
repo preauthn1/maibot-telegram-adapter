@@ -17,7 +17,7 @@ from src.chat.planner_actions.action_modifier import ActionModifier
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
 from src.express.expression_learner import expression_learner_manager
-from src.chat.frequency_control.frequency_control import frequency_control_manager
+from src.chat.heart_flow.frequency_control import frequency_control_manager
 from src.express.reflect_tracker import reflect_tracker_manager
 from src.express.expression_reflector import expression_reflector_manager
 from src.jargon import extract_and_store_jargon
@@ -329,9 +329,6 @@ class HeartFChatting:
         start_time = time.time()
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
             asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
-            asyncio.create_task(
-                frequency_control_manager.get_or_create_frequency_control(self.stream_id).trigger_frequency_adjust()
-            )
 
             # 添加curious检测任务 - 检测聊天记录中的矛盾、冲突或需要提问的内容
             # asyncio.create_task(check_and_make_question(self.stream_id))
