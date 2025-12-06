@@ -260,6 +260,9 @@ class MemoryConfig(ConfigBase):
     max_agent_iterations: int = 5
     """Agent最多迭代轮数（最低为1）"""
 
+    agent_timeout_seconds: float = 120.0
+    """Agent超时时间（秒）"""
+
     enable_jargon_detection: bool = True
     """记忆检索过程中是否启用黑话识别"""
 
@@ -270,6 +273,8 @@ class MemoryConfig(ConfigBase):
         """验证配置值"""
         if self.max_agent_iterations < 1:
             raise ValueError(f"max_agent_iterations 必须至少为1，当前值: {self.max_agent_iterations}")
+        if self.agent_timeout_seconds <= 0:
+            raise ValueError(f"agent_timeout_seconds 必须大于0，当前值: {self.agent_timeout_seconds}")
 
 
 @dataclass

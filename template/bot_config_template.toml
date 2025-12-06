@@ -109,7 +109,8 @@ talk_value_rules = [
 include_planner_reasoning = false # 是否将planner推理加入replyer，默认关闭（不加入）
 
 [memory]
-max_agent_iterations = 3 # 记忆思考深度（最低为1（不深入思考））
+max_agent_iterations = 2 # 记忆思考深度（最低为1）
+agent_timeout_seconds = 45.0 # 最长回忆时间（秒）
 enable_jargon_detection = true # 记忆检索过程中是否启用黑话识别
 global_memory = false # 是否允许记忆检索进行全局查询
 

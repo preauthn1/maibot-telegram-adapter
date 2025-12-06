@@ -303,90 +303,6 @@ class HeartFChatting:
 
         return loop_info, reply_text, cycle_timers
 
-    async def _run_planner_without_reply(
-        self,
-        available_actions: Dict[str, ActionInfo],
-        cycle_timers: Dict[str, float],
-    ) -> List[ActionPlannerInfo]:
-        """执行planner，但不包含reply动作（用于并行执行场景，提及时使用简化版提示词）"""
-        try:
-            with Timer("规划器", cycle_timers):
-                action_to_use_info = await self.action_planner.plan(
-                    loop_start_time=self.last_read_time,
-                    available_actions=available_actions,
-                    is_mentioned=True,  # 标记为提及时，使用简化版提示词
-                )
-            # 过滤掉reply动作（虽然提及时不应该有reply，但为了安全还是过滤一下）
-            return [action for action in action_to_use_info if action.action_type != "reply"]
-        except Exception as e:
-            logger.error(f"{self.log_prefix} Planner执行失败: {e}")
-            traceback.print_exc()
-            return []
-
-    async def _generate_mentioned_reply(
-        self,
-        force_reply_message: "DatabaseMessages",
-        thinking_id: str,
-        cycle_timers: Dict[str, float],
-        available_actions: Dict[str, ActionInfo],
-    ) -> Dict[str, Any]:
-        """当被提及时，独立生成回复的任务"""
-        try:
-            self.questioned = False
-            # 重置连续 no_reply 计数
-            self.consecutive_no_reply_count = 0
-            reason = ""
-
-            await database_api.store_action_info(
-                chat_stream=self.chat_stream,
-                action_build_into_prompt=False,
-                action_prompt_display=reason,
-                action_done=True,
-                thinking_id=thinking_id,
-                action_data={},
-                action_name="reply",
-                action_reasoning=reason,
-            )
-
-            with Timer("提及回复生成", cycle_timers):
-                success, llm_response = await generator_api.generate_reply(
-                    chat_stream=self.chat_stream,
-                    reply_message=force_reply_message,
-                    available_actions=available_actions,
-                    chosen_actions=[],  # 独立回复，不依赖planner的动作
-                    reply_reason=reason,
-                    enable_tool=global_config.tool.enable_tool,
-                    request_type="replyer",
-                    from_plugin=False,
-                    reply_time_point=self.last_read_time,
-                )
-
-            if not success or not llm_response or not llm_response.reply_set:
-                logger.warning(f"{self.log_prefix} 提及回复生成失败")
-                return {"action_type": "reply", "success": False, "result": "提及回复生成失败", "loop_info": None}
-
-            response_set = llm_response.reply_set
-            selected_expressions = llm_response.selected_expressions
-            loop_info, reply_text, _ = await self._send_and_store_reply(
-                response_set=response_set,
-                action_message=force_reply_message,
-                cycle_timers=cycle_timers,
-                thinking_id=thinking_id,
-                actions=[],  # 独立回复，不依赖planner的动作
-                selected_expressions=selected_expressions,
-            )
-            self.last_active_time = time.time()
-            return {
-                "action_type": "reply",
-                "success": True,
-                "result": f"你回复内容{reply_text}",
-                "loop_info": loop_info,
-            }
-        except Exception as e:
-            logger.error(f"{self.log_prefix} 提及回复生成异常: {e}")
-            traceback.print_exc()
-            return {"action_type": "reply", "success": False, "result": f"提及回复生成异常: {e}", "loop_info": None}
-
     async def _observe(
         self,  # interest_value: float = 0.0,
         recent_messages_list: Optional[List["DatabaseMessages"]] = None,
@@ -438,95 +354,50 @@ class HeartFChatting:
             except Exception as e:
                 logger.error(f"{self.log_prefix} 动作修改失败: {e}")
 
-            # 如果被提及，让回复生成和planner并行执行
-            if force_reply_message:
-                logger.info(f"{self.log_prefix} 检测到提及，回复生成与planner并行执行")
+            # 执行planner
+            is_group_chat, chat_target_info, _ = self.action_planner.get_necessary_info()
 
-                # 并行执行planner和回复生成
-                planner_task = asyncio.create_task(
-                    self._run_planner_without_reply(
-                        available_actions=available_actions,
-                        cycle_timers=cycle_timers,
-                    )
+            message_list_before_now = get_raw_msg_before_timestamp_with_chat(
+                chat_id=self.stream_id,
+                timestamp=time.time(),
+                limit=int(global_config.chat.max_context_size * 0.6),
+                filter_intercept_message_level=1,
+            )
+            chat_content_block, message_id_list = build_readable_messages_with_id(
+                messages=message_list_before_now,
+                timestamp_mode="normal_no_YMD",
+                read_mark=self.action_planner.last_obs_time_mark,
+                truncate=True,
+                show_actions=True,
+            )
+
+            prompt_info = await self.action_planner.build_planner_prompt(
+                is_group_chat=is_group_chat,
+                chat_target_info=chat_target_info,
+                current_available_actions=available_actions,
+                chat_content_block=chat_content_block,
+                message_id_list=message_id_list,
+                interest=global_config.personality.interest,
+            )
+            continue_flag, modified_message = await events_manager.handle_mai_events(
+                EventType.ON_PLAN, None, prompt_info[0], None, self.chat_stream.stream_id
+            )
+            if not continue_flag:
+                return False
+            if modified_message and modified_message._modify_flags.modify_llm_prompt:
+                prompt_info = (modified_message.llm_prompt, prompt_info[1])
+
+            with Timer("规划器", cycle_timers):
+                action_to_use_info = await self.action_planner.plan(
+                    loop_start_time=self.last_read_time,
+                    available_actions=available_actions,
                 )
-                reply_task = asyncio.create_task(
-                    self._generate_mentioned_reply(
-                        force_reply_message=force_reply_message,
-                        thinking_id=thinking_id,
-                        cycle_timers=cycle_timers,
-                        available_actions=available_actions,
-                    )
-                )
-
-                # 等待两个任务完成
-                planner_result, reply_result = await asyncio.gather(planner_task, reply_task, return_exceptions=True)
-
-                # 处理planner结果
-                if isinstance(planner_result, BaseException):
-                    logger.error(f"{self.log_prefix} Planner执行异常: {planner_result}")
-                    action_to_use_info = []
-                else:
-                    action_to_use_info = planner_result
-
-                # 处理回复结果
-                if isinstance(reply_result, BaseException):
-                    logger.error(f"{self.log_prefix} 回复生成异常: {reply_result}")
-                    reply_result = {
-                        "action_type": "reply",
-                        "success": False,
-                        "result": "回复生成异常",
-                        "loop_info": None,
-                    }
-            else:
-                # 正常流程：只执行planner
-                is_group_chat, chat_target_info, _ = self.action_planner.get_necessary_info()
-
-                message_list_before_now = get_raw_msg_before_timestamp_with_chat(
-                    chat_id=self.stream_id,
-                    timestamp=time.time(),
-                    limit=int(global_config.chat.max_context_size * 0.6),
-                    filter_intercept_message_level=1,
-                )
-                chat_content_block, message_id_list = build_readable_messages_with_id(
-                    messages=message_list_before_now,
-                    timestamp_mode="normal_no_YMD",
-                    read_mark=self.action_planner.last_obs_time_mark,
-                    truncate=True,
-                    show_actions=True,
-                )
-
-                prompt_info = await self.action_planner.build_planner_prompt(
-                    is_group_chat=is_group_chat,
-                    chat_target_info=chat_target_info,
-                    current_available_actions=available_actions,
-                    chat_content_block=chat_content_block,
-                    message_id_list=message_id_list,
-                    interest=global_config.personality.interest,
-                )
-                continue_flag, modified_message = await events_manager.handle_mai_events(
-                    EventType.ON_PLAN, None, prompt_info[0], None, self.chat_stream.stream_id
-                )
-                if not continue_flag:
-                    return False
-                if modified_message and modified_message._modify_flags.modify_llm_prompt:
-                    prompt_info = (modified_message.llm_prompt, prompt_info[1])
-
-                with Timer("规划器", cycle_timers):
-                    action_to_use_info = await self.action_planner.plan(
-                        loop_start_time=self.last_read_time,
-                        available_actions=available_actions,
-                    )
-                reply_result = None
-
-            # 只在提及情况下过滤掉planner返回的reply动作（提及时已有独立回复生成）
-            if force_reply_message:
-                action_to_use_info = [action for action in action_to_use_info if action.action_type != "reply"]
 
             logger.info(
                 f"{self.log_prefix} 决定执行{len(action_to_use_info)}个动作: {' '.join([a.action_type for a in action_to_use_info])}"
             )
 
-            # 3. 并行执行所有动作（不包括reply，reply已经独立执行）
+            # 3. 并行执行所有动作
             action_tasks = [
                 asyncio.create_task(
                     self._execute_action(action, action_to_use_info, thinking_id, available_actions, cycle_timers)
@@ -536,10 +407,6 @@ class HeartFChatting:
 
             # 并行执行所有任务
             results = await asyncio.gather(*action_tasks, return_exceptions=True)
-
-            # 如果有独立的回复结果，添加到结果列表中
-            if reply_result:
-                results = list(results) + [reply_result]
 
             # 处理执行结果
             reply_loop_info = None

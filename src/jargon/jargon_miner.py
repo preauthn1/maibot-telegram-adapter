@@ -48,7 +48,7 @@ def _init_prompt() -> None:
 - 中文词语的缩写，用几个汉字概括一个词汇或含义，例如：社死、内卷
 
 以 JSON 数组输出，元素为对象（严格按以下结构）：
-请你提取出可能的黑话，最多10
+请你提取出可能的黑话，最多30个黑话，请尽量提取所有
 [
   {{"content": "词条", "msg_id": "m12"}},  // msg_id 必须与上方聊天中展示的ID完全一致
   {{"content": "词条2", "msg_id": "m15"}}
@@ -168,19 +168,24 @@ class JargonMiner:
         self.chat_id = chat_id
         self.last_learning_time: float = time.time()
         # 频率控制，可按需调整
-        self.min_messages_for_learning: int = 10
-        self.min_learning_interval: float = 20
+        self.min_messages_for_learning: int = 30
+        self.min_learning_interval: float = 60
 
         self.llm = LLMRequest(
             model_set=model_config.model_task_config.utils,
             request_type="jargon.extract",
+        )
+        
+        self.llm_inference = LLMRequest(
+            model_set=model_config.model_task_config.utils,
+            request_type="jargon.inference",
         )
 
         # 初始化stream_name作为类属性，避免重复提取
         chat_manager = get_chat_manager()
         stream_name = chat_manager.get_stream_name(self.chat_id)
         self.stream_name = stream_name if stream_name else self.chat_id
-        self.cache_limit = 100
+        self.cache_limit = 50
         self.cache: OrderedDict[str, None] = OrderedDict()
         
         # 黑话提取锁，防止并发执行
@@ -276,7 +281,7 @@ class JargonMiner:
                 raw_content_list=raw_content_text,
             )
 
-            response1, _ = await self.llm.generate_response_async(prompt1, temperature=0.3)
+            response1, _ = await self.llm_inference.generate_response_async(prompt1, temperature=0.3)
             if not response1:
                 logger.warning(f"jargon {content} 推断1失败：无响应")
                 return
@@ -313,7 +318,7 @@ class JargonMiner:
                 content=content,
             )
 
-            response2, _ = await self.llm.generate_response_async(prompt2, temperature=0.3)
+            response2, _ = await self.llm_inference.generate_response_async(prompt2, temperature=0.3)
             if not response2:
                 logger.warning(f"jargon {content} 推断2失败：无响应")
                 return
@@ -360,7 +365,7 @@ class JargonMiner:
             if global_config.debug.show_jargon_prompt:
                 logger.info(f"jargon {content} 比较提示词: {prompt3}")
 
-            response3, _ = await self.llm.generate_response_async(prompt3, temperature=0.3)
+            response3, _ = await self.llm_inference.generate_response_async(prompt3, temperature=0.3)
             if not response3:
                 logger.warning(f"jargon {content} 比较失败：无响应")
                 return
