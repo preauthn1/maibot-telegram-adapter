@@ -83,13 +83,6 @@ def normalize_dotted_keys(obj: Dict[str, Any]) -> Dict[str, Any]:
     将形如 {'a.b': 1} 的键展开为嵌套结构 {'a': {'b': 1}}。
     若遇到中间节点已存在且非字典，记录日志并覆盖为字典。
     """
-    def _deep_merge(dst: Dict[str, Any], src: Dict[str, Any]) -> None:
-        for k, v in src.items():
-            if k in dst and isinstance(dst[k], dict) and isinstance(v, dict):
-                _deep_merge(dst[k], v)
-            else:
-                dst[k] = v
-
     result: Dict[str, Any] = {}
     dotted_items = []
 
