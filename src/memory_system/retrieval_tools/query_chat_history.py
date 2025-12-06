@@ -153,7 +153,7 @@ async def search_chat_history(
                 return "未找到相关聊天记录"
 
         # 如果匹配结果超过20条，不返回具体记录，只返回提示和所有相关关键词
-        if len(filtered_records) > 20:
+        if len(filtered_records) > 15:
             # 统计所有记录上的关键词并去重
             all_keywords_set = set()
             for record in filtered_records:

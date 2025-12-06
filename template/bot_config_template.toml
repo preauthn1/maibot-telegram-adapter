@@ -114,9 +114,9 @@ enable_jargon_detection = true # 记忆检索过程中是否启用黑话识别
 global_memory = false # 是否允许记忆检索进行全局查询
 
 [dream]
-interval_minutes = 45 # 做梦时间间隔（分钟），默认30分钟
+interval_minutes = 60 # 做梦时间间隔（分钟），默认30分钟
 max_iterations = 20 # 做梦最大轮次，默认20轮
-first_delay_seconds = 1200 # 程序启动后首次做梦前的延迟时间（秒），默认60秒
+first_delay_seconds = 1800 # 程序启动后首次做梦前的延迟时间（秒），默认60秒
 
 # 做梦时间段配置，格式：["HH:MM-HH:MM", ...]
 # 如果列表为空，则表示全天允许做梦。

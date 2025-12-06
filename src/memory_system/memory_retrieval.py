@@ -180,32 +180,38 @@ def _log_conversation_messages(
     for idx, msg in enumerate(conversation_messages, start_idx):
         role_name = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
 
-        # 处理内容 - 显示完整内容，不截断
-        if isinstance(msg.content, str):
-            full_content = msg.content
-            content_type = "文本"
-        elif isinstance(msg.content, list):
-            text_parts = [item for item in msg.content if isinstance(item, str)]
-            image_count = len([item for item in msg.content if isinstance(item, tuple)])
-            full_content = "".join(text_parts) if text_parts else ""
-            content_type = f"混合({len(text_parts)}段文本, {image_count}张图片)"
-        else:
-            full_content = str(msg.content)
-            content_type = "未知"
+        # # 处理内容 - 显示完整内容，不截断
+        # if isinstance(msg.content, str):
+        #     full_content = msg.content
+        #     content_type = "文本"
+        # elif isinstance(msg.content, list):
+        #     text_parts = [item for item in msg.content if isinstance(item, str)]
+        #     image_count = len([item for item in msg.content if isinstance(item, tuple)])
+        #     full_content = "".join(text_parts) if text_parts else ""
+        #     content_type = f"混合({len(text_parts)}段文本, {image_count}张图片)"
+        # else:
+        #     full_content = str(msg.content)
+        #     content_type = "未知"
 
         # 构建单条消息的日志信息
-        msg_info = f"\n========================================\n[消息 {idx}] 角色: {role_name} 内容类型: {content_type}\n-----------------------------"
+        # msg_info = f"\n========================================\n[消息 {idx}] 角色: {role_name} 内容类型: {content_type}\n-----------------------------"
+        msg_info = f"\n========================================\n[消息 {idx}] 角色: {role_name}\n-----------------------------"
 
-        if full_content:
-            msg_info += f"\n{full_content}"
+        # if full_content:
+        #     msg_info += f"\n{full_content}"
+        if msg.content:
+            msg_info += f"\n{msg.content}"
 
         if msg.tool_calls:
             msg_info += f"\n  工具调用: {len(msg.tool_calls)}个"
             for tool_call in msg.tool_calls:
                 msg_info += f"\n    - {tool_call}"
+                msg_info += f"\n    - {tool_call.func_name}: {json.dumps(tool_call.args, ensure_ascii=False)}"
 
         if msg.tool_call_id:
             msg_info += f"\n  工具调用ID: {msg.tool_call_id}"
+        # if msg.tool_call_id:
+            # msg_info += f"\n  工具调用ID: {msg.tool_call_id}"
 
         log_lines.append(msg_info)
 
