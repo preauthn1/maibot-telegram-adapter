@@ -470,20 +470,6 @@ class ToolConfig(ConfigBase):
 
 
 @dataclass
-class MoodConfig(ConfigBase):
-    """情绪配置类"""
-
-    enable_mood: bool = True
-    """是否启用情绪系统"""
-
-    mood_update_threshold: float = 1
-    """情绪更新阈值,越高，更新越慢"""
-
-    emotion_style: str = "情绪较为稳定，但遭遇特定事件的时候起伏较大"
-    """情感特征，影响情绪的变化情况"""
-
-
-@dataclass
 class VoiceConfig(ConfigBase):
     """语音识别配置类"""
 

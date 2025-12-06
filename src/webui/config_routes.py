@@ -29,7 +29,6 @@ from src.config.official_configs import (
     ToolConfig,
     MemoryConfig,
     DebugConfig,
-    MoodConfig,
     VoiceConfig,
     JargonConfig,
 )
@@ -104,7 +103,6 @@ async def get_config_section_schema(section_name: str):
     - tool: ToolConfig
     - memory: MemoryConfig
     - debug: DebugConfig
-    - mood: MoodConfig
     - voice: VoiceConfig
     - jargon: JargonConfig
     - model_task_config: ModelTaskConfig
@@ -130,7 +128,6 @@ async def get_config_section_schema(section_name: str):
         "tool": ToolConfig,
         "memory": MemoryConfig,
         "debug": DebugConfig,
-        "mood": MoodConfig,
         "voice": VoiceConfig,
         "jargon": JargonConfig,
         "model_task_config": ModelTaskConfig,

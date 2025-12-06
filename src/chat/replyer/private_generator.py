@@ -25,7 +25,6 @@ from src.chat.utils.chat_message_builder import (
 )
 from src.express.expression_selector import expression_selector
 from src.plugin_system.apis.message_api import translate_pid_to_description
-from src.mood.mood_manager import mood_manager
 
 # from src.memory_system.memory_activator import MemoryActivator
 
@@ -287,12 +286,6 @@ class PrivateReplyer:
 
         return f"{expression_habits_title}\n{expression_habits_block}", selected_ids
 
-    async def build_mood_state_prompt(self) -> str:
-        """构建情绪状态提示"""
-        if not global_config.mood.enable_mood:
-            return ""
-        mood_state = await mood_manager.get_mood_by_chat_id(self.chat_stream.stream_id).get_mood()
-        return f"你现在的心情是：{mood_state}"
 
     async def build_tool_info(self, chat_history: str, sender: str, target: str, enable_tool: bool = True) -> str:
         """构建工具信息块
@@ -721,7 +714,6 @@ class PrivateReplyer:
             self._time_and_run_task(self.get_prompt_info(chat_talking_prompt_short, sender, target), "prompt_info"),
             self._time_and_run_task(self.build_actions_prompt(available_actions, chosen_actions), "actions_info"),
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
-            self._time_and_run_task(self.build_mood_state_prompt(), "mood_state_prompt"),
             self._time_and_run_task(
                 build_memory_retrieval_prompt(
                     chat_talking_prompt_short, sender, target, self.chat_stream, self.tool_executor
@@ -742,7 +734,6 @@ class PrivateReplyer:
             "prompt_info": "获取知识",
             "actions_info": "动作信息",
             "personality_prompt": "人格信息",
-            "mood_state_prompt": "情绪状态",
             "memory_retrieval": "记忆检索",
             "jargon_explanation": "黑话解释",
         }
@@ -770,7 +761,6 @@ class PrivateReplyer:
         prompt_info: str = results_dict["prompt_info"]  # 直接使用格式化后的结果
         actions_info: str = results_dict["actions_info"]
         personality_prompt: str = results_dict["personality_prompt"]
-        mood_state_prompt: str = results_dict["mood_state_prompt"]
         memory_retrieval: str = results_dict["memory_retrieval"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
         jargon_explanation: str = results_dict.get("jargon_explanation") or ""
@@ -814,7 +804,6 @@ class PrivateReplyer:
                 expression_habits_block=expression_habits_block,
                 tool_info_block=tool_info,
                 knowledge_prompt=prompt_info,
-                mood_state=mood_state_prompt,
                 relation_info_block=relation_info,
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
@@ -837,7 +826,6 @@ class PrivateReplyer:
                 expression_habits_block=expression_habits_block,
                 tool_info_block=tool_info,
                 knowledge_prompt=prompt_info,
-                mood_state=mood_state_prompt,
                 relation_info_block=relation_info,
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,

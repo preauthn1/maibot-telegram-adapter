@@ -137,11 +137,6 @@ all_global = true # 是否开启全局黑话模式，注意，此功能关闭后
 [tool]
 enable_tool = true # 是否启用工具
 
-[mood]
-enable_mood = false # 是否启用情绪系统
-mood_update_threshold = 1 # 情绪更新阈值,越高，更新越慢
-# 情感特征，影响情绪的变化情况
-emotion_style = "情绪较为稳定，但遭遇特定事件的时候起伏较大"
 
 [emoji]
 emoji_chance = 0.4 # 麦麦激活表情包动作的概率
