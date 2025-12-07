@@ -117,9 +117,6 @@ class ChatConfig(ConfigBase):
     时间区间支持跨夜，例如 "23:00-02:00"。
     """
 
-    include_planner_reasoning: bool = False
-    """是否将planner推理加入replyer，默认关闭（不加入）"""
-
     def _parse_stream_config_to_chat_id(self, stream_config_str: str) -> Optional[str]:
         """与 ChatStream.get_stream_id 一致地从 "platform:id:type" 生成 chat_id。"""
         try:
