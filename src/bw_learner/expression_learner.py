@@ -34,6 +34,8 @@ def init_prompt() -> None:
 5. 例子仅供参考，请严格根据群聊内容总结!!!
 注意：总结成如下格式的规律，总结的内容要详细，但具有概括性：
 例如：当"AAAAA"时，可以"BBBBB", AAAAA代表某个场景，不超过20个字。BBBBB代表对应的语言风格，特定句式或表达方式，不超过20个字。
+表达方式在3-5个左右，不要超过10个
+
 
 任务2：请从上面这段聊天内容中提取"可能是黑话"的候选项（黑话/俚语/网络缩写/口头禅）。
 - 必须为对话中真实出现过的短词或短语
@@ -49,6 +51,7 @@ def init_prompt() -> None:
 
 输出要求：
 将表达方式，语言风格和黑话以 JSON 数组输出，每个元素为一个对象，结构如下（注意字段名）：
+注意请不要输出重复内容，请对表达方式和黑话进行去重。
 
 [
   {{"situation": "AAAAA", "style": "BBBBB", "source_id": "3"}},
@@ -131,6 +134,16 @@ class ExpressionLearner:
         jargon_entries: List[Tuple[str, str]]  # (content, source_id)
         expressions, jargon_entries = self.parse_expression_response(response)
         expressions = self._filter_self_reference_styles(expressions)
+        
+        # 检查表达方式数量，如果超过10个则放弃本次表达学习
+        if len(expressions) > 10:
+            logger.info(f"表达方式提取数量超过10个（实际{len(expressions)}个），放弃本次表达学习")
+            expressions = []
+        
+        # 检查黑话数量，如果超过30个则放弃本次黑话学习
+        if len(jargon_entries) > 30:
+            logger.info(f"黑话提取数量超过30个（实际{len(jargon_entries)}个），放弃本次黑话学习")
+            jargon_entries = []
         
         # 处理黑话条目，路由到 jargon_miner（即使没有表达方式也要处理黑话）
         if jargon_entries:
