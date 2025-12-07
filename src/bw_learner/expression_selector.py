@@ -262,7 +262,8 @@ class ExpressionSelector:
             # 4. 调用LLM
             content, (reasoning_content, model_name, _) = await self.llm_model.generate_response_async(prompt=prompt)
 
-            # print(prompt)
+            print(prompt)
+            print(content)
 
             if not content:
                 logger.warning("LLM返回空结果")

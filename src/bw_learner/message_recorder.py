@@ -126,10 +126,10 @@ class MessageRecorder:
                     )
                 
                 # 触发 jargon 提取（如果启用），传递消息
-                if self.enable_jargon_learning:
-                    asyncio.create_task(
-                        self._trigger_jargon_extraction(extraction_start_time, extraction_end_time, messages)
-                    )
+                # if self.enable_jargon_learning:
+                    # asyncio.create_task(
+                        # self._trigger_jargon_extraction(extraction_start_time, extraction_end_time, messages)
+                    # )
                 
             except Exception as e:
                 logger.error(f"为聊天流 {self.chat_name} 提取和分发消息失败: {e}")

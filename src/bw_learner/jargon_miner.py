@@ -723,6 +723,145 @@ class JargonMiner:
                 logger.error(f"JargonMiner 运行失败: {e}")
                 # 即使失败也保持时间戳更新，避免频繁重试
 
+    async def process_extracted_entries(self, entries: List[Dict[str, List[str]]]) -> None:
+        """
+        处理已提取的黑话条目（从 expression_learner 路由过来的）
+        
+        Args:
+            entries: 黑话条目列表，每个元素格式为 {"content": "...", "raw_content": [...]}
+        """
+        if not entries:
+            return
+        
+        try:
+            # 去重并合并raw_content（按 content 聚合）
+            merged_entries: OrderedDict[str, Dict[str, List[str]]] = OrderedDict()
+            for entry in entries:
+                content_key = entry["content"]
+                raw_list = entry.get("raw_content", []) or []
+                if content_key in merged_entries:
+                    merged_entries[content_key]["raw_content"].extend(raw_list)
+                else:
+                    merged_entries[content_key] = {
+                        "content": content_key,
+                        "raw_content": list(raw_list),
+                    }
+
+            uniq_entries = []
+            for merged_entry in merged_entries.values():
+                raw_content_list = merged_entry["raw_content"]
+                if raw_content_list:
+                    merged_entry["raw_content"] = list(dict.fromkeys(raw_content_list))
+                uniq_entries.append(merged_entry)
+
+            saved = 0
+            updated = 0
+            for entry in uniq_entries:
+                content = entry["content"]
+                raw_content_list = entry["raw_content"]  # 已经是列表
+
+                try:
+                    # 查询所有content匹配的记录
+                    query = Jargon.select().where(Jargon.content == content)
+
+                    # 查找匹配的记录
+                    matched_obj = None
+                    for obj in query:
+                        if global_config.expression.all_global_jargon:
+                            # 开启all_global：所有content匹配的记录都可以
+                            matched_obj = obj
+                            break
+                        else:
+                            # 关闭all_global：需要检查chat_id列表是否包含目标chat_id
+                            chat_id_list = parse_chat_id_list(obj.chat_id)
+                            if chat_id_list_contains(chat_id_list, self.chat_id):
+                                matched_obj = obj
+                                break
+
+                    if matched_obj:
+                        obj = matched_obj
+                        try:
+                            obj.count = (obj.count or 0) + 1
+                        except Exception:
+                            obj.count = 1
+
+                        # 合并raw_content列表：读取现有列表，追加新值，去重
+                        existing_raw_content = []
+                        if obj.raw_content:
+                            try:
+                                existing_raw_content = (
+                                    json.loads(obj.raw_content) if isinstance(obj.raw_content, str) else obj.raw_content
+                                )
+                                if not isinstance(existing_raw_content, list):
+                                    existing_raw_content = [existing_raw_content] if existing_raw_content else []
+                            except (json.JSONDecodeError, TypeError):
+                                existing_raw_content = [obj.raw_content] if obj.raw_content else []
+
+                        # 合并并去重
+                        merged_list = list(dict.fromkeys(existing_raw_content + raw_content_list))
+                        obj.raw_content = json.dumps(merged_list, ensure_ascii=False)
+
+                        # 更新chat_id列表：增加当前chat_id的计数
+                        chat_id_list = parse_chat_id_list(obj.chat_id)
+                        updated_chat_id_list = update_chat_id_list(chat_id_list, self.chat_id, increment=1)
+                        obj.chat_id = json.dumps(updated_chat_id_list, ensure_ascii=False)
+
+                        # 开启all_global时，确保记录标记为is_global=True
+                        if global_config.expression.all_global_jargon:
+                            obj.is_global = True
+                        # 关闭all_global时，保持原有is_global不变（不修改）
+
+                        obj.save()
+
+                        # 检查是否需要推断（达到阈值且超过上次判定值）
+                        if _should_infer_meaning(obj):
+                            # 异步触发推断，不阻塞主流程
+                            # 重新加载对象以确保数据最新
+                            jargon_id = obj.id
+                            asyncio.create_task(self._infer_meaning_by_id(jargon_id))
+
+                        updated += 1
+                    else:
+                        # 没找到匹配记录，创建新记录
+                        if global_config.expression.all_global_jargon:
+                            # 开启all_global：新记录默认为is_global=True
+                            is_global_new = True
+                        else:
+                            # 关闭all_global：新记录is_global=False
+                            is_global_new = False
+
+                        # 使用新格式创建chat_id列表：[[chat_id, count]]
+                        chat_id_list = [[self.chat_id, 1]]
+                        chat_id_json = json.dumps(chat_id_list, ensure_ascii=False)
+
+                        Jargon.create(
+                            content=content,
+                            raw_content=json.dumps(raw_content_list, ensure_ascii=False),
+                            chat_id=chat_id_json,
+                            is_global=is_global_new,
+                            count=1,
+                        )
+                        saved += 1
+                except Exception as e:
+                    logger.error(f"保存jargon失败: chat_id={self.chat_id}, content={content}, err={e}")
+                    continue
+                finally:
+                    self._add_to_cache(content)
+
+            # 固定输出提取的jargon结果，格式化为可读形式（只要有提取结果就输出）
+            if uniq_entries:
+                # 收集所有提取的jargon内容
+                jargon_list = [entry["content"] for entry in uniq_entries]
+                jargon_str = ",".join(jargon_list)
+
+                # 输出格式化的结果（使用logger.info会自动应用jargon模块的颜色）
+                logger.info(f"[{self.stream_name}]疑似黑话: {jargon_str}")
+
+            if saved or updated:
+                logger.info(f"jargon写入: 新增 {saved} 条，更新 {updated} 条，chat_id={self.chat_id}")
+        except Exception as e:
+            logger.error(f"处理已提取的黑话条目失败: {e}")
+
 
 class JargonMinerManager:
     def __init__(self) -> None:
