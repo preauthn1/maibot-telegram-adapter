@@ -48,7 +48,8 @@ reply
 2.你可以自然的顺着正在进行的聊天内容进行回复或自然的提出一个问题
 3.不要回复你自己发送的消息
 4.不要单独对表情包进行回复
-{{"action":"reply", "target_message_id":"消息id(m+数字)", "reason":"原因"}}
+5.think_level表示思考深度，0表示该回复不需要思考，1表示该回复需要简单思考，2表示该回复需要深度思考
+{{"action":"reply", "think_level":数值等级(0-2), "target_message_id":"消息id(m+数字)"}}
 
 no_reply
 动作描述：
@@ -59,7 +60,6 @@ no_reply
 {no_reply_until_call_block}
 
 {action_options_text}
-
 
 **你之前的action执行和思考记录**
 {actions_before_now_block}
@@ -72,12 +72,13 @@ no_reply
 {plan_style}
 {moderation_prompt}
 
+target_message_id为必填，表示触发消息的id
 请选择所有符合使用要求的action，动作用json格式输出，用```json包裹，如果输出多个json，每个json都要单独一行放在同一个```json代码块内，你可以重复使用同一个动作或不同动作:
 **示例**
 // 理由文本（简短）
 ```json
-{{"action":"动作名", "target_message_id":"m123", "reason":"原因"}}
-{{"action":"动作名", "target_message_id":"m456", "reason":"原因"}}
+{{"action":"动作名", "target_message_id":"m123", .....}}
+{{"action":"动作名", "target_message_id":"m456", .....}}
 ```""",
         "planner_prompt",
     )
@@ -112,8 +113,8 @@ no_reply
 **示例**
 // 理由文本（简短）
 ```json
-{{"action":"动作名", "target_message_id":"m123", "reason":"原因"}}
-{{"action":"动作名", "target_message_id":"m456", "reason":"原因"}}
+{{"action":"动作名", "target_message_id":"m123"}}
+{{"action":"动作名", "target_message_id":"m456"}}
 ```""",
         "planner_prompt_mentioned",
     )
@@ -124,7 +125,7 @@ no_reply
 动作描述：{action_description}
 使用条件{parallel_text}：
 {action_require}
-{{"action":"{action_name}",{action_parameters}, "target_message_id":"消息id(m+数字)", "reason":"原因"}}
+{{"action":"{action_name}",{action_parameters}, "target_message_id":"消息id(m+数字)"}}
 """,
         "action_prompt",
     )
@@ -218,11 +219,14 @@ class ActionPlanner:
 
         try:
             action = action_json.get("action", "no_reply")
-            original_reasoning = action_json.get("reason", "未提供原因")
-            reasoning = self._replace_message_ids_with_text(original_reasoning, message_id_list)
-            if reasoning is None:
-                reasoning = original_reasoning
-            action_data = {key: value for key, value in action_json.items() if key not in ["action", "reason"]}
+            # 使用 extracted_reasoning（整体推理文本）作为 reasoning
+            if extracted_reasoning:
+                reasoning = self._replace_message_ids_with_text(extracted_reasoning, message_id_list)
+                if reasoning is None:
+                    reasoning = extracted_reasoning
+            else:
+                reasoning = "未提供原因"
+            action_data = {key: value for key, value in action_json.items() if key not in ["action"]}
             # 非no_reply动作需要target_message_id
             target_message = None
 

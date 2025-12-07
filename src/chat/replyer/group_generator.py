@@ -72,6 +72,7 @@ class DefaultReplyer:
         stream_id: Optional[str] = None,
         reply_message: Optional[DatabaseMessages] = None,
         reply_time_point: Optional[float] = time.time(),
+        think_level: int = 1,
     ) -> Tuple[bool, LLMGenerationDataModel]:
         # sourcery skip: merge-nested-ifs
         """
@@ -106,6 +107,7 @@ class DefaultReplyer:
                     reply_message=reply_message,
                     reply_reason=reply_reason,
                     reply_time_point=reply_time_point,
+                    think_level=think_level,
                 )
             llm_response.prompt = prompt
             llm_response.selected_expressions = selected_expressions
@@ -698,6 +700,7 @@ class DefaultReplyer:
         chosen_actions: Optional[List[ActionPlannerInfo]] = None,
         enable_tool: bool = True,
         reply_time_point: Optional[float] = time.time(),
+        think_level: int = 1,
     ) -> Tuple[str, List[int]]:
         """
         构建回复器上下文
@@ -795,7 +798,7 @@ class DefaultReplyer:
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
             self._time_and_run_task(
                 build_memory_retrieval_prompt(
-                    chat_talking_prompt_short, sender, target, self.chat_stream, self.tool_executor
+                    chat_talking_prompt_short, sender, target, self.chat_stream, self.tool_executor, think_level=think_level
                 ),
                 "memory_retrieval",
             ),

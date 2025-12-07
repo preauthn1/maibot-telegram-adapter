@@ -20,7 +20,7 @@ from src.express.expression_learner import expression_learner_manager
 from src.chat.heart_flow.frequency_control import frequency_control_manager
 from src.express.reflect_tracker import reflect_tracker_manager
 from src.express.expression_reflector import expression_reflector_manager
-from src.jargon import extract_and_store_jargon
+from src.bw_learner.message_recorder import extract_and_distribute_messages
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
 from src.plugin_system.core import events_manager
@@ -328,12 +328,12 @@ class HeartFChatting:
 
         start_time = time.time()
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
-            asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
+            # 通过 MessageRecorder 统一提取消息并分发给 expression_learner 和 jargon_miner
+            # 在 replyer 执行时触发，统一管理时间窗口，避免重复获取消息
+            asyncio.create_task(extract_and_distribute_messages(self.stream_id))
 
             # 添加curious检测任务 - 检测聊天记录中的矛盾、冲突或需要提问的内容
             # asyncio.create_task(check_and_make_question(self.stream_id))
-            # 添加jargon提取任务 - 提取聊天中的黑话/俚语并入库（内部自行取消息并带冷却）
-            asyncio.create_task(extract_and_store_jargon(self.stream_id))
             # 添加聊天内容概括任务 - 累积、打包和压缩聊天记录
             # 注意：后台循环已在start()中启动，这里作为额外触发点，在有思考时立即处理
             # asyncio.create_task(self.chat_history_summarizer.process())
@@ -648,6 +648,7 @@ class HeartFChatting:
                     self.consecutive_no_reply_count = 0
 
                     reason = action_planner_info.reasoning or ""
+                    think_level = action_planner_info.action_data.get("think_level", 1)
                     # 使用 action_reasoning（planner 的整体思考理由）作为 reply_reason
                     planner_reasoning = action_planner_info.action_reasoning or reason
                     await database_api.store_action_info(
@@ -671,6 +672,7 @@ class HeartFChatting:
                         request_type="replyer",
                         from_plugin=False,
                         reply_time_point=action_planner_info.action_data.get("loop_start_time", time.time()),
+                        think_level=think_level,
                     )
 
                     if not success or not llm_response or not llm_response.reply_set:

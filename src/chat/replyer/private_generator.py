@@ -71,6 +71,7 @@ class PrivateReplyer:
         chosen_actions: Optional[List[ActionPlannerInfo]] = None,
         enable_tool: bool = True,
         from_plugin: bool = True,
+        think_level: int = 1,
         stream_id: Optional[str] = None,
         reply_message: Optional[DatabaseMessages] = None,
         reply_time_point: Optional[float] = time.time(),
