@@ -886,9 +886,19 @@ class DefaultReplyer:
         chat_prompt_content = self.get_chat_prompt_for_chat(chat_id)
         chat_prompt_block = f"{chat_prompt_content}\n" if chat_prompt_content else ""
 
-        # 固定使用群聊回复模板
+        # 根据think_level选择不同的回复模板
+        # think_level=0: 轻量回复（简短平淡）
+        # think_level=1: 中等回复（日常口语化）
+        # think_level=2: 深度回复（仔细思考，把握话题）
+        if think_level == 0:
+            prompt_name = "replyer_prompt_0"
+        elif think_level == 2:
+            prompt_name = "replyer_prompt_2"
+        else:  # think_level == 1 或默认
+            prompt_name = "replyer_prompt"
+
         return await global_prompt_manager.format_prompt(
-            "replyer_prompt",
+            prompt_name,
             expression_habits_block=expression_habits_block,
             tool_info_block=tool_info,
             bot_name=global_config.bot.nickname,
@@ -959,58 +969,30 @@ class DefaultReplyer:
 
         if sender and target:
             # 使用预先分析的内容类型结果
-            if is_group_chat:
-                if sender:
-                    if has_only_pics and not has_text:
-                        # 只包含图片
-                        reply_target_block = (
-                            f"现在{sender}发送的图片：{pic_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                        )
-                    elif has_text and pic_part:
-                        # 既有图片又有文字
-                        reply_target_block = f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                    else:
-                        # 只包含文字
-                        reply_target_block = (
-                            f"现在{sender}说的:{text_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                        )
-                elif target:
-                    reply_target_block = f"现在{target}引起了你的注意，你想要在群里发言或者回复这条消息。"
+            if sender:
+                if has_only_pics and not has_text:
+                    # 只包含图片
+                    reply_target_block = (
+                        f"现在{sender}发送的图片：{pic_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
+                    )
+                elif has_text and pic_part:
+                    # 既有图片又有文字
+                    reply_target_block = f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
                 else:
-                    reply_target_block = "现在，你想要在群里发言或者回复消息。"
-            else:  # private chat
-                if sender:
-                    if has_only_pics and not has_text:
-                        # 只包含图片
-                        reply_target_block = f"现在{sender}发送的图片：{pic_part}。引起了你的注意，针对这条消息回复。"
-                    elif has_text and pic_part:
-                        # 既有图片又有文字
-                        reply_target_block = (
-                            f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，针对这条消息回复。"
-                        )
-                    else:
-                        # 只包含文字
-                        reply_target_block = f"现在{sender}说的:{text_part}。引起了你的注意，针对这条消息回复。"
-                elif target:
-                    reply_target_block = f"现在{target}引起了你的注意，针对这条消息回复。"
-                else:
-                    reply_target_block = "现在，你想要回复。"
+                    # 只包含文字
+                    reply_target_block = (
+                        f"现在{sender}说的:{text_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
+                    )
+            elif target:
+                reply_target_block = f"现在{target}引起了你的注意，你想要在群里发言或者回复这条消息。"
+            else:
+                reply_target_block = "现在，你想要在群里发言或者回复消息。"
         else:
             reply_target_block = ""
 
-        if is_group_chat:
-            chat_target_1 = await global_prompt_manager.get_prompt_async("chat_target_group1")
-            chat_target_2 = await global_prompt_manager.get_prompt_async("chat_target_group2")
-        else:
-            chat_target_name = "对方"
-            if self.chat_target_info:
-                chat_target_name = self.chat_target_info.person_name or self.chat_target_info.user_nickname or "对方"
-            chat_target_1 = await global_prompt_manager.format_prompt(
-                "chat_target_private1", sender_name=chat_target_name
-            )
-            chat_target_2 = await global_prompt_manager.format_prompt(
-                "chat_target_private2", sender_name=chat_target_name
-            )
+
+        chat_target_1 = await global_prompt_manager.get_prompt_async("chat_target_group1")
+        chat_target_2 = await global_prompt_manager.get_prompt_async("chat_target_group2")
 
         template_name = "default_expressor_prompt"
 

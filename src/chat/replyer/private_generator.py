@@ -893,59 +893,35 @@ class PrivateReplyer:
         )
 
         if sender and target:
-            # 使用预先分析的内容类型结果
-            if is_group_chat:
-                if sender:
-                    if has_only_pics and not has_text:
-                        # 只包含图片
-                        reply_target_block = (
-                            f"现在{sender}发送的图片：{pic_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                        )
-                    elif has_text and pic_part:
-                        # 既有图片又有文字
-                        reply_target_block = f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                    else:
-                        # 只包含文字
-                        reply_target_block = (
-                            f"现在{sender}说的:{text_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                        )
-                elif target:
-                    reply_target_block = f"现在{target}引起了你的注意，你想要在群里发言或者回复这条消息。"
+            if sender:
+                if has_only_pics and not has_text:
+                    # 只包含图片
+                    reply_target_block = f"现在{sender}发送的图片：{pic_part}。引起了你的注意，针对这条消息回复。"
+                elif has_text and pic_part:
+                    # 既有图片又有文字
+                    reply_target_block = (
+                        f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，针对这条消息回复。"
+                    )
                 else:
-                    reply_target_block = "现在，你想要在群里发言或者回复消息。"
-            else:  # private chat
-                if sender:
-                    if has_only_pics and not has_text:
-                        # 只包含图片
-                        reply_target_block = f"现在{sender}发送的图片：{pic_part}。引起了你的注意，针对这条消息回复。"
-                    elif has_text and pic_part:
-                        # 既有图片又有文字
-                        reply_target_block = (
-                            f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，针对这条消息回复。"
-                        )
-                    else:
-                        # 只包含文字
-                        reply_target_block = f"现在{sender}说的:{text_part}。引起了你的注意，针对这条消息回复。"
-                elif target:
-                    reply_target_block = f"现在{target}引起了你的注意，针对这条消息回复。"
-                else:
-                    reply_target_block = "现在，你想要回复。"
+                    # 只包含文字
+                    reply_target_block = f"现在{sender}说的:{text_part}。引起了你的注意，针对这条消息回复。"
+            elif target:
+                reply_target_block = f"现在{target}引起了你的注意，针对这条消息回复。"
+            else:
+                reply_target_block = "现在，你想要回复。"
         else:
             reply_target_block = ""
 
-        if is_group_chat:
-            chat_target_1 = await global_prompt_manager.get_prompt_async("chat_target_group1")
-            chat_target_2 = await global_prompt_manager.get_prompt_async("chat_target_group2")
-        else:
-            chat_target_name = "对方"
-            if self.chat_target_info:
-                chat_target_name = self.chat_target_info.person_name or self.chat_target_info.user_nickname or "对方"
-            chat_target_1 = await global_prompt_manager.format_prompt(
-                "chat_target_private1", sender_name=chat_target_name
-            )
-            chat_target_2 = await global_prompt_manager.format_prompt(
-                "chat_target_private2", sender_name=chat_target_name
-            )
+
+        chat_target_name = "对方"
+        if self.chat_target_info:
+            chat_target_name = self.chat_target_info.person_name or self.chat_target_info.user_nickname or "对方"
+        chat_target_1 = await global_prompt_manager.format_prompt(
+            "chat_target_private1", sender_name=chat_target_name
+        )
+        chat_target_2 = await global_prompt_manager.format_prompt(
+            "chat_target_private2", sender_name=chat_target_name
+        )
 
         template_name = "default_expressor_prompt"
 
