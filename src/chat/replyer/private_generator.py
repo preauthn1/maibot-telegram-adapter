@@ -33,13 +33,13 @@ from src.plugin_system.base.component_types import ActionInfo, EventType
 from src.plugin_system.apis import llm_api
 
 from src.chat.replyer.prompt.lpmm_prompt import init_lpmm_prompt
-from src.chat.replyer.prompt.replyer_prompt import init_replyer_prompt
+from src.chat.replyer.prompt.replyer_private_prompt import init_replyer_private_prompt
 from src.chat.replyer.prompt.rewrite_prompt import init_rewrite_prompt
 from src.memory_system.memory_retrieval import init_memory_retrieval_prompt, build_memory_retrieval_prompt
 from src.bw_learner.jargon_explainer import explain_jargon_in_context
 
 init_lpmm_prompt()
-init_replyer_prompt()
+init_replyer_private_prompt()
 init_rewrite_prompt()
 init_memory_retrieval_prompt()
 

@@ -136,10 +136,9 @@ class DefaultReplyer:
                 content, reasoning_content, model_name, tool_call = await self.llm_generate_content(prompt)
                 # logger.debug(f"replyer生成内容: {content}")
 
-                logger.info(f"replyer生成内容: {content}")
-                if global_config.debug.show_replyer_reasoning:
-                    logger.info(f"replyer生成推理:\n{reasoning_content}")
-                logger.info(f"replyer生成模型: {model_name}")
+                logger.info(f"模型: [{model_name}][思考等级:{think_level}]生成内容: {content}")
+                if global_config.debug.show_replyer_reasoning and reasoning_content:
+                    logger.info(f"模型: [{model_name}][思考等级:{think_level}]生成推理:\n{reasoning_content}")
 
                 llm_response.content = content
                 llm_response.reasoning = reasoning_content
@@ -1065,7 +1064,7 @@ class DefaultReplyer:
             # 移除 content 前后的换行符和空格
             content = content.strip()
 
-            logger.info(f"使用 {model_name} 生成回复内容: {content}")
+            # logger.info(f"使用 {model_name} 生成回复内容: {content}")
         return content, reasoning_content, model_name, tool_calls
 
     async def get_prompt_info(self, message: str, sender: str, target: str):

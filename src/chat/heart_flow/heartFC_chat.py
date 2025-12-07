@@ -29,6 +29,7 @@ from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
 )
+from src.chat.utils.utils import get_chat_type_and_target_info, record_replyer_action_temp
 from src.hippo_memorizer.chat_history_summarizer import ChatHistorySummarizer
 
 if TYPE_CHECKING:
@@ -651,6 +652,13 @@ class HeartFChatting:
                     think_level = action_planner_info.action_data.get("think_level", 1)
                     # 使用 action_reasoning（planner 的整体思考理由）作为 reply_reason
                     planner_reasoning = action_planner_info.action_reasoning or reason
+                    
+                    record_replyer_action_temp(
+                        chat_id=self.stream_id,
+                        reason=reason,
+                        think_level=think_level,
+                    )
+                    
                     await database_api.store_action_info(
                         chat_stream=self.chat_stream,
                         action_build_into_prompt=False,
