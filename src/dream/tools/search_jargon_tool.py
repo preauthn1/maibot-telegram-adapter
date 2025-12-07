@@ -4,7 +4,7 @@ from src.common.logger import get_logger
 from src.common.database.database_model import Jargon
 from src.config.config import global_config
 from src.chat.utils.utils import parse_keywords_string
-from src.jargon.jargon_utils import parse_chat_id_list, chat_id_list_contains
+from src.bw_learner.learner_utils import parse_chat_id_list, chat_id_list_contains
 
 logger = get_logger("dream_agent")
 
@@ -24,7 +24,7 @@ def make_search_jargon(chat_id: str):
             query = Jargon.select().where(Jargon.is_jargon)
 
             # 根据 all_global 配置决定 chat_id 作用域
-            if global_config.jargon.all_global:
+            if global_config.expression.all_global_jargon:
                 # 开启全局黑话：只看 is_global=True 的记录，不区分 chat_id
                 query = query.where(Jargon.is_global)
             else:
@@ -63,7 +63,7 @@ def make_search_jargon(chat_id: str):
                 if any_matched:
                     filtered_keyword.append(r)
 
-            if global_config.jargon.all_global:
+            if global_config.expression.all_global_jargon:
                 # 全局黑话模式：不再做 chat_id 过滤，直接使用关键词过滤结果
                 records = filtered_keyword
             else:
@@ -80,7 +80,7 @@ def make_search_jargon(chat_id: str):
             if not records:
                 scope_note = (
                     "（当前为全局黑话模式，仅统计 is_global=True 的条目）"
-                    if global_config.jargon.all_global
+                    if global_config.expression.all_global_jargon
                     else "（当前为按 chat_id 作用域模式，仅统计全局黑话或与当前 chat_id 相关的条目）"
                 )
                 return f"未找到包含关键词'{keyword}'的 Jargon 记录{scope_note}"

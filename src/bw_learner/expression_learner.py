@@ -3,19 +3,17 @@ import json
 import os
 import re
 import asyncio
-from typing import List, Optional, Tuple
-import traceback
+from typing import List, Optional, Tuple, Any
 from src.common.logger import get_logger
 from src.common.database.database_model import Expression
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 from src.chat.utils.chat_message_builder import (
-    get_raw_msg_by_timestamp_with_chat_inclusive,
     build_anonymous_messages,
 )
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
-from src.express.express_utils import filter_message_content
+from src.bw_learner.learner_utils import filter_message_content, is_bot_message
 from json_repair import repair_json
 
 
@@ -26,15 +24,14 @@ logger = get_logger("expressor")
 
 def init_prompt() -> None:
     learn_style_prompt = """{chat_str}
-
-请从上面这段群聊中概括除了人名为"SELF"之外的人的语言风格。
-每一行消息前面的方括号中的数字（如 [1]、[2]）是该行消息的唯一编号，请在输出中引用这些编号来标注“表达方式的来源行”。
+你的名字是{bot_name},现在请你请从上面这段群聊中用户的语言风格和说话方式
 1. 只考虑文字，不要考虑表情包和图片
-2. 不要涉及具体的人名，但是可以涉及具体名词
-3. 思考有没有特殊的梗，一并总结成语言风格
-4. 例子仅供参考，请严格根据群聊内容总结!!!
+2. 不要总结SELF的发言
+3. 不要涉及具体的人名，也不要涉及具体名词
+4. 思考有没有特殊的梗，一并总结成语言风格
+5. 例子仅供参考，请严格根据群聊内容总结!!!
 注意：总结成如下格式的规律，总结的内容要详细，但具有概括性：
-例如：当"AAAAA"时，可以"BBBBB", AAAAA代表某个具体的场景，不超过20个字。BBBBB代表对应的语言风格，特定句式或表达方式，不超过20个字。
+例如：当"AAAAA"时，可以"BBBBB", AAAAA代表某个场景，不超过20个字。BBBBB代表对应的语言风格，特定句式或表达方式，不超过20个字。
 
 请严格以 JSON 数组的形式输出结果，每个元素为一个对象，结构如下（注意字段名）：
 [
@@ -44,10 +41,6 @@ def init_prompt() -> None:
   {{"situation": "表示讽刺的赞同，不讲道理", "style": "对对对", "source_id": "[消息编号]"}},
   {{"situation": "当涉及游戏相关时，夸赞，略带戏谑意味", "style": "使用 这么强！", "source_id": "[消息编号]"}},
 ]
-
-请注意：
-- 不要总结你自己（SELF）的发言，尽量保证总结内容的逻辑性
-- 请只针对最重要的若干条表达方式进行总结，避免输出太多重复或相似的条目
 
 其中：
 - situation：表示“在什么情境下”的简短概括（不超过20个字）
@@ -69,170 +62,36 @@ class ExpressionLearner:
         self.summary_model: LLMRequest = LLMRequest(
             model_set=model_config.model_task_config.utils_small, request_type="expression.summary"
         )
-        self.embedding_model: LLMRequest = LLMRequest(
-            model_set=model_config.model_task_config.embedding, request_type="expression.embedding"
-        )
         self.chat_id = chat_id
         self.chat_stream = get_chat_manager().get_stream(chat_id)
         self.chat_name = get_chat_manager().get_stream_name(chat_id) or chat_id
 
-        # 维护每个chat的上次学习时间
-        self.last_learning_time: float = time.time()
-
         # 学习锁，防止并发执行学习任务
         self._learning_lock = asyncio.Lock()
 
-        # 学习参数
-        _, self.enable_learning, self.learning_intensity = global_config.expression.get_expression_config_for_chat(
-            self.chat_id
-        )
-        # 防止除以零：如果学习强度为0或负数，使用最小值0.0001
-        if self.learning_intensity <= 0:
-            logger.warning(f"学习强度为 {self.learning_intensity}，已自动调整为 0.0001 以避免除以零错误")
-            self.learning_intensity = 0.0000001
-        self.min_messages_for_learning = 15 / self.learning_intensity  # 触发学习所需的最少消息数
-        self.min_learning_interval = 120 / self.learning_intensity
-
-    def should_trigger_learning(self) -> bool:
-        """
-        检查是否应该触发学习
-
-        Args:
-            chat_id: 聊天流ID
-
-        Returns:
-            bool: 是否应该触发学习
-        """
-        # 检查是否允许学习
-        if not self.enable_learning:
-            return False
-
-        # 检查时间间隔
-        time_diff = time.time() - self.last_learning_time
-        if time_diff < self.min_learning_interval:
-            return False
-
-        # 检查消息数量（只检查指定聊天流的消息）
-        recent_messages = get_raw_msg_by_timestamp_with_chat_inclusive(
-            chat_id=self.chat_id,
-            timestamp_start=self.last_learning_time,
-            timestamp_end=time.time(),
-        )
-
-        if not recent_messages or len(recent_messages) < self.min_messages_for_learning:
-            return False
-
-        return True
-
-    async def trigger_learning_for_chat(self):
-        """
-        为指定聊天流触发学习
-
-        Args:
-            chat_id: 聊天流ID
-
-        Returns:
-            bool: 是否成功触发学习
-        """
-        # 使用异步锁防止并发执行
-        async with self._learning_lock:
-            # 在锁内检查，避免并发触发
-            # 如果锁被持有，其他协程会等待，但等待期间条件可能已变化，所以需要再次检查
-            if not self.should_trigger_learning():
-                return
-
-            # 保存学习开始前的时间戳，用于获取消息范围
-            learning_start_timestamp = time.time()
-            previous_learning_time = self.last_learning_time
-            
-            # 立即更新学习时间，防止并发触发
-            self.last_learning_time = learning_start_timestamp
-
-            try:
-                logger.info(f"在聊天流 {self.chat_name} 学习表达方式")
-                # 学习语言风格，传递学习开始前的时间戳
-                learnt_style = await self.learn_and_store(num=25, timestamp_start=previous_learning_time)
-
-                if learnt_style:
-                    logger.info(f"聊天流 {self.chat_name} 表达学习完成")
-                else:
-                    logger.warning(f"聊天流 {self.chat_name} 表达学习未获得有效结果")
-
-            except Exception as e:
-                logger.error(f"为聊天流 {self.chat_name} 触发学习失败: {e}")
-                traceback.print_exc()
-                # 即使失败也保持时间戳更新，避免频繁重试
-                return
-
-    async def learn_and_store(self, num: int = 10, timestamp_start: Optional[float] = None) -> List[Tuple[str, str, str]]:
+    async def learn_and_store(
+        self, 
+        messages: List[Any],
+    ) -> List[Tuple[str, str, str]]:
         """
         学习并存储表达方式
         
         Args:
+            messages: 外部传入的消息列表（必需）
             num: 学习数量
             timestamp_start: 学习开始的时间戳，如果为None则使用self.last_learning_time
         """
-        learnt_expressions = await self.learn_expression(num, timestamp_start=timestamp_start)
-
-        if learnt_expressions is None:
-            logger.info("没有学习到表达风格")
-            return []
-
-        # 展示学到的表达方式
-        learnt_expressions_str = ""
-        for (
-            situation,
-            style,
-            _context,
-        ) in learnt_expressions:
-            learnt_expressions_str += f"{situation}->{style}\n"
-        logger.info(f"在 {self.chat_name} 学习到表达风格:\n{learnt_expressions_str}")
-
-        current_time = time.time()
-
-        # 存储到数据库 Expression 表
-        for (
-            situation,
-            style,
-            context,
-        ) in learnt_expressions:
-            await self._upsert_expression_record(
-                situation=situation,
-                style=style,
-                context=context,
-                current_time=current_time,
-            )
-
-        return learnt_expressions
-
-    async def learn_expression(self, num: int = 10, timestamp_start: Optional[float] = None) -> Optional[List[Tuple[str, str, str]]]:
-        """从指定聊天流学习表达方式
-
-        Args:
-            num: 学习数量
-            timestamp_start: 学习开始的时间戳，如果为None则使用self.last_learning_time
-        """
-        current_time = time.time()
-        
-        # 使用传入的时间戳，如果没有则使用self.last_learning_time
-        start_timestamp = timestamp_start if timestamp_start is not None else self.last_learning_time
-
-        # 获取上次学习之后的消息
-        random_msg = get_raw_msg_by_timestamp_with_chat_inclusive(
-            chat_id=self.chat_id,
-            timestamp_start=start_timestamp,
-            timestamp_end=current_time,
-            limit=num,
-        )
-        # print(random_msg)
-        if not random_msg or random_msg == []:
+        if not messages:
             return None
+        
+        random_msg = messages
 
         # 学习用（开启行编号，便于溯源）
         random_msg_str: str = await build_anonymous_messages(random_msg, show_ids=True)
 
         prompt: str = await global_prompt_manager.format_prompt(
             "learn_style_prompt",
+            bot_name=global_config.bot.nickname,
             chat_str=random_msg_str,
         )
 
@@ -269,16 +128,50 @@ class ExpressionLearner:
 
             # 当前行的原始内容
             current_msg = random_msg[line_index]
+            
+            # 过滤掉从bot自己发言中提取到的表达方式
+            if is_bot_message(current_msg):
+                continue
+            
             context = filter_message_content(current_msg.processed_plain_text or "")
             if not context:
                 continue
 
             filtered_expressions.append((situation, style, context))
+        
+        
+        learnt_expressions = filtered_expressions
 
-        if not filtered_expressions:
-            return None
+        if learnt_expressions is None:
+            logger.info("没有学习到表达风格")
+            return []
 
-        return filtered_expressions
+        # 展示学到的表达方式
+        learnt_expressions_str = ""
+        for (
+            situation,
+            style,
+            _context,
+        ) in learnt_expressions:
+            learnt_expressions_str += f"{situation}->{style}\n"
+        logger.info(f"在 {self.chat_name} 学习到表达风格:\n{learnt_expressions_str}")
+
+        current_time = time.time()
+
+        # 存储到数据库 Expression 表
+        for (
+            situation,
+            style,
+            context,
+        ) in learnt_expressions:
+            await self._upsert_expression_record(
+                situation=situation,
+                style=style,
+                context=context,
+                current_time=current_time,
+            )
+
+        return learnt_expressions
 
     def parse_expression_response(self, response: str) -> List[Tuple[str, str, str]]:
         """
@@ -356,9 +249,9 @@ class ExpressionLearner:
                         
                         if in_string:
                             # 在字符串值内部，将中文引号替换为转义的英文引号
-                            if char == '"':  # 中文左引号
+                            if char == '"':  # 中文左引号 U+201C
                                 result.append('\\"')
-                            elif char == '"':  # 中文右引号
+                            elif char == '"':  # 中文右引号 U+201D
                                 result.append('\\"')
                             else:
                                 result.append(char)

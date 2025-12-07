@@ -30,7 +30,6 @@ from src.config.official_configs import (
     MemoryConfig,
     DebugConfig,
     VoiceConfig,
-    JargonConfig,
 )
 from src.config.api_ada_configs import (
     ModelTaskConfig,
@@ -129,7 +128,6 @@ async def get_config_section_schema(section_name: str):
         "memory": MemoryConfig,
         "debug": DebugConfig,
         "voice": VoiceConfig,
-        "jargon": JargonConfig,
         "model_task_config": ModelTaskConfig,
         "api_provider": APIProvider,
         "model_info": ModelInfo,

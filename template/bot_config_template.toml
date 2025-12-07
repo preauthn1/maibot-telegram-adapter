@@ -1,5 +1,5 @@
 [inner]
-version = "7.0.2"
+version = "7.1.0"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 # 如果你想要修改配置文件，请递增version的值
@@ -60,16 +60,14 @@ state_probability = 0.3
 [expression]
 # 表达学习配置
 learning_list = [ # 表达学习配置列表，支持按聊天流配置
-    ["", "enable", "enable", "1.0"],  # 全局配置：使用表达，启用学习，学习强度1.0
-    ["qq:1919810:group", "enable", "enable", "1.5"],  # 特定群聊配置：使用表达，启用学习，学习强度1.5
-    ["qq:114514:private", "enable", "disable", "0.5"],  # 特定私聊配置：使用表达，禁用学习，学习强度0.5
+    ["", "enable", "enable", "enable"],  # 全局配置：使用表达，启用学习，启用jargon学习
+    ["qq:1919810:group", "enable", "enable", "enable"],  # 特定群聊配置：使用表达，启用学习，启用jargon学习
+    ["qq:114514:private", "enable", "disable", "disable"],  # 特定私聊配置：使用表达，禁用学习，禁用jargon学习
     # 格式说明：
     # 第一位: chat_stream_id，空字符串表示全局配置
     # 第二位: 是否使用学到的表达 ("enable"/"disable")
     # 第三位: 是否学习表达 ("enable"/"disable") 
-    # 第四位: 学习强度（浮点数），影响学习频率，最短学习时间间隔 = 300/学习强度（秒）
-    # 学习强度越高，学习越频繁；学习强度越低，学习越少
-    # 如果学习强度设置为0会自动转换为0.0001以避免除以零错误
+    # 第四位: 是否启用jargon学习 ("enable"/"disable")
 ]
 
 expression_groups = [
@@ -84,6 +82,8 @@ expression_groups = [
 reflect = false # 是否启用表达反思（Bot主动向管理员询问表达方式是否合适）
 reflect_operator_id = "" # 表达反思操作员ID，格式：platform:id:type (例如 "qq:123456:private" 或 "qq:654321:group")
 allow_reflect = [] # 允许进行表达反思的聊天流ID列表，格式：["qq:123456:private", "qq:654321:group", ...]，只有在此列表中的聊天流才会提出问题并跟踪。如果列表为空，则所有聊天流都可以进行表达反思（前提是 reflect = true）
+
+all_global_jargon = true # 是否开启全局黑话模式，注意，此功能关闭后，已经记录的全局黑话不会改变，需要手动删除
 
 
 [chat] # 麦麦的聊天设置
@@ -130,9 +130,6 @@ dream_time_ranges = [
     "23:00-10:00",      # 跨夜时间段（23:00到次日10:00）
 ]
 # dream_time_ranges = []
-
-[jargon]
-all_global = true # 是否开启全局黑话模式，注意，此功能关闭后，已经记录的全局黑话不会改变，需要手动删除
 
 [tool]
 enable_tool = true # 是否启用工具

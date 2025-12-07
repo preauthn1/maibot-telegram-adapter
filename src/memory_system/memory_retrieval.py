@@ -11,7 +11,7 @@ from src.common.database.database_model import ThinkingBack
 from src.memory_system.retrieval_tools import get_tool_registry, init_all_tools
 from src.memory_system.memory_utils import parse_questions_json
 from src.llm_models.payload_content.message import MessageBuilder, RoleType, Message
-from src.jargon.jargon_explainer import match_jargon_from_text, retrieve_concepts_with_jargon
+from src.bw_learner.jargon_explainer import match_jargon_from_text, retrieve_concepts_with_jargon
 
 logger = get_logger("memory_retrieval")
 
@@ -972,6 +972,7 @@ async def _process_single_question(
     context: str,
     initial_info: str = "",
     initial_jargon_concepts: Optional[List[str]] = None,
+    max_iterations: Optional[int] = None,
 ) -> Optional[str]:
     """处理单个问题的查询
 
@@ -996,10 +997,14 @@ async def _process_single_question(
 
     jargon_concepts_for_agent = initial_jargon_concepts if global_config.memory.enable_jargon_detection else None
 
+    # 如果未指定max_iterations，使用配置的默认值
+    if max_iterations is None:
+        max_iterations = global_config.memory.max_agent_iterations
+
     found_answer, answer, thinking_steps, is_timeout = await _react_agent_solve_question(
         question=question,
         chat_id=chat_id,
-        max_iterations=global_config.memory.max_agent_iterations,
+        max_iterations=max_iterations,
         timeout=global_config.memory.agent_timeout_seconds,
         initial_info=question_initial_info,
         initial_jargon_concepts=jargon_concepts_for_agent,
@@ -1030,6 +1035,7 @@ async def build_memory_retrieval_prompt(
     target: str,
     chat_stream,
     tool_executor,
+    think_level: int = 1,
 ) -> str:
     """构建记忆检索提示
     使用两段式查询：第一步生成问题，第二步使用ReAct Agent查询答案
@@ -1117,9 +1123,14 @@ async def build_memory_retrieval_prompt(
             return ""
 
         # 第二步：并行处理所有问题（使用配置的最大迭代次数和超时时间）
-        max_iterations = global_config.memory.max_agent_iterations
+        base_max_iterations = global_config.memory.max_agent_iterations
+        # 根据think_level调整迭代次数：think_level=1时不变，think_level=0时减半
+        if think_level == 0:
+            max_iterations = max(1, base_max_iterations // 2)  # 至少为1
+        else:
+            max_iterations = base_max_iterations
         timeout_seconds = global_config.memory.agent_timeout_seconds
-        logger.debug(f"问题数量: {len(questions)}，设置最大迭代次数: {max_iterations}，超时时间: {timeout_seconds}秒")
+        logger.debug(f"问题数量: {len(questions)}，think_level={think_level}，设置最大迭代次数: {max_iterations}（基础值: {base_max_iterations}），超时时间: {timeout_seconds}秒")
 
         # 并行处理所有问题，将概念检索结果作为初始信息传递
         question_tasks = [
@@ -1129,6 +1140,7 @@ async def build_memory_retrieval_prompt(
                 context=message,
                 initial_info=initial_info,
                 initial_jargon_concepts=concepts if enable_jargon_detection else None,
+                max_iterations=max_iterations,
             )
             for question in questions
         ]

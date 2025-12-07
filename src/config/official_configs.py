@@ -284,20 +284,20 @@ class ExpressionConfig(ConfigBase):
     learning_list: list[list] = field(default_factory=lambda: [])
     """
     表达学习配置列表，支持按聊天流配置
-    格式: [["chat_stream_id", "use_expression", "enable_learning", learning_intensity], ...]
+    格式: [["chat_stream_id", "use_expression", "enable_learning", "enable_jargon_learning"], ...]
     
     示例:
     [
-        ["", "enable", "enable", 1.0],  # 全局配置：使用表达，启用学习，学习强度1.0
-        ["qq:1919810:private", "enable", "enable", 1.5],  # 特定私聊配置：使用表达，启用学习，学习强度1.5
-        ["qq:114514:private", "enable", "disable", 0.5],  # 特定私聊配置：使用表达，禁用学习，学习强度0.5
+        ["", "enable", "enable", "enable"],  # 全局配置：使用表达，启用学习，启用jargon学习
+        ["qq:1919810:private", "enable", "enable", "enable"],  # 特定私聊配置：使用表达，启用学习，启用jargon学习
+        ["qq:114514:private", "enable", "disable", "disable"],  # 特定私聊配置：使用表达，禁用学习，禁用jargon学习
     ]
     
     说明:
     - 第一位: chat_stream_id，空字符串表示全局配置
     - 第二位: 是否使用学到的表达 ("enable"/"disable")
     - 第三位: 是否学习表达 ("enable"/"disable") 
-    - 第四位: 学习强度（浮点数），影响学习频率，最短学习时间间隔 = 300/学习强度（秒）
+    - 第四位: 是否启用jargon学习 ("enable"/"disable")
     """
 
     expression_groups: list[list[str]] = field(default_factory=list)
@@ -319,6 +319,9 @@ class ExpressionConfig(ConfigBase):
     只有在此列表中的聊天流才会提出问题并跟踪
     如果列表为空，则所有聊天流都可以进行表达反思（前提是 reflect = true）
     """
+
+    all_global_jargon: bool = False
+    """是否将所有新增的jargon项目默认为全局（is_global=True），chat_id记录第一次存储时的id。注意，此功能关闭后，已经记录的全局黑话不会改变，需要手动删除"""
 
     def _parse_stream_config_to_chat_id(self, stream_config_str: str) -> Optional[str]:
         """
@@ -355,7 +358,7 @@ class ExpressionConfig(ConfigBase):
         except (ValueError, IndexError):
             return None
 
-    def get_expression_config_for_chat(self, chat_stream_id: Optional[str] = None) -> tuple[bool, bool, int]:
+    def get_expression_config_for_chat(self, chat_stream_id: Optional[str] = None) -> tuple[bool, bool, bool]:
         """
         根据聊天流ID获取表达配置
 
@@ -363,35 +366,27 @@ class ExpressionConfig(ConfigBase):
             chat_stream_id: 聊天流ID，格式为哈希值
 
         Returns:
-            tuple: (是否使用表达, 是否学习表达, 学习间隔)
+            tuple: (是否使用表达, 是否学习表达, 是否启用jargon学习)
         """
         if not self.learning_list:
-            # 如果没有配置，使用默认值：启用表达，启用学习，学习强度1.0（对应300秒间隔）
-            return True, True, 1.0
+            # 如果没有配置，使用默认值：启用表达，启用学习，启用jargon学习
+            return True, True, True
 
         # 优先检查聊天流特定的配置
         if chat_stream_id:
             specific_expression_config = self._get_stream_specific_config(chat_stream_id)
             if specific_expression_config is not None:
-                use_expression, enable_learning, learning_intensity = specific_expression_config
-                # 防止学习强度为0，自动转换为0.0001
-                if learning_intensity == 0:
-                    learning_intensity = 0.0000001
-                return use_expression, enable_learning, learning_intensity
+                return specific_expression_config
 
         # 检查全局配置（第一个元素为空字符串的配置）
         global_expression_config = self._get_global_config()
         if global_expression_config is not None:
-            use_expression, enable_learning, learning_intensity = global_expression_config
-            # 防止学习强度为0，自动转换为0.0001
-            if learning_intensity == 0:
-                learning_intensity = 0.0000001
-            return use_expression, enable_learning, learning_intensity
+            return global_expression_config
 
-        # 如果都没有匹配，返回默认值：启用表达，启用学习，学习强度1.0（对应300秒间隔）
-        return True, True, 1.0
+        # 如果都没有匹配，返回默认值：启用表达，启用学习，启用jargon学习
+        return True, True, True
 
-    def _get_stream_specific_config(self, chat_stream_id: str) -> Optional[tuple[bool, bool, int]]:
+    def _get_stream_specific_config(self, chat_stream_id: str) -> Optional[tuple[bool, bool, bool]]:
         """
         获取特定聊天流的表达配置
 
@@ -399,7 +394,7 @@ class ExpressionConfig(ConfigBase):
             chat_stream_id: 聊天流ID（哈希值）
 
         Returns:
-            tuple: (是否使用表达, 是否学习表达, 学习间隔)，如果没有配置则返回 None
+            tuple: (是否使用表达, 是否学习表达, 是否启用jargon学习)，如果没有配置则返回 None
         """
         for config_item in self.learning_list:
             if not config_item or len(config_item) < 4:
@@ -424,22 +419,19 @@ class ExpressionConfig(ConfigBase):
             try:
                 use_expression: bool = config_item[1].lower() == "enable"
                 enable_learning: bool = config_item[2].lower() == "enable"
-                learning_intensity: float = float(config_item[3])
-                # 防止学习强度为0，自动转换为0.0001
-                if learning_intensity == 0:
-                    learning_intensity = 0.0000001
-                return use_expression, enable_learning, learning_intensity  # type: ignore
+                enable_jargon_learning: bool = config_item[3].lower() == "enable"
+                return use_expression, enable_learning, enable_jargon_learning  # type: ignore
             except (ValueError, IndexError):
                 continue
 
         return None
 
-    def _get_global_config(self) -> Optional[tuple[bool, bool, int]]:
+    def _get_global_config(self) -> Optional[tuple[bool, bool, bool]]:
         """
         获取全局表达配置
 
         Returns:
-            tuple: (是否使用表达, 是否学习表达, 学习间隔)，如果没有配置则返回 None
+            tuple: (是否使用表达, 是否学习表达, 是否启用jargon学习)，如果没有配置则返回 None
         """
         for config_item in self.learning_list:
             if not config_item or len(config_item) < 4:
@@ -450,11 +442,8 @@ class ExpressionConfig(ConfigBase):
                 try:
                     use_expression: bool = config_item[1].lower() == "enable"
                     enable_learning: bool = config_item[2].lower() == "enable"
-                    learning_intensity = float(config_item[3])
-                    # 防止学习强度为0，自动转换为0.0001
-                    if learning_intensity == 0:
-                        learning_intensity = 0.0000001
-                    return use_expression, enable_learning, learning_intensity  # type: ignore
+                    enable_jargon_learning: bool = config_item[3].lower() == "enable"
+                    return use_expression, enable_learning, enable_jargon_learning  # type: ignore
                 except (ValueError, IndexError):
                     continue
 
@@ -730,14 +719,6 @@ class LPMMKnowledgeConfig(ConfigBase):
 
     embedding_dimension: int = 1024
     """嵌入向量维度，应该与模型的输出维度一致"""
-
-
-@dataclass
-class JargonConfig(ConfigBase):
-    """Jargon配置类"""
-
-    all_global: bool = False
-    """是否将所有新增的jargon项目默认为全局（is_global=True），chat_id记录第一次存储时的id"""
 
 
 @dataclass

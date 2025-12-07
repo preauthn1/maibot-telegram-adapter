@@ -23,7 +23,7 @@ from src.chat.utils.chat_message_builder import (
     get_raw_msg_before_timestamp_with_chat,
     replace_user_references,
 )
-from src.express.expression_selector import expression_selector
+from src.bw_learner.expression_selector import expression_selector
 from src.plugin_system.apis.message_api import translate_pid_to_description
 
 # from src.memory_system.memory_activator import MemoryActivator
@@ -36,7 +36,7 @@ from src.chat.replyer.prompt.lpmm_prompt import init_lpmm_prompt
 from src.chat.replyer.prompt.replyer_prompt import init_replyer_prompt
 from src.chat.replyer.prompt.rewrite_prompt import init_rewrite_prompt
 from src.memory_system.memory_retrieval import init_memory_retrieval_prompt, build_memory_retrieval_prompt
-from src.jargon.jargon_explainer import explain_jargon_in_context
+from src.bw_learner.jargon_explainer import explain_jargon_in_context
 
 init_lpmm_prompt()
 init_replyer_prompt()

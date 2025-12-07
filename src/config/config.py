@@ -33,7 +33,6 @@ from src.config.official_configs import (
     VoiceConfig,
     MemoryConfig,
     DebugConfig,
-    JargonConfig,
     DreamConfig,
 )
 
@@ -355,7 +354,6 @@ class Config(ConfigBase):
     memory: MemoryConfig
     debug: DebugConfig
     voice: VoiceConfig
-    jargon: JargonConfig
     dream: DreamConfig
 
 

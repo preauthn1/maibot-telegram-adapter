@@ -1,6 +1,7 @@
 import time
 import json
 import asyncio
+import random
 from collections import OrderedDict
 from typing import List, Dict, Optional, Any
 from json_repair import repair_json
@@ -16,7 +17,7 @@ from src.chat.utils.chat_message_builder import (
     get_raw_msg_by_timestamp_with_chat_inclusive,
 )
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
-from src.jargon.jargon_utils import (
+from src.bw_learner.learner_utils import (
     is_bot_message,
     build_context_paragraph,
     contains_bot_self_name,
@@ -29,6 +30,29 @@ from src.jargon.jargon_utils import (
 logger = get_logger("jargon")
 
 
+def _is_single_char_jargon(content: str) -> bool:
+    """
+    判断是否是单字黑话（单个汉字、英文或数字）
+    
+    Args:
+        content: 词条内容
+        
+    Returns:
+        bool: 如果是单字黑话返回True，否则返回False
+    """
+    if not content or len(content) != 1:
+        return False
+    
+    char = content[0]
+    # 判断是否是单个汉字、单个英文字母或单个数字
+    return (
+        '\u4e00' <= char <= '\u9fff' or  # 汉字
+        'a' <= char <= 'z' or            # 小写字母
+        'A' <= char <= 'Z' or            # 大写字母
+        '0' <= char <= '9'               # 数字
+    )
+
+
 def _init_prompt() -> None:
     prompt_str = """
 **聊天内容，其中的{bot_name}的发言内容是你自己的发言，[msg_id] 是消息ID**
@@ -36,11 +60,9 @@ def _init_prompt() -> None:
 
 请从上面这段聊天内容中提取"可能是黑话"的候选项（黑话/俚语/网络缩写/口头禅）。
 - 必须为对话中真实出现过的短词或短语
-- 必须是你无法理解含义的词语，没有明确含义的词语
-- 请不要选择有明确含义，或者含义清晰的词语
+- 必须是你无法理解含义的词语，没有明确含义的词语，请不要选择有明确含义，或者含义清晰的词语
 - 排除：人名、@、表情包/图片中的内容、纯标点、常规功能词（如的、了、呢、啊等）
 - 每个词条长度建议 2-8 个字符（不强制），尽量短小
-- 合并重复项，去重
 
 黑话必须为以下几种类型：
 - 由字母构成的，汉语拼音首字母的简写词，例如：nb、yyds、xswl
@@ -67,12 +89,14 @@ def _init_inference_prompts() -> None:
 {content}
 **词条出现的上下文。其中的{bot_name}的发言内容是你自己的发言**
 {raw_content_list}
+{previous_meaning_section}
 
 请根据上下文，推断"{content}"这个词条的含义。
 - 如果这是一个黑话、俚语或网络用语，请推断其含义
 - 如果含义明确（常规词汇），也请说明
 - {bot_name} 的发言内容可能包含错误，请不要参考其发言内容
 - 如果上下文信息不足，无法推断含义，请设置 no_info 为 true
+{previous_meaning_instruction}
 
 以 JSON 格式输出：
 {{
@@ -166,10 +190,6 @@ def _should_infer_meaning(jargon_obj: Jargon) -> bool:
 class JargonMiner:
     def __init__(self, chat_id: str) -> None:
         self.chat_id = chat_id
-        self.last_learning_time: float = time.time()
-        # 频率控制，可按需调整
-        self.min_messages_for_learning: int = 30
-        self.min_learning_interval: float = 60
 
         self.llm = LLMRequest(
             model_set=model_config.model_task_config.utils,
@@ -198,6 +218,10 @@ class JargonMiner:
 
         key = content.strip()
         if not key:
+            return
+
+        # 单字黑话（单个汉字、英文或数字）不记录到缓存
+        if _is_single_char_jargon(key):
             return
 
         if key in self.cache:
@@ -272,13 +296,37 @@ class JargonMiner:
                 logger.warning(f"jargon {content} 没有raw_content，跳过推断")
                 return
 
+            # 获取当前count和上一次的meaning
+            current_count = jargon_obj.count or 0
+            previous_meaning = jargon_obj.meaning or ""
+            
+            # 当count为24, 60时，随机移除一半的raw_content项目
+            if current_count in [24, 60] and len(raw_content_list) > 1:
+                # 计算要保留的数量（至少保留1个）
+                keep_count = max(1, len(raw_content_list) // 2)
+                raw_content_list = random.sample(raw_content_list, keep_count)
+                logger.info(f"jargon {content} count={current_count}，随机移除后剩余 {len(raw_content_list)} 个raw_content项目")
+
             # 步骤1: 基于raw_content和content推断
             raw_content_text = "\n".join(raw_content_list)
+            
+            # 当count为24, 60, 100时，在prompt中放入上一次推断出的meaning作为参考
+            previous_meaning_section = ""
+            previous_meaning_instruction = ""
+            if current_count in [24, 60, 100] and previous_meaning:
+                previous_meaning_section = f"""
+**上一次推断的含义（仅供参考）**
+{previous_meaning}
+"""
+                previous_meaning_instruction = "- 请参考上一次推断的含义，结合新的上下文信息，给出更准确或更新的推断结果"
+            
             prompt1 = await global_prompt_manager.format_prompt(
                 "jargon_inference_with_context_prompt",
                 content=content,
                 bot_name=global_config.bot.nickname,
                 raw_content_list=raw_content_text,
+                previous_meaning_section=previous_meaning_section,
+                previous_meaning_instruction=previous_meaning_instruction,
             )
 
             response1, _ = await self.llm_inference.generate_response_async(prompt1, temperature=0.3)
@@ -430,45 +478,16 @@ class JargonMiner:
 
             traceback.print_exc()
 
-    def should_trigger(self) -> bool:
-        # 冷却时间检查
-        if time.time() - self.last_learning_time < self.min_learning_interval:
-            return False
-
-        # 拉取最近消息数量是否足够
-        recent_messages = get_raw_msg_by_timestamp_with_chat_inclusive(
-            chat_id=self.chat_id,
-            timestamp_start=self.last_learning_time,
-            timestamp_end=time.time(),
-        )
-        return bool(recent_messages and len(recent_messages) >= self.min_messages_for_learning)
-
-    async def run_once(self) -> None:
+    async def run_once(self, messages: List[Any]) -> None:
+        """
+        运行一次黑话提取
+        
+        Args:
+            messages: 外部传入的消息列表（必需）
+        """
         # 使用异步锁防止并发执行
         async with self._extraction_lock:
             try:
-                # 在锁内检查，避免并发触发
-                if not self.should_trigger():
-                    return
-
-                chat_stream = get_chat_manager().get_stream(self.chat_id)
-                if not chat_stream:
-                    return
-
-                # 记录本次提取的时间窗口，避免重复提取
-                extraction_start_time = self.last_learning_time
-                extraction_end_time = time.time()
-                
-                # 立即更新学习时间，防止并发触发
-                self.last_learning_time = extraction_end_time
-
-                # 拉取学习窗口内的消息
-                messages = get_raw_msg_by_timestamp_with_chat_inclusive(
-                    chat_id=self.chat_id,
-                    timestamp_start=extraction_start_time,
-                    timestamp_end=extraction_end_time,
-                    limit=20,
-                )
                 if not messages:
                     return
 
@@ -608,7 +627,7 @@ class JargonMiner:
                         # 查找匹配的记录
                         matched_obj = None
                         for obj in query:
-                            if global_config.jargon.all_global:
+                            if global_config.expression.all_global_jargon:
                                 # 开启all_global：所有content匹配的记录都可以
                                 matched_obj = obj
                                 break
@@ -648,7 +667,7 @@ class JargonMiner:
                             obj.chat_id = json.dumps(updated_chat_id_list, ensure_ascii=False)
 
                             # 开启all_global时，确保记录标记为is_global=True
-                            if global_config.jargon.all_global:
+                            if global_config.expression.all_global_jargon:
                                 obj.is_global = True
                             # 关闭all_global时，保持原有is_global不变（不修改）
 
@@ -664,7 +683,7 @@ class JargonMiner:
                             updated += 1
                         else:
                             # 没找到匹配记录，创建新记录
-                            if global_config.jargon.all_global:
+                            if global_config.expression.all_global_jargon:
                                 # 开启all_global：新记录默认为is_global=True
                                 is_global_new = True
                             else:
@@ -718,9 +737,6 @@ class JargonMinerManager:
 miner_manager = JargonMinerManager()
 
 
-async def extract_and_store_jargon(chat_id: str) -> None:
-    miner = miner_manager.get_miner(chat_id)
-    await miner.run_once()
 
 
 def search_jargon(
@@ -770,7 +786,7 @@ def search_jargon(
     query = query.where(search_condition)
 
     # 根据all_global配置决定查询逻辑
-    if global_config.jargon.all_global:
+    if global_config.expression.all_global_jargon:
         # 开启all_global：所有记录都是全局的，查询所有is_global=True的记录（无视chat_id）
         query = query.where(Jargon.is_global)
     # 注意：对于all_global=False的情况，chat_id过滤在Python层面进行，以便兼容新旧格式
@@ -787,7 +803,7 @@ def search_jargon(
     results = []
     for jargon in query:
         # 如果提供了chat_id且all_global=False，需要检查chat_id列表是否包含目标chat_id
-        if chat_id and not global_config.jargon.all_global:
+        if chat_id and not global_config.expression.all_global_jargon:
             chat_id_list = parse_chat_id_list(jargon.chat_id)
             # 如果记录是is_global=True，或者chat_id列表包含目标chat_id，则包含
             if not jargon.is_global and not chat_id_list_contains(chat_id_list, chat_id):

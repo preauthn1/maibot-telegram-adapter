@@ -16,10 +16,10 @@ from src.chat.planner_actions.planner import ActionPlanner
 from src.chat.planner_actions.action_modifier import ActionModifier
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
-from src.express.expression_learner import expression_learner_manager
+from src.bw_learner.expression_learner import expression_learner_manager
 from src.chat.heart_flow.frequency_control import frequency_control_manager
-from src.express.reflect_tracker import reflect_tracker_manager
-from src.express.expression_reflector import expression_reflector_manager
+from src.bw_learner.reflect_tracker import reflect_tracker_manager
+from src.bw_learner.expression_reflector import expression_reflector_manager
 from src.bw_learner.message_recorder import extract_and_distribute_messages
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
