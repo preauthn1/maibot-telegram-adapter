@@ -45,9 +45,6 @@ class PersonalityConfig(ConfigBase):
     reply_style: str = ""
     """表达风格"""
 
-    interest: str = ""
-    """兴趣"""
-
     plan_style: str = ""
     """说话规则，行为风格"""
 
@@ -78,12 +75,6 @@ class ChatConfig(ConfigBase):
 
     max_context_size: int = 18
     """上下文长度"""
-
-    interest_rate_mode: Literal["fast", "accurate"] = "fast"
-    """兴趣值计算模式，fast为快速计算，accurate为精确计算"""
-
-    planner_size: float = 1.5
-    """副规划器大小，越小，麦麦的动作执行能力越精细，但是消耗更多token，调大可以缓解429类错误"""
 
     mentioned_bot_reply: bool = True
     """是否启用提及必回复"""

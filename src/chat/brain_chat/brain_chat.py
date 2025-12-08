@@ -311,7 +311,6 @@ class BrainChatting:
                 current_available_actions=available_actions,
                 chat_content_block=chat_content_block,
                 message_id_list=message_id_list,
-                interest=global_config.personality.interest,
                 prompt_key="brain_planner_prompt_react",
             )
             continue_flag, modified_message = await events_manager.handle_mai_events(

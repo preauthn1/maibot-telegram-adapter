@@ -36,7 +36,6 @@ def init_prompt():
         """
 {time_block}
 {name_block}
-你的兴趣是：{interest}
 {chat_context_description}，以下是具体的聊天内容
 **聊天内容**
 {chat_content_block}
@@ -48,8 +47,8 @@ reply
 2.你可以自然的顺着正在进行的聊天内容进行回复或自然的提出一个问题
 3.不要回复你自己发送的消息
 4.不要单独对表情包进行回复
-5.think_level表示思考深度，0表示该回复不需要思考，1表示该回复需要简单思考，2表示该回复需要深度思考
-{{"action":"reply", "think_level":数值等级(0-2), "target_message_id":"消息id(m+数字)"}}
+5.think_level表示思考深度，0表示该回复不需要思考和回忆，2表示该回复需要深度思考，进行深入的回忆和思考
+{{"action":"reply", "think_level":数值等级(0-2), "target_messamge_id":"消息id(m+数字)"}}
 
 no_reply
 动作描述：
@@ -361,7 +360,6 @@ class ActionPlanner:
             current_available_actions=filtered_actions,
             chat_content_block=chat_content_block,
             message_id_list=message_id_list,
-            interest=global_config.personality.interest,
             is_mentioned=is_mentioned,
         )
 
