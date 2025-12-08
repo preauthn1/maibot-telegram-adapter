@@ -334,4 +334,5 @@ config.toml
 
 interested_rates.txt
 MaiBot.code-workspace
-*.lockactionlint
+*.lock
+actionlint

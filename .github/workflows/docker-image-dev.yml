@@ -141,11 +141,6 @@ jobs:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/maibot
           tags: |
             type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
             type=sha,prefix=${{ github.ref_name }}-,enable=${{ github.ref_type == 'branch' }}
 
       - name: Create and Push Manifest
