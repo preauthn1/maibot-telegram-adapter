@@ -234,7 +234,7 @@ class ExpressionSelector:
             max_num: 最大选择数量
             target_message: 目标消息内容
             reply_reason: planner给出的回复理由
-            think_level: 思考级别，0/1/2
+            think_level: 思考级别，0/1
 
         Returns:
             Tuple[List[Dict[str, Any]], List[int]]: 选中的表达方式列表和ID列表
@@ -266,7 +266,7 @@ class ExpressionSelector:
             max_num: 最大选择数量
             target_message: 目标消息内容
             reply_reason: planner给出的回复理由
-            think_level: 思考级别，0/1/2
+            think_level: 思考级别，0/1
 
         Returns:
             Tuple[List[Dict[str, Any]], List[int]]: 选中的表达方式列表和ID列表
@@ -276,7 +276,7 @@ class ExpressionSelector:
             if think_level == 0:
                 return self._select_expressions_simple(chat_id, max_num)
             
-            # think_level == 1 或 2: 先选高count，再从所有表达方式中随机抽样
+            # think_level == 1: 先选高count，再从所有表达方式中随机抽样
             # 1. 获取所有表达方式并分离 count > 1 和 count <= 1 的
             related_chat_ids = self.get_related_chat_ids(chat_id)
             style_query = Expression.select().where(
@@ -300,19 +300,11 @@ class ExpressionSelector:
             # 分离 count > 1 和 count <= 1 的表达方式
             high_count_exprs = [expr for expr in all_style_exprs if (expr.get("count", 1) or 1) > 1]
             
-            # 根据 think_level 设置要求
-            if think_level == 1:
-                # level 1: 需要至少10个高count和10个总数
-                min_high_count = 10
-                min_total_count = 10
-                select_high_count = 5
-                select_random_count = 5
-            else:  # think_level == 2
-                # level 2: 需要至少20个高count和20个总数
-                min_high_count = 20
-                min_total_count = 20
-                select_high_count = 10
-                select_random_count = 10
+            # 根据 think_level 设置要求（仅支持 0/1，0 已在上方返回）
+            min_high_count = 10
+            min_total_count = 10
+            select_high_count = 5
+            select_random_count = 5
             
             # 检查数量要求
             if len(high_count_exprs) < min_high_count:

@@ -1,5 +1,5 @@
 [inner]
-version = "7.1.3"
+version = "7.1.5"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 # 如果你想要修改配置文件，请递增version的值
@@ -85,10 +85,10 @@ all_global_jargon = true # 是否开启全局黑话模式，注意，此功能�
 
 
 [chat] # 麦麦的聊天设置
-talk_value = 1 # 聊天频率，越小越沉默，范围0-1，如果设置为0会自动转换为0.0001以避免除以零错误
+talk_value = 1 # 聊天频率，越小越沉默，范围0-1
 mentioned_bot_reply = true # 是否启用提及必回复
 max_context_size = 30 # 上下文长度
-planner_smooth = 2 # 规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐1-5，0为关闭，必须大于等于0
+planner_smooth = 3 # 规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐1-5，0为关闭，必须大于等于0
 
 enable_talk_value_rules = true # 是否启用动态发言频率规则
 

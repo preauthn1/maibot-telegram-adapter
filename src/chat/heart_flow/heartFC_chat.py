@@ -29,7 +29,7 @@ from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
 )
-from src.chat.utils.utils import get_chat_type_and_target_info, record_replyer_action_temp
+from src.chat.utils.utils import record_replyer_action_temp
 from src.hippo_memorizer.chat_history_summarizer import ChatHistorySummarizer
 
 if TYPE_CHECKING:
@@ -100,7 +100,6 @@ class HeartFChatting:
         self._current_cycle_detail: CycleDetail = None  # type: ignore
 
         self.last_read_time = time.time() - 2
-        self.no_reply_until_call = False
 
         self.is_mute = False
 
@@ -208,23 +207,6 @@ class HeartFChatting:
         if len(recent_messages_list) >= threshold:
             # for message in recent_messages_list:
             # print(message.processed_plain_text)
-            # !处理no_reply_until_call逻辑
-            if self.no_reply_until_call:
-                for message in recent_messages_list:
-                    if (
-                        message.is_mentioned
-                        or message.is_at
-                        or len(recent_messages_list) >= 8
-                        or time.time() - self.last_read_time > 600
-                    ):
-                        self.no_reply_until_call = False
-                        self.last_read_time = time.time()
-                        break
-                # 没有提到，继续保持沉默
-                if self.no_reply_until_call:
-                    # logger.info(f"{self.log_prefix} 没有提到，继续保持沉默")
-                    await asyncio.sleep(1)
-                    return True
 
             self.last_read_time = time.time()
 
@@ -614,31 +596,6 @@ class HeartFChatting:
                     )
 
                     return {"action_type": "no_reply", "success": True, "result": "选择不回复", "command": ""}
-
-                elif action_planner_info.action_type == "no_reply_until_call":
-                    # 直接当场执行no_reply_until_call逻辑
-                    logger.info(f"{self.log_prefix} 保持沉默，直到有人直接叫的名字")
-                    reason = action_planner_info.reasoning or "选择不回复"
-
-                    # 增加连续 no_reply 计数
-                    self.consecutive_no_reply_count += 1
-                    self.no_reply_until_call = True
-                    await database_api.store_action_info(
-                        chat_stream=self.chat_stream,
-                        action_build_into_prompt=False,
-                        action_prompt_display=reason,
-                        action_done=True,
-                        thinking_id=thinking_id,
-                        action_data={},
-                        action_name="no_reply_until_call",
-                        action_reasoning=reason,
-                    )
-                    return {
-                        "action_type": "no_reply_until_call",
-                        "success": True,
-                        "result": "保持沉默，直到有人直接叫的名字",
-                        "command": "",
-                    }
 
                 elif action_planner_info.action_type == "reply":
                     # 直接当场执行reply逻辑

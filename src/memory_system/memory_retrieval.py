@@ -1034,7 +1034,6 @@ async def build_memory_retrieval_prompt(
     sender: str,
     target: str,
     chat_stream,
-    tool_executor,
     think_level: int = 1,
 ) -> str:
     """构建记忆检索提示

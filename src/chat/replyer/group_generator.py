@@ -798,7 +798,7 @@ class DefaultReplyer:
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
             self._time_and_run_task(
                 build_memory_retrieval_prompt(
-                    chat_talking_prompt_short, sender, target, self.chat_stream, self.tool_executor, think_level=think_level
+                    chat_talking_prompt_short, sender, target, self.chat_stream, think_level=think_level
                 ),
                 "memory_retrieval",
             ),
@@ -884,11 +884,8 @@ class DefaultReplyer:
         # 根据think_level选择不同的回复模板
         # think_level=0: 轻量回复（简短平淡）
         # think_level=1: 中等回复（日常口语化）
-        # think_level=2: 深度回复（仔细思考，把握话题）
         if think_level == 0:
             prompt_name = "replyer_prompt_0"
-        elif think_level == 2:
-            prompt_name = "replyer_prompt_2"
         else:  # think_level == 1 或默认
             prompt_name = "replyer_prompt"
 
@@ -923,8 +920,6 @@ class DefaultReplyer:
     ) -> str:  # sourcery skip: merge-else-if-into-elif, remove-redundant-if
         chat_stream = self.chat_stream
         chat_id = chat_stream.stream_id
-        is_group_chat = bool(chat_stream.group_info)
-
         sender, target = self._parse_reply_target(reply_to)
         target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
 

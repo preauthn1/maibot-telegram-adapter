@@ -45,10 +45,10 @@ reply
 动作描述：
 1.你可以选择呼叫了你的名字，但是你没有做出回应的消息进行回复
 2.你可以自然的顺着正在进行的聊天内容进行回复或自然的提出一个问题
-3.不要回复你自己发送的消息
+3.不要选择回复你自己发送的消息
 4.不要单独对表情包进行回复
-5.think_level表示思考深度，0表示该回复不需要思考和回忆，2表示该回复需要深度思考，进行深入的回忆和思考
-{{"action":"reply", "think_level":数值等级(0-2), "target_messamge_id":"消息id(m+数字)"}}
+5.think_level表示思考深度，0表示该回复不需要思考和回忆，1表示该回复需要进行回忆和思考
+{{"action":"reply", "think_level":数值等级(0或1), "target_messamge_id":"消息id(m+数字)"}}
 
 no_reply
 动作描述：
@@ -56,15 +56,12 @@ no_reply
 控制聊天频率，不要太过频繁的发言
 {{"action":"no_reply"}}
 
-{no_reply_until_call_block}
-
 {action_options_text}
 
 **你之前的action执行和思考记录**
 {actions_before_now_block}
 
 请选择**可选的**且符合使用条件的action，并说明触发action的消息id(消息id格式:m+数字)
-不要回复你自己发送的消息
 先输出你的简短的选择思考理由，再输出你选择的action，理由不要分点，精简。
 **动作选择要求**
 请你根据聊天内容,用户的最新消息和以下标准选择合适的动作:
@@ -251,7 +248,7 @@ class ActionPlanner:
 
             # 验证action是否可用
             available_action_names = [action_name for action_name, _ in current_available_actions]
-            internal_action_names = ["no_reply", "reply", "wait_time", "no_reply_until_call"]
+            internal_action_names = ["no_reply", "reply", "wait_time"]
 
             if action not in internal_action_names and action not in available_action_names:
                 logger.warning(
@@ -307,7 +304,6 @@ class ActionPlanner:
         self,
         available_actions: Dict[str, ActionInfo],
         loop_start_time: float = 0.0,
-        is_mentioned: bool = False,
     ) -> List[ActionPlannerInfo]:
         # sourcery skip: use-named-expression
         """
@@ -348,11 +344,6 @@ class ActionPlanner:
 
         logger.debug(f"{self.log_prefix}过滤后有{len(filtered_actions)}个可用动作")
 
-        # 如果是提及时且没有可用动作，直接返回空列表，不调用LLM以节省token
-        if is_mentioned and not filtered_actions:
-            logger.info(f"{self.log_prefix}提及时没有可用动作，跳过plan调用")
-            return []
-
         # 构建包含所有动作的提示词
         prompt, message_id_list = await self.build_planner_prompt(
             is_group_chat=is_group_chat,
@@ -360,7 +351,6 @@ class ActionPlanner:
             current_available_actions=filtered_actions,
             chat_content_block=chat_content_block,
             message_id_list=message_id_list,
-            is_mentioned=is_mentioned,
         )
 
         # 调用LLM获取决策
@@ -432,32 +422,6 @@ class ActionPlanner:
 
         return plan_log_str
 
-    def _has_consecutive_no_reply(self, min_count: int = 3) -> bool:
-        """
-        检查是否有连续min_count次以上的no_reply
-
-        Args:
-            min_count: 需要连续的最少次数，默认3
-
-        Returns:
-            如果有连续min_count次以上no_reply返回True，否则返回False
-        """
-        consecutive_count = 0
-
-        # 从后往前遍历plan_log，检查最新的连续记录
-        for _reasoning, _timestamp, content in reversed(self.plan_log):
-            if isinstance(content, list) and all(isinstance(action, ActionPlannerInfo) for action in content):
-                # 检查所有action是否都是no_reply
-                if all(action.action_type == "no_reply" for action in content):
-                    consecutive_count += 1
-                    if consecutive_count >= min_count:
-                        return True
-                else:
-                    # 如果遇到非no_reply的action，重置计数
-                    break
-
-        return False
-
     async def build_planner_prompt(
         self,
         is_group_chat: bool,
@@ -466,7 +430,6 @@ class ActionPlanner:
         message_id_list: List[Tuple[str, "DatabaseMessages"]],
         chat_content_block: str = "",
         interest: str = "",
-        is_mentioned: bool = False,
     ) -> tuple[str, List[Tuple[str, "DatabaseMessages"]]]:
         """构建 Planner LLM 的提示词 (获取模板并填充数据)"""
         try:
@@ -487,47 +450,18 @@ class ActionPlanner:
             )
             name_block = f"你的名字是{bot_name}{bot_nickname}，请注意哪些是你自己的发言。"
 
-            # 根据是否是提及时选择不同的模板
-            if is_mentioned:
-                # 提及时使用简化版提示词，不需要reply、no_reply、no_reply_until_call
-                planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt_mentioned")
-                prompt = planner_prompt_template.format(
-                    time_block=time_block,
-                    chat_context_description=chat_context_description,
-                    chat_content_block=chat_content_block,
-                    actions_before_now_block=actions_before_now_block,
-                    action_options_text=action_options_block,
-                    moderation_prompt=moderation_prompt_block,
-                    name_block=name_block,
-                    interest=interest,
-                    plan_style=global_config.personality.plan_style,
-                )
-            else:
-                # 正常流程使用完整版提示词
-                # 检查是否有连续3次以上no_reply，如果有则添加no_reply_until_call选项
-                no_reply_until_call_block = ""
-                if self._has_consecutive_no_reply(min_count=3):
-                    no_reply_until_call_block = """no_reply_until_call
-动作描述：
-保持沉默，直到有人直接叫你的名字
-当前话题不感兴趣时使用，或有人不喜欢你的发言时使用
-当你频繁选择no_reply时使用，表示话题暂时与你无关
-{{"action":"no_reply_until_call"}}
-"""
-
-                planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")
-                prompt = planner_prompt_template.format(
-                    time_block=time_block,
-                    chat_context_description=chat_context_description,
-                    chat_content_block=chat_content_block,
-                    actions_before_now_block=actions_before_now_block,
-                    action_options_text=action_options_block,
-                    no_reply_until_call_block=no_reply_until_call_block,
-                    moderation_prompt=moderation_prompt_block,
-                    name_block=name_block,
-                    interest=interest,
-                    plan_style=global_config.personality.plan_style,
-                )
+            planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")
+            prompt = planner_prompt_template.format(
+                time_block=time_block,
+                chat_context_description=chat_context_description,
+                chat_content_block=chat_content_block,
+                actions_before_now_block=actions_before_now_block,
+                action_options_text=action_options_block,
+                moderation_prompt=moderation_prompt_block,
+                name_block=name_block,
+                interest=interest,
+                plan_style=global_config.personality.plan_style,
+            )
 
             return prompt, message_id_list
         except Exception as e:
