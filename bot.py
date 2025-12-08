@@ -143,7 +143,7 @@ def print_opensource_notice():
         "",
         f"{Fore.WHITE}  官方仓库: {Fore.BLUE}https://github.com/MaiM-with-u/MaiBot {Style.RESET_ALL}",
         f"{Fore.WHITE}  官方文档: {Fore.BLUE}https://docs.mai-mai.org {Style.RESET_ALL}",
-        f"{Fore.WHITE}  官方群聊: {Fore.BLUE}123456780{Style.RESET_ALL}",
+        f"{Fore.WHITE}  官方群聊: {Fore.BLUE}1006149251{Style.RESET_ALL}",
         f"{Fore.CYAN}{'─' * 70}{Style.RESET_ALL}",
         f"{Fore.RED}  ⚠ 将本软件作为「商品」倒卖、隐瞒开源性质均违反协议！{Style.RESET_ALL}",
         f"{Fore.CYAN}{'═' * 70}{Style.RESET_ALL}",

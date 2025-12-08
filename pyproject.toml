@@ -1,6 +1,6 @@
 [project]
 name = "MaiBot"
-version = "0.11.0"
+version = "0.11.6"
 description = "MaiCore 是一个基于大语言模型的可交互智能体"
 requires-python = ">=3.10"
 dependencies = [
@@ -36,6 +36,10 @@ dependencies = [
     "uvicorn>=0.35.0",
     "zstandard>=0.25.0",
 ]
+
+
+[tool.uv]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 
 [tool.ruff]
