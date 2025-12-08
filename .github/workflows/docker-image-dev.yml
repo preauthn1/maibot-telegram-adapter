@@ -19,6 +19,7 @@ jobs:
       - name: Check out git repository
         uses: actions/checkout@v4
         with:
+          ref: dev
           fetch-depth: 0
 
       # Clone required dependencies
@@ -72,6 +73,7 @@ jobs:
       - name: Check out git repository
         uses: actions/checkout@v4
         with:
+          ref: dev
           fetch-depth: 0
 
       # Clone required dependencies
