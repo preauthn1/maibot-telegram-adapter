@@ -40,7 +40,6 @@ def init_prompt():
         """
 {time_block}
 {name_block}
-你的兴趣是：{interest}
 {chat_context_description}，以下是具体的聊天内容
 
 **聊天内容**
@@ -305,7 +304,6 @@ class BrainPlanner:
             current_available_actions=filtered_actions,
             chat_content_block=chat_content_block,
             message_id_list=message_id_list,
-            interest=global_config.personality.interest,
             prompt_key=prompt_key,
         )
 

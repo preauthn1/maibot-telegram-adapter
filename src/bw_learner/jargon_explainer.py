@@ -7,8 +7,8 @@ from src.common.database.database_model import Jargon
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
-from src.jargon.jargon_miner import search_jargon
-from src.jargon.jargon_utils import is_bot_message, contains_bot_self_name, parse_chat_id_list, chat_id_list_contains
+from src.bw_learner.jargon_miner import search_jargon
+from src.bw_learner.learner_utils import is_bot_message, contains_bot_self_name, parse_chat_id_list, chat_id_list_contains
 
 logger = get_logger("jargon")
 
@@ -82,7 +82,7 @@ class JargonExplainer:
         query = Jargon.select().where((Jargon.meaning.is_null(False)) & (Jargon.meaning != ""))
 
         # 根据all_global配置决定查询逻辑
-        if global_config.jargon.all_global:
+        if global_config.expression.all_global_jargon:
             # 开启all_global：只查询is_global=True的记录
             query = query.where(Jargon.is_global)
         else:
@@ -107,7 +107,7 @@ class JargonExplainer:
                 continue
 
             # 检查chat_id（如果all_global=False）
-            if not global_config.jargon.all_global:
+            if not global_config.expression.all_global_jargon:
                 if jargon.is_global:
                     # 全局黑话，包含
                     pass
@@ -181,7 +181,7 @@ class JargonExplainer:
             content = entry["content"]
 
             # 根据是否开启全局黑话，决定查询方式
-            if global_config.jargon.all_global:
+            if global_config.expression.all_global_jargon:
                 # 开启全局黑话：查询所有is_global=True的记录
                 results = search_jargon(
                     keyword=content,
@@ -265,7 +265,7 @@ def match_jargon_from_text(chat_text: str, chat_id: str) -> List[str]:
         return []
 
     query = Jargon.select().where((Jargon.meaning.is_null(False)) & (Jargon.meaning != ""))
-    if global_config.jargon.all_global:
+    if global_config.expression.all_global_jargon:
         query = query.where(Jargon.is_global)
 
     query = query.order_by(Jargon.count.desc())
@@ -277,7 +277,7 @@ def match_jargon_from_text(chat_text: str, chat_id: str) -> List[str]:
         if not content:
             continue
 
-        if not global_config.jargon.all_global and not jargon.is_global:
+        if not global_config.expression.all_global_jargon and not jargon.is_global:
             chat_id_list = parse_chat_id_list(jargon.chat_id)
             if not chat_id_list_contains(chat_id_list, chat_id):
                 continue
