@@ -40,6 +40,90 @@ def is_webui_virtual_group(group_id: str) -> bool:
     return group_id and group_id.startswith(VIRTUAL_GROUP_ID_PREFIX)
 
 
+def parse_message_segments(segment) -> list:
+    """解析消息段，转换为 WebUI 可用的格式
+    
+    参考 NapCat 适配器的消息解析逻辑
+    
+    Args:
+        segment: Seg 消息段对象
+        
+    Returns:
+        list: 消息段列表，每个元素为 {"type": "...", "data": ...}
+    """
+    from maim_message import Seg
+    
+    result = []
+    
+    if segment is None:
+        return result
+    
+    if segment.type == "seglist":
+        # 处理消息段列表
+        if segment.data:
+            for seg in segment.data:
+                result.extend(parse_message_segments(seg))
+    elif segment.type == "text":
+        # 文本消息
+        if segment.data:
+            result.append({"type": "text", "data": segment.data})
+    elif segment.type == "image":
+        # 图片消息（base64）
+        if segment.data:
+            result.append({"type": "image", "data": f"data:image/png;base64,{segment.data}"})
+    elif segment.type == "emoji":
+        # 表情包消息（base64）
+        if segment.data:
+            result.append({"type": "emoji", "data": f"data:image/gif;base64,{segment.data}"})
+    elif segment.type == "imageurl":
+        # 图片链接消息
+        if segment.data:
+            result.append({"type": "image", "data": segment.data})
+    elif segment.type == "face":
+        # 原生表情
+        result.append({"type": "face", "data": segment.data})
+    elif segment.type == "voice":
+        # 语音消息（base64）
+        if segment.data:
+            result.append({"type": "voice", "data": f"data:audio/wav;base64,{segment.data}"})
+    elif segment.type == "voiceurl":
+        # 语音链接
+        if segment.data:
+            result.append({"type": "voice", "data": segment.data})
+    elif segment.type == "video":
+        # 视频消息（base64）
+        if segment.data:
+            result.append({"type": "video", "data": f"data:video/mp4;base64,{segment.data}"})
+    elif segment.type == "videourl":
+        # 视频链接
+        if segment.data:
+            result.append({"type": "video", "data": segment.data})
+    elif segment.type == "music":
+        # 音乐消息
+        result.append({"type": "music", "data": segment.data})
+    elif segment.type == "file":
+        # 文件消息
+        result.append({"type": "file", "data": segment.data})
+    elif segment.type == "reply":
+        # 回复消息
+        result.append({"type": "reply", "data": segment.data})
+    elif segment.type == "forward":
+        # 转发消息
+        forward_items = []
+        if segment.data:
+            for item in segment.data:
+                forward_items.append({
+                    "content": parse_message_segments(item.get("message_segment", {})) if isinstance(item, dict) else []
+                })
+        result.append({"type": "forward", "data": forward_items})
+    else:
+        # 未知类型，尝试作为文本处理
+        if segment.data:
+            result.append({"type": "unknown", "original_type": segment.type, "data": str(segment.data)})
+    
+    return result
+
+
 async def _send_message(message: MessageSending, show_log=True) -> bool:
     """合并后的消息发送函数，包含WS发送和日志记录"""
     message_preview = truncate_message(message.processed_plain_text, max_length=200)
@@ -56,11 +140,25 @@ async def _send_message(message: MessageSending, show_log=True) -> bool:
             import time
             from src.config.config import global_config
 
+            # 解析消息段，获取富文本内容
+            message_segments = parse_message_segments(message.message_segment)
+            
+            # 判断消息类型
+            # 如果只有一个文本段，使用简单的 text 类型
+            # 否则使用 rich 类型，包含完整的消息段
+            if len(message_segments) == 1 and message_segments[0].get("type") == "text":
+                message_type = "text"
+                segments = None
+            else:
+                message_type = "rich"
+                segments = message_segments
+
             await chat_manager.broadcast(
                 {
                     "type": "bot_message",
                     "content": message.processed_plain_text,
-                    "message_type": "text",
+                    "message_type": message_type,
+                    "segments": segments,  # 富文本消息段
                     "timestamp": time.time(),
                     "group_id": group_id,  # 包含群 ID 以便前端区分不同的聊天标签
                     "sender": {
