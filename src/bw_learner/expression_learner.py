@@ -3,19 +3,18 @@ import json
 import os
 import re
 import asyncio
-from typing import List, Optional, Tuple
-import traceback
+from typing import List, Optional, Tuple, Any, Dict
 from src.common.logger import get_logger
 from src.common.database.database_model import Expression
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 from src.chat.utils.chat_message_builder import (
-    get_raw_msg_by_timestamp_with_chat_inclusive,
     build_anonymous_messages,
 )
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
-from src.express.express_utils import filter_message_content
+from src.bw_learner.learner_utils import filter_message_content, is_bot_message, build_context_paragraph, contains_bot_self_name
+from src.bw_learner.jargon_miner import miner_manager
 from json_repair import repair_json
 
 
@@ -26,33 +25,52 @@ logger = get_logger("expressor")
 
 def init_prompt() -> None:
     learn_style_prompt = """{chat_str}
-
-请从上面这段群聊中概括除了人名为"SELF"之外的人的语言风格。
-每一行消息前面的方括号中的数字（如 [1]、[2]）是该行消息的唯一编号，请在输出中引用这些编号来标注“表达方式的来源行”。
+你的名字是{bot_name},现在请你完成两个提取任务
+任务1：请从上面这段群聊中用户的语言风格和说话方式
 1. 只考虑文字，不要考虑表情包和图片
-2. 不要涉及具体的人名，但是可以涉及具体名词
-3. 思考有没有特殊的梗，一并总结成语言风格
-4. 例子仅供参考，请严格根据群聊内容总结!!!
+2. 不要总结SELF的发言
+3. 不要涉及具体的人名，也不要涉及具体名词
+4. 思考有没有特殊的梗，一并总结成语言风格
+5. 例子仅供参考，请严格根据群聊内容总结!!!
 注意：总结成如下格式的规律，总结的内容要详细，但具有概括性：
-例如：当"AAAAA"时，可以"BBBBB", AAAAA代表某个具体的场景，不超过20个字。BBBBB代表对应的语言风格，特定句式或表达方式，不超过20个字。
+例如：当"AAAAA"时，可以"BBBBB", AAAAA代表某个场景，不超过20个字。BBBBB代表对应的语言风格，特定句式或表达方式，不超过20个字。
+表达方式在3-5个左右，不要超过10个
 
-请严格以 JSON 数组的形式输出结果，每个元素为一个对象，结构如下（注意字段名）：
+
+任务2：请从上面这段聊天内容中提取"可能是黑话"的候选项（黑话/俚语/网络缩写/口头禅）。
+- 必须为对话中真实出现过的短词或短语
+- 必须是你无法理解含义的词语，没有明确含义的词语，请不要选择有明确含义，或者含义清晰的词语
+- 排除：人名、@、表情包/图片中的内容、纯标点、常规功能词（如的、了、呢、啊等）
+- 每个词条长度建议 2-8 个字符（不强制），尽量短小
+- 请你提取出可能的黑话，最多30个黑话，请尽量提取所有
+
+黑话必须为以下几种类型：
+- 由字母构成的，汉语拼音首字母的简写词，例如：nb、yyds、xswl
+- 英文词语的缩写，用英文字母概括一个词汇或含义，例如：CPU、GPU、API
+- 中文词语的缩写，用几个汉字概括一个词汇或含义，例如：社死、内卷
+
+输出要求：
+将表达方式，语言风格和黑话以 JSON 数组输出，每个元素为一个对象，结构如下（注意字段名）：
+注意请不要输出重复内容，请对表达方式和黑话进行去重。
+
 [
   {{"situation": "AAAAA", "style": "BBBBB", "source_id": "3"}},
   {{"situation": "CCCC", "style": "DDDD", "source_id": "7"}}
   {{"situation": "对某件事表示十分惊叹", "style": "使用 我嘞个xxxx", "source_id": "[消息编号]"}},
   {{"situation": "表示讽刺的赞同，不讲道理", "style": "对对对", "source_id": "[消息编号]"}},
   {{"situation": "当涉及游戏相关时，夸赞，略带戏谑意味", "style": "使用 这么强！", "source_id": "[消息编号]"}},
+  {{"content": "词条", "source_id": "12"}},
+  {{"content": "词条2", "source_id": "5"}}
 ]
 
-请注意：
-- 不要总结你自己（SELF）的发言，尽量保证总结内容的逻辑性
-- 请只针对最重要的若干条表达方式进行总结，避免输出太多重复或相似的条目
-
 其中：
+表达方式条目：
 - situation：表示“在什么情境下”的简短概括（不超过20个字）
 - style：表示对应的语言风格或常用表达（不超过20个字）
 - source_id：该表达方式对应的“来源行编号”，即上方聊天记录中方括号里的数字（例如 [3]），请只输出数字本身，不要包含方括号
+黑话jargon条目：
+- content:表示黑话的内容
+- source_id：该黑话对应的“来源行编号”，即上方聊天记录中方括号里的数字（例如 [3]），请只输出数字本身，不要包含方括号
 
 现在请你输出 JSON：
 """
@@ -69,110 +87,107 @@ class ExpressionLearner:
         self.summary_model: LLMRequest = LLMRequest(
             model_set=model_config.model_task_config.utils_small, request_type="expression.summary"
         )
-        self.embedding_model: LLMRequest = LLMRequest(
-            model_set=model_config.model_task_config.embedding, request_type="expression.embedding"
-        )
         self.chat_id = chat_id
         self.chat_stream = get_chat_manager().get_stream(chat_id)
         self.chat_name = get_chat_manager().get_stream_name(chat_id) or chat_id
 
-        # 维护每个chat的上次学习时间
-        self.last_learning_time: float = time.time()
-
         # 学习锁，防止并发执行学习任务
         self._learning_lock = asyncio.Lock()
 
-        # 学习参数
-        _, self.enable_learning, self.learning_intensity = global_config.expression.get_expression_config_for_chat(
-            self.chat_id
-        )
-        # 防止除以零：如果学习强度为0或负数，使用最小值0.0001
-        if self.learning_intensity <= 0:
-            logger.warning(f"学习强度为 {self.learning_intensity}，已自动调整为 0.0001 以避免除以零错误")
-            self.learning_intensity = 0.0000001
-        self.min_messages_for_learning = 15 / self.learning_intensity  # 触发学习所需的最少消息数
-        self.min_learning_interval = 120 / self.learning_intensity
-
-    def should_trigger_learning(self) -> bool:
-        """
-        检查是否应该触发学习
-
-        Args:
-            chat_id: 聊天流ID
-
-        Returns:
-            bool: 是否应该触发学习
-        """
-        # 检查是否允许学习
-        if not self.enable_learning:
-            return False
-
-        # 检查时间间隔
-        time_diff = time.time() - self.last_learning_time
-        if time_diff < self.min_learning_interval:
-            return False
-
-        # 检查消息数量（只检查指定聊天流的消息）
-        recent_messages = get_raw_msg_by_timestamp_with_chat_inclusive(
-            chat_id=self.chat_id,
-            timestamp_start=self.last_learning_time,
-            timestamp_end=time.time(),
-        )
-
-        if not recent_messages or len(recent_messages) < self.min_messages_for_learning:
-            return False
-
-        return True
-
-    async def trigger_learning_for_chat(self):
-        """
-        为指定聊天流触发学习
-
-        Args:
-            chat_id: 聊天流ID
-
-        Returns:
-            bool: 是否成功触发学习
-        """
-        # 使用异步锁防止并发执行
-        async with self._learning_lock:
-            # 在锁内检查，避免并发触发
-            # 如果锁被持有，其他协程会等待，但等待期间条件可能已变化，所以需要再次检查
-            if not self.should_trigger_learning():
-                return
-
-            # 保存学习开始前的时间戳，用于获取消息范围
-            learning_start_timestamp = time.time()
-            previous_learning_time = self.last_learning_time
-            
-            # 立即更新学习时间，防止并发触发
-            self.last_learning_time = learning_start_timestamp
-
-            try:
-                logger.info(f"在聊天流 {self.chat_name} 学习表达方式")
-                # 学习语言风格，传递学习开始前的时间戳
-                learnt_style = await self.learn_and_store(num=25, timestamp_start=previous_learning_time)
-
-                if learnt_style:
-                    logger.info(f"聊天流 {self.chat_name} 表达学习完成")
-                else:
-                    logger.warning(f"聊天流 {self.chat_name} 表达学习未获得有效结果")
-
-            except Exception as e:
-                logger.error(f"为聊天流 {self.chat_name} 触发学习失败: {e}")
-                traceback.print_exc()
-                # 即使失败也保持时间戳更新，避免频繁重试
-                return
-
-    async def learn_and_store(self, num: int = 10, timestamp_start: Optional[float] = None) -> List[Tuple[str, str, str]]:
+    async def learn_and_store(
+        self, 
+        messages: List[Any],
+    ) -> List[Tuple[str, str, str]]:
         """
         学习并存储表达方式
         
         Args:
+            messages: 外部传入的消息列表（必需）
             num: 学习数量
             timestamp_start: 学习开始的时间戳，如果为None则使用self.last_learning_time
         """
-        learnt_expressions = await self.learn_expression(num, timestamp_start=timestamp_start)
+        if not messages:
+            return None
+        
+        random_msg = messages
+
+        # 学习用（开启行编号，便于溯源）
+        random_msg_str: str = await build_anonymous_messages(random_msg, show_ids=True)
+
+        prompt: str = await global_prompt_manager.format_prompt(
+            "learn_style_prompt",
+            bot_name=global_config.bot.nickname,
+            chat_str=random_msg_str,
+        )
+
+        # print(f"random_msg_str:{random_msg_str}")
+        # logger.info(f"学习{type_str}的prompt: {prompt}")
+
+        try:
+            response, _ = await self.express_learn_model.generate_response_async(prompt, temperature=0.3)
+        except Exception as e:
+            logger.error(f"学习表达方式失败,模型生成出错: {e}")
+            return None
+
+        # 解析 LLM 返回的表达方式列表和黑话列表（包含来源行编号）
+        expressions: List[Tuple[str, str, str]]
+        jargon_entries: List[Tuple[str, str]]  # (content, source_id)
+        expressions, jargon_entries = self.parse_expression_response(response)
+        expressions = self._filter_self_reference_styles(expressions)
+        
+        # 检查表达方式数量，如果超过10个则放弃本次表达学习
+        if len(expressions) > 10:
+            logger.info(f"表达方式提取数量超过10个（实际{len(expressions)}个），放弃本次表达学习")
+            expressions = []
+        
+        # 检查黑话数量，如果超过30个则放弃本次黑话学习
+        if len(jargon_entries) > 30:
+            logger.info(f"黑话提取数量超过30个（实际{len(jargon_entries)}个），放弃本次黑话学习")
+            jargon_entries = []
+        
+        # 处理黑话条目，路由到 jargon_miner（即使没有表达方式也要处理黑话）
+        if jargon_entries:
+            await self._process_jargon_entries(jargon_entries, random_msg)
+        
+        # 如果没有表达方式，直接返回
+        if not expressions:
+            logger.info("过滤后没有可用的表达方式（style 与机器人名称重复）")
+            return []
+        
+        logger.info(f"学习的prompt: {prompt}")
+        logger.info(f"学习的expressions: {expressions}")
+        logger.info(f"学习的jargon_entries: {jargon_entries}")
+        logger.info(f"学习的response: {response}")
+
+        # 直接根据 source_id 在 random_msg 中溯源，获取 context
+        filtered_expressions: List[Tuple[str, str, str]] = []  # (situation, style, context)
+
+        for situation, style, source_id in expressions:
+            source_id_str = (source_id or "").strip()
+            if not source_id_str.isdigit():
+                # 无效的来源行编号，跳过
+                continue
+
+            line_index = int(source_id_str) - 1  # build_anonymous_messages 的编号从 1 开始
+            if line_index < 0 or line_index >= len(random_msg):
+                # 超出范围，跳过
+                continue
+
+            # 当前行的原始内容
+            current_msg = random_msg[line_index]
+            
+            # 过滤掉从bot自己发言中提取到的表达方式
+            if is_bot_message(current_msg):
+                continue
+            
+            context = filter_message_content(current_msg.processed_plain_text or "")
+            if not context:
+                continue
+
+            filtered_expressions.append((situation, style, context))
+        
+        
+        learnt_expressions = filtered_expressions
 
         if learnt_expressions is None:
             logger.info("没有学习到表达风格")
@@ -205,93 +220,24 @@ class ExpressionLearner:
 
         return learnt_expressions
 
-    async def learn_expression(self, num: int = 10, timestamp_start: Optional[float] = None) -> Optional[List[Tuple[str, str, str]]]:
-        """从指定聊天流学习表达方式
-
-        Args:
-            num: 学习数量
-            timestamp_start: 学习开始的时间戳，如果为None则使用self.last_learning_time
+    def parse_expression_response(self, response: str) -> Tuple[List[Tuple[str, str, str]], List[Tuple[str, str]]]:
         """
-        current_time = time.time()
-        
-        # 使用传入的时间戳，如果没有则使用self.last_learning_time
-        start_timestamp = timestamp_start if timestamp_start is not None else self.last_learning_time
-
-        # 获取上次学习之后的消息
-        random_msg = get_raw_msg_by_timestamp_with_chat_inclusive(
-            chat_id=self.chat_id,
-            timestamp_start=start_timestamp,
-            timestamp_end=current_time,
-            limit=num,
-        )
-        # print(random_msg)
-        if not random_msg or random_msg == []:
-            return None
-
-        # 学习用（开启行编号，便于溯源）
-        random_msg_str: str = await build_anonymous_messages(random_msg, show_ids=True)
-
-        prompt: str = await global_prompt_manager.format_prompt(
-            "learn_style_prompt",
-            chat_str=random_msg_str,
-        )
-
-        # print(f"random_msg_str:{random_msg_str}")
-        # logger.info(f"学习{type_str}的prompt: {prompt}")
-
-        try:
-            response, _ = await self.express_learn_model.generate_response_async(prompt, temperature=0.3)
-        except Exception as e:
-            logger.error(f"学习表达方式失败,模型生成出错: {e}")
-            return None
-
-        # 解析 LLM 返回的表达方式列表（包含来源行编号）
-        expressions: List[Tuple[str, str, str]] = self.parse_expression_response(response)
-        expressions = self._filter_self_reference_styles(expressions)
-        if not expressions:
-            logger.info("过滤后没有可用的表达方式（style 与机器人名称重复）")
-            return None
-        # logger.debug(f"学习{type_str}的response: {response}")
-
-        # 直接根据 source_id 在 random_msg 中溯源，获取 context
-        filtered_expressions: List[Tuple[str, str, str]] = []  # (situation, style, context)
-
-        for situation, style, source_id in expressions:
-            source_id_str = (source_id or "").strip()
-            if not source_id_str.isdigit():
-                # 无效的来源行编号，跳过
-                continue
-
-            line_index = int(source_id_str) - 1  # build_anonymous_messages 的编号从 1 开始
-            if line_index < 0 or line_index >= len(random_msg):
-                # 超出范围，跳过
-                continue
-
-            # 当前行的原始内容
-            current_msg = random_msg[line_index]
-            context = filter_message_content(current_msg.processed_plain_text or "")
-            if not context:
-                continue
-
-            filtered_expressions.append((situation, style, context))
-
-        if not filtered_expressions:
-            return None
-
-        return filtered_expressions
-
-    def parse_expression_response(self, response: str) -> List[Tuple[str, str, str]]:
-        """
-        解析 LLM 返回的表达风格总结 JSON，提取 (situation, style, source_id) 元组列表。
+        解析 LLM 返回的表达风格总结和黑话 JSON，提取两个列表。
 
         期望的 JSON 结构：
         [
-          {"situation": "AAAAA", "style": "BBBBB", "source_id": "3"},
+          {"situation": "AAAAA", "style": "BBBBB", "source_id": "3"},  // 表达方式
+          {"content": "词条", "source_id": "12"},  // 黑话
           ...
         ]
+
+        Returns:
+            Tuple[List[Tuple[str, str, str]], List[Tuple[str, str]]]:
+                第一个列表是表达方式 (situation, style, source_id)
+                第二个列表是黑话 (content, source_id)
         """
         if not response:
-            return []
+            return [], []
 
         raw = response.strip()
 
@@ -307,7 +253,8 @@ class ExpressionLearner:
             raw = raw.strip()
 
         parsed = None
-        expressions: List[Tuple[str, str, str]] = []
+        expressions: List[Tuple[str, str, str]] = []  # (situation, style, source_id)
+        jargon_entries: List[Tuple[str, str]] = []  # (content, source_id)
 
         try:
             # 优先尝试直接解析
@@ -356,9 +303,9 @@ class ExpressionLearner:
                         
                         if in_string:
                             # 在字符串值内部，将中文引号替换为转义的英文引号
-                            if char == '"':  # 中文左引号
+                            if char == '"':  # 中文左引号 U+201C
                                 result.append('\\"')
-                            elif char == '"':  # 中文右引号
+                            elif char == '"':  # 中文右引号 U+201D
                                 result.append('\\"')
                             else:
                                 result.append(char)
@@ -399,15 +346,23 @@ class ExpressionLearner:
         for item in parsed_list:
             if not isinstance(item, dict):
                 continue
+            
+            # 检查是否是表达方式条目（有 situation 和 style）
             situation = str(item.get("situation", "")).strip()
             style = str(item.get("style", "")).strip()
             source_id = str(item.get("source_id", "")).strip()
-            if not situation or not style or not source_id:
-                # 三个字段必须同时存在
-                continue
-            expressions.append((situation, style, source_id))
+            
+            if situation and style and source_id:
+                # 表达方式条目
+                expressions.append((situation, style, source_id))
+            elif item.get("content"):
+                # 黑话条目（有 content 字段）
+                content = str(item.get("content", "")).strip()
+                source_id = str(item.get("source_id", "")).strip()
+                if content and source_id:
+                    jargon_entries.append((content, source_id))
 
-        return expressions
+        return expressions, jargon_entries
 
     def _filter_self_reference_styles(self, expressions: List[Tuple[str, str, str]]) -> List[Tuple[str, str, str]]:
         """
@@ -544,6 +499,66 @@ class ExpressionLearner:
         except Exception as e:
             logger.error(f"概括表达情境失败: {e}")
         return None
+
+    async def _process_jargon_entries(self, jargon_entries: List[Tuple[str, str]], messages: List[Any]) -> None:
+        """
+        处理从 expression learner 提取的黑话条目，路由到 jargon_miner
+        
+        Args:
+            jargon_entries: 黑话条目列表，每个元素是 (content, source_id)
+            messages: 消息列表，用于构建上下文
+        """
+        if not jargon_entries or not messages:
+            return
+        
+        # 获取 jargon_miner 实例
+        jargon_miner = miner_manager.get_miner(self.chat_id)
+        
+        # 构建黑话条目格式，与 jargon_miner.run_once 中的格式一致
+        entries: List[Dict[str, List[str]]] = []
+        
+        for content, source_id in jargon_entries:
+            content = content.strip()
+            if not content:
+                continue
+            
+            # 检查是否包含机器人名称
+            if contains_bot_self_name(content):
+                logger.info(f"跳过包含机器人昵称/别名的黑话: {content}")
+                continue
+            
+            # 解析 source_id
+            source_id_str = (source_id or "").strip()
+            if not source_id_str.isdigit():
+                logger.warning(f"黑话条目 source_id 无效: content={content}, source_id={source_id_str}")
+                continue
+            
+            # build_anonymous_messages 的编号从 1 开始
+            line_index = int(source_id_str) - 1
+            if line_index < 0 or line_index >= len(messages):
+                logger.warning(f"黑话条目 source_id 超出范围: content={content}, source_id={source_id_str}")
+                continue
+            
+            # 检查是否是机器人自己的消息
+            target_msg = messages[line_index]
+            if is_bot_message(target_msg):
+                logger.info(f"跳过引用机器人自身消息的黑话: content={content}, source_id={source_id_str}")
+                continue
+            
+            # 构建上下文段落
+            context_paragraph = build_context_paragraph(messages, line_index)
+            if not context_paragraph:
+                logger.warning(f"黑话条目上下文为空: content={content}, source_id={source_id_str}")
+                continue
+            
+            entries.append({"content": content, "raw_content": [context_paragraph]})
+        
+        if not entries:
+            return
+        
+        # 调用 jargon_miner 处理这些条目
+        await jargon_miner.process_extracted_entries(entries)
+
 
 init_prompt()
 

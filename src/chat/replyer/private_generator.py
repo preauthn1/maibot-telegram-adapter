@@ -23,9 +23,8 @@ from src.chat.utils.chat_message_builder import (
     get_raw_msg_before_timestamp_with_chat,
     replace_user_references,
 )
-from src.express.expression_selector import expression_selector
+from src.bw_learner.expression_selector import expression_selector
 from src.plugin_system.apis.message_api import translate_pid_to_description
-from src.mood.mood_manager import mood_manager
 
 # from src.memory_system.memory_activator import MemoryActivator
 
@@ -34,13 +33,13 @@ from src.plugin_system.base.component_types import ActionInfo, EventType
 from src.plugin_system.apis import llm_api
 
 from src.chat.replyer.prompt.lpmm_prompt import init_lpmm_prompt
-from src.chat.replyer.prompt.replyer_prompt import init_replyer_prompt
+from src.chat.replyer.prompt.replyer_private_prompt import init_replyer_private_prompt
 from src.chat.replyer.prompt.rewrite_prompt import init_rewrite_prompt
 from src.memory_system.memory_retrieval import init_memory_retrieval_prompt, build_memory_retrieval_prompt
-from src.jargon.jargon_explainer import explain_jargon_in_context
+from src.bw_learner.jargon_explainer import explain_jargon_in_context
 
 init_lpmm_prompt()
-init_replyer_prompt()
+init_replyer_private_prompt()
 init_rewrite_prompt()
 init_memory_retrieval_prompt()
 
@@ -72,6 +71,7 @@ class PrivateReplyer:
         chosen_actions: Optional[List[ActionPlannerInfo]] = None,
         enable_tool: bool = True,
         from_plugin: bool = True,
+        think_level: int = 1,
         stream_id: Optional[str] = None,
         reply_message: Optional[DatabaseMessages] = None,
         reply_time_point: Optional[float] = time.time(),
@@ -287,12 +287,6 @@ class PrivateReplyer:
 
         return f"{expression_habits_title}\n{expression_habits_block}", selected_ids
 
-    async def build_mood_state_prompt(self) -> str:
-        """构建情绪状态提示"""
-        if not global_config.mood.enable_mood:
-            return ""
-        mood_state = await mood_manager.get_mood_by_chat_id(self.chat_stream.stream_id).get_mood()
-        return f"你现在的心情是：{mood_state}"
 
     async def build_tool_info(self, chat_history: str, sender: str, target: str, enable_tool: bool = True) -> str:
         """构建工具信息块
@@ -721,7 +715,6 @@ class PrivateReplyer:
             self._time_and_run_task(self.get_prompt_info(chat_talking_prompt_short, sender, target), "prompt_info"),
             self._time_and_run_task(self.build_actions_prompt(available_actions, chosen_actions), "actions_info"),
             self._time_and_run_task(self.build_personality_prompt(), "personality_prompt"),
-            self._time_and_run_task(self.build_mood_state_prompt(), "mood_state_prompt"),
             self._time_and_run_task(
                 build_memory_retrieval_prompt(
                     chat_talking_prompt_short, sender, target, self.chat_stream, self.tool_executor
@@ -742,7 +735,6 @@ class PrivateReplyer:
             "prompt_info": "获取知识",
             "actions_info": "动作信息",
             "personality_prompt": "人格信息",
-            "mood_state_prompt": "情绪状态",
             "memory_retrieval": "记忆检索",
             "jargon_explanation": "黑话解释",
         }
@@ -770,16 +762,10 @@ class PrivateReplyer:
         prompt_info: str = results_dict["prompt_info"]  # 直接使用格式化后的结果
         actions_info: str = results_dict["actions_info"]
         personality_prompt: str = results_dict["personality_prompt"]
-        mood_state_prompt: str = results_dict["mood_state_prompt"]
         memory_retrieval: str = results_dict["memory_retrieval"]
         keywords_reaction_prompt = await self.build_keywords_reaction_prompt(target)
         jargon_explanation: str = results_dict.get("jargon_explanation") or ""
-
-        # 从 chosen_actions 中提取 planner 的整体思考理由
-        planner_reasoning = ""
-        if global_config.chat.include_planner_reasoning and reply_reason:
-            # 如果没有 chosen_actions，使用 reply_reason 作为备选
-            planner_reasoning = f"你的想法是：{reply_reason}"
+        planner_reasoning = f"你的想法是：{reply_reason}"
 
         if extra_info:
             extra_info_block = f"以下是你在回复时需要参考的信息，现在请你阅读以下内容，进行决策\n{extra_info}\n以上是你在回复时需要参考的信息，现在请你阅读以下内容，进行决策"
@@ -814,7 +800,6 @@ class PrivateReplyer:
                 expression_habits_block=expression_habits_block,
                 tool_info_block=tool_info,
                 knowledge_prompt=prompt_info,
-                mood_state=mood_state_prompt,
                 relation_info_block=relation_info,
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
@@ -837,7 +822,6 @@ class PrivateReplyer:
                 expression_habits_block=expression_habits_block,
                 tool_info_block=tool_info,
                 knowledge_prompt=prompt_info,
-                mood_state=mood_state_prompt,
                 relation_info_block=relation_info,
                 extra_info_block=extra_info_block,
                 identity=personality_prompt,
@@ -904,59 +888,35 @@ class PrivateReplyer:
         )
 
         if sender and target:
-            # 使用预先分析的内容类型结果
-            if is_group_chat:
-                if sender:
-                    if has_only_pics and not has_text:
-                        # 只包含图片
-                        reply_target_block = (
-                            f"现在{sender}发送的图片：{pic_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                        )
-                    elif has_text and pic_part:
-                        # 既有图片又有文字
-                        reply_target_block = f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                    else:
-                        # 只包含文字
-                        reply_target_block = (
-                            f"现在{sender}说的:{text_part}。引起了你的注意，你想要在群里发言或者回复这条消息。"
-                        )
-                elif target:
-                    reply_target_block = f"现在{target}引起了你的注意，你想要在群里发言或者回复这条消息。"
+            if sender:
+                if has_only_pics and not has_text:
+                    # 只包含图片
+                    reply_target_block = f"现在{sender}发送的图片：{pic_part}。引起了你的注意，针对这条消息回复。"
+                elif has_text and pic_part:
+                    # 既有图片又有文字
+                    reply_target_block = (
+                        f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，针对这条消息回复。"
+                    )
                 else:
-                    reply_target_block = "现在，你想要在群里发言或者回复消息。"
-            else:  # private chat
-                if sender:
-                    if has_only_pics and not has_text:
-                        # 只包含图片
-                        reply_target_block = f"现在{sender}发送的图片：{pic_part}。引起了你的注意，针对这条消息回复。"
-                    elif has_text and pic_part:
-                        # 既有图片又有文字
-                        reply_target_block = (
-                            f"现在{sender}发送了图片：{pic_part}，并说：{text_part}。引起了你的注意，针对这条消息回复。"
-                        )
-                    else:
-                        # 只包含文字
-                        reply_target_block = f"现在{sender}说的:{text_part}。引起了你的注意，针对这条消息回复。"
-                elif target:
-                    reply_target_block = f"现在{target}引起了你的注意，针对这条消息回复。"
-                else:
-                    reply_target_block = "现在，你想要回复。"
+                    # 只包含文字
+                    reply_target_block = f"现在{sender}说的:{text_part}。引起了你的注意，针对这条消息回复。"
+            elif target:
+                reply_target_block = f"现在{target}引起了你的注意，针对这条消息回复。"
+            else:
+                reply_target_block = "现在，你想要回复。"
         else:
             reply_target_block = ""
 
-        if is_group_chat:
-            chat_target_1 = await global_prompt_manager.get_prompt_async("chat_target_group1")
-            chat_target_2 = await global_prompt_manager.get_prompt_async("chat_target_group2")
-        else:
-            chat_target_name = "对方"
-            if self.chat_target_info:
-                chat_target_name = self.chat_target_info.person_name or self.chat_target_info.user_nickname or "对方"
-            chat_target_1 = await global_prompt_manager.format_prompt(
-                "chat_target_private1", sender_name=chat_target_name
-            )
-            chat_target_2 = await global_prompt_manager.format_prompt(
-                "chat_target_private2", sender_name=chat_target_name
-            )
+
+        chat_target_name = "对方"
+        if self.chat_target_info:
+            chat_target_name = self.chat_target_info.person_name or self.chat_target_info.user_nickname or "对方"
+        chat_target_1 = await global_prompt_manager.format_prompt(
+            "chat_target_private1", sender_name=chat_target_name
+        )
+        chat_target_2 = await global_prompt_manager.format_prompt(
+            "chat_target_private2", sender_name=chat_target_name
+        )
 
         template_name = "default_expressor_prompt"
 

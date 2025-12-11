@@ -13,7 +13,6 @@ from src.config.config import global_config
 from src.chat.message_receive.bot import chat_bot
 from src.common.logger import get_logger
 from src.common.server import get_global_server, Server
-from src.mood.mood_manager import mood_manager
 from src.chat.knowledge import lpmm_start_up
 from rich.traceback import install
 
@@ -114,10 +113,6 @@ class MainSystem:
         get_emoji_manager().initialize()
         logger.info("表情包管理器初始化成功")
 
-        # 启动情绪管理器
-        if global_config.mood.enable_mood:
-            await mood_manager.start()
-            logger.info("情绪管理器初始化成功")
 
         # 初始化聊天管理器
         await get_chat_manager()._initialize()

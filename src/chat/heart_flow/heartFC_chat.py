@@ -16,11 +16,11 @@ from src.chat.planner_actions.planner import ActionPlanner
 from src.chat.planner_actions.action_modifier import ActionModifier
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.heart_flow.hfc_utils import CycleDetail
-from src.express.expression_learner import expression_learner_manager
-from src.chat.frequency_control.frequency_control import frequency_control_manager
-from src.express.reflect_tracker import reflect_tracker_manager
-from src.express.expression_reflector import expression_reflector_manager
-from src.jargon import extract_and_store_jargon
+from src.bw_learner.expression_learner import expression_learner_manager
+from src.chat.heart_flow.frequency_control import frequency_control_manager
+from src.bw_learner.reflect_tracker import reflect_tracker_manager
+from src.bw_learner.expression_reflector import expression_reflector_manager
+from src.bw_learner.message_recorder import extract_and_distribute_messages
 from src.person_info.person_info import Person
 from src.plugin_system.base.component_types import EventType, ActionInfo
 from src.plugin_system.core import events_manager
@@ -29,6 +29,7 @@ from src.chat.utils.chat_message_builder import (
     build_readable_messages_with_id,
     get_raw_msg_before_timestamp_with_chat,
 )
+from src.chat.utils.utils import record_replyer_action_temp
 from src.hippo_memorizer.chat_history_summarizer import ChatHistorySummarizer
 
 if TYPE_CHECKING:
@@ -99,7 +100,6 @@ class HeartFChatting:
         self._current_cycle_detail: CycleDetail = None  # type: ignore
 
         self.last_read_time = time.time() - 2
-        self.no_reply_until_call = False
 
         self.is_mute = False
 
@@ -207,23 +207,6 @@ class HeartFChatting:
         if len(recent_messages_list) >= threshold:
             # for message in recent_messages_list:
             # print(message.processed_plain_text)
-            # !处理no_reply_until_call逻辑
-            if self.no_reply_until_call:
-                for message in recent_messages_list:
-                    if (
-                        message.is_mentioned
-                        or message.is_at
-                        or len(recent_messages_list) >= 8
-                        or time.time() - self.last_read_time > 600
-                    ):
-                        self.no_reply_until_call = False
-                        self.last_read_time = time.time()
-                        break
-                # 没有提到，继续保持沉默
-                if self.no_reply_until_call:
-                    # logger.info(f"{self.log_prefix} 没有提到，继续保持沉默")
-                    await asyncio.sleep(1)
-                    return True
 
             self.last_read_time = time.time()
 
@@ -328,15 +311,12 @@ class HeartFChatting:
 
         start_time = time.time()
         async with global_prompt_manager.async_message_scope(self.chat_stream.context.get_template_name()):
-            asyncio.create_task(self.expression_learner.trigger_learning_for_chat())
-            asyncio.create_task(
-                frequency_control_manager.get_or_create_frequency_control(self.stream_id).trigger_frequency_adjust()
-            )
+            # 通过 MessageRecorder 统一提取消息并分发给 expression_learner 和 jargon_miner
+            # 在 replyer 执行时触发，统一管理时间窗口，避免重复获取消息
+            asyncio.create_task(extract_and_distribute_messages(self.stream_id))
 
             # 添加curious检测任务 - 检测聊天记录中的矛盾、冲突或需要提问的内容
             # asyncio.create_task(check_and_make_question(self.stream_id))
-            # 添加jargon提取任务 - 提取聊天中的黑话/俚语并入库（内部自行取消息并带冷却）
-            asyncio.create_task(extract_and_store_jargon(self.stream_id))
             # 添加聊天内容概括任务 - 累积、打包和压缩聊天记录
             # 注意：后台循环已在start()中启动，这里作为额外触发点，在有思考时立即处理
             # asyncio.create_task(self.chat_history_summarizer.process())
@@ -377,7 +357,6 @@ class HeartFChatting:
                 current_available_actions=available_actions,
                 chat_content_block=chat_content_block,
                 message_id_list=message_id_list,
-                interest=global_config.personality.interest,
             )
             continue_flag, modified_message = await events_manager.handle_mai_events(
                 EventType.ON_PLAN, None, prompt_info[0], None, self.chat_stream.stream_id
@@ -618,31 +597,6 @@ class HeartFChatting:
 
                     return {"action_type": "no_reply", "success": True, "result": "选择不回复", "command": ""}
 
-                elif action_planner_info.action_type == "no_reply_until_call":
-                    # 直接当场执行no_reply_until_call逻辑
-                    logger.info(f"{self.log_prefix} 保持沉默，直到有人直接叫的名字")
-                    reason = action_planner_info.reasoning or "选择不回复"
-
-                    # 增加连续 no_reply 计数
-                    self.consecutive_no_reply_count += 1
-                    self.no_reply_until_call = True
-                    await database_api.store_action_info(
-                        chat_stream=self.chat_stream,
-                        action_build_into_prompt=False,
-                        action_prompt_display=reason,
-                        action_done=True,
-                        thinking_id=thinking_id,
-                        action_data={},
-                        action_name="no_reply_until_call",
-                        action_reasoning=reason,
-                    )
-                    return {
-                        "action_type": "no_reply_until_call",
-                        "success": True,
-                        "result": "保持沉默，直到有人直接叫的名字",
-                        "command": "",
-                    }
-
                 elif action_planner_info.action_type == "reply":
                     # 直接当场执行reply逻辑
                     self.questioned = False
@@ -651,8 +605,16 @@ class HeartFChatting:
                     self.consecutive_no_reply_count = 0
 
                     reason = action_planner_info.reasoning or ""
+                    think_level = action_planner_info.action_data.get("think_level", 1)
                     # 使用 action_reasoning（planner 的整体思考理由）作为 reply_reason
                     planner_reasoning = action_planner_info.action_reasoning or reason
+                    
+                    record_replyer_action_temp(
+                        chat_id=self.stream_id,
+                        reason=reason,
+                        think_level=think_level,
+                    )
+                    
                     await database_api.store_action_info(
                         chat_stream=self.chat_stream,
                         action_build_into_prompt=False,
@@ -674,6 +636,7 @@ class HeartFChatting:
                         request_type="replyer",
                         from_plugin=False,
                         reply_time_point=action_planner_info.action_data.get("loop_start_time", time.time()),
+                        think_level=think_level,
                     )
 
                     if not success or not llm_response or not llm_response.reply_set:
