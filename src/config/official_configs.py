@@ -108,6 +108,14 @@ class ChatConfig(ConfigBase):
     时间区间支持跨夜，例如 "23:00-02:00"。
     """
 
+    think_mode: Literal["default", "deep", "dynamic"] = "default"
+    """
+    思考模式配置
+    - default: 默认think_level为0（轻量回复，不需要思考和回忆）
+    - deep: 默认think_level为1（深度回复，需要进行回忆和思考）
+    - dynamic: think_level由planner动态给出（根据planner返回的think_level决定）
+    """
+
     def _parse_stream_config_to_chat_id(self, stream_config_str: str) -> Optional[str]:
         """与 ChatStream.get_stream_id 一致地从 "platform:id:type" 生成 chat_id。"""
         try:

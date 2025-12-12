@@ -69,7 +69,7 @@ no_reply
 {moderation_prompt}
 
 target_message_id为必填，表示触发消息的id
-请选择所有符合使用要求的action，动作用json格式输出，用```json包裹，如果输出多个json，每个json都要单独一行放在同一个```json代码块内，你可以重复使用同一个动作或不同动作:
+请选择所有符合使用要求的action，动作用json格式输出，用```json包裹，如果输出多个json，每个json都要单独一行放在同一个```json代码块内:
 **示例**
 // 理由文本（简短）
 ```json
@@ -78,43 +78,8 @@ target_message_id为必填，表示触发消息的id
 ```""",
         "planner_prompt",
     )
-
-    Prompt(
-        """{time_block}
-{name_block}
-{chat_context_description}，以下是具体的聊天内容
-**聊天内容**
-{chat_content_block}
-
-**可选的action**
-no_reply
-动作描述：
-没有合适的可以使用的动作，不使用action
-{{"action":"no_reply"}}
-
-{action_options_text}
-
-**你之前的action执行和思考记录**
-{actions_before_now_block}
-
-请选择**可选的**且符合使用条件的action，并说明触发action的消息id(消息id格式:m+数字)
-先输出你的简短的选择思考理由，再输出你选择的action，理由不要分点，精简。
-**动作选择要求**
-请你根据聊天内容,用户的最新消息和以下标准选择合适的动作:
-1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
-2.如果相同的内容已经被执行，请不要重复执行
-{moderation_prompt}
-
-请选择所有符合使用要求的action，动作用json格式输出，用```json包裹，如果输出多个json，每个json都要单独一行放在同一个```json代码块内，你可以重复使用同一个动作或不同动作:
-**示例**
-// 理由文本（简短）
-```json
-{{"action":"动作名", "target_message_id":"m123"}}
-{{"action":"动作名", "target_message_id":"m456"}}
-```""",
-        "planner_prompt_mentioned",
-    )
-
+    
+    
     Prompt(
         """
 {action_name}
@@ -462,6 +427,29 @@ class ActionPlanner:
                 interest=interest,
                 plan_style=global_config.personality.plan_style,
             )
+
+            # 如果 think_mode 为 "default"，移除 think_level 相关说明（第 50-51 行）
+            if global_config.chat.think_mode == "default":
+                # 移除 "5.think_level表示思考深度..." 这一行和下一行的 JSON 示例中的 think_level 部分
+                lines = prompt.split('\n')
+                new_lines = []
+                skip_next = False
+                for i, line in enumerate(lines):
+                    if skip_next:
+                        skip_next = False
+                        # 移除 JSON 示例中的 think_level 部分
+                        if 'think_level' in line:
+                            # 移除 "think_level":数值等级(0或1), 这部分
+                            line = re.sub(r',\s*"think_level":数值等级\(0或1\)', '', line)
+                            line = re.sub(r'"think_level":数值等级\(0或1\),\s*', '', line)
+                        new_lines.append(line)
+                        continue
+                    # 检查是否是 think_level 说明行
+                    if 'think_level表示思考深度' in line or 'think_level表示思考深度' in line:
+                        skip_next = True
+                        continue
+                    new_lines.append(line)
+                prompt = '\n'.join(new_lines)
 
             return prompt, message_id_list
         except Exception as e:

@@ -605,7 +605,18 @@ class HeartFChatting:
                     self.consecutive_no_reply_count = 0
 
                     reason = action_planner_info.reasoning or ""
-                    think_level = action_planner_info.action_data.get("think_level", 1)
+                    # 根据 think_mode 配置决定 think_level 的值
+                    think_mode = global_config.chat.think_mode
+                    if think_mode == "default":
+                        think_level = 0
+                    elif think_mode == "deep":
+                        think_level = 1
+                    elif think_mode == "dynamic":
+                        # dynamic 模式：从 planner 返回的 action_data 中获取
+                        think_level = action_planner_info.action_data.get("think_level", 1)
+                    else:
+                        # 默认使用 default 模式
+                        think_level = 0
                     # 使用 action_reasoning（planner 的整体思考理由）作为 reply_reason
                     planner_reasoning = action_planner_info.action_reasoning or reason
                     
