@@ -430,26 +430,11 @@ class ActionPlanner:
 
             # 如果 think_mode 为 "default"，移除 think_level 相关说明（第 50-51 行）
             if global_config.chat.think_mode == "default":
-                # 移除 "5.think_level表示思考深度..." 这一行和下一行的 JSON 示例中的 think_level 部分
-                lines = prompt.split('\n')
-                new_lines = []
-                skip_next = False
-                for i, line in enumerate(lines):
-                    if skip_next:
-                        skip_next = False
-                        # 移除 JSON 示例中的 think_level 部分
-                        if 'think_level' in line:
-                            # 移除 "think_level":数值等级(0或1), 这部分
-                            line = re.sub(r',\s*"think_level":数值等级\(0或1\)', '', line)
-                            line = re.sub(r'"think_level":数值等级\(0或1\),\s*', '', line)
-                        new_lines.append(line)
-                        continue
-                    # 检查是否是 think_level 说明行
-                    if 'think_level表示思考深度' in line or 'think_level表示思考深度' in line:
-                        skip_next = True
-                        continue
-                    new_lines.append(line)
-                prompt = '\n'.join(new_lines)
+                # 移除 "5.think_level表示思考深度..." 这一行（包括可能的换行符）
+                prompt = re.sub(r'5\.think_level表示思考深度，0表示该回复不需要思考和回忆，1表示该回复需要进行回忆和思考\s*\n?', '', prompt)
+                # 移除 JSON 示例中的 think_level 参数（注意格式化后是单大括号）
+                prompt = re.sub(r',\s*"think_level":数值等级\(0或1\)', '', prompt)
+                prompt = re.sub(r'"think_level":数值等级\(0或1\),\s*', '', prompt)
 
             return prompt, message_id_list
         except Exception as e:
