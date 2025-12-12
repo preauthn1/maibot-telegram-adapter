@@ -993,7 +993,7 @@ class EmojiManager:
             )
 
             # 处理情感列表
-            emotions = [e.strip() for e in emotions_text.split(",") if e.strip()]
+            emotions = [e.strip() for e in emotions_text.replace("，",",").split(",") if e.strip()]
 
             # 根据情感标签数量随机选择 - 超过5个选3个，超过2个选2个
             if len(emotions) > 5:
