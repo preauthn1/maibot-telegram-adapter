@@ -143,10 +143,14 @@ def _convert_tool_options(tool_options: list[ToolOption]) -> list[FunctionDeclar
         :param tool_option_param: 工具参数对象
         :return: 转换后的工具参数字典
         """
-        # JSON Schema要求使用"boolean"而不是"bool"
+        # JSON Schema 类型名称修正：
+        # - 布尔类型使用 "boolean" 而不是 "bool"
+        # - 浮点数使用 "number" 而不是 "float"
         param_type_value = tool_option_param.param_type.value
         if param_type_value == "bool":
             param_type_value = "boolean"
+        elif param_type_value == "float":
+            param_type_value = "number"
 
         return_dict: dict[str, Any] = {
             "type": param_type_value,
