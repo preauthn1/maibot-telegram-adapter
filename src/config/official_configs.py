@@ -108,10 +108,10 @@ class ChatConfig(ConfigBase):
     时间区间支持跨夜，例如 "23:00-02:00"。
     """
 
-    think_mode: Literal["default", "deep", "dynamic"] = "default"
+    think_mode: Literal["classic", "deep", "dynamic"] = "classic"
     """
     思考模式配置
-    - default: 默认think_level为0（轻量回复，不需要思考和回忆）
+    - classic: 默认think_level为0（轻量回复，不需要思考和回忆）
     - deep: 默认think_level为1（深度回复，需要进行回忆和思考）
     - dynamic: think_level由planner动态给出（根据planner返回的think_level决定）
     """

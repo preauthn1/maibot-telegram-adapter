@@ -47,8 +47,7 @@ reply
 2.你可以自然的顺着正在进行的聊天内容进行回复或自然的提出一个问题
 3.不要选择回复你自己发送的消息
 4.不要单独对表情包进行回复
-5.think_level表示思考深度，0表示该回复不需要思考和回忆，1表示该回复需要进行回忆和思考
-{{"action":"reply", "think_level":数值等级(0或1), "target_messamge_id":"消息id(m+数字)"}}
+{reply_action_example}
 
 no_reply
 动作描述：
@@ -415,6 +414,12 @@ class ActionPlanner:
             )
             name_block = f"你的名字是{bot_name}{bot_nickname}，请注意哪些是你自己的发言。"
 
+            # 根据 think_mode 配置决定 reply action 的示例 JSON
+            if global_config.chat.think_mode == "classic":
+                reply_action_example = '{{"action":"reply", "target_messamge_id":"消息id(m+数字)"}}'
+            else:
+                reply_action_example = '5.think_level表示思考深度，0表示该回复不需要思考和回忆，1表示该回复需要进行回忆和思考\n{{"action":"reply", "think_level":数值等级(0或1), "target_messamge_id":"消息id(m+数字)"}}'
+
             planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")
             prompt = planner_prompt_template.format(
                 time_block=time_block,
@@ -426,15 +431,8 @@ class ActionPlanner:
                 name_block=name_block,
                 interest=interest,
                 plan_style=global_config.personality.plan_style,
+                reply_action_example=reply_action_example,
             )
-
-            # 如果 think_mode 为 "default"，移除 think_level 相关说明（第 50-51 行）
-            if global_config.chat.think_mode == "default":
-                # 移除 "5.think_level表示思考深度..." 这一行（包括可能的换行符）
-                prompt = re.sub(r'5\.think_level表示思考深度，0表示该回复不需要思考和回忆，1表示该回复需要进行回忆和思考\s*\n?', '', prompt)
-                # 移除 JSON 示例中的 think_level 参数（注意格式化后是单大括号）
-                prompt = re.sub(r',\s*"think_level":数值等级\(0或1\)', '', prompt)
-                prompt = re.sub(r'"think_level":数值等级\(0或1\),\s*', '', prompt)
 
             return prompt, message_id_list
         except Exception as e:
