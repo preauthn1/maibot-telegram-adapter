@@ -82,9 +82,7 @@ class ExpressionReflector:
             # 获取未检查的表达
             try:
                 logger.info("[Expression Reflection] 查询未检查且未拒绝的表达")
-                expressions = (
-                    Expression.select().where((~Expression.checked) & (~Expression.rejected)).limit(50)
-                )
+                expressions = Expression.select().where((~Expression.checked) & (~Expression.rejected)).limit(50)
 
                 expr_list = list(expressions)
                 logger.info(f"[Expression Reflection] 找到 {len(expr_list)} 个候选表达")

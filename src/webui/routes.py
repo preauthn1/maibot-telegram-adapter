@@ -139,10 +139,10 @@ async def verify_token(request: TokenVerifyRequest, response: Response):
 async def logout(response: Response):
     """
     登出并清除认证 Cookie
-    
+
     Args:
         response: FastAPI Response 对象
-    
+
     Returns:
         登出结果
     """
@@ -158,23 +158,23 @@ async def check_auth_status(
 ):
     """
     检查当前认证状态（用于前端判断是否已登录）
-    
+
     Returns:
         认证状态
     """
     try:
         token = None
-        
+
         # 优先从 Cookie 获取
         if maibot_session:
             token = maibot_session
         # 其次从 Header 获取
         elif authorization and authorization.startswith("Bearer "):
             token = authorization.replace("Bearer ", "")
-        
+
         if not token:
             return {"authenticated": False}
-        
+
         token_manager = get_token_manager()
         if token_manager.verify_token(token):
             return {"authenticated": True}
@@ -211,7 +211,7 @@ async def update_token(
             current_token = maibot_session
         elif authorization and authorization.startswith("Bearer "):
             current_token = authorization.replace("Bearer ", "")
-        
+
         if not current_token:
             raise HTTPException(status_code=401, detail="未提供有效的认证信息")
 
@@ -222,7 +222,7 @@ async def update_token(
 
         # 更新 token
         success, message = token_manager.update_token(request.new_token)
-        
+
         # 如果更新成功，清除 Cookie，要求用户重新登录
         if success:
             clear_auth_cookie(response)
@@ -263,7 +263,7 @@ async def regenerate_token(
 
         if not current_token:
             raise HTTPException(status_code=401, detail="未提供有效的认证信息")
-            
+
         token_manager = get_token_manager()
 
         if not token_manager.verify_token(current_token):
@@ -271,7 +271,7 @@ async def regenerate_token(
 
         # 重新生成 token
         new_token = token_manager.regenerate_token()
-        
+
         # 清除 Cookie，要求用户重新登录
         clear_auth_cookie(response)
 
@@ -306,7 +306,7 @@ async def get_setup_status(
             current_token = maibot_session
         elif authorization and authorization.startswith("Bearer "):
             current_token = authorization.replace("Bearer ", "")
-        
+
         if not current_token:
             raise HTTPException(status_code=401, detail="未提供有效的认证信息")
 
@@ -349,7 +349,7 @@ async def complete_setup(
             current_token = maibot_session
         elif authorization and authorization.startswith("Bearer "):
             current_token = authorization.replace("Bearer ", "")
-        
+
         if not current_token:
             raise HTTPException(status_code=401, detail="未提供有效的认证信息")
 
@@ -392,7 +392,7 @@ async def reset_setup(
             current_token = maibot_session
         elif authorization and authorization.startswith("Bearer "):
             current_token = authorization.replace("Bearer ", "")
-        
+
         if not current_token:
             raise HTTPException(status_code=401, detail="未提供有效的认证信息")
 

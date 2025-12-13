@@ -63,14 +63,14 @@ class ChatHistoryManager:
 
     def _message_to_dict(self, msg: Messages, group_id: Optional[str] = None) -> Dict[str, Any]:
         """将数据库消息转换为前端格式
-        
+
         Args:
             msg: 数据库消息对象
             group_id: 群 ID，用于判断是否是虚拟群
         """
         # 判断是否是机器人消息
         user_id = msg.user_id or ""
-        
+
         # 对于虚拟群，通过比较机器人 QQ 账号来判断
         # 对于普通 WebUI 群，检查 user_id 是否以 webui_ 开头
         if group_id and group_id.startswith(VIRTUAL_GROUP_ID_PREFIX):
@@ -414,7 +414,9 @@ async def websocket_chat(
                     group_id=virtual_group_id,
                     group_name=group_name or "WebUI虚拟群聊",
                 )
-                logger.info(f"虚拟身份模式已通过 URL 参数激活: {current_virtual_config.user_nickname} @ {current_virtual_config.platform}, group_id={virtual_group_id}")
+                logger.info(
+                    f"虚拟身份模式已通过 URL 参数激活: {current_virtual_config.user_nickname} @ {current_virtual_config.platform}, group_id={virtual_group_id}"
+                )
         except Exception as e:
             logger.warning(f"通过 URL 参数配置虚拟身份失败: {e}")
 

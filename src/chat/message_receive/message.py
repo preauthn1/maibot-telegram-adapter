@@ -263,7 +263,7 @@ class MessageRecv(Message):
                     desc = segment.data.get("desc", "")  # 内容描述
                     source_url = segment.data.get("source_url", "")  # 原始链接
                     url = segment.data.get("url", "")  # 小程序链接
-                    text = f"[小程序分享"
+                    text = "[小程序分享"
                     if title:
                         text += f" - {title}"
                     text += "]"

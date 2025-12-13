@@ -22,42 +22,42 @@ def get_current_token(
 ) -> str:
     """
     获取当前请求的 token，优先从 Cookie 获取，其次从 Header 获取
-    
+
     Args:
         request: FastAPI Request 对象
         maibot_session: Cookie 中的 token
         authorization: Authorization Header (Bearer token)
-    
+
     Returns:
         验证通过的 token
-    
+
     Raises:
         HTTPException: 认证失败时抛出 401 错误
     """
     token = None
-    
+
     # 优先从 Cookie 获取
     if maibot_session:
         token = maibot_session
     # 其次从 Header 获取（兼容旧版本）
     elif authorization and authorization.startswith("Bearer "):
         token = authorization.replace("Bearer ", "")
-    
+
     if not token:
         raise HTTPException(status_code=401, detail="未提供有效的认证信息")
-    
+
     # 验证 token
     token_manager = get_token_manager()
     if not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="Token 无效或已过期")
-    
+
     return token
 
 
 def set_auth_cookie(response: Response, token: str) -> None:
     """
     设置认证 Cookie
-    
+
     Args:
         response: FastAPI Response 对象
         token: 要设置的 token
@@ -77,7 +77,7 @@ def set_auth_cookie(response: Response, token: str) -> None:
 def clear_auth_cookie(response: Response) -> None:
     """
     清除认证 Cookie
-    
+
     Args:
         response: FastAPI Response 对象
     """
@@ -96,32 +96,32 @@ def verify_auth_token_from_cookie_or_header(
 ) -> bool:
     """
     验证认证 Token，支持从 Cookie 或 Header 获取
-    
+
     Args:
         maibot_session: Cookie 中的 token
         authorization: Authorization header (Bearer token)
-    
+
     Returns:
         验证成功返回 True
-    
+
     Raises:
         HTTPException: 认证失败时抛出 401 错误
     """
     token = None
-    
+
     # 优先从 Cookie 获取
     if maibot_session:
         token = maibot_session
     # 其次从 Header 获取（兼容旧版本）
     elif authorization and authorization.startswith("Bearer "):
         token = authorization.replace("Bearer ", "")
-    
+
     if not token:
         raise HTTPException(status_code=401, detail="未提供有效的认证信息")
-    
+
     # 验证 token
     token_manager = get_token_manager()
     if not token_manager.verify_token(token):
         raise HTTPException(status_code=401, detail="Token 无效或已过期")
-    
+
     return True

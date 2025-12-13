@@ -125,6 +125,7 @@ def coerce_types(schema_part: Dict[str, Any], config_part: Dict[str, Any]) -> No
     """
     根据 schema 将配置中的类型纠正（目前只纠正 list-from-str）。
     """
+
     def _is_list_type(tp: Any) -> bool:
         origin = get_origin(tp)
         return tp is list or origin is list
@@ -313,7 +314,9 @@ async def check_git_status() -> GitStatusResponse:
 
 
 @router.get("/mirrors", response_model=AvailableMirrorsResponse)
-async def get_available_mirrors(maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> AvailableMirrorsResponse:
+async def get_available_mirrors(
+    maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+) -> AvailableMirrorsResponse:
     """
     获取所有可用的镜像源配置
     """
@@ -343,7 +346,9 @@ async def get_available_mirrors(maibot_session: Optional[str] = Cookie(None), au
 
 
 @router.post("/mirrors", response_model=MirrorConfigResponse)
-async def add_mirror(request: AddMirrorRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> MirrorConfigResponse:
+async def add_mirror(
+    request: AddMirrorRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+) -> MirrorConfigResponse:
     """
     添加新的镜像源
     """
@@ -383,7 +388,10 @@ async def add_mirror(request: AddMirrorRequest, maibot_session: Optional[str] = 
 
 @router.put("/mirrors/{mirror_id}", response_model=MirrorConfigResponse)
 async def update_mirror(
-    mirror_id: str, request: UpdateMirrorRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+    mirror_id: str,
+    request: UpdateMirrorRequest,
+    maibot_session: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
 ) -> MirrorConfigResponse:
     """
     更新镜像源配置
@@ -426,7 +434,9 @@ async def update_mirror(
 
 
 @router.delete("/mirrors/{mirror_id}")
-async def delete_mirror(mirror_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def delete_mirror(
+    mirror_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
     """
     删除镜像源
     """
@@ -449,7 +459,9 @@ async def delete_mirror(mirror_id: str, maibot_session: Optional[str] = Cookie(N
 
 @router.post("/fetch-raw", response_model=FetchRawFileResponse)
 async def fetch_raw_file(
-    request: FetchRawFileRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+    request: FetchRawFileRequest,
+    maibot_session: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
 ) -> FetchRawFileResponse:
     """
     获取 GitHub 仓库的 Raw 文件内容
@@ -534,7 +546,9 @@ async def fetch_raw_file(
 
 @router.post("/clone", response_model=CloneRepositoryResponse)
 async def clone_repository(
-    request: CloneRepositoryRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+    request: CloneRepositoryRequest,
+    maibot_session: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
 ) -> CloneRepositoryResponse:
     """
     克隆 GitHub 仓库到本地
@@ -574,7 +588,11 @@ async def clone_repository(
 
 
 @router.post("/install")
-async def install_plugin(request: InstallPluginRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def install_plugin(
+    request: InstallPluginRequest,
+    maibot_session: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
+) -> Dict[str, Any]:
     """
     安装插件
 
@@ -778,7 +796,9 @@ async def install_plugin(request: InstallPluginRequest, maibot_session: Optional
 
 @router.post("/uninstall")
 async def uninstall_plugin(
-    request: UninstallPluginRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+    request: UninstallPluginRequest,
+    maibot_session: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """
     卸载插件
@@ -913,7 +933,11 @@ async def uninstall_plugin(
 
 
 @router.post("/update")
-async def update_plugin(request: UpdatePluginRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def update_plugin(
+    request: UpdatePluginRequest,
+    maibot_session: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
+) -> Dict[str, Any]:
     """
     更新插件
 
@@ -1132,7 +1156,9 @@ async def update_plugin(request: UpdatePluginRequest, maibot_session: Optional[s
 
 
 @router.get("/installed")
-async def get_installed_plugins(maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_installed_plugins(
+    maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
     """
     获取已安装的插件列表
 
@@ -1272,7 +1298,9 @@ class UpdatePluginConfigRequest(BaseModel):
 
 
 @router.get("/config/{plugin_id}/schema")
-async def get_plugin_config_schema(plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_plugin_config_schema(
+    plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
     """
     获取插件配置 Schema
 
@@ -1405,7 +1433,9 @@ async def get_plugin_config_schema(plugin_id: str, maibot_session: Optional[str]
 
 
 @router.get("/config/{plugin_id}")
-async def get_plugin_config(plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def get_plugin_config(
+    plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
     """
     获取插件当前配置值
 
@@ -1461,7 +1491,10 @@ async def get_plugin_config(plugin_id: str, maibot_session: Optional[str] = Cook
 
 @router.put("/config/{plugin_id}")
 async def update_plugin_config(
-    plugin_id: str, request: UpdatePluginConfigRequest, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+    plugin_id: str,
+    request: UpdatePluginConfigRequest,
+    maibot_session: Optional[str] = Cookie(None),
+    authorization: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """
     更新插件配置
@@ -1532,7 +1565,9 @@ async def update_plugin_config(
 
 
 @router.post("/config/{plugin_id}/reset")
-async def reset_plugin_config(plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def reset_plugin_config(
+    plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
     """
     重置插件配置为默认值
 
@@ -1592,7 +1627,9 @@ async def reset_plugin_config(plugin_id: str, maibot_session: Optional[str] = Co
 
 
 @router.post("/config/{plugin_id}/toggle")
-async def toggle_plugin(plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+async def toggle_plugin(
+    plugin_id: str, maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)
+) -> Dict[str, Any]:
     """
     切换插件启用状态
 

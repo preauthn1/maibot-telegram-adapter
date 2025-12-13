@@ -110,8 +110,10 @@ class WebUIServer:
             from src.webui.routes import router as webui_router
             from src.webui.logs_ws import router as logs_router
             from src.webui.knowledge_routes import router as knowledge_router
+
             # 导入本地聊天室路由
             from src.webui.chat_routes import router as chat_router
+
             # 注册路由
             self.app.include_router(webui_router)
             self.app.include_router(logs_router)
@@ -166,6 +168,7 @@ class WebUIServer:
     def _check_port_available(self) -> bool:
         """检查端口是否可用"""
         import socket
+
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1)
