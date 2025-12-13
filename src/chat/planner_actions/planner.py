@@ -47,8 +47,7 @@ reply
 2.你可以自然的顺着正在进行的聊天内容进行回复或自然的提出一个问题
 3.不要选择回复你自己发送的消息
 4.不要单独对表情包进行回复
-5.think_level表示思考深度，0表示该回复不需要思考和回忆，1表示该回复需要进行回忆和思考
-{{"action":"reply", "think_level":数值等级(0或1), "target_messamge_id":"消息id(m+数字)"}}
+{reply_action_example}
 
 no_reply
 动作描述：
@@ -69,7 +68,7 @@ no_reply
 {moderation_prompt}
 
 target_message_id为必填，表示触发消息的id
-请选择所有符合使用要求的action，动作用json格式输出，用```json包裹，如果输出多个json，每个json都要单独一行放在同一个```json代码块内，你可以重复使用同一个动作或不同动作:
+请选择所有符合使用要求的action，动作用json格式输出，用```json包裹，如果输出多个json，每个json都要单独一行放在同一个```json代码块内:
 **示例**
 // 理由文本（简短）
 ```json
@@ -78,43 +77,8 @@ target_message_id为必填，表示触发消息的id
 ```""",
         "planner_prompt",
     )
-
-    Prompt(
-        """{time_block}
-{name_block}
-{chat_context_description}，以下是具体的聊天内容
-**聊天内容**
-{chat_content_block}
-
-**可选的action**
-no_reply
-动作描述：
-没有合适的可以使用的动作，不使用action
-{{"action":"no_reply"}}
-
-{action_options_text}
-
-**你之前的action执行和思考记录**
-{actions_before_now_block}
-
-请选择**可选的**且符合使用条件的action，并说明触发action的消息id(消息id格式:m+数字)
-先输出你的简短的选择思考理由，再输出你选择的action，理由不要分点，精简。
-**动作选择要求**
-请你根据聊天内容,用户的最新消息和以下标准选择合适的动作:
-1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
-2.如果相同的内容已经被执行，请不要重复执行
-{moderation_prompt}
-
-请选择所有符合使用要求的action，动作用json格式输出，用```json包裹，如果输出多个json，每个json都要单独一行放在同一个```json代码块内，你可以重复使用同一个动作或不同动作:
-**示例**
-// 理由文本（简短）
-```json
-{{"action":"动作名", "target_message_id":"m123"}}
-{{"action":"动作名", "target_message_id":"m456"}}
-```""",
-        "planner_prompt_mentioned",
-    )
-
+    
+    
     Prompt(
         """
 {action_name}
@@ -450,6 +414,12 @@ class ActionPlanner:
             )
             name_block = f"你的名字是{bot_name}{bot_nickname}，请注意哪些是你自己的发言。"
 
+            # 根据 think_mode 配置决定 reply action 的示例 JSON
+            if global_config.chat.think_mode == "classic":
+                reply_action_example = '{{"action":"reply", "target_messamge_id":"消息id(m+数字)"}}'
+            else:
+                reply_action_example = '5.think_level表示思考深度，0表示该回复不需要思考和回忆，1表示该回复需要进行回忆和思考\n{{"action":"reply", "think_level":数值等级(0或1), "target_messamge_id":"消息id(m+数字)"}}'
+
             planner_prompt_template = await global_prompt_manager.get_prompt_async("planner_prompt")
             prompt = planner_prompt_template.format(
                 time_block=time_block,
@@ -461,6 +431,7 @@ class ActionPlanner:
                 name_block=name_block,
                 interest=interest,
                 plan_style=global_config.personality.plan_style,
+                reply_action_example=reply_action_example,
             )
 
             return prompt, message_id_list
