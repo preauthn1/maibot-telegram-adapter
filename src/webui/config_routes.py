@@ -368,6 +368,18 @@ async def update_model_config_section(section_name: str, section_data: SectionBo
         try:
             APIAdapterConfig.from_dict(config_data)
         except Exception as e:
+            logger.error(f"配置数据验证失败，详细错误: {str(e)}")
+            # 特殊处理：如果是更新 api_providers，检查是否有模型引用了已删除的provider
+            if section_name == "api_providers" and "api_provider" in str(e):
+                provider_names = {p.get("name") for p in section_data if isinstance(p, dict)}
+                models = config_data.get("models", [])
+                orphaned_models = [
+                    m.get("name") for m in models 
+                    if isinstance(m, dict) and m.get("api_provider") not in provider_names
+                ]
+                if orphaned_models:
+                    error_msg = f"以下模型引用了已删除的提供商: {', '.join(orphaned_models)}。请先在模型管理页面删除这些模型，或重新分配它们的提供商。"
+                    raise HTTPException(status_code=400, detail=error_msg) from e
             raise HTTPException(status_code=400, detail=f"配置数据验证失败: {str(e)}") from e
 
         # 保存配置（格式化数组为多行，保留注释）
