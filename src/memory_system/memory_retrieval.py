@@ -1097,7 +1097,6 @@ async def build_memory_retrieval_prompt(
     chat_stream,
     think_level: int = 1,
     unknown_words: Optional[List[str]] = None,
-    question: Optional[str] = None,
 ) -> str:
     """构建记忆检索提示
     使用两段式查询：第一步生成问题，第二步使用ReAct Agent查询答案
@@ -1109,7 +1108,6 @@ async def build_memory_retrieval_prompt(
         chat_stream: 聊天流对象
         think_level: 思考深度等级
         unknown_words: Planner 提供的未知词语列表，优先使用此列表而不是从聊天记录匹配
-        question: Planner 提供的问题，当 planner_question 配置开启时，直接使用此问题进行检索
 
     Returns:
         str: 记忆检索结果字符串
@@ -1144,52 +1142,37 @@ async def build_memory_retrieval_prompt(
         if not recent_query_history:
             recent_query_history = "最近没有查询记录。"
 
-        # 第一步：生成问题或使用 Planner 提供的问题
+        # 第一步：使用 LLM 生成问题
+        question_prompt = await global_prompt_manager.format_prompt(
+            "memory_retrieval_question_prompt",
+            bot_name=bot_name,
+            time_now=time_now,
+            chat_history=message,
+            recent_query_history=recent_query_history,
+            sender=sender,
+            target_message=target,
+        )
+
+        success, response, reasoning_content, model_name = await llm_api.generate_with_model(
+            question_prompt,
+            model_config=model_config.model_task_config.tool_use,
+            request_type="memory.question",
+        )
+
+        if global_config.debug.show_memory_prompt:
+            logger.info(f"{log_prefix}记忆检索问题生成提示词: {question_prompt}")
+        # logger.info(f"记忆检索问题生成响应: {response}")
+
+        if not success:
+            logger.error(f"{log_prefix}LLM生成问题失败: {response}")
+            return ""
+
+        # 解析概念列表和问题列表，只取第一个问题
         single_question: Optional[str] = None
-        
-        # 如果 planner_question 配置开启，只使用 Planner 提供的问题，不使用旧模式
-        if global_config.memory.planner_question:
-            if question and isinstance(question, str) and question.strip():
-                # 清理和验证 question
-                single_question = question.strip()
-                logger.info(f"{log_prefix}使用 Planner 提供的 question: {single_question}")
-            else:
-                # planner_question 开启但没有提供 question，跳过记忆检索
-                logger.debug(f"{log_prefix}planner_question 已开启但未提供 question，跳过记忆检索")
-                end_time = time.time()
-                logger.info(f"{log_prefix}无当次查询，不返回任何结果，耗时: {(end_time - start_time):.3f}秒")
-                return ""
-        else:
-            # planner_question 关闭，使用旧模式：LLM 生成问题
-            question_prompt = await global_prompt_manager.format_prompt(
-                "memory_retrieval_question_prompt",
-                bot_name=bot_name,
-                time_now=time_now,
-                chat_history=message,
-                recent_query_history=recent_query_history,
-                sender=sender,
-                target_message=target,
-            )
-
-            success, response, reasoning_content, model_name = await llm_api.generate_with_model(
-                question_prompt,
-                model_config=model_config.model_task_config.tool_use,
-                request_type="memory.question",
-            )
-
-            if global_config.debug.show_memory_prompt:
-                logger.info(f"{log_prefix}记忆检索问题生成提示词: {question_prompt}")
-            # logger.info(f"记忆检索问题生成响应: {response}")
-
-            if not success:
-                logger.error(f"{log_prefix}LLM生成问题失败: {response}")
-                return ""
-
-            # 解析概念列表和问题列表，只取第一个问题
-            _, questions = parse_questions_json(response)
-            if questions and len(questions) > 0:
-                single_question = questions[0].strip()
-                logger.info(f"{log_prefix}解析到问题: {single_question}")
+        _, questions = parse_questions_json(response)
+        if questions and len(questions) > 0:
+            single_question = questions[0].strip()
+            logger.info(f"{log_prefix}解析到问题: {single_question}")
 
         # 初始阶段：使用 Planner 提供的 unknown_words 进行检索（如果提供）
         initial_info = ""
