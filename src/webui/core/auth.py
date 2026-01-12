@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import HTTPException, Cookie, Header, Response, Request
 from src.common.logger import get_logger
 from src.config.config import global_config
-from .token_manager import get_token_manager
+from .security import get_token_manager
 
 logger = get_logger("webui.auth")
 
@@ -27,7 +27,7 @@ def _is_secure_environment() -> bool:
     if global_config.webui.secure_cookie:
         logger.info("配置中启用了 secure_cookie")
         return True
-    
+
     # 检查是否是生产环境
     if global_config.webui.mode == "production":
         logger.info("WebUI运行在生产模式，启用 secure cookie")
@@ -88,7 +88,7 @@ def set_auth_cookie(response: Response, token: str, request: Optional[Request] =
     """
     # 根据环境和实际请求协议决定安全设置
     is_secure = _is_secure_environment()
-    
+
     # 如果提供了 request，检测实际使用的协议
     if request:
         # 检查 X-Forwarded-Proto header（代理/负载均衡器）
@@ -100,7 +100,7 @@ def set_auth_cookie(response: Response, token: str, request: Optional[Request] =
             # 检查 request.url.scheme
             is_https = request.url.scheme == "https"
             logger.debug(f"检测到 scheme: {request.url.scheme}, is_https={is_https}")
-        
+
         # 如果是 HTTP 连接，强制禁用 secure 标志
         if not is_https and is_secure:
             logger.warning("=" * 80)
@@ -110,7 +110,7 @@ def set_auth_cookie(response: Response, token: str, request: Optional[Request] =
             logger.warning("2. 如果使用反向代理，请确保正确配置 X-Forwarded-Proto 头")
             logger.warning("=" * 80)
             is_secure = False
-    
+
     # 设置 Cookie
     response.set_cookie(
         key=COOKIE_NAME,
@@ -121,8 +121,10 @@ def set_auth_cookie(response: Response, token: str, request: Optional[Request] =
         secure=is_secure,  # 根据实际协议决定
         path="/",  # 确保 Cookie 在所有路径下可用
     )
-    
-    logger.info(f"已设置认证 Cookie: {token[:8]}... (secure={is_secure}, samesite=lax, httponly=True, path=/, max_age={COOKIE_MAX_AGE})")
+
+    logger.info(
+        f"已设置认证 Cookie: {token[:8]}... (secure={is_secure}, samesite=lax, httponly=True, path=/, max_age={COOKIE_MAX_AGE})"
+    )
     logger.debug(f"完整 token 前缀: {token[:20]}...")
 
 

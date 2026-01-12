@@ -24,8 +24,8 @@ class TokenManager:
             config_path: 配置文件路径，默认为项目根目录的 data/webui.json
         """
         if config_path is None:
-            # 获取项目根目录 (src/webui -> src -> 根目录)
-            project_root = Path(__file__).parent.parent.parent
+            # 获取项目根目录 (src/webui/core -> src/webui -> src -> 根目录)
+            project_root = Path(__file__).parent.parent.parent.parent
             config_path = project_root / "data" / "webui.json"
 
         self.config_path = config_path

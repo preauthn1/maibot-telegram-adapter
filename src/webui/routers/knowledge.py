@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Query, Depends, Cookie, Header
 from pydantic import BaseModel
 import logging
-from src.webui.auth import verify_auth_token_from_cookie_or_header
+from src.webui.core import verify_auth_token_from_cookie_or_header
 from src.config.config import global_config
 
 logger = logging.getLogger(__name__)

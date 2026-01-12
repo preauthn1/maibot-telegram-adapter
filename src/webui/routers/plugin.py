@@ -7,9 +7,9 @@ from src.common.logger import get_logger
 from src.common.toml_utils import save_toml_with_format
 from src.config.config import MMC_VERSION
 from src.plugin_system.base.config_types import ConfigField
-from .git_mirror_service import get_git_mirror_service, set_update_progress_callback
-from .token_manager import get_token_manager
-from .plugin_progress_ws import update_progress
+from src.webui.git_mirror_service import get_git_mirror_service, set_update_progress_callback
+from src.webui.core import get_token_manager
+from src.webui.routers.websocket.plugin_progress import update_progress
 
 logger = get_logger("webui.plugin_routes")
 
@@ -1370,21 +1370,19 @@ async def get_installed_plugins(
         seen_ids = {}  # 记录 ID -> 路径的映射
         unique_plugins = []
         duplicates = []
-        
+
         for plugin in installed_plugins:
             plugin_id = plugin["id"]
             plugin_path = plugin["path"]
-            
+
             if plugin_id not in seen_ids:
                 seen_ids[plugin_id] = plugin_path
                 unique_plugins.append(plugin)
             else:
                 duplicates.append(plugin)
                 first_path = seen_ids[plugin_id]
-                logger.warning(
-                    f"重复插件 {plugin_id}: 保留 {first_path}, 跳过 {plugin_path}"
-                )
-        
+                logger.warning(f"重复插件 {plugin_id}: 保留 {first_path}, 跳过 {plugin_path}")
+
         if duplicates:
             logger.warning(f"共检测到 {len(duplicates)} 个重复插件已去重")
 
@@ -1420,34 +1418,35 @@ async def get_local_plugin_readme(
 
     try:
         plugins_dir = Path("plugins")
-        
+
         # 查找插件目录
         plugin_path = None
         for folder in plugins_dir.iterdir():
             if not folder.is_dir():
                 continue
-                
+
             manifest_path = folder / "_manifest.json"
             if manifest_path.exists():
                 try:
                     import json as json_module
+
                     with open(manifest_path, "r", encoding="utf-8") as f:
                         manifest = json_module.load(f)
-                    
+
                     # 检查是否匹配 plugin_id
                     if manifest.get("id") == plugin_id:
                         plugin_path = folder
                         break
                 except Exception:
                     continue
-        
+
         if not plugin_path:
             return {"success": False, "error": "插件未安装"}
-        
+
         # 查找 README 文件（支持多种命名）
         readme_files = ["README.md", "readme.md", "Readme.md", "README.MD"]
         readme_content = None
-        
+
         for readme_name in readme_files:
             readme_path = plugin_path / readme_name
             if readme_path.exists():
@@ -1459,12 +1458,12 @@ async def get_local_plugin_readme(
                 except Exception as e:
                     logger.warning(f"读取 {readme_path} 失败: {e}")
                     continue
-        
+
         if readme_content:
             return {"success": True, "data": readme_content}
         else:
             return {"success": False, "error": "本地未找到 README 文件"}
-            
+
     except Exception as e:
         logger.error(f"获取本地 README 失败: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
@@ -1756,10 +1755,10 @@ async def update_plugin_config_raw(
 
         # 验证 TOML 格式
         import tomlkit
-        
+
         if not isinstance(request.config, str):
             raise HTTPException(status_code=400, detail="配置必须是字符串格式的 TOML 内容")
-        
+
         try:
             tomlkit.loads(request.config)
         except Exception as e:

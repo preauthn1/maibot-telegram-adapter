@@ -9,7 +9,7 @@ from typing import Optional
 import secrets
 import time
 from src.common.logger import get_logger
-from src.webui.token_manager import get_token_manager
+from src.webui.core import get_token_manager
 
 logger = get_logger("webui.ws_auth")
 router = APIRouter()

@@ -5,8 +5,8 @@ from typing import Set, Optional
 import json
 from pathlib import Path
 from src.common.logger import get_logger
-from src.webui.token_manager import get_token_manager
-from src.webui.ws_auth import verify_ws_token
+from src.webui.core import get_token_manager
+from src.webui.routers.websocket.auth import verify_ws_token
 
 logger = get_logger("webui.logs_ws")
 router = APIRouter()

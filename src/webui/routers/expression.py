@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict
 from src.common.logger import get_logger
 from src.common.database.database_model import Expression, ChatStreams
-from .auth import verify_auth_token_from_cookie_or_header
+from src.webui.core import verify_auth_token_from_cookie_or_header
 import time
 
 logger = get_logger("webui.expression")
@@ -224,10 +224,7 @@ async def get_expression_list(
 
         # 搜索过滤
         if search:
-            query = query.where(
-                (Expression.situation.contains(search))
-                | (Expression.style.contains(search))
-            )
+            query = query.where((Expression.situation.contains(search)) | (Expression.style.contains(search)))
 
         # 聊天ID过滤
         if chat_id:
@@ -363,21 +360,21 @@ async def update_expression(
         if request.require_unchecked and expression.checked:
             raise HTTPException(
                 status_code=409,
-                detail=f"此表达方式已被{'AI自动' if expression.modified_by == 'ai' else '人工'}检查，请刷新列表"
+                detail=f"此表达方式已被{'AI自动' if expression.modified_by == 'ai' else '人工'}检查，请刷新列表",
             )
 
         # 只更新提供的字段
         update_data = request.model_dump(exclude_unset=True)
-        
+
         # 移除 require_unchecked，它不是数据库字段
-        update_data.pop('require_unchecked', None)
+        update_data.pop("require_unchecked", None)
 
         if not update_data:
             raise HTTPException(status_code=400, detail="未提供任何需要更新的字段")
 
         # 如果更新了 checked 或 rejected，标记为用户修改
-        if 'checked' in update_data or 'rejected' in update_data:
-            update_data['modified_by'] = 'user'
+        if "checked" in update_data or "rejected" in update_data:
+            update_data["modified_by"] = "user"
 
         # 更新最后活跃时间
         update_data["last_active_time"] = time.time()
@@ -542,8 +539,10 @@ async def get_expression_stats(
 
 # ============ 审核相关接口 ============
 
+
 class ReviewStatsResponse(BaseModel):
     """审核统计响应"""
+
     total: int
     unchecked: int
     passed: int
@@ -553,10 +552,7 @@ class ReviewStatsResponse(BaseModel):
 
 
 @router.get("/review/stats", response_model=ReviewStatsResponse)
-async def get_review_stats(
-    maibot_session: Optional[str] = Cookie(None),
-    authorization: Optional[str] = Header(None)
-):
+async def get_review_stats(maibot_session: Optional[str] = Cookie(None), authorization: Optional[str] = Header(None)):
     """
     获取审核统计数据
 
@@ -568,14 +564,10 @@ async def get_review_stats(
 
         total = Expression.select().count()
         unchecked = Expression.select().where(Expression.checked == False).count()
-        passed = Expression.select().where(
-            (Expression.checked == True) & (Expression.rejected == False)
-        ).count()
-        rejected = Expression.select().where(
-            (Expression.checked == True) & (Expression.rejected == True)
-        ).count()
-        ai_checked = Expression.select().where(Expression.modified_by == 'ai').count()
-        user_checked = Expression.select().where(Expression.modified_by == 'user').count()
+        passed = Expression.select().where((Expression.checked == True) & (Expression.rejected == False)).count()
+        rejected = Expression.select().where((Expression.checked == True) & (Expression.rejected == True)).count()
+        ai_checked = Expression.select().where(Expression.modified_by == "ai").count()
+        user_checked = Expression.select().where(Expression.modified_by == "user").count()
 
         return ReviewStatsResponse(
             total=total,
@@ -583,7 +575,7 @@ async def get_review_stats(
             passed=passed,
             rejected=rejected,
             ai_checked=ai_checked,
-            user_checked=user_checked
+            user_checked=user_checked,
         )
 
     except HTTPException:
@@ -595,6 +587,7 @@ async def get_review_stats(
 
 class ReviewListResponse(BaseModel):
     """审核列表响应"""
+
     success: bool
     total: int
     page: int
@@ -641,9 +634,7 @@ async def get_review_list(
 
         # 搜索过滤
         if search:
-            query = query.where(
-                (Expression.situation.contains(search)) | (Expression.style.contains(search))
-            )
+            query = query.where((Expression.situation.contains(search)) | (Expression.style.contains(search)))
 
         # 聊天ID过滤
         if chat_id:
@@ -651,10 +642,8 @@ async def get_review_list(
 
         # 排序：创建时间倒序
         from peewee import Case
-        query = query.order_by(
-            Case(None, [(Expression.create_date.is_null(), 1)], 0),
-            Expression.create_date.desc()
-        )
+
+        query = query.order_by(Case(None, [(Expression.create_date.is_null(), 1)], 0), Expression.create_date.desc())
 
         total = query.count()
         offset = (page - 1) * page_size
@@ -665,7 +654,7 @@ async def get_review_list(
             total=total,
             page=page,
             page_size=page_size,
-            data=[expression_to_response(expr) for expr in expressions]
+            data=[expression_to_response(expr) for expr in expressions],
         )
 
     except HTTPException:
@@ -677,6 +666,7 @@ async def get_review_list(
 
 class BatchReviewItem(BaseModel):
     """批量审核项"""
+
     id: int
     rejected: bool
     require_unchecked: bool = True  # 默认要求未检查状态
@@ -684,11 +674,13 @@ class BatchReviewItem(BaseModel):
 
 class BatchReviewRequest(BaseModel):
     """批量审核请求"""
+
     items: List[BatchReviewItem]
 
 
 class BatchReviewResultItem(BaseModel):
     """批量审核结果项"""
+
     id: int
     success: bool
     message: str
@@ -696,6 +688,7 @@ class BatchReviewResultItem(BaseModel):
 
 class BatchReviewResponse(BaseModel):
     """批量审核响应"""
+
     success: bool
     total: int
     succeeded: int
@@ -733,54 +726,44 @@ async def batch_review_expressions(
                 expression = Expression.get_or_none(Expression.id == item.id)
 
                 if not expression:
-                    results.append(BatchReviewResultItem(
-                        id=item.id,
-                        success=False,
-                        message=f"未找到 ID 为 {item.id} 的表达方式"
-                    ))
+                    results.append(
+                        BatchReviewResultItem(id=item.id, success=False, message=f"未找到 ID 为 {item.id} 的表达方式")
+                    )
                     failed += 1
                     continue
 
                 # 冲突检测
                 if item.require_unchecked and expression.checked:
-                    results.append(BatchReviewResultItem(
-                        id=item.id,
-                        success=False,
-                        message=f"已被{'AI自动' if expression.modified_by == 'ai' else '人工'}检查"
-                    ))
+                    results.append(
+                        BatchReviewResultItem(
+                            id=item.id,
+                            success=False,
+                            message=f"已被{'AI自动' if expression.modified_by == 'ai' else '人工'}检查",
+                        )
+                    )
                     failed += 1
                     continue
 
                 # 更新状态
                 expression.checked = True
                 expression.rejected = item.rejected
-                expression.modified_by = 'user'
+                expression.modified_by = "user"
                 expression.last_active_time = time.time()
                 expression.save()
 
-                results.append(BatchReviewResultItem(
-                    id=item.id,
-                    success=True,
-                    message="通过" if not item.rejected else "拒绝"
-                ))
+                results.append(
+                    BatchReviewResultItem(id=item.id, success=True, message="通过" if not item.rejected else "拒绝")
+                )
                 succeeded += 1
 
             except Exception as e:
-                results.append(BatchReviewResultItem(
-                    id=item.id,
-                    success=False,
-                    message=str(e)
-                ))
+                results.append(BatchReviewResultItem(id=item.id, success=False, message=str(e)))
                 failed += 1
 
         logger.info(f"批量审核完成: 成功 {succeeded}, 失败 {failed}")
 
         return BatchReviewResponse(
-            success=True,
-            total=len(request.items),
-            succeeded=succeeded,
-            failed=failed,
-            results=results
+            success=True, total=len(request.items), succeeded=succeeded, failed=failed, results=results
         )
 
     except HTTPException:

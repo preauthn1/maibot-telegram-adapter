@@ -18,7 +18,7 @@ from src.common.database.database_model import (
     ActionRecords,
     Jargon,
 )
-from src.webui.auth import verify_auth_token_from_cookie_or_header
+from src.webui.core import verify_auth_token_from_cookie_or_header
 
 logger = get_logger("webui.annual_report")
 

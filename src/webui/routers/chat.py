@@ -15,9 +15,8 @@ from src.common.logger import get_logger
 from src.common.database.database_model import Messages, PersonInfo
 from src.config.config import global_config
 from src.chat.message_receive.bot import chat_bot
-from src.webui.auth import verify_auth_token_from_cookie_or_header
-from src.webui.token_manager import get_token_manager
-from src.webui.ws_auth import verify_ws_token
+from src.webui.core import verify_auth_token_from_cookie_or_header, get_token_manager
+from src.webui.routers.websocket.auth import verify_ws_token
 
 logger = get_logger("webui.chat")
 

@@ -6,8 +6,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Annotated
 from src.common.logger import get_logger
 from src.common.database.database_model import Emoji
-from .token_manager import get_token_manager
-from .auth import verify_auth_token_from_cookie_or_header
+from src.webui.core import get_token_manager, verify_auth_token_from_cookie_or_header
 import time
 import os
 import hashlib

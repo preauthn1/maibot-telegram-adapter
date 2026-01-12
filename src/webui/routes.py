@@ -4,21 +4,25 @@ from fastapi import APIRouter, HTTPException, Header, Response, Request, Cookie,
 from pydantic import BaseModel, Field
 from typing import Optional
 from src.common.logger import get_logger
-from .token_manager import get_token_manager
-from .auth import set_auth_cookie, clear_auth_cookie
-from .rate_limiter import get_rate_limiter, check_auth_rate_limit
-from .config_routes import router as config_router
-from .statistics_routes import router as statistics_router
-from .person_routes import router as person_router
-from .expression_routes import router as expression_router
-from .jargon_routes import router as jargon_router
-from .emoji_routes import router as emoji_router
-from .plugin_routes import router as plugin_router
-from .plugin_progress_ws import get_progress_router
-from .routers.system import router as system_router
-from .model_routes import router as model_router
-from .ws_auth import router as ws_auth_router
-from .annual_report_routes import router as annual_report_router
+from src.webui.core import (
+    get_token_manager,
+    set_auth_cookie,
+    clear_auth_cookie,
+    get_rate_limiter,
+    check_auth_rate_limit,
+)
+from src.webui.routers.config import router as config_router
+from src.webui.routers.statistics import router as statistics_router
+from src.webui.routers.person import router as person_router
+from src.webui.routers.expression import router as expression_router
+from src.webui.routers.jargon import router as jargon_router
+from src.webui.routers.emoji import router as emoji_router
+from src.webui.routers.plugin import router as plugin_router
+from src.webui.routers.websocket.plugin_progress import get_progress_router
+from src.webui.routers.system import router as system_router
+from src.webui.routers.model import router as model_router
+from src.webui.routers.websocket.auth import router as ws_auth_router
+from src.webui.routers.annual_report import router as annual_report_router
 
 logger = get_logger("webui.api")
 
@@ -198,9 +202,11 @@ async def check_auth_status(
     """
     try:
         token = None
-        
+
         # 记录请求信息用于调试
-        logger.debug(f"检查认证状态 - Cookie: {maibot_session[:20] if maibot_session else 'None'}..., Authorization: {'Present' if authorization else 'None'}")
+        logger.debug(
+            f"检查认证状态 - Cookie: {maibot_session[:20] if maibot_session else 'None'}..., Authorization: {'Present' if authorization else 'None'}"
+        )
 
         # 优先从 Cookie 获取
         if maibot_session:
@@ -218,7 +224,7 @@ async def check_auth_status(
         token_manager = get_token_manager()
         is_valid = token_manager.verify_token(token)
         logger.debug(f"Token 验证结果: {is_valid}")
-        
+
         if is_valid:
             return {"authenticated": True}
         else:
