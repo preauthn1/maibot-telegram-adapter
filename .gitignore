@@ -48,6 +48,7 @@ template/compare/model_config_template.toml
 CLAUDE.md
 MaiBot-Dashboard/
 cloudflare-workers/
+log_viewer/
 result.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
