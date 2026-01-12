@@ -697,6 +697,9 @@ class WebUIConfig(ConfigBase):
     secure_cookie: bool = False
     """是否启用安全Cookie（仅通过HTTPS传输，默认false）"""
 
+    enable_paragraph_content: bool = False
+    """是否在知识图谱中加载段落完整内容（需要加载embedding store，会占用额外内存）"""
+
 
 @dataclass
 class DebugConfig(ConfigBase):

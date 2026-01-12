@@ -5,10 +5,82 @@ from fastapi import APIRouter, Query, Depends, Cookie, Header
 from pydantic import BaseModel
 import logging
 from src.webui.auth import verify_auth_token_from_cookie_or_header
+from src.config.config import global_config
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/webui/knowledge", tags=["knowledge"])
+
+# 延迟初始化的轻量级 embedding store（只读，仅用于获取段落完整文本）
+_paragraph_store_cache = None
+
+
+def _get_paragraph_store():
+    """延迟加载段落 embedding store（只读模式，轻量级）
+    
+    Returns:
+        EmbeddingStore | None: 如果配置启用则返回store，否则返回None
+    """
+    # 检查配置是否启用
+    if not global_config.webui.enable_paragraph_content:
+        return None
+    
+    global _paragraph_store_cache
+    if _paragraph_store_cache is not None:
+        return _paragraph_store_cache
+    
+    try:
+        from src.chat.knowledge.embedding_store import EmbeddingStore
+        import os
+        
+        # 获取数据路径
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_path = os.path.abspath(os.path.join(current_dir, "..", ".."))
+        embedding_dir = os.path.join(root_path, "data/embedding")
+        
+        # 只加载段落 embedding store（轻量级）
+        paragraph_store = EmbeddingStore(
+            namespace="paragraph",
+            dir_path=embedding_dir,
+            max_workers=1,  # 只读不需要多线程
+            chunk_size=100
+        )
+        paragraph_store.load_from_file()
+        
+        _paragraph_store_cache = paragraph_store
+        logger.info(f"成功加载段落 embedding store，包含 {len(paragraph_store.store)} 个段落")
+        return paragraph_store
+    except Exception as e:
+        logger.warning(f"加载段落 embedding store 失败: {e}")
+        return None
+
+
+def _get_paragraph_content(node_id: str) -> tuple[Optional[str], bool]:
+    """从 embedding store 获取段落完整内容
+    
+    Args:
+        node_id: 段落节点ID，格式为 'paragraph-{hash}'
+    
+    Returns:
+        tuple[str | None, bool]: (段落完整内容或None, 是否启用了功能)
+    """
+    try:
+        paragraph_store = _get_paragraph_store()
+        if paragraph_store is None:
+            # 功能未启用
+            return None, False
+        
+        # 从 store 中获取完整内容
+        paragraph_item = paragraph_store.store.get(node_id)
+        if paragraph_item is not None:
+            # paragraph_item 是 EmbeddingStoreItem，其 str 属性包含完整文本
+            content: str = getattr(paragraph_item, 'str', '')
+            if content:
+                return content, True
+        return None, True
+    except Exception as e:
+        logger.debug(f"获取段落内容失败: {e}")
+        return None, True
 
 
 def require_auth(
@@ -84,7 +156,14 @@ def _convert_graph_to_json(kg_manager) -> KnowledgeGraph:
             node_data = graph[node_id]
             # 节点类型: "ent" -> "entity", "pg" -> "paragraph"
             node_type = "entity" if ("type" in node_data and node_data["type"] == "ent") else "paragraph"
-            content = node_data["content"] if "content" in node_data else node_id
+            
+            # 对于段落节点，尝试从 embedding store 获取完整内容
+            if node_type == "paragraph":
+                full_content, _ = _get_paragraph_content(node_id)
+                content = full_content if full_content is not None else (node_data["content"] if "content" in node_data else node_id)
+            else:
+                content = node_data["content"] if "content" in node_data else node_id
+            
             create_time = node_data["create_time"] if "create_time" in node_data else None
 
             nodes.append(KnowledgeNode(id=node_id, type=node_type, content=content, create_time=create_time))
@@ -166,7 +245,14 @@ async def get_knowledge_graph(
             try:
                 node_data = graph[node_id]
                 node_type_val = "entity" if ("type" in node_data and node_data["type"] == "ent") else "paragraph"
-                content = node_data["content"] if "content" in node_data else node_id
+                
+                # 对于段落节点，尝试从 embedding store 获取完整内容
+                if node_type_val == "paragraph":
+                    full_content, _ = _get_paragraph_content(node_id)
+                    content = full_content if full_content is not None else (node_data["content"] if "content" in node_data else node_id)
+                else:
+                    content = node_data["content"] if "content" in node_data else node_id
+                
                 create_time = node_data["create_time"] if "create_time" in node_data else None
 
                 nodes.append(KnowledgeNode(id=node_id, type=node_type_val, content=content, create_time=create_time))
@@ -281,8 +367,14 @@ async def search_knowledge_node(query: str = Query(..., min_length=1), _auth: bo
         for node_id in node_list:
             try:
                 node_data = graph[node_id]
-                content = node_data["content"] if "content" in node_data else node_id
                 node_type = "entity" if ("type" in node_data and node_data["type"] == "ent") else "paragraph"
+                
+                # 对于段落节点，尝试从 embedding store 获取完整内容
+                if node_type == "paragraph":
+                    full_content, _ = _get_paragraph_content(node_id)
+                    content = full_content if full_content is not None else (node_data["content"] if "content" in node_data else node_id)
+                else:
+                    content = node_data["content"] if "content" in node_data else node_id
 
                 if query_lower in content.lower() or query_lower in node_id.lower():
                     create_time = node_data["create_time"] if "create_time" in node_data else None
