@@ -1045,8 +1045,8 @@ class ChatHistorySummarizer:
             content_parts = []
 
             # 1. 话题主题
-            if theme:
-                content_parts.append(f"话题：{theme}")
+            # if theme:
+                # content_parts.append(f"话题：{theme}")
 
             # 2. 概括内容
             if summary:
@@ -1058,14 +1058,14 @@ class ChatHistorySummarizer:
                 content_parts.append(f"参与者：{participants_text}")
 
             # 4. 原始文本摘要（如果原始文本太长，只取前500字）
-            if original_text:
-                # 截断原始文本，避免过长
-                max_original_length = 500
-                if len(original_text) > max_original_length:
-                    truncated_text = original_text[:max_original_length] + "..."
-                    content_parts.append(f"原始内容摘要：{truncated_text}")
-                else:
-                    content_parts.append(f"原始内容：{original_text}")
+            # if original_text:
+            #     # 截断原始文本，避免过长
+            #     max_original_length = 500
+            #     if len(original_text) > max_original_length:
+            #         truncated_text = original_text[:max_original_length] + "..."
+            #         content_parts.append(f"原始内容摘要：{truncated_text}")
+            #     else:
+            #         content_parts.append(f"原始内容：{original_text}")
 
             # 将所有部分合并为一个完整段落（使用单换行符，避免被LPMM分段）
             # LPMM使用 \n\n 作为段落分隔符，所以这里使用 \n 确保不会被分段
@@ -1076,7 +1076,7 @@ class ChatHistorySummarizer:
                 return
 
             # 调用lpmm_ops导入
-            result = await lpmm_ops.add_content(content_to_import)
+            result = await lpmm_ops.add_content(text=content_to_import, auto_split=False)
 
             if result["status"] == "success":
                 logger.info(

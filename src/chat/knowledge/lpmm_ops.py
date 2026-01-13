@@ -1,4 +1,6 @@
 import asyncio
+import os
+from functools import partial
 from typing import List, Callable, Any
 from src.chat.knowledge.embedding_store import EmbeddingManager
 from src.chat.knowledge.kg_manager import KGManager
@@ -58,12 +60,15 @@ class LPMMOperations:
             
         return qa_mgr.embed_manager, qa_mgr.kg_manager, qa_mgr
 
-    async def add_content(self, text: str) -> dict:
+    async def add_content(self, text: str, auto_split: bool = True) -> dict:
         """
         向知识库添加新内容。
         
         Args:
-            text: 原始文本。支持多段文本（用双换行分隔）。
+            text: 原始文本。
+            auto_split: 是否自动按双换行符分割段落。
+                - True: 自动分割（默认），支持多段文本（用双换行分隔）
+                - False: 不分割，将整个文本作为完整一段处理
             
         Returns:
             dict: {"status": "success/error", "count": 导入段落数, "message": "描述"}
@@ -72,7 +77,16 @@ class LPMMOperations:
             embed_mgr, kg_mgr, _ = await self._get_managers()
             
             # 1. 分段处理
-            paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+            if auto_split:
+                # 自动按双换行符分割
+                paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+            else:
+                # 不分割，作为完整一段
+                text_stripped = text.strip()
+                if not text_stripped:
+                    return {"status": "error", "message": "文本内容为空"}
+                paragraphs = [text_stripped]
+            
             if not paragraphs:
                 return {"status": "error", "message": "文本内容为空"}
 
@@ -207,11 +221,15 @@ class LPMMOperations:
             embed_mgr.stored_pg_hashes = set(embed_mgr.paragraphs_embedding_store.store.keys())
             
             # b. 从知识图谱删除
-            await self._run_cancellable_executor(
+            # 注意：必须使用关键字参数，避免 True 被误当作 ent_hashes 参数
+            # 使用 partial 来传递关键字参数，因为 run_in_executor 不支持 **kwargs
+            delete_func = partial(
                 kg_mgr.delete_paragraphs,
                 to_delete_hashes,
-                True  # remove_orphan_entities
+                ent_hashes=None,
+                remove_orphan_entities=True
             )
+            await self._run_cancellable_executor(delete_func)
 
             # 3. 持久化
             await self._run_cancellable_executor(embed_mgr.rebuild_faiss_index)
@@ -280,25 +298,64 @@ class LPMMOperations:
             else:
                 rel_deleted = 0
             
-            # 2. 清空知识图谱
+            # 2. 清空所有 embedding store 的索引和映射
+            # 确保 faiss_index 和 idx2hash 也被重置，并删除旧的索引文件
+            def _clear_embedding_indices():
+                # 清空段落索引
+                embed_mgr.paragraphs_embedding_store.faiss_index = None
+                embed_mgr.paragraphs_embedding_store.idx2hash = None
+                embed_mgr.paragraphs_embedding_store.dirty = False
+                # 删除旧的索引文件
+                if os.path.exists(embed_mgr.paragraphs_embedding_store.index_file_path):
+                    os.remove(embed_mgr.paragraphs_embedding_store.index_file_path)
+                if os.path.exists(embed_mgr.paragraphs_embedding_store.idx2hash_file_path):
+                    os.remove(embed_mgr.paragraphs_embedding_store.idx2hash_file_path)
+                
+                # 清空实体索引
+                embed_mgr.entities_embedding_store.faiss_index = None
+                embed_mgr.entities_embedding_store.idx2hash = None
+                embed_mgr.entities_embedding_store.dirty = False
+                # 删除旧的索引文件
+                if os.path.exists(embed_mgr.entities_embedding_store.index_file_path):
+                    os.remove(embed_mgr.entities_embedding_store.index_file_path)
+                if os.path.exists(embed_mgr.entities_embedding_store.idx2hash_file_path):
+                    os.remove(embed_mgr.entities_embedding_store.idx2hash_file_path)
+                
+                # 清空关系索引
+                embed_mgr.relation_embedding_store.faiss_index = None
+                embed_mgr.relation_embedding_store.idx2hash = None
+                embed_mgr.relation_embedding_store.dirty = False
+                # 删除旧的索引文件
+                if os.path.exists(embed_mgr.relation_embedding_store.index_file_path):
+                    os.remove(embed_mgr.relation_embedding_store.index_file_path)
+                if os.path.exists(embed_mgr.relation_embedding_store.idx2hash_file_path):
+                    os.remove(embed_mgr.relation_embedding_store.idx2hash_file_path)
+            
+            await self._run_cancellable_executor(_clear_embedding_indices)
+            
+            # 3. 清空知识图谱
             # 获取所有段落hash
             all_pg_hashes = list(kg_mgr.stored_paragraph_hashes)
             if all_pg_hashes:
                 # 删除所有段落节点（这会自动清理相关的边和孤立实体）
-                await self._run_cancellable_executor(
+                # 注意：必须使用关键字参数，避免 True 被误当作 ent_hashes 参数
+                # 使用 partial 来传递关键字参数，因为 run_in_executor 不支持 **kwargs
+                delete_func = partial(
                     kg_mgr.delete_paragraphs,
                     all_pg_hashes,
-                    True  # remove_orphan_entities
+                    ent_hashes=None,
+                    remove_orphan_entities=True
                 )
+                await self._run_cancellable_executor(delete_func)
             
-            # 完全清空KG：创建新的空图
+            # 完全清空KG：创建新的空图（无论是否有段落hash都要执行）
             from quick_algo import di_graph
             kg_mgr.graph = di_graph.DiGraph()
             kg_mgr.stored_paragraph_hashes.clear()
             kg_mgr.ent_appear_cnt.clear()
             
-            # 3. 重建索引并保存
-            await self._run_cancellable_executor(embed_mgr.rebuild_faiss_index)
+            # 4. 保存所有数据（此时所有store都是空的，索引也是None）
+            # 注意：即使store为空，save_to_file也会保存空的DataFrame，这是正确的
             await self._run_cancellable_executor(embed_mgr.save_to_file)
             await self._run_cancellable_executor(kg_mgr.save_to_file)
             
