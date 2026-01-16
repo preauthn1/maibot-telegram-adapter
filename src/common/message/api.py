@@ -75,6 +75,7 @@ def get_global_api() -> MessageServer:  # sourcery skip: extract-method
                     ssl_enabled=use_wss,
                     ssl_certfile=maim_message_config.api_server_cert_file if use_wss else None,
                     ssl_keyfile=maim_message_config.api_server_key_file if use_wss else None,
+                    custom_logger=api_logger  # 传入自定义logger
                 )
 
                 # 2. Setup Auth Handler
