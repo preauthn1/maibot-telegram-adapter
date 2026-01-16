@@ -1,5 +1,5 @@
 [inner]
-version = "7.3.1"
+version = "7.4.1"
 
 #----以下是给开发人员阅读的，如果你只是部署了麦麦，不需要阅读----
 # 如果你想要修改配置文件，请递增version的值
@@ -40,20 +40,11 @@ multiple_reply_style = [
 multiple_probability = 0.3
 
 # 麦麦的说话规则和行为规则:
-plan_style = """
-1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
-2.如果相同的内容已经被执行，请不要重复执行
-3.你对技术相关话题，游戏和动漫相关话题感兴趣，也对日常话题感兴趣，不喜欢太过沉重严肃的话题
-4.请控制你的发言频率，不要太过频繁的发言
-5.如果有人对你感到厌烦，请减少回复
-6.如果有人在追问你，或者话题没有说完，请你继续回复"""
-
-
-# 麦麦私聊的说话规则，行为风格:
-private_plan_style = """
-1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
-2.如果相同的内容已经被执行，请不要重复执行
-3.某句话如果已经被回复过，不要重复回复"""
+plan_style = """1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
+2.如果相同的action已经被执行，请不要重复执行该action
+3.如果有人对你感到厌烦，请减少回复
+4.如果有人在追问你，或者话题没有说完，请你继续回复
+5.请分析哪些对话是和你说的，哪些是其他人之间的互动，不要误认为其他人之间的互动是和你说的"""
 
 # 多重人格，根据概率随机选择人格
 states = [
@@ -116,6 +107,10 @@ max_context_size = 30 # 上下文长度
 planner_smooth = 3 # 规划器平滑，增大数值会减小planner负荷，略微降低反应速度，推荐1-5，0为关闭，必须大于等于0
 think_mode = "dynamic" # 思考模式，可选：classic（默认浅度思考和回复）、deep（会进行比较长的，深度回复）、dynamic（动态选择两种模式）
 
+plan_reply_log_max_per_chat = 1024 # 每个聊天保存最大的Plan/Reply日志数量，超过此数量时会自动删除最老的日志
+
+llm_quote = false # 是否由llm执行引用
+
 enable_talk_value_rules = true # 是否启用动态发言频率规则
 
 # 动态发言频率规则：按时段/按chat_id调整 talk_value（优先匹配具体chat，再匹配全局）
@@ -137,7 +132,13 @@ global_memory = false # 是否允许记忆检索进行全局查询
 global_memory_blacklist = [
     
 ] # 全局记忆黑名单，当启用全局记忆时，不将特定聊天流纳入检索。格式: ["platform:id:type", ...]，例如: ["qq:1919810:private", "qq:114514:group"]
-planner_question = true # 是否使用 Planner 提供的 question 作为记忆检索问题。开启后，当 Planner 在 reply 动作中提供了 question 时，直接使用该问题进行记忆检索，跳过 LLM 生成问题的步骤；关闭后沿用旧模式，使用 LLM 生成问题
+
+# 聊天历史总结配置
+chat_history_topic_check_message_threshold = 80 # 聊天历史话题检查的消息数量阈值，当累积消息数达到此值时触发话题检查
+chat_history_topic_check_time_hours = 8.0 # 聊天历史话题检查的时间阈值（小时），当距离上次检查超过此时间且消息数达到最小阈值时触发话题检查
+chat_history_topic_check_min_messages = 20 # 聊天历史话题检查的时间触发模式下的最小消息数阈值
+chat_history_finalize_no_update_checks = 3 # 聊天历史话题打包存储的连续无更新检查次数阈值，当话题连续N次检查无新增内容时触发打包存储
+chat_history_finalize_message_count = 5 # 聊天历史话题打包存储的消息条数阈值，当话题的消息条数超过此值时触发打包存储
 
 [dream]
 interval_minutes = 60 # 做梦时间间隔（分钟），默认30分钟
@@ -149,6 +150,7 @@ first_delay_seconds = 1800 # 程序启动后首次做梦前的延迟时间（秒
 # 为空字符串时不推送。
 dream_send = ""
 
+dream_visible = false # 做梦结果是否存储到上下文，True: 将梦境发送给配置的用户后，也会存储到聊天上下文中，在后续对话中可见；False: 仅发送梦境但不存储，不在后续对话上下文中出现
 # 做梦时间段配置，格式：["HH:MM-HH:MM", ...]
 # 如果列表为空，则表示全天允许做梦。
 # 如果配置了时间段，则只有在这些时间段内才会实际执行做梦流程。
@@ -292,8 +294,15 @@ trusted_proxies = "" # 信任的代理IP列表（逗号分隔），只有来自�
 trust_xff = false # 是否启用X-Forwarded-For代理解析（默认false）
                   # 启用后，仍要求直连IP在trusted_proxies中才会信任XFF头
 secure_cookie = false # 是否启用安全Cookie（仅通过HTTPS传输，默认false）
+enable_paragraph_content = false # 是否在知识图谱中加载段落完整内容（需要加载embedding store，会占用额外内存）
 
 [experimental] #实验性功能
+# 麦麦私聊的说话规则，行为风格（实验性功能）
+private_plan_style = """
+1.思考**所有**的可用的action中的**每个动作**是否符合当下条件，如果动作使用条件符合聊天内容就使用
+2.如果相同的内容已经被执行，请不要重复执行
+3.某句话如果已经被回复过，不要重复回复"""
+
 # 为指定聊天添加额外的prompt配置
 # 格式: ["platform:id:type:prompt内容", ...]
 # 示例:
@@ -303,6 +312,8 @@ secure_cookie = false # 是否启用安全Cookie（仅通过HTTPS传输，默认
 #     "qq:114514:private:这是你与好朋友的私聊"
 # ]
 chat_prompts = []
+
+lpmm_memory = false # 是否将聊天历史总结导入到LPMM知识库。开启后，chat_history_summarizer总结出的历史记录会同时导入到知识库
 
 
 # 此系统暂时移除，无效配置

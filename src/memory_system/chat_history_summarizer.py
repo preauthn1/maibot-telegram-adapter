@@ -15,7 +15,7 @@ from json_repair import repair_json
 
 from src.common.logger import get_logger
 from src.common.data_models.database_data_model import DatabaseMessages
-from src.config.config import global_config, model_config
+from src.config.config import model_config, global_config
 from src.llm_models.utils_model import LLMRequest
 from src.plugin_system.apis import message_api
 from src.chat.utils.chat_message_builder import build_readable_messages
@@ -71,16 +71,14 @@ def init_prompt():
 1. 关键词：提取与话题相关的关键词，用列表形式返回（3-10个关键词）
 2. 概括：对这段话的平文本概括（50-200字），要求：
    - 仔细地转述发生的事件和聊天内容；
-   - 可以适当摘取聊天记录中的原文；
    - 重点突出事件的发展过程和结果；
    - 围绕话题这个中心进行概括。
-3. 关键信息：提取话题中的关键信息点，用列表形式返回（3-8个关键信息点），每个关键信息点应该简洁明了。
+   - 提取话题中的关键信息点，关键信息点应该简洁明了。
 
 请以JSON格式返回，格式如下：
 {{
     "keywords": ["关键词1", "关键词2", ...],
-    "summary": "概括内容",
-    "key_point": ["关键信息1", "关键信息2", ...]
+    "summary": "概括内容"
 }}
 
 聊天记录：
@@ -370,18 +368,24 @@ class ChatHistorySummarizer:
 
         logger.debug(f"{self.log_prefix} 批次状态检查 | 消息数: {message_count} | 距上次检查: {time_str}")
 
-        # 检查“话题检查”触发条件
+        # 检查"话题检查"触发条件
         should_check = False
 
-        # 条件1: 消息数量 >= 100，触发一次检查
-        if message_count >= 80:
-            should_check = True
-            logger.info(f"{self.log_prefix} 触发检查条件: 消息数量达到 {message_count} 条（阈值: 100条）")
+        # 从配置中获取阈值
+        message_threshold = global_config.memory.chat_history_topic_check_message_threshold
+        time_threshold_hours = global_config.memory.chat_history_topic_check_time_hours
+        min_messages = global_config.memory.chat_history_topic_check_min_messages
+        time_threshold_seconds = time_threshold_hours * 3600
 
-        # 条件2: 距离上一次检查 > 3600 * 8 秒（8小时）且消息数量 >= 20 条，触发一次检查
-        elif time_since_last_check > 3600 * 8 and message_count >= 20:
+        # 条件1: 消息数量达到阈值，触发一次检查
+        if message_count >= message_threshold:
             should_check = True
-            logger.info(f"{self.log_prefix} 触发检查条件: 距上次检查 {time_str}（阈值: 8小时）且消息数量达到 {message_count} 条（阈值: 20条）")
+            logger.info(f"{self.log_prefix} 触发检查条件: 消息数量达到 {message_count} 条（阈值: {message_threshold}条）")
+
+        # 条件2: 距离上一次检查超过时间阈值且消息数量达到最小阈值，触发一次检查
+        elif time_since_last_check > time_threshold_seconds and message_count >= min_messages:
+            should_check = True
+            logger.info(f"{self.log_prefix} 触发检查条件: 距上次检查 {time_str}（阈值: {time_threshold_hours}小时）且消息数量达到 {message_count} 条（阈值: {min_messages}条）")
 
         if should_check:
             await self._run_topic_check_and_update_cache(messages)
@@ -528,14 +532,18 @@ class ChatHistorySummarizer:
                 item.no_update_checks += 1
 
         # 6. 检查是否有话题需要打包存储
+        # 从配置中获取阈值
+        no_update_checks_threshold = global_config.memory.chat_history_finalize_no_update_checks
+        message_count_threshold = global_config.memory.chat_history_finalize_message_count
+
         topics_to_finalize: List[str] = []
         for topic, item in self.topic_cache.items():
-            if item.no_update_checks >= 3:
-                logger.info(f"{self.log_prefix} 话题[{topic}] 连续 3 次检查无新增内容，触发打包存储")
+            if item.no_update_checks >= no_update_checks_threshold:
+                logger.info(f"{self.log_prefix} 话题[{topic}] 连续 {no_update_checks_threshold} 次检查无新增内容，触发打包存储")
                 topics_to_finalize.append(topic)
                 continue
-            if len(item.messages) > 5:
-                logger.info(f"{self.log_prefix} 话题[{topic}] 消息条数超过 4，触发打包存储")
+            if len(item.messages) > message_count_threshold:
+                logger.info(f"{self.log_prefix} 话题[{topic}] 消息条数超过 {message_count_threshold}，触发打包存储")
                 topics_to_finalize.append(topic)
 
         for topic in topics_to_finalize:
@@ -805,12 +813,38 @@ class ChatHistorySummarizer:
         original_text = "\n".join(item.messages)
 
         logger.info(
-            f"{self.log_prefix} 开始打包话题[{topic}] | 消息数: {len(item.messages)} | 时间范围: {start_time:.2f} - {end_time:.2f}"
+            f"{self.log_prefix} 开始将聊天记录构建成记忆：[{topic}] | 消息数: {len(item.messages)} | 时间范围: {start_time:.2f} - {end_time:.2f}"
         )
 
-        # 使用 LLM 进行总结（基于话题名）
-        success, keywords, summary, key_point = await self._compress_with_llm(original_text, topic)
-        if not success:
+        # 使用 LLM 进行总结（基于话题名），带重试机制
+        max_retries = 3
+        attempt = 0
+        success = False
+        keywords = []
+        summary = ""
+
+        while attempt < max_retries:
+            attempt += 1
+            success, keywords, summary = await self._compress_with_llm(original_text, topic)
+            
+            if success and keywords and summary:
+                # 成功获取到有效的 keywords 和 summary
+                if attempt > 1:
+                    logger.info(
+                        f"{self.log_prefix} 话题[{topic}] LLM 概括在第 {attempt} 次重试后成功"
+                    )
+                break
+            
+            if attempt < max_retries:
+                logger.warning(
+                    f"{self.log_prefix} 话题[{topic}] LLM 概括失败（第 {attempt} 次尝试），准备重试"
+                )
+            else:
+                logger.error(
+                    f"{self.log_prefix} 话题[{topic}] LLM 概括连续 {max_retries} 次失败，放弃存储"
+                )
+
+        if not success or not keywords or not summary:
             logger.warning(f"{self.log_prefix} 话题[{topic}] LLM 概括失败，不写入数据库")
             return
 
@@ -824,14 +858,13 @@ class ChatHistorySummarizer:
             theme=topic,  # 主题直接使用话题名
             keywords=keywords,
             summary=summary,
-            key_point=key_point,
         )
 
         logger.info(
             f"{self.log_prefix} 话题[{topic}] 成功打包并存储 | 消息数: {len(item.messages)} | 参与者数: {len(participants)}"
         )
 
-    async def _compress_with_llm(self, original_text: str, topic: str) -> tuple[bool, List[str], str, List[str]]:
+    async def _compress_with_llm(self, original_text: str, topic: str) -> tuple[bool, List[str], str]:
         """
         使用LLM压缩聊天内容（用于单个话题的最终总结）
 
@@ -840,7 +873,7 @@ class ChatHistorySummarizer:
             topic: 话题名称
 
         Returns:
-            tuple[bool, List[str], str, List[str]]: (是否成功, 关键词列表, 概括, 关键信息列表)
+            tuple[bool, List[str], str]: (是否成功, 关键词列表, 概括)
         """
         prompt = await global_prompt_manager.format_prompt(
             "hippo_topic_summary_prompt",
@@ -910,24 +943,24 @@ class ChatHistorySummarizer:
 
             keywords = result.get("keywords", [])
             summary = result.get("summary", "")
-            key_point = result.get("key_point", [])
             
-            if not (keywords and summary) and key_point:
-                logger.warning(f"{self.log_prefix} LLM返回的JSON中缺少字段，原文\n{response}")
+            # 检查必需字段是否为空
+            if not keywords or not summary:
+                logger.warning(f"{self.log_prefix} LLM返回的JSON中缺少必需字段，原文\n{response}")
+                # 返回失败，和模型出错一样，让上层进行重试
+                return False, [], ""
 
-            # 确保keywords和key_point是列表
+            # 确保keywords是列表
             if isinstance(keywords, str):
                 keywords = [keywords]
-            if isinstance(key_point, str):
-                key_point = [key_point]
 
-            return True, keywords, summary, key_point
+            return True, keywords, summary
 
         except Exception as e:
             logger.error(f"{self.log_prefix} LLM压缩聊天内容时出错: {e}")
             logger.error(f"{self.log_prefix} LLM响应: {response if 'response' in locals() else 'N/A'}")
             # 返回失败标志和默认值
-            return False, [], "压缩失败，无法生成概括", []
+            return False, [], "压缩失败，无法生成概括"
 
     async def _store_to_database(
         self,
@@ -938,7 +971,6 @@ class ChatHistorySummarizer:
         theme: str,
         keywords: List[str],
         summary: str,
-        key_point: Optional[List[str]] = None,
     ):
         """存储到数据库"""
         try:
@@ -958,10 +990,6 @@ class ChatHistorySummarizer:
                 "count": 0,
             }
 
-            # 存储 key_point（如果存在）
-            if key_point is not None:
-                data["key_point"] = json.dumps(key_point, ensure_ascii=False)
-
             # 使用db_save存储（使用start_time和chat_id作为唯一标识）
             # 由于可能有多条记录，我们使用组合键，但peewee不支持，所以使用start_time作为唯一标识
             # 但为了避免冲突，我们使用组合键：chat_id + start_time
@@ -976,12 +1004,92 @@ class ChatHistorySummarizer:
             else:
                 logger.warning(f"{self.log_prefix} 存储聊天历史记录到数据库失败")
 
+            # 如果配置开启，同时导入到LPMM知识库
+            if global_config.lpmm_knowledge.enable and global_config.experimental.lpmm_memory:
+                await self._import_to_lpmm_knowledge(
+                    theme=theme,
+                    summary=summary,
+                    participants=participants,
+                    original_text=original_text,
+                )
+
         except Exception as e:
             logger.error(f"{self.log_prefix} 存储到数据库时出错: {e}")
             import traceback
 
             traceback.print_exc()
             raise
+
+    async def _import_to_lpmm_knowledge(
+        self,
+        theme: str,
+        summary: str,
+        participants: List[str],
+        original_text: str,
+    ):
+        """
+        将聊天历史总结导入到LPMM知识库
+
+        Args:
+            theme: 话题主题
+            summary: 概括内容
+            participants: 参与者列表
+            original_text: 原始文本（可能很长，需要截断）
+        """
+        try:
+            from src.chat.knowledge.lpmm_ops import lpmm_ops
+
+            # 构造要导入的文本内容
+            # 格式：主题 + 概括 + 参与者信息 + 原始内容摘要
+            # 注意：使用单换行符连接，确保整个内容作为一段导入，不被LPMM分段
+            content_parts = []
+
+            # 1. 话题主题
+            # if theme:
+                # content_parts.append(f"话题：{theme}")
+
+            # 2. 概括内容
+            if summary:
+                content_parts.append(f"概括：{summary}")
+
+            # 3. 参与者信息
+            if participants:
+                participants_text = "、".join(participants)
+                content_parts.append(f"参与者：{participants_text}")
+
+            # 4. 原始文本摘要（如果原始文本太长，只取前500字）
+            # if original_text:
+            #     # 截断原始文本，避免过长
+            #     max_original_length = 500
+            #     if len(original_text) > max_original_length:
+            #         truncated_text = original_text[:max_original_length] + "..."
+            #         content_parts.append(f"原始内容摘要：{truncated_text}")
+            #     else:
+            #         content_parts.append(f"原始内容：{original_text}")
+
+            # 将所有部分合并为一个完整段落（使用单换行符，避免被LPMM分段）
+            # LPMM使用 \n\n 作为段落分隔符，所以这里使用 \n 确保不会被分段
+            content_to_import = "\n".join(content_parts)
+
+            if not content_to_import.strip():
+                logger.warning(f"{self.log_prefix} 聊天历史总结内容为空，跳过导入知识库")
+                return
+
+            # 调用lpmm_ops导入
+            result = await lpmm_ops.add_content(text=content_to_import, auto_split=False)
+
+            if result["status"] == "success":
+                logger.info(
+                    f"{self.log_prefix} 成功将聊天历史总结导入到LPMM知识库 | 话题: {theme} | 新增段落数: {result.get('count', 0)}"
+                )
+            else:
+                logger.warning(
+                    f"{self.log_prefix} 将聊天历史总结导入到LPMM知识库失败 | 话题: {theme} | 错误: {result.get('message', '未知错误')}"
+                )
+
+        except Exception as e:
+            # 导入失败不应该影响数据库存储，只记录错误
+            logger.error(f"{self.log_prefix} 导入聊天历史总结到LPMM知识库时出错: {e}", exc_info=True)
 
     async def start(self):
         """启动后台定期检查循环"""
