@@ -202,7 +202,7 @@ async def _send_message(message: MessageSending, show_log=True) -> bool:
                     if legacy_exception:
                         raise legacy_exception
                     return False
-                
+
                 if not extra_server.is_running():
                     logger.warning(f"[API Server Fallback] extra_server未运行")
                     if legacy_exception:
@@ -226,8 +226,28 @@ async def _send_message(message: MessageSending, show_log=True) -> bool:
                 # group_info/user_info 是消息接收者信息，放入 receiver_info
                 from maim_message import MessageConverter
 
+                # 修复 API Server Fallback 模式下的 user_info 问题
+                # 在 Legacy 模式下，MessageSending.to_dict() 的第 454 行会将 user_info 替换为 chat_stream.user_info
+                # 但在 API Server Fallback 模式下，MessageConverter.to_api_send() 直接访问 message 对象，不调用 to_dict()
+                # 需要手动应用相同的变通方案：在私聊场景下，user_info 应该是接收者（sender_info）
+                message_for_conversion = message
+                if hasattr(message, "message_info") and message.message_info.group_info is None:
+                    # 私聊场景：group_info 为 None
+                    # user_info 应该是接收者，从 chat_stream.user_info 或 sender_info 获取
+                    temp_dict = message.to_dict()
+                    if (
+                        hasattr(message, "chat_stream")
+                        and message.chat_stream
+                        and hasattr(message.chat_stream, "user_info")
+                    ):
+                        temp_dict["message_info"]["user_info"] = message.chat_stream.user_info.to_dict()
+                    # 重新构建 MessageBase 对象（不保留 sender_info 等扩展属性）
+                    from maim_message import MessageBase
+
+                    message_for_conversion = MessageBase.from_dict(temp_dict)
+
                 api_message = MessageConverter.to_api_send(
-                    message=message,
+                    message=message_for_conversion,
                     api_key=target_api_key,
                     platform=platform,
                 )
@@ -249,6 +269,7 @@ async def _send_message(message: MessageSending, show_log=True) -> bool:
             except Exception as e:
                 logger.error(f"[API Server Fallback] 发生异常: {e}")
                 import traceback
+
                 logger.debug(traceback.format_exc())
 
             # 如果 Fallback 失败，且存在 legacy 异常，则抛出 legacy 异常
