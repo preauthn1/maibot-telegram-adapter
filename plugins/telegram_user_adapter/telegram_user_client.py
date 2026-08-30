@@ -244,6 +244,43 @@ class TelegramUserClient:
         except Exception as exc:  # noqa: BLE001 - 已读失败不影响主流程
             self._logger.debug(f"标记已读失败: {exc}")
 
+    async def publish_to_channel(
+        self, channel: Any, text: str, *, silent: bool = False
+    ) -> Any:
+        """向频道发布一条消息。
+
+        不吞异常：发布失败要让上层知道，以便决定是否重试或退避。
+
+        Args:
+            channel: 频道实体或标识。
+            text: 正文。
+            silent: 是否静默发送（不给订阅者推送通知）。
+
+        Returns:
+            Any: Telethon 返回的消息对象。
+        """
+
+        return await self._client.send_message(channel, text, silent=silent)
+
+    async def forward_to_channel(
+        self, channel: Any, from_chat: Any, message_id: int
+    ) -> Any:
+        """把一条群消息原生转发到频道。
+
+        注意：原生转发会带 "Forwarded from"，等于公开消息来源。
+        调用方必须先确认来源是公开群。
+
+        Args:
+            channel: 目标频道。
+            from_chat: 来源会话。
+            message_id: 来源消息 ID。
+
+        Returns:
+            Any: Telethon 返回的消息对象。
+        """
+
+        return await self._client.forward_messages(channel, message_id, from_chat)
+
     async def send_reaction(
         self,
         entity: Any,
