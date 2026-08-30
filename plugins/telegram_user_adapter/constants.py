@@ -7,7 +7,7 @@ TELEGRAM_USER_GATEWAY_NAME = "telegram_user_gateway"
 PLATFORM_NAME = "telegram"
 
 # 配置结构版本
-SUPPORTED_CONFIG_VERSION = "0.1.0"
+SUPPORTED_CONFIG_VERSION = "0.2.0"
 
 # 默认名单模式
 DEFAULT_CHAT_LIST_TYPE = "whitelist"

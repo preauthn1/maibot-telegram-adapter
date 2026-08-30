@@ -12,6 +12,7 @@ import asyncio
 import base64
 import random
 
+from ..humanize import humanize_chat_text
 from ..telegram_user_client import TelegramUserClient
 from ..utils import estimate_typing_seconds, parse_topic_group_id
 
@@ -33,6 +34,21 @@ class TelegramUserOutboundCodec:
         self._typing_cps = 6.0
         self._min_think_delay = 0.8
         self._max_typing_delay = 12.0
+        self._enable_humanize = True
+        self._max_emoji = 1
+        self._presence: Any = None
+        self._last_typing_seconds = 0.0
+        self._last_humanize_rules: list[str] = []
+        self._last_original_text = ""
+
+    def set_presence_manager(self, presence: Any) -> None:
+        """注入在线状态管理器。
+
+        Args:
+            presence: :class:`PresenceManager` 实例；``None`` 表示不管理在线状态。
+        """
+
+        self._presence = presence
 
     def set_behavior(
         self,
@@ -41,6 +57,8 @@ class TelegramUserOutboundCodec:
         typing_cps: float,
         min_think_delay: float,
         max_typing_delay: float,
+        enable_humanize: bool = True,
+        max_emoji: int = 1,
     ) -> None:
         """配置拟人化发送行为。
 
@@ -49,12 +67,46 @@ class TelegramUserOutboundCodec:
             typing_cps: 每秒键入字符数。
             min_think_delay: 最小思考停顿。
             max_typing_delay: 最长打字时间。
+            enable_humanize: 是否启用中文拟人化改写。
+            max_emoji: 单条消息 emoji 上限。
         """
 
         self._simulate_typing = simulate_typing
         self._typing_cps = typing_cps
         self._min_think_delay = min_think_delay
         self._max_typing_delay = max_typing_delay
+        self._enable_humanize = enable_humanize
+        self._max_emoji = max_emoji
+
+    @property
+    def last_typing_seconds(self) -> float:
+        """最近一次发送的模拟打字总时长。
+
+        Returns:
+            float: 秒数。
+        """
+
+        return self._last_typing_seconds
+
+    @property
+    def last_humanize_rules(self) -> list[str]:
+        """最近一次发送命中的拟人化规则。
+
+        Returns:
+            list[str]: 规则名列表。
+        """
+
+        return list(self._last_humanize_rules)
+
+    @property
+    def last_original_text(self) -> str:
+        """最近一次发送在拟人化处理前的文本。
+
+        Returns:
+            str: 原始文本。
+        """
+
+        return self._last_original_text
 
     async def send_outbound_message(self, message: Dict[str, Any], route: Dict[str, Any]) -> Dict[str, Any]:
         """发送一条出站消息。
@@ -108,23 +160,37 @@ class TelegramUserOutboundCodec:
         if not payloads:
             return {"success": False, "error": "消息段为空"}
 
+        # 重置本次发送的观测指标。
+        self._last_typing_seconds = 0.0
+        self._last_humanize_rules = []
+        self._last_original_text = ""
+
+        # 只在真正要发言时上线（需求 10）。
+        if self._presence is not None:
+            await self._presence.go_online()
+
         last_sent: Any = None
         errors: List[str] = []
         sent_any = False
 
-        for seg in payloads:
-            if self._is_local_only_segment(seg):
-                continue
-            current_reply = reply_to if not sent_any else None
-            try:
-                sent = await self._send_segment(entity, seg, current_reply)
-            except Exception as exc:  # noqa: BLE001 - 单段失败不阻断其他段
-                errors.append(f"{seg.get('type', 'unknown')}: {exc}")
-                continue
-            if sent is None:
-                continue
-            sent_any = True
-            last_sent = sent
+        try:
+            for seg in payloads:
+                if self._is_local_only_segment(seg):
+                    continue
+                current_reply = reply_to if not sent_any else None
+                try:
+                    sent = await self._send_segment(entity, seg, current_reply)
+                except Exception as exc:  # noqa: BLE001 - 单段失败不阻断其他段
+                    errors.append(f"{seg.get('type', 'unknown')}: {exc}")
+                    continue
+                if sent is None:
+                    continue
+                sent_any = True
+                last_sent = sent
+        finally:
+            # 无论成功与否都安排下线，避免异常路径把账号永久挂在线上。
+            if self._presence is not None:
+                await self._presence.schedule_offline()
 
         if not sent_any:
             return {"success": False, "error": "; ".join(errors) or "所有消息段发送失败"}
@@ -152,6 +218,21 @@ class TelegramUserOutboundCodec:
             text = seg_data if isinstance(seg_data, str) else str(seg_data)
             if not text.strip():
                 return None
+
+            self._last_original_text = text
+            if self._enable_humanize:
+                humanized = humanize_chat_text(text, max_emoji=self._max_emoji)
+                if humanized.became_empty:
+                    # 整条都是助手腔，跳过发送。真人不会为了说话而说话。
+                    self._logger.info(f"跳过纯助手腔消息，不发送: {text!r}")
+                    return None
+                if humanized.changed:
+                    self._last_humanize_rules.extend(humanized.applied_rules)
+                    self._logger.debug(
+                        f"拟人化改写: {text!r} -> {humanized.text!r} 规则={humanized.applied_rules}"
+                    )
+                text = humanized.text
+
             await self._humanize_before_send(entity, len(text))
             return await self._tg.send_text(entity, text, reply_to=reply_to)
 
@@ -215,6 +296,7 @@ class TelegramUserOutboundCodec:
         )
         # 加入 ±20% 抖动，避免固定节奏被识别为脚本。
         delay *= random.uniform(0.8, 1.2)
+        self._last_typing_seconds += delay
 
         if self._simulate_typing:
             await self._tg.simulate_typing(entity, delay)

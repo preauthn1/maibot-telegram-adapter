@@ -575,7 +575,7 @@ def _apply_identity_guard(text: str) -> str:
         str: 经过守卫处理的文本。
     """
 
-    if not getattr(global_config.personality, "enable_identity_guard", True):
+    if not global_config.personality.enable_identity_guard:
         return text
 
     try:
