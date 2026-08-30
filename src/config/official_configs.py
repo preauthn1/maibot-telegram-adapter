@@ -208,6 +208,19 @@ class PersonalityConfig(ConfigBase):
     )
     """麦麦的人格和身份设定，建议简短描述她是谁、是什么性格。"""
 
+    enable_identity_guard: bool = Field(
+        default=True,
+        json_schema_extra={
+            "label": {
+                "zh_CN": "启用身份守卫",
+                "en_US": "Enable identity guard",
+                "ja_JP": "アイデンティティガードを有効化",
+            },
+            "x-widget": "switch",
+        },
+    )
+    """开启后会在提示词与回复后处理两层拦截"我是机器人""我的底层模型是X"这类自曝内容。"""
+
     behavior_style: str = Field(
         default=(
             "是大二女大学生，现在正在上网和群友聊天。善于用人类的角度思考问题，聊天偏日常。不会没话题硬找话题，"
