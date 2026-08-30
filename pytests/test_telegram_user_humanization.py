@@ -1,0 +1,481 @@
+"""Telegram 真人账号适配器拟人化组件测试。
+
+覆盖：
+- humanize：中文群聊改写（书面语、助手腔、markdown、emoji、标点）
+- send_queue：静默时段判定、优先级排序、全局串行
+- presence：按需上线 / 延迟下线
+- self_improvement：怀疑检测、经验累积、SOUL/SKILL 文件生成
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import asyncio
+import sys
+
+import pytest
+
+_PLUGIN_ROOT = Path(__file__).resolve().parents[1] / "plugins"
+if str(_PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_ROOT))
+
+from telegram_user_adapter.humanize import (  # noqa: E402
+    humanize_chat_text,
+    jitter,
+    should_reply_briefly,
+)
+from telegram_user_adapter.self_improvement import (  # noqa: E402
+    ChatOutcome,
+    SelfImprovementStore,
+    detect_suspicion,
+)
+from telegram_user_adapter.send_queue import (  # noqa: E402
+    PRIORITY_MENTION,
+    PRIORITY_NORMAL,
+    QuietHoursError,
+    SendQueue,
+    is_quiet_hours,
+    seconds_until_quiet_end,
+)
+
+_CN_TZ = timezone(timedelta(hours=8))
+
+
+class _StubLogger:
+    """测试用的静默日志器。"""
+
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def _record(self, msg: object) -> None:
+        self.messages.append(str(msg))
+
+    debug = _record
+    info = _record
+    warning = _record
+    error = _record
+
+
+# ---------------------------------------------------------------------------
+# humanize
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text, must_not_contain",
+    [
+        ("此外，我觉得这个挺好的", "此外"),
+        ("总的来说这事儿没啥问题", "总的来说"),
+        ("希望这些对你有帮助", "希望"),
+        ("好的，我这就去看看", "好的，"),
+        ("有什么可以帮你的吗？", "可以帮"),
+        ("**重点**是这个", "**"),
+        ("# 标题\n内容", "#"),
+        ("他说——其实没那么难", "——"),
+        ("我看了《三体》", "《"),
+        ("值得一提的是，这个功能很好用", "值得一提"),
+    ],
+)
+def test_humanize_removes_ai_markers(text: str, must_not_contain: str) -> None:
+    """书面语、助手腔、markdown、书面标点必须被清除。"""
+
+    result = humanize_chat_text(text)
+
+    assert must_not_contain not in result.text, f"{text!r} -> {result.text!r}"
+    assert result.changed
+
+
+def test_humanize_drops_trailing_period() -> None:
+    """句尾句号应被去掉，问号感叹号保留。"""
+
+    assert not humanize_chat_text("今天天气不错。").text.endswith("。")
+    assert humanize_chat_text("你去吗？").text.endswith("？")
+    assert humanize_chat_text("太强了！").text.endswith("！")
+
+
+def test_humanize_limits_emoji() -> None:
+    """emoji 数量应被限制，行首装饰 emoji 应删除。"""
+
+    result = humanize_chat_text("🚀 今天 😀 很好 🎉 真的 ✨", max_emoji=1)
+
+    assert not result.text.startswith("🚀")
+    emoji_count = sum(1 for ch in result.text if ord(ch) > 0x1F000)
+    assert emoji_count <= 1, result.text
+
+
+def test_humanize_pure_assistant_tone_is_dropped() -> None:
+    """整条都是助手腔时应标记为空，由调用方跳过发送。
+
+    退回原文是错误的：那等于把最糟糕的 AI 味原样发出去。
+    """
+
+    for text in ["好的。", "有什么可以帮你的吗？", "希望这些对你有帮助", "很高兴为您服务。"]:
+        result = humanize_chat_text(text)
+        assert result.became_empty, f"未标记为空: {text!r} -> {result.text!r}"
+        assert result.text == ""
+
+
+def test_humanize_keeps_content_alongside_assistant_tone() -> None:
+    """助手腔与真实内容混排时，应保留真实内容。"""
+
+    result = humanize_chat_text("好的，那个文件我放桌面上了")
+
+    assert not result.became_empty
+    assert "文件" in result.text
+    assert "桌面" in result.text
+    assert not result.text.startswith("好的")
+
+
+def test_humanize_preserves_normal_chat() -> None:
+    """正常口语内容不应被大幅改动。"""
+
+    text = "哈哈哈哈那你也太惨了吧"
+    result = humanize_chat_text(text)
+
+    assert result.text == text
+    assert not result.changed
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "有什么好吃的推荐吗",
+        "你有什么想法",
+        "这有什么难的",
+        "有啥事儿吗",
+        "帮我看看这个",
+        "谁能帮我一下",
+        "我帮你问问",
+        "有什么区别",
+        "有什么好玩的",
+        "今天有什么安排",
+    ],
+)
+def test_humanize_does_not_break_normal_questions(text: str) -> None:
+    """含"有什么/帮"的正常问句绝不能被误删。
+
+    助手腔规则必须精确锚定完整客服套话，泛匹配会把
+    "你有什么想法" 毁成 "你想法"。
+    """
+
+    result = humanize_chat_text(text)
+
+    assert not result.became_empty, f"正常问句被判空: {text!r}"
+    assert result.text == text, f"正常问句被改动: {text!r} -> {result.text!r}"
+
+
+def test_humanize_does_not_invent_content() -> None:
+    """拟人化只删不增，长度不应变长。"""
+
+    for text in ["此外，这个方案我觉得可行", "**注意**：明天开会", "希望对你有帮助"]:
+        result = humanize_chat_text(text)
+        assert len(result.text) <= len(text), f"{text!r} -> {result.text!r}"
+
+
+def test_should_reply_briefly() -> None:
+    """短消息应建议短回复。"""
+
+    assert should_reply_briefly("在吗")
+    assert not should_reply_briefly("我今天遇到一个特别复杂的问题想请教一下大家的看法")
+
+
+def test_jitter_stays_in_range() -> None:
+    """抖动结果应落在预期区间内且非负。"""
+
+    for _ in range(200):
+        value = jitter(10.0, ratio=0.25)
+        assert 7.5 <= value <= 12.5
+    assert jitter(0.0) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# 静默时段
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("hour, expected", [(2, False), (3, True), (5, True), (6, True), (7, False), (12, False), (23, False)])
+def test_quiet_hours_boundaries(hour: int, expected: bool) -> None:
+    """UTC+8 03:00-07:00 为静默时段，边界须精确。"""
+
+    now = datetime(2026, 8, 30, hour, 30, tzinfo=_CN_TZ)
+
+    assert is_quiet_hours(now) is expected
+
+
+def test_quiet_hours_uses_utc8_not_local() -> None:
+    """必须按 UTC+8 判定，而不是服务器本地时区。"""
+
+    # UTC 20:00 == UTC+8 次日 04:00，属于静默时段。
+    utc_now = datetime(2026, 8, 30, 20, 0, tzinfo=timezone.utc)
+
+    assert is_quiet_hours(utc_now) is True
+
+    # UTC 02:00 == UTC+8 10:00，不静默。
+    utc_now = datetime(2026, 8, 30, 2, 0, tzinfo=timezone.utc)
+
+    assert is_quiet_hours(utc_now) is False
+
+
+def test_seconds_until_quiet_end() -> None:
+    """剩余秒数计算应正确。"""
+
+    now = datetime(2026, 8, 30, 5, 0, tzinfo=_CN_TZ)
+
+    assert seconds_until_quiet_end(now, end_hour=7) == pytest.approx(2 * 3600)
+
+
+# ---------------------------------------------------------------------------
+# 发送队列
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_send_queue_serializes_globally() -> None:
+    """所有群共用一条通道，任何时刻只能有一条消息在发送。"""
+
+    queue = SendQueue(_StubLogger(), enable_quiet_hours=False, min_gap_seconds=0, max_gap_seconds=0)
+    queue.start()
+
+    concurrent = 0
+    max_concurrent = 0
+
+    async def _send(tag: str) -> str:
+        nonlocal concurrent, max_concurrent
+        concurrent += 1
+        max_concurrent = max(max_concurrent, concurrent)
+        await asyncio.sleep(0.02)
+        concurrent -= 1
+        return tag
+
+    try:
+        results = await asyncio.gather(
+            *(queue.submit(lambda t=f"g{i}": _send(t), label=f"g{i}") for i in range(6))
+        )
+    finally:
+        await queue.stop()
+
+    assert len(results) == 6
+    assert max_concurrent == 1, f"检测到并发发送: {max_concurrent}"
+
+
+@pytest.mark.asyncio
+async def test_send_queue_prioritizes_mentions() -> None:
+    """被 @ 的群应优先于普通群出队。"""
+
+    queue = SendQueue(_StubLogger(), enable_quiet_hours=False, min_gap_seconds=0, max_gap_seconds=0)
+    order: list[str] = []
+    blocker = asyncio.Event()
+
+    async def _record(tag: str) -> None:
+        order.append(tag)
+
+    async def _block() -> None:
+        await blocker.wait()
+
+    queue.start()
+    try:
+        # 先占住 worker，确保后续任务都堆在队列里再释放。
+        blocked = asyncio.create_task(queue.submit(_block, label="blocker"))
+        await asyncio.sleep(0.05)
+
+        normal_tasks = [
+            asyncio.create_task(
+                queue.submit(lambda t=f"normal{i}": _record(t), priority=PRIORITY_NORMAL, label=t)
+            )
+            for i, t in enumerate(["normal0", "normal1"])
+        ]
+        await asyncio.sleep(0.05)
+        mention = asyncio.create_task(
+            queue.submit(lambda: _record("mention"), priority=PRIORITY_MENTION, label="mention")
+        )
+        await asyncio.sleep(0.05)
+
+        blocker.set()
+        await asyncio.gather(blocked, mention, *normal_tasks)
+    finally:
+        await queue.stop()
+
+    assert order[0] == "mention", f"提及未获得优先: {order}"
+
+
+@pytest.mark.asyncio
+async def test_send_queue_rejects_during_quiet_hours(monkeypatch: pytest.MonkeyPatch) -> None:
+    """静默时段内提交必须被拒绝，且不执行发送。"""
+
+    queue = SendQueue(_StubLogger(), enable_quiet_hours=True)
+    queue.start()
+    monkeypatch.setattr(queue, "in_quiet_hours", lambda now=None: True)
+
+    called = False
+
+    async def _send() -> None:
+        nonlocal called
+        called = True
+
+    try:
+        with pytest.raises(QuietHoursError):
+            await queue.submit(_send, label="g1")
+    finally:
+        await queue.stop()
+
+    assert not called, "静默时段内不应执行发送"
+
+
+@pytest.mark.asyncio
+async def test_send_queue_propagates_errors() -> None:
+    """发送异常必须回传给调用方，由其决定静默处理。"""
+
+    queue = SendQueue(_StubLogger(), enable_quiet_hours=False, min_gap_seconds=0, max_gap_seconds=0)
+    queue.start()
+
+    async def _boom() -> None:
+        raise RuntimeError("API 挂了")
+
+    try:
+        with pytest.raises(RuntimeError, match="API 挂了"):
+            await queue.submit(_boom, label="g1")
+    finally:
+        await queue.stop()
+
+
+# ---------------------------------------------------------------------------
+# 自我改进
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "你是不是机器人",
+        "你是AI吧",
+        "这是个bot吧",
+        "你说话好像机器人",
+        "是不是人机",
+        "复读机",
+    ],
+)
+def test_detect_suspicion_positive(text: str) -> None:
+    """怀疑话术必须被识别。"""
+
+    assert detect_suspicion(text), text
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["今天天气不错", "你是南方人吗", "这个机器人展览挺好玩", "我是学AI的"],
+)
+def test_detect_suspicion_negative(text: str) -> None:
+    """正常内容不应被误判为怀疑。"""
+
+    assert not detect_suspicion(text), text
+
+
+@pytest.mark.asyncio
+async def test_self_improvement_creates_and_updates_files(tmp_path: Path) -> None:
+    """SOUL.md / SKILL.md 应被创建，并随反馈更新。"""
+
+    store = SelfImprovementStore(tmp_path, _StubLogger())
+
+    assert store.soul_path.exists()
+    assert store.skill_path.exists()
+
+    await store.record_outcome(ChatOutcome(chat_id="g1", text="今天挺累的", got_reply=True))
+    await store.record_outcome(
+        ChatOutcome(
+            chat_id="g1",
+            text="作为一个助手我建议你",
+            suspected=True,
+            suspicion_text="你是不是机器人",
+        )
+    )
+
+    skill_text = store.skill_path.read_text(encoding="utf-8")
+    assert "累计发言：2" in skill_text
+    assert "被怀疑是机器人：1" in skill_text
+    assert "作为一个助手我建议你" in skill_text
+    assert "你是不是机器人" in skill_text
+
+    stats = store.get_stats()
+    assert stats["total_messages"] == 2
+    assert stats["suspected"] == 1
+    assert stats["got_reply"] == 1
+
+
+@pytest.mark.asyncio
+async def test_self_improvement_prompt_block_warns_about_avoid_phrases(tmp_path: Path) -> None:
+    """被怀疑过的表达必须进入 prompt 警告块。"""
+
+    store = SelfImprovementStore(tmp_path, _StubLogger())
+    await store.record_outcome(
+        ChatOutcome(
+            chat_id="g1",
+            text="很高兴为您服务",
+            suspected=True,
+            suspicion_text="你是AI吧",
+        )
+    )
+
+    block = store.build_prompt_block()
+
+    assert "很高兴为您服务" in block
+    assert "不要再这么说" in block
+
+
+@pytest.mark.asyncio
+async def test_prompt_block_excludes_human_facing_meta_text(tmp_path: Path) -> None:
+    """SOUL.md 里写给人看的说明文字不得混进 prompt。
+
+    否则模型会把"这份文件描述本账号的身份"当成人设的一部分。
+    """
+
+    store = SelfImprovementStore(tmp_path, _StubLogger())
+    await store.record_outcome(ChatOutcome(chat_id="g1", text="嗯", got_reply=True))
+
+    block = store.build_prompt_block()
+
+    assert "这份文件" not in block
+    assert "你可以直接手工编辑" not in block
+    assert "句子短" in block, "真正的说话习惯应保留"
+
+
+@pytest.mark.asyncio
+async def test_prompt_experience_file_is_exported(tmp_path: Path) -> None:
+    """经验必须导出到主程序约定读取的文件。"""
+
+    store = SelfImprovementStore(tmp_path, _StubLogger())
+    await store.record_outcome(
+        ChatOutcome(
+            chat_id="g1",
+            text="有什么可以帮您的吗",
+            suspected=True,
+            suspicion_text="机器人吧",
+        )
+    )
+
+    exported = tmp_path / "prompt_experience.txt"
+
+    assert exported.is_file(), "未导出 prompt 经验文件"
+    assert "有什么可以帮您的吗" in exported.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_self_improvement_state_persists(tmp_path: Path) -> None:
+    """统计状态应跨实例持久化。"""
+
+    store = SelfImprovementStore(tmp_path, _StubLogger())
+    await store.record_outcome(ChatOutcome(chat_id="g1", text="test", got_reply=True))
+
+    reloaded = SelfImprovementStore(tmp_path, _StubLogger())
+
+    assert reloaded.get_stats()["total_messages"] == 1
+
+
+def test_self_improvement_disabled_is_noop(tmp_path: Path) -> None:
+    """关闭后不应创建任何文件。"""
+
+    store = SelfImprovementStore(tmp_path / "off", _StubLogger(), enabled=False)
+
+    assert not store.enabled
+    assert store.build_prompt_block() == ""
