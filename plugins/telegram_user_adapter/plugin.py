@@ -30,7 +30,7 @@ from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_N
 from .filters import TelegramUserChatFilter
 from .presence import PresenceManager
 from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion
-from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue
+from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
 
@@ -608,6 +608,25 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         session_key = self._resolve_inbound_session_key(message_dict, chat_id)
         incoming_text = message_dict.get("processed_plain_text", "") or ""
         is_mention = bool(message_dict.get("is_at"))
+
+        # 静默时段直接在入站侧丢弃，不喂给 Host。
+        #
+        # 静默检查原本只在出站闸门，导致消息照常触发完整 LLM 推理，
+        # 生成完回复才被丢掉（实测日志：SendService 发送失败 error=quiet_hours）。
+        # 白烧一次推理，还会把静默期的消息混进上下文，
+        # 让醒来后的第一句话像在回应几小时前的对话。
+        quiet = settings.quiet_hours
+        if quiet.enable and is_quiet_hours(
+            start_hour=quiet.start_hour, end_hour=quiet.end_hour
+        ):
+            self.ctx.logger.debug(f"静默时段内丢弃入站消息: session={session_key}")
+            if self._transcript is not None:
+                await self._transcript.log_event(
+                    chat_id=session_key,
+                    event="quiet_hours_inbound_drop",
+                    detail={"reason": "UTC+8 静默时段内不处理入站消息"},
+                )
+            return
 
         # NSFW 内容直接丢弃整条消息，不进上下文、不进 Host、不触发回复。
         # 必须在入站侧拦：一旦进了上下文，即使这轮不复述，也会带偏后续几轮的
