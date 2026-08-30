@@ -197,8 +197,11 @@ class TelegramUserInboundCodec:
         if getattr(message, "media", None) is None:
             return None
 
+        # 贴纸一概不读：贴纸的"语义"高度依赖图案本身，模型只能拿到
+        # 一个占位符，据此回复往往驴唇不对马嘴，反而暴露自己看不懂。
+        # 真人看不懂梗图时也常常直接不接话。
         if getattr(message, "sticker", None) is not None:
-            return await self._build_downloaded_segment(message, "sticker", "[贴纸]")
+            return None
         if getattr(message, "photo", None) is not None:
             return await self._build_downloaded_segment(message, "image", "[图片]")
         if getattr(message, "gif", None) is not None:
