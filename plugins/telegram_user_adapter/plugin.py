@@ -30,6 +30,7 @@ from .codecs.reactions import ReactionInfo, parse_reaction_update
 from .config import TelegramUserPluginSettings
 from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
+from .engagement import ChatEngagementTracker
 from .filters import TelegramUserChatFilter
 from .presence import PresenceManager
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
@@ -85,6 +86,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._consecutive_blocked_at: Dict[str, float] = {}
         # (会话键, 发送者ID) -> 最近消息时间戳，用于识别单人刷屏。
         self._user_message_times: Dict[tuple[str, str], List[float]] = {}
+        # 各群互动质量追踪，用于动态调整发言意愿。
+        self._engagement = ChatEngagementTracker()
 
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否登录。"""
@@ -375,6 +378,31 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             if candidate:
                 return str(candidate)
         return ""
+
+    async def _sync_engagement_multiplier(self, chat_id: str) -> None:
+        """把该会话的互动权重写回 Host 的发言频率调节槽。
+
+        Host 侧 ``_talk_frequency_adjust`` 会被 ``_get_effective_reply_frequency()``
+        直接乘进去，因此改这一个值即可影响所有下游阈值。
+
+        Args:
+            chat_id: 会话 ID。
+        """
+
+        multiplier = self._engagement.compute_multiplier(chat_id)
+        if not self._engagement.should_apply(chat_id, multiplier):
+            return
+
+        try:
+            await self.ctx.call_capability(
+                "frequency.set_adjust", chat_id=chat_id, value=multiplier
+            )
+        except Exception as exc:  # noqa: BLE001 - 能力调用失败不应影响消息处理
+            self.ctx.logger.warning(f"写回发言频率倍率失败: chat={chat_id} {exc}")
+            return
+
+        self._engagement.mark_applied(chat_id, multiplier)
+        self.ctx.logger.info(f"群权重已更新: chat={chat_id} 倍率={multiplier:.2f}")
 
     def _is_user_flooding(self, session_key: str, sender_id: str) -> bool:
         """判断某个用户是否在刷屏消耗 token。
@@ -885,7 +913,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         # 防刷 token：同一个人在窗口内引发过多回复时暂时不再理他，
         # 但不影响群里其他人正常对话。
-        if self._is_user_flooding(session_key, str(sender_id)):
+        # 只统计有实际文本的消息——贴纸、图片、空消息本来就不会触发
+        # LLM 推理，把它们计入配额会让正常用户被误限流。
+        if incoming_text.strip() and self._is_user_flooding(session_key, str(sender_id)):
             if self._transcript is not None:
                 await self._transcript.log_event(
                     chat_id=session_key,
@@ -901,6 +931,12 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if is_mention:
             # 需求 5：被 @ 或被回复时，该群下次发送享有最高优先级。
             self._recent_mentions[session_key] = time.monotonic()
+
+            # 被 @ 或被回复是最可靠的\"真实互动\"信号：记入群权重。
+            # 注意按人去重（tracker 内部对单用户设了计数上限），
+            # 一个人反复 @ 我们顶不高这个群的权重，防的就是刷 token。
+            self._engagement.record_engagement(session_key, str(sender_id))
+            await self._sync_engagement_multiplier(session_key)
 
         await self._record_inbound_feedback(session_key, incoming_text)
 
