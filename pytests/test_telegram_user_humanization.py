@@ -239,6 +239,27 @@ def test_empty_text_is_not_emoji_only() -> None:
     assert not is_emoji_only("   ")
 
 
+def test_quiet_hours_across_midnight() -> None:
+    """跨零点的静默区间（如 23:00-07:00）应正确判定。
+
+    实测事故：静默检查原本只在出站，消息照常触发完整 LLM 推理，
+    生成完回复才被丢弃（SendService error=quiet_hours），
+    白烧推理且污染上下文。现已在入站侧提前拦截，
+    该判定被更早、更频繁地调用，跨零点分支必须可靠。
+    """
+
+    from datetime import datetime, timedelta, timezone
+
+    tz = timezone(timedelta(hours=8))
+
+    def at(hour: int) -> datetime:
+        return datetime(2026, 8, 31, hour, tzinfo=tz)
+
+    assert is_quiet_hours(at(23), start_hour=23, end_hour=7)
+    assert is_quiet_hours(at(2), start_hour=23, end_hour=7)
+    assert not is_quiet_hours(at(8), start_hour=23, end_hour=7)
+
+
 # ---------------------------------------------------------------------------
 # 静默时段
 # ---------------------------------------------------------------------------
