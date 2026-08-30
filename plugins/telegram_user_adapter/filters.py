@@ -72,7 +72,14 @@ class TelegramUserChatFilter:
         if not chat_id:
             return True
 
-        if chat_config.group_list_type == "whitelist" and not self._id_matches(chat_id, chat_config.group_list):
+        # 需求：对所有群组都执行聊天行为。
+        # 空白名单表示"不限制"，而不是"全部拒绝"——否则默认配置下一个群都不会聊。
+        # 想只聊特定群时，把群号填进 group_list 即可。
+        if (
+            chat_config.group_list_type == "whitelist"
+            and chat_config.group_list
+            and not self._id_matches(chat_id, chat_config.group_list)
+        ):
             self._logger.debug(
                 f"群聊不在白名单中，消息被丢弃: chat_id={chat_id}, group_list={chat_config.group_list}"
             )
