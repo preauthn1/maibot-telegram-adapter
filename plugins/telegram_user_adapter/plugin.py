@@ -17,6 +17,7 @@ from typing import Any, ClassVar, Dict, Optional, cast
 
 import asyncio
 import contextlib
+import json
 import time
 
 from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase
@@ -24,6 +25,7 @@ from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase
 from .codecs import TelegramUserInboundCodec
 from .codecs.outbound import TelegramUserOutboundCodec
 from .config import TelegramUserPluginSettings
+from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
 from .filters import TelegramUserChatFilter
 from .presence import PresenceManager
@@ -380,6 +382,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             f"phone={getattr(me, 'phone', None)}"
         )
 
+        # 把账号资料写给主程序：prompt 需要知道"别人看到的我是谁"，
+        # 否则模型只能靠猜，实测出现过私聊里自称"群里的人"的破绽。
+        self._write_account_profile(me, self_username)
+
         # 登录后立刻置为离线，避免 Telethon 连接本身让账号显示在线（需求 10）。
         if behavior.online_only_when_chatting:
             self._presence = PresenceManager(
@@ -449,6 +455,38 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         self._stop_requested = False
         self._run_task = asyncio.create_task(self._run_loop(), name="telegram_user_adapter.run")
+
+    def _write_account_profile(self, me: Any, username: Optional[str]) -> None:
+        """把当前账号资料写给主程序，供 prompt 场景说明使用。
+
+        主程序运行在另一个进程，无法直接访问 Telethon 的 me 对象，
+        因此通过插件数据目录下的约定文件传递。
+
+        Args:
+            me: Telethon 返回的当前账号对象。
+            username: 账号用户名，可能为 ``None``。
+        """
+
+        first_name = getattr(me, "first_name", None) or ""
+        last_name = getattr(me, "last_name", None) or ""
+        display_name = f"{first_name} {last_name}".strip() or username or ""
+
+        profile = {
+            "platform": PLATFORM_NAME,
+            "user_id": str(getattr(me, "id", "")),
+            "username": username or "",
+            "display_name": display_name,
+        }
+
+        try:
+            path = self.ctx.paths.data_dir / "account_profile.json"
+            path.write_text(
+                json.dumps(profile, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            # 写不成只是少一段场景说明，不该影响登录与监听。
+            self.ctx.logger.warning(f"写入账号资料失败: {exc}")
 
     async def _stop_client(self) -> None:
         """停止监听并释放 Telegram 连接。"""
@@ -570,6 +608,23 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         session_key = self._resolve_inbound_session_key(message_dict, chat_id)
         incoming_text = message_dict.get("processed_plain_text", "") or ""
         is_mention = bool(message_dict.get("is_at"))
+
+        # NSFW 内容直接丢弃整条消息，不进上下文、不进 Host、不触发回复。
+        # 必须在入站侧拦：一旦进了上下文，即使这轮不复述，也会带偏后续几轮的
+        # 语气和话题走向，出站过滤堵不住这个口子。
+        is_nsfw, nsfw_hits = detect_nsfw(incoming_text)
+        if is_nsfw:
+            # 只记命中词到本地日志用于排查，绝不回显到聊天里。
+            self.ctx.logger.info(
+                f"检测到 NSFW 内容，已丢弃该条上下文: session={session_key} 命中={nsfw_hits}"
+            )
+            if self._transcript is not None:
+                await self._transcript.log_event(
+                    chat_id=session_key,
+                    event="nsfw_dropped",
+                    detail={"hits": nsfw_hits, "sender_id": str(sender_id)},
+                )
+            return
 
         self._last_inbound_at[session_key] = time.monotonic()
 

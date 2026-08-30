@@ -72,9 +72,13 @@ class TelegramUserChatFilter:
         if not chat_id:
             return True
 
-        # 需求：对所有群组都执行聊天行为。
+        # 总开关：关闭后不参与任何群聊，优先级高于名单。
+        if not chat_config.enable_group_chat:
+            self._logger.debug(f"群聊功能已关闭，消息被丢弃: chat_id={chat_id}")
+            return False
+
         # 空白名单表示"不限制"，而不是"全部拒绝"——否则默认配置下一个群都不会聊。
-        # 想只聊特定群时，把群号填进 group_list 即可。
+        # 想只聊特定群时，把群号填进 group_list 即可；想完全不聊群请关 enable_group_chat。
         if (
             chat_config.group_list_type == "whitelist"
             and chat_config.group_list

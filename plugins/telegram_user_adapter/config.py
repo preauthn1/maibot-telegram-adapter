@@ -323,40 +323,49 @@ class TelegramUserChatConfig(PluginConfigBase):
     __ui_label__: ClassVar[str] = "聊天过滤"
     __ui_order__: ClassVar[int] = 3
 
+    enable_group_chat: bool = Field(
+        default=True,
+        description="是否参与群聊。关闭后只处理私聊，忽略所有群消息。",
+        json_schema_extra={
+            "hint": "关闭后即使 group_list 填了群号也不会参与群聊。",
+            "label": "参与群聊",
+            "order": 0,
+        },
+    )
     group_list_type: Literal["whitelist", "blacklist"] = Field(
         default=DEFAULT_CHAT_LIST_TYPE,
         description="群聊名单模式。",
-        json_schema_extra={"label": "群聊名单模式", "order": 0},
+        json_schema_extra={"label": "群聊名单模式", "order": 1},
     )
     group_list: List[str] = Field(
         default_factory=list,
-        description="群聊名单中的 chat_id 列表。",
-        json_schema_extra={"label": "群聊名单", "order": 1, "placeholder": "请输入 chat_id"},
+        description="群聊名单中的 chat_id 列表。白名单模式下留空表示所有群。",
+        json_schema_extra={"label": "群聊名单", "order": 2, "placeholder": "请输入 chat_id"},
     )
     private_list_type: Literal["whitelist", "blacklist"] = Field(
         default=DEFAULT_CHAT_LIST_TYPE,
         description="私聊名单模式。",
-        json_schema_extra={"label": "私聊名单模式", "order": 2},
+        json_schema_extra={"label": "私聊名单模式", "order": 3},
     )
     private_list: List[str] = Field(
         default_factory=list,
         description="私聊名单中的用户 ID 列表。",
-        json_schema_extra={"label": "私聊名单", "order": 3, "placeholder": "请输入用户 ID"},
+        json_schema_extra={"label": "私聊名单", "order": 4, "placeholder": "请输入用户 ID"},
     )
     ban_user_id: List[str] = Field(
         default_factory=list,
         description="全局屏蔽的用户 ID 列表。",
-        json_schema_extra={"label": "全局屏蔽用户", "order": 4, "placeholder": "请输入用户 ID"},
+        json_schema_extra={"label": "全局屏蔽用户", "order": 5, "placeholder": "请输入用户 ID"},
     )
     ignore_bots: bool = Field(
         default=True,
         description="忽略其他机器人发来的消息。",
-        json_schema_extra={"label": "忽略机器人消息", "order": 5},
+        json_schema_extra={"label": "忽略机器人消息", "order": 6},
     )
     ignore_channels: bool = Field(
         default=True,
         description="忽略频道（channel）广播消息。",
-        json_schema_extra={"label": "忽略频道消息", "order": 6},
+        json_schema_extra={"label": "忽略频道消息", "order": 7},
     )
 
     @field_validator("group_list_type", "private_list_type", mode="before")

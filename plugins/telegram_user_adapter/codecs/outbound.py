@@ -12,7 +12,8 @@ import asyncio
 import base64
 import random
 
-from ..humanize import humanize_chat_text
+from ..content_safety import detect_nsfw
+from ..humanize import humanize_chat_text, is_emoji_only
 from ..telegram_user_client import TelegramUserClient
 from ..utils import estimate_typing_seconds, parse_topic_group_id
 
@@ -220,7 +221,21 @@ class TelegramUserOutboundCodec:
                 return None
 
             self._last_original_text = text
+
+            # NSFW 兜底：入站已经拦过一道，这里防的是模型自己生成露骨内容
+            # （被诱导、或人设漂移）。与 humanize 无关，因此不受其开关控制。
+            is_nsfw, nsfw_hits = detect_nsfw(text)
+            if is_nsfw:
+                self._logger.warning(f"出站内容命中 NSFW，已拦截不发送: 命中={nsfw_hits}")
+                return None
+
             if self._enable_humanize:
+                # 只有 emoji / 标点的回复一律不发：emoji 只能在句子里起辅助作用。
+                # 放在改写之前判断，避免改写把正常句子削成只剩 emoji 后误判。
+                if is_emoji_only(text):
+                    self._logger.info(f"跳过纯 emoji/标点回复，不发送: {text!r}")
+                    return None
+
                 humanized = humanize_chat_text(text, max_emoji=self._max_emoji)
                 if humanized.became_empty:
                     # 整条都是助手腔，跳过发送。真人不会为了说话而说话。
@@ -232,6 +247,11 @@ class TelegramUserOutboundCodec:
                         f"拟人化改写: {text!r} -> {humanized.text!r} 规则={humanized.applied_rules}"
                     )
                 text = humanized.text
+
+                # 改写后又变成纯 emoji 的，同样不发。
+                if is_emoji_only(text):
+                    self._logger.info(f"改写后仅剩 emoji，不发送: {text!r}")
+                    return None
 
             await self._humanize_before_send(entity, len(text))
             return await self._tg.send_text(entity, text, reply_to=reply_to)
@@ -251,15 +271,10 @@ class TelegramUserOutboundCodec:
             return None
 
         if seg_type in ("emoji", "sticker"):
-            if not binary_b64:
-                return None
-            await self._humanize_before_send(entity, 0)
-            return await self._tg.send_file(
-                entity,
-                base64.b64decode(binary_b64),
-                file_name="sticker.webp",
-                reply_to=reply_to,
-            )
+            # 一律不发贴纸/表情包：单独发一张贴纸等同于"只回一个 emoji"，
+            # 是没有信息量的敷衍回复。emoji 只应作为文字的辅助出现在句子里。
+            self._logger.info(f"跳过贴纸/表情包发送: seg_type={seg_type}")
+            return None
 
         if seg_type == "voice":
             if not binary_b64:
