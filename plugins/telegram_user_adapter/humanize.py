@@ -219,6 +219,31 @@ def _tidy(text: str) -> str:
     return text.strip()
 
 
+def is_emoji_only(text: str) -> bool:
+    """判断文本是否只由 emoji / 标点 / 空白构成。
+
+    需求：不允许只回一个（或一串）emoji。emoji 只能在句子里起辅助作用。
+
+    只发一个 emoji 是自动化账号最省事的"敷衍回复"，真人当然也会这么干，
+    但机器人这么干的频率高得多，而且往往出现在它没听懂的时候——
+    这恰恰是最容易露馅的场合。宁可不回。
+
+    Args:
+        text: 待判断文本。
+
+    Returns:
+        bool: 去掉 emoji、标点、空白后没有剩余内容时返回 ``True``。
+    """
+
+    if not text or not text.strip():
+        return False
+
+    residue = _EMOJI_PATTERN.sub("", text)
+    # 颜文字与纯标点回复（如 "..."、"？？"）同样属于无信息量的敷衍。
+    residue = re.sub(r"[\s\W_]+", "", residue, flags=re.UNICODE)
+    return not residue
+
+
 def humanize_chat_text(
     text: str,
     *,

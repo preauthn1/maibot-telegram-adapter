@@ -23,6 +23,7 @@ if str(_PLUGIN_ROOT) not in sys.path:
 
 from telegram_user_adapter.humanize import (  # noqa: E402
     humanize_chat_text,
+    is_emoji_only,
     jitter,
     should_reply_briefly,
 )
@@ -191,6 +192,51 @@ def test_jitter_stays_in_range() -> None:
         value = jitter(10.0, ratio=0.25)
         assert 7.5 <= value <= 12.5
     assert jitter(0.0) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# emoji 单独回复
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["😂", "😂😂😂", "👍", "🤣🤣", "  😅  ", "...", "？？", "。", "😂!!!", "🙏🙏🙏🙏"],
+)
+def test_emoji_only_replies_are_detected(text: str) -> None:
+    """纯 emoji / 纯标点回复必须被识别。
+
+    只回一个 emoji 是最省事的敷衍回复，而且往往出现在没听懂的时候，
+    正是最容易露馅的场合。
+    """
+
+    assert is_emoji_only(text), f"未识别为纯 emoji 回复: {text!r}"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "哈哈哈😂",
+        "😂 那你也太惨了",
+        "行吧👍我知道了",
+        "今天好累啊",
+        "哈哈哈哈哈",
+        "6",
+        "在",
+        "草",
+    ],
+)
+def test_sentences_with_emoji_are_allowed(text: str) -> None:
+    """emoji 作为句子辅助时必须放行，只有纯 emoji 才拦。"""
+
+    assert not is_emoji_only(text), f"误判为纯 emoji 回复: {text!r}"
+
+
+def test_empty_text_is_not_emoji_only() -> None:
+    """空文本走既有的空值分支，不归类为纯 emoji。"""
+
+    assert not is_emoji_only("")
+    assert not is_emoji_only("   ")
 
 
 # ---------------------------------------------------------------------------
@@ -567,6 +613,46 @@ def test_banned_user_blocked_even_in_open_group() -> None:
     config = TelegramUserChatConfig(ban_user_id=["12345"])
 
     assert not _check_group(config, "-1001234567890")
+
+
+def test_group_chat_can_be_disabled_entirely() -> None:
+    """总开关关闭后不参与任何群聊，优先级高于名单。
+
+    空名单被定义为"不限制"，因此需要独立开关才能完全退出群聊。
+    """
+
+    config = TelegramUserChatConfig(enable_group_chat=False)
+
+    assert not _check_group(config, "-1001234567890")
+    assert not _check_group(config, "-100987654321")
+
+
+def test_disabled_group_chat_overrides_explicit_whitelist() -> None:
+    """即使群号在白名单里，总开关关闭也不参与。"""
+
+    config = TelegramUserChatConfig(
+        enable_group_chat=False,
+        group_list_type="whitelist",
+        group_list=["-1001111111111"],
+    )
+
+    assert not _check_group(config, "-1001111111111")
+
+
+def test_disabling_group_chat_does_not_affect_private() -> None:
+    """关闭群聊不应影响白名单内的私聊。"""
+
+    config = TelegramUserChatConfig(enable_group_chat=False, private_list=["1000000002"])
+    allowed = TelegramUserChatFilter(_StubLogger()).check_allow(
+        config,
+        user_id="1000000002",
+        chat_id="1000000002",
+        is_private=True,
+        is_channel=False,
+        sender_is_bot=False,
+    )
+
+    assert allowed, "关闭群聊不应波及私聊"
 
 
 # ---------------------------------------------------------------------------
