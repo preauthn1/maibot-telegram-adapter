@@ -26,6 +26,9 @@ from telegram_user_adapter.humanize import (  # noqa: E402
     jitter,
     should_reply_briefly,
 )
+from telegram_user_adapter.config import TelegramUserChatConfig  # noqa: E402
+from telegram_user_adapter.filters import TelegramUserChatFilter  # noqa: E402
+from telegram_user_adapter.presence import PresenceManager  # noqa: E402
 from telegram_user_adapter.self_improvement import (  # noqa: E402
     ChatOutcome,
     SelfImprovementStore,
@@ -479,3 +482,170 @@ def test_self_improvement_disabled_is_noop(tmp_path: Path) -> None:
 
     assert not store.enabled
     assert store.build_prompt_block() == ""
+
+
+# ---------------------------------------------------------------------------
+# 聊天名单过滤
+# ---------------------------------------------------------------------------
+
+
+def _check_group(config: TelegramUserChatConfig, chat_id: str) -> bool:
+    """用给定配置判断某个群消息是否放行。
+
+    Args:
+        config: 聊天名单配置。
+        chat_id: 群 ID。
+
+    Returns:
+        bool: 放行返回 ``True``。
+    """
+
+    return TelegramUserChatFilter(_StubLogger()).check_allow(
+        config,
+        user_id="12345",
+        chat_id=chat_id,
+        is_private=False,
+        is_channel=False,
+        sender_is_bot=False,
+    )
+
+
+def test_default_config_chats_in_all_groups() -> None:
+    """默认配置必须对所有群放行。
+
+    需求要求"对所有群组都执行聊天行为"。若空白名单被当作
+    "全部拒绝"，默认配置下一个群都不会聊，功能等于没实现。
+    """
+
+    config = TelegramUserChatConfig()
+
+    assert _check_group(config, "-1001234567890"), "默认配置下群消息被丢弃"
+    assert _check_group(config, "-100987654321")
+
+
+def test_non_empty_whitelist_still_restricts() -> None:
+    """一旦填了白名单，就只聊名单内的群。"""
+
+    config = TelegramUserChatConfig(group_list_type="whitelist", group_list=["-1001111111111"])
+
+    assert _check_group(config, "-1001111111111")
+    assert not _check_group(config, "-1002222222222")
+
+
+def test_group_blacklist_blocks_listed_group() -> None:
+    """黑名单模式下应拦截名单内的群。"""
+
+    config = TelegramUserChatConfig(group_list_type="blacklist", group_list=["-1003333333333"])
+
+    assert not _check_group(config, "-1003333333333")
+    assert _check_group(config, "-1004444444444")
+
+
+def test_private_whitelist_stays_strict() -> None:
+    """私聊白名单保持严格：默认不回复陌生人私信。
+
+    需求只要求"所有群组"，私聊放开会让账号有求必应地回应任何陌生人，
+    这既不像真人，也是风控高危行为。
+    """
+
+    config = TelegramUserChatConfig()
+    allowed = TelegramUserChatFilter(_StubLogger()).check_allow(
+        config,
+        user_id="99999",
+        chat_id="99999",
+        is_private=True,
+        is_channel=False,
+        sender_is_bot=False,
+    )
+
+    assert not allowed, "默认不应回复未在白名单的私聊"
+
+
+def test_banned_user_blocked_even_in_open_group() -> None:
+    """全局黑名单用户即使在放开的群里也应被拦截。"""
+
+    config = TelegramUserChatConfig(ban_user_id=["12345"])
+
+    assert not _check_group(config, "-1001234567890")
+
+
+# ---------------------------------------------------------------------------
+# 在线状态
+# ---------------------------------------------------------------------------
+
+
+class _FakeTelethonClient:
+    """记录 UpdateStatusRequest 调用的假 Telethon client。"""
+
+    def __init__(self) -> None:
+        self.calls: list[bool] = []
+
+    async def __call__(self, request: object) -> bool:
+        self.calls.append(bool(request.offline))
+        return True
+
+
+class _FakeTgClient:
+    """只暴露 client 属性的假 TelegramUserClient。"""
+
+    def __init__(self) -> None:
+        self.client = _FakeTelethonClient()
+
+
+@pytest.mark.asyncio
+async def test_presence_reports_online_then_offline() -> None:
+    """应先上报在线，最终上报离线。"""
+
+    tg = _FakeTgClient()
+    presence = PresenceManager(tg, _StubLogger())
+
+    await presence.go_online()
+    assert presence.is_online
+    assert tg.client.calls == [False]
+
+    await presence.force_offline()
+    assert not presence.is_online
+    assert tg.client.calls == [False, True]
+
+
+@pytest.mark.asyncio
+async def test_presence_deduplicates_repeated_online() -> None:
+    """重复上线不应重复上报，避免状态抖动被识别。"""
+
+    tg = _FakeTgClient()
+    presence = PresenceManager(tg, _StubLogger())
+
+    await presence.go_online()
+    await presence.go_online()
+    await presence.go_online()
+
+    assert len(tg.client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_presence_survives_inverted_linger_config() -> None:
+    """linger_min > linger_max 属于配置错误，但不能让发送流程崩溃。"""
+
+    tg = _FakeTgClient()
+    presence = PresenceManager(tg, _StubLogger(), linger_min=15.0, linger_max=4.0)
+
+    await presence.go_online()
+    await presence.schedule_offline()
+    await presence.force_offline()
+
+    assert not presence.is_online
+
+
+@pytest.mark.asyncio
+async def test_presence_handles_missing_client() -> None:
+    """client 尚未建立时不应抛异常。"""
+
+    class _NoClient:
+        client = None
+
+    presence = PresenceManager(_NoClient(), _StubLogger())
+
+    await presence.go_online()
+    await presence.force_offline()
+
+    assert not presence.is_online
