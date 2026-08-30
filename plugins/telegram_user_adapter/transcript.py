@@ -152,6 +152,7 @@ class ChatTranscriptLogger:
         priority: int,
         humanize_rules: Optional[list[str]] = None,
         identity_guard_triggered: bool = False,
+        reply_is_quote: bool = False,
     ) -> None:
         """记录一条已发出的消息及其拟人化决策。
 
@@ -185,6 +186,9 @@ class ChatTranscriptLogger:
                 "priority": priority,
                 "humanize_rules": humanize_rules or [],
                 "identity_guard_triggered": identity_guard_triggered,
+                # 是否带引用。用于验证引用降频是否真的生效——
+                # 条条引用是机器人最明显的特征之一。
+                "reply_is_quote": reply_is_quote,
             },
         )
 

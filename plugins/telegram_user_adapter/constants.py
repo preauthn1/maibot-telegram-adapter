@@ -8,7 +8,7 @@ PLATFORM_NAME = "telegram"
 
 # 配置结构版本
 # 0.2.0 -> 0.3.0：新增 chat.enable_group_chat 开关；quiet_hours.enable 默认改为关闭。
-SUPPORTED_CONFIG_VERSION = "0.3.0"
+SUPPORTED_CONFIG_VERSION = "0.5.0"
 
 # 默认名单模式
 DEFAULT_CHAT_LIST_TYPE = "whitelist"

@@ -19,10 +19,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import asyncio
 import json
@@ -40,9 +40,18 @@ _SUSPICION_PATTERNS = (
     r"图灵测试",
     r"复读机",
     r"(?:自动)?(?:回复|发言)(?:机|脚本|程序)",
+    # 最短形式的质疑：单独一个 "ai?" / "bot?" / "机器人?"。
+    # 线上真实翻车样本就是一句 "ai？" —— 原有规则要求前后文，全部漏掉。
+    r"^\s*(?:ai|bot|gpt|人机|机器人)\s*[?？]+\s*$",
+    r"^\s*(?:ai|bot|gpt|人机|机器人)\s*[吧吗么]\s*[?？]*\s*$",
+    r"(?:是|像)(?:个)?(?:ai|bot|gpt)(?:\b|吧|吗|么|$)",
+    r"(?:机器人|人机)(?:吧|吗|么|哦|啊)?$",
+    r"(?:chatgpt|大模型|语言模型|prompt)",
+    r"(?:回复|说话)(?:太|好|真)?(?:快|标准|规整)",
 )
 
-_COMPILED_SUSPICION = tuple(re.compile(p) for p in _SUSPICION_PATTERNS)
+# 大小写不敏感：线上真实样本里 "AI?" 与 "ai？" 都出现过。
+_COMPILED_SUSPICION = tuple(re.compile(p, re.IGNORECASE) for p in _SUSPICION_PATTERNS)
 
 _SOUL_HEADER = """# SOUL.md — 我是谁
 
@@ -75,6 +84,50 @@ def detect_suspicion(text: str) -> bool:
     return any(pattern.search(normalized) for pattern in _COMPILED_SUSPICION)
 
 
+# 出站自省：我们**自己**说出口的话里不该出现的东西。
+# 这与 content_safety 的入站过滤是两回事——入站拦别人发来的脏东西，
+# 这里拦的是\"我被带偏了/我怼人了\"，属于事后自省，用于沉淀教训。
+_SELF_AGGRESSIVE: Tuple[str, ...] = (
+    "sb", "傻逼", "煞笔", "你妈", "滚", "蠢货", "闭嘴",
+    "智障", "弱智", "废物", "神经病", "有病吧", "垃圾",
+    "急了", "破防", "你才",
+)
+
+# 顺着 NSFW 话题接话的迹象。真人会岔开或不接，机器人容易被带跑。
+_SELF_NSFW_FOLLOWUP: Tuple[str, ...] = (
+    "裸", "脱光", "开房", "约炮", "一夜情", "色情", "黄片",
+)
+
+
+def inspect_own_message(text: str) -> Tuple[str, List[str]]:
+    """自省一条**我们自己发出**的消息是否越界。
+
+    人设改了不代表模型永远守规矩；把越界的话记下来，
+    才能在 prompt 经验里回灌\"这句翻过车\"，形成闭环。
+
+    Args:
+        text: 我们发出的文本。
+
+    Returns:
+        Tuple[str, List[str]]: ``(问题类型, 命中词列表)``。
+            问题类型为空串表示没发现问题。
+    """
+
+    normalized = (text or "").strip().lower()
+    if not normalized:
+        return "", []
+
+    aggressive = [w for w in _SELF_AGGRESSIVE if w in normalized]
+    if aggressive:
+        return "aggressive", aggressive
+
+    nsfw = [w for w in _SELF_NSFW_FOLLOWUP if w in normalized]
+    if nsfw:
+        return "nsfw_followup", nsfw
+
+    return "", []
+
+
 @dataclass
 class ChatOutcome:
     """一次发言的效果反馈。"""
@@ -93,6 +146,12 @@ class ChatOutcome:
 
     suspicion_text: str = ""
     """触发怀疑的对方原话。"""
+
+    violation_kind: str = ""
+    """自省发现的问题类型，例如 ``aggressive`` / ``nsfw_followup``。空串表示没问题。"""
+
+    violation_hits: List[str] = field(default_factory=list)
+    """触发自省的具体命中词，仅用于本地复盘，绝不回显到聊天。"""
 
 
 class SelfImprovementStore:
@@ -223,6 +282,35 @@ class SelfImprovementStore:
         async with self._lock:
             self._state["total_messages"] = int(self._state.get("total_messages", 0)) + 1
 
+            if outcome.violation_kind:
+                # 自省命中：这是最该记住的一类教训——不是\"别人怀疑我\"，
+                # 而是\"我自己说错了\"。计数、留样本，并写进要避免的表达。
+                key = f"violation_{outcome.violation_kind}"
+                self._state[key] = int(self._state.get(key, 0)) + 1
+
+                violations: List[Dict[str, str]] = list(self._state.get("violation_samples", []))
+                violations.append(
+                    {
+                        "ts": datetime.now(_CN_TZ).isoformat(),
+                        "chat_id": outcome.chat_id,
+                        "kind": outcome.violation_kind,
+                        "our_text": outcome.text[:200],
+                        "hits": ",".join(outcome.violation_hits[:5]),
+                    }
+                )
+                self._state["violation_samples"] = violations[-50:]
+
+                avoid_v: List[str] = list(self._state.get("avoid_phrases", []))
+                snippet_v = outcome.text.strip()[:60]
+                if snippet_v and snippet_v not in avoid_v:
+                    avoid_v.append(snippet_v)
+                self._state["avoid_phrases"] = avoid_v[-30:]
+
+                self._logger.warning(
+                    f"⚠️ 自省发现越界发言 kind={outcome.violation_kind} "
+                    f"chat_id={outcome.chat_id} 内容={outcome.text[:60]!r}"
+                )
+
             if outcome.suspected:
                 self._state["suspected"] = int(self._state.get("suspected", 0)) + 1
                 samples: List[Dict[str, str]] = list(self._state.get("suspicion_samples", []))
@@ -340,6 +428,24 @@ class SelfImprovementStore:
             sections.append(
                 "【以下表达曾被人怀疑不是真人，绝对不要再这么说】\n" + avoid_lines
             )
+
+        # 自省教训单独成段：这些不是\"像不像真人\"的问题，而是\"说错话\"的问题，
+        # 混在一起会稀释警示强度。
+        violations = list(self._state.get("violation_samples", []))
+        if violations:
+            recent = violations[-5:]
+            aggressive = [v for v in recent if v.get("kind") == "aggressive"]
+            nsfw = [v for v in recent if v.get("kind") == "nsfw_followup"]
+
+            lines: List[str] = []
+            if aggressive:
+                lines.append("你曾经说过这些带攻击性的话，翻过车，不要再犯：")
+                lines.extend(f"- {v.get('our_text', '')[:50]}" for v in aggressive)
+            if nsfw:
+                lines.append("你曾经顺着下流话题接话，这是被带偏了。遇到这类内容要岔开或不接：")
+                lines.extend(f"- {v.get('our_text', '')[:50]}" for v in nsfw)
+            if lines:
+                sections.append("【我犯过的错】\n" + "\n".join(lines))
 
         if not sections:
             return ""
