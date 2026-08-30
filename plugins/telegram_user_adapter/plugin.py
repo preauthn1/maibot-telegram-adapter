@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import Any, ClassVar, Dict, Optional, cast
 
 import asyncio
@@ -24,6 +25,7 @@ from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase
 
 from .codecs import TelegramUserInboundCodec
 from .codecs.outbound import TelegramUserOutboundCodec
+from .codecs.reactions import ReactionInfo, parse_reaction_update
 from .config import TelegramUserPluginSettings
 from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
@@ -33,6 +35,7 @@ from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicio
 from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
+from .utils import parse_topic_group_id
 
 
 class TelegramUserAdapterPlugin(MaiBotPlugin):
@@ -64,6 +67,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._last_outbound_text: Dict[str, str] = {}
         # chat_id -> 我们最近发言后是否已有人接话。
         self._pending_outcome: Dict[str, asyncio.Task[None]] = {}
+        # (原始chat_id:int, 消息id:int) -> (会话键, 消息摘要)，用于把\"别人给我发的
+        # 消息点了表情\"匹配回具体会话与内容。用有界 OrderedDict 防止长期泄漏。
+        self._sent_messages: "OrderedDict[tuple[int, int], tuple[str, str]]" = OrderedDict()
 
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否登录。"""
@@ -215,7 +221,46 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 发言后清除该群的提及标记，避免长期占用高优先级。
         self._recent_mentions.pop(chat_id, None)
 
+        # 记录本账号发出的消息，供表情回应匹配回具体会话与内容。
+        self._remember_sent_message(chat_id, result.get("external_message_id"), sent_text)
+
         self._schedule_outcome_check(chat_id, sent_text)
+
+    def _remember_sent_message(
+        self, session_key: str, external_message_id: Any, sent_text: str
+    ) -> None:
+        """记录一条本账号发出的消息，用于后续表情回应匹配。
+
+        表情回应更新只带原始 chat_id（不含 topic 后缀）与消息 ID，因此这里
+        把会话键还原成原始 chat_id 再入表，键为 ``(原始chat_id, 消息id)``。
+
+        Args:
+            session_key: 出站会话键（群聊为含 topic 的虚拟 group_id）。
+            external_message_id: Telethon 返回的消息 ID。
+            sent_text: 消息摘要文本。
+        """
+
+        settings = self._load_settings()
+        if not settings.behavior.receive_reactions:
+            return
+
+        message_id = self._safe_int(external_message_id)
+        if message_id is None:
+            return
+
+        raw_chat_id_str, _ = parse_topic_group_id(session_key)
+        raw_chat_id = self._safe_int(raw_chat_id_str)
+        if raw_chat_id is None:
+            return
+
+        key = (raw_chat_id, message_id)
+        # 更新已有键要移到末尾，保证 LRU 语义。
+        self._sent_messages.pop(key, None)
+        self._sent_messages[key] = (session_key, sent_text)
+
+        # 有界保存：只留最近 500 条自发消息的表情匹配窗口，防止内存无限增长。
+        while len(self._sent_messages) > 500:
+            self._sent_messages.popitem(last=False)
 
     def _schedule_outcome_check(self, chat_id: str, sent_text: str) -> None:
         """安排一次"有没有人接话"的判定。
@@ -313,6 +358,24 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             if isinstance(seg, dict) and seg.get("type") == "text" and isinstance(seg.get("data"), str)
         ]
         return "".join(parts)
+
+    @staticmethod
+    def _safe_int(value: Any) -> Optional[int]:
+        """把值安全转换为整数。
+
+        Args:
+            value: 待转换的值。
+
+        Returns:
+            Optional[int]: 转换成功返回整数；无法转换时返回 ``None``。
+        """
+
+        if value is None:
+            return None
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
 
     def _load_settings(self) -> TelegramUserPluginSettings:
         """读取当前插件配置。
@@ -446,6 +509,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             incoming_only=behavior.ignore_outgoing_from_other_devices,
         )
 
+        # 表情回应走 raw MTProto 更新，NewMessage 事件覆盖不到。
+        if behavior.receive_reactions:
+            from telethon.tl import types as _tl_types
+
+            self._tg_client.add_raw_update_handler(
+                self._on_reaction_update,
+                _tl_types.UpdateMessageReactions,
+            )
+
         await self.ctx.gateway.update_state(
             gateway_name=TELEGRAM_USER_GATEWAY_NAME,
             ready=True,
@@ -535,6 +607,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._recent_mentions.clear()
         self._last_inbound_at.clear()
         self._last_outbound_text.clear()
+        self._sent_messages.clear()
 
     async def _run_loop(self) -> None:
         """保持 Telethon 事件循环运行直到断开。"""
@@ -680,6 +753,87 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             )
         except Exception as exc:  # noqa: BLE001 - 路由失败需要暴露具体消息
             self.ctx.logger.error(f"Telegram 消息路由到 Host 失败: {exc}")
+
+    async def _on_reaction_update(self, update: Any) -> None:
+        """处理一条表情回应更新。
+
+        只把「别人给我发的消息点了表情」写进上下文，让麦麦知道自己刚才那句话
+        收到了什么反馈。**不走 route_message**：表情不是一条待回复的消息，
+        走入站路由会触发一次完整 LLM 推理并可能主动接话，真人不会因为别人点了
+        个赞就再冒一句。
+
+        Args:
+            update: Telethon 原始 MTProto Update 对象。
+        """
+
+        settings = self._load_settings()
+        if not settings.behavior.receive_reactions:
+            return
+
+        info = parse_reaction_update(update)
+        if info is None:
+            return
+
+        # 只认自己发出去的消息；别人之间互相点表情与我无关。
+        remembered = self._sent_messages.get((info.chat_id, info.message_id))
+        if remembered is None:
+            return
+
+        session_key, sent_text = remembered
+
+        # 自己给自己点的表情不算反馈，否则会把自己的动作当成别人的回应。
+        reactor_ids = [rid for rid in info.reactor_ids if rid != self._self_account_id]
+        if info.reactor_ids and not reactor_ids:
+            return
+
+        visible_text = self._build_reaction_text(info, sent_text, reactor_ids)
+
+        if self._transcript is not None:
+            await self._transcript.log_event(
+                chat_id=session_key,
+                event="reaction_received",
+                detail={
+                    "message_id": info.message_id,
+                    "emojis": info.emojis,
+                    "reactor_ids": reactor_ids,
+                },
+            )
+
+        try:
+            await self.ctx.maisaka.context.append(
+                stream_id=session_key,
+                segments=[{"type": "text", "data": visible_text}],
+                visible_text=visible_text,
+                source_kind="telegram_reaction",
+            )
+        except Exception as exc:  # noqa: BLE001 - 上下文注入失败需要暴露具体原因
+            self.ctx.logger.error(f"表情回应写入上下文失败: {exc}")
+
+    @staticmethod
+    def _build_reaction_text(
+        info: ReactionInfo, sent_text: str, reactor_ids: list[str]
+    ) -> str:
+        """把表情回应渲染成一句上下文可读的中文描述。
+
+        Args:
+            info: 表情回应解析结果。
+            sent_text: 被点表情的那条自发消息内容。
+            reactor_ids: 点表情的用户 ID（已剔除自己）。
+
+        Returns:
+            str: 供上下文阅读的描述文本。
+        """
+
+        # 消息太长会淹没上下文，这里只保留开头一小段用于定位是哪句话。
+        quoted = sent_text.strip().replace("\n", " ")
+        if len(quoted) > 30:
+            quoted = f"{quoted[:30]}…"
+
+        emojis = " ".join(info.emojis)
+        who = f"<{reactor_ids[0]}>" if len(reactor_ids) == 1 else "有人"
+        if quoted:
+            return f"[{who} 给你刚才说的「{quoted}」点了 {emojis}]"
+        return f"[{who} 给你刚才发的消息点了 {emojis}]"
 
     async def _record_inbound_feedback(self, session_key: str, incoming_text: str) -> None:
         """把入站消息作为上一次发言的效果反馈。
