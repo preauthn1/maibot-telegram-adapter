@@ -18,7 +18,7 @@ from src.common.data_models.llm_service_data_models import LLMResponseResult
 from src.common.data_models.message_component_data_model import DictComponent, MessageSequence
 from src.common.logger import get_logger
 from src.common.prompt_i18n import load_prompt
-from src.config.config import global_config
+from src.config.config import config_manager, global_config
 from src.llm_models.payload_content.context_item import (
     AssistantMessageItem,
     ContextImagePart,
@@ -685,6 +685,15 @@ async def _build_recall_cue_embeddings(
 ) -> list[dict[str, Any]]:
     normalized_cues = _normalize_recall_cues(list(recall_cues))
     if not normalized_cues:
+        return []
+
+    # DeepSeek 当前公开的 v4-flash / v4-pro / vision 都是对话模型，
+    # 不能拿来冒充 embedding。bge-m3 已由用户修复并经真实 embeddings
+    # 请求验证可用，因此这里按配置正常走向量召回；若后续主动清空
+    # embedding 模型列表，仍保留文字摘要而不让整次回想失败。
+    model_config = config_manager.get_model_config()
+    if not model_config.model_task_config.embedding.model_list:
+        logger.info(f"[{session_id}] 未配置 embedding 模型，聊天回想仅保存文字摘要")
         return []
 
     from src.services.embedding_service import EmbeddingServiceClient
