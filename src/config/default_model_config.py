@@ -27,7 +27,7 @@ DEFAULT_TASK_CONFIG_TEMPLATES: dict[str, dict[str, Any]] = {
         "hard_timeout": 120.0,
     },
     "memory": {
-        "model_list": [],
+        "model_list": ["deepseek-v4-pro"],
         "max_tokens": 8192,
         "temperature": 0.5,
         "slow_threshold": 30.0,
@@ -35,7 +35,7 @@ DEFAULT_TASK_CONFIG_TEMPLATES: dict[str, dict[str, Any]] = {
         "hard_timeout": 240.0,
     },
     "mid_memory": {
-        "model_list": [],
+        "model_list": ["deepseek-v4-pro"],
         "max_tokens": 8000,
         "temperature": 0.7,
         "slow_threshold": 12.0,
@@ -43,7 +43,7 @@ DEFAULT_TASK_CONFIG_TEMPLATES: dict[str, dict[str, Any]] = {
         "hard_timeout": 180.0,
     },
     "replyer": {
-        "model_list": ["deepseek-v4-pro-think", "deepseek-v4-pro-nonthink"],
+        "model_list": ["deepseek-v4-pro"],
         "max_tokens": 4096,
         "temperature": 1,
         "slow_threshold": 120.0,
@@ -58,32 +58,23 @@ DEFAULT_TASK_CONFIG_TEMPLATES: dict[str, dict[str, Any]] = {
         "selection_strategy": "random",
         "hard_timeout": 180.0,
     },
-    "learner": {"model_list": [], "max_tokens": 4096, "hard_timeout": 120.0},
-    "expression_use": {"model_list": [], "max_tokens": 1024, "temperature": 0.3, "hard_timeout": 120.0},
-    "emoji": {"model_list": [], "max_tokens": 4096, "hard_timeout": 120.0},
-    "vlm": {"model_list": [], "max_tokens": 4096, "hard_timeout": 240.0},
+    "learner": {"model_list": ["deepseek-v4-flash"], "max_tokens": 4096, "hard_timeout": 120.0},
+    "expression_use": {"model_list": ["deepseek-v4-flash"], "max_tokens": 1024, "temperature": 0.3, "hard_timeout": 120.0},
+    "emoji": {"model_list": ["deepseek-v4-flash"], "max_tokens": 4096, "hard_timeout": 120.0},
+    "vlm": {"model_list": ["deepseek-v4-flash-vision-exp"], "max_tokens": 4096, "hard_timeout": 240.0},
     "voice": {"model_list": [], "max_tokens": 4096, "hard_timeout": 120.0},
-    "embedding": {"model_list": [], "max_tokens": 4096, "hard_timeout": 60.0},
+    "embedding": {"model_list": ["bge-m3"], "max_tokens": 4096, "hard_timeout": 60.0},
 }
 
 DEFAULT_MODEL_TEMPLATES: list[dict[str, Any]] = [
     {
         "model_identifier": "deepseek-v4-pro",
-        "name": "deepseek-v4-pro-think",
+        "name": "deepseek-v4-pro",
         "api_provider": "DeepSeek",
         "price_in": 12.0,
         "price_out": 24.0,
         "visual": False,
         "extra_params": {"thinking": {"type": "enabled"}, "reasoning_effort": "high"},
-    },
-    {
-        "model_identifier": "deepseek-v4-pro",
-        "name": "deepseek-v4-pro-nonthink",
-        "api_provider": "DeepSeek",
-        "price_in": 12.0,
-        "price_out": 24.0,
-        "visual": False,
-        "extra_params": {"thinking": {"type": "disabled"}},
     },
     {
         "model_identifier": "deepseek-v4-flash",
@@ -93,6 +84,24 @@ DEFAULT_MODEL_TEMPLATES: list[dict[str, Any]] = [
         "price_out": 2.0,
         "visual": False,
         "extra_params": {"thinking": {"type": "disabled"}},
+    },
+    {
+        "model_identifier": "deepseek-v4-flash-vision-exp",
+        "name": "deepseek-v4-flash-vision-exp",
+        "api_provider": "DeepSeek",
+        "price_in": 1.0,
+        "price_out": 2.0,
+        "visual": True,
+        "extra_params": {"thinking": {"type": "disabled"}},
+    },
+    {
+        "model_identifier": "bge-m3",
+        "name": "bge-m3",
+        "api_provider": "WKAI",
+        "price_in": 0.0,
+        "price_out": 0.0,
+        "visual": False,
+        "extra_params": {},
     },
 ]
 
