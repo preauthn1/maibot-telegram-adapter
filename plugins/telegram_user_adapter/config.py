@@ -214,6 +214,15 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         description="单条消息允许保留的 emoji 数量。",
         json_schema_extra={"label": "单条消息 emoji 上限", "order": 16},
     )
+    receive_reactions: bool = Field(
+        default=True,
+        description="接收他人对自己消息的表情回应，作为上下文注入（不会触发回复）。让麦麦感知到\"有人给我点了❤️\"这类互动。",
+        json_schema_extra={
+            "hint": "只把表情回应加入上下文，不会因此主动发言。",
+            "label": "接收表情回应",
+            "order": 17,
+        },
+    )
 
     @field_validator(
         "typing_chars_per_second",
@@ -256,8 +265,8 @@ class TelegramUserQuietHoursConfig(PluginConfigBase):
     __ui_order__: ClassVar[int] = 4
 
     enable: bool = Field(
-        default=True,
-        description="启用静默时段，期间不发送任何消息。",
+        default=False,
+        description="启用静默时段，期间不发送任何消息、也不处理入站消息。默认关闭：真人账号全天在线更自然，深夜也可能被 @ 后即时回应。",
         json_schema_extra={"label": "启用静默时段", "order": 0},
     )
     start_hour: int = Field(
