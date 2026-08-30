@@ -175,6 +175,45 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         description="单个媒体文件的下载大小上限（MB），超过则只保留文本占位。",
         json_schema_extra={"label": "媒体大小上限（MB）", "order": 9},
     )
+    online_only_when_chatting: bool = Field(
+        default=True,
+        description="只在发言时上线，发完后延迟下线。关闭则始终不主动上报在线状态。",
+        json_schema_extra={
+            "hint": "一直挂在线是自动化最明显的特征之一。",
+            "label": "仅聊天时上线",
+            "order": 10,
+        },
+    )
+    online_linger_min: float = Field(
+        default=4.0,
+        description="发言后保持在线的最短秒数。",
+        json_schema_extra={"label": "发言后在线最短时长（秒）", "order": 11},
+    )
+    online_linger_max: float = Field(
+        default=15.0,
+        description="发言后保持在线的最长秒数。",
+        json_schema_extra={"label": "发言后在线最长时长（秒）", "order": 12},
+    )
+    min_send_gap: float = Field(
+        default=1.5,
+        description="两条消息之间的最小间隔秒数（全局串行队列生效）。",
+        json_schema_extra={"label": "消息最小间隔（秒）", "order": 13},
+    )
+    max_send_gap: float = Field(
+        default=6.0,
+        description="两条消息之间的最大间隔秒数。",
+        json_schema_extra={"label": "消息最大间隔（秒）", "order": 14},
+    )
+    enable_humanize: bool = Field(
+        default=True,
+        description="启用中文群聊拟人化改写：去掉书面语、助手腔、markdown、多余 emoji。",
+        json_schema_extra={"label": "启用拟人化改写", "order": 15},
+    )
+    max_emoji_per_message: int = Field(
+        default=1,
+        description="单条消息允许保留的 emoji 数量。",
+        json_schema_extra={"label": "单条消息 emoji 上限", "order": 16},
+    )
 
     @field_validator(
         "typing_chars_per_second",
@@ -182,6 +221,10 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         "max_typing_delay",
         "read_delay",
         "max_media_size_mb",
+        "online_linger_min",
+        "online_linger_max",
+        "min_send_gap",
+        "max_send_gap",
         mode="before",
     )
     @classmethod
@@ -193,6 +236,85 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         except (TypeError, ValueError):
             return 0.0
         return parsed if parsed >= 0 else 0.0
+
+    @field_validator("max_emoji_per_message", mode="before")
+    @classmethod
+    def _normalize_emoji_limit(cls, value: Any) -> int:
+        """把 emoji 上限规范化为非负整数。"""
+
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 1
+        return max(0, parsed)
+
+
+class TelegramUserQuietHoursConfig(PluginConfigBase):
+    """静默时段配置（UTC+8）。"""
+
+    __ui_label__: ClassVar[str] = "静默时段"
+    __ui_order__: ClassVar[int] = 4
+
+    enable: bool = Field(
+        default=True,
+        description="启用静默时段，期间不发送任何消息。",
+        json_schema_extra={"label": "启用静默时段", "order": 0},
+    )
+    start_hour: int = Field(
+        default=3,
+        description="静默开始小时（UTC+8，含）。",
+        json_schema_extra={"label": "开始小时", "order": 1},
+    )
+    end_hour: int = Field(
+        default=7,
+        description="静默结束小时（UTC+8，不含）。",
+        json_schema_extra={"label": "结束小时", "order": 2},
+    )
+
+    @field_validator("start_hour", "end_hour", mode="before")
+    @classmethod
+    def _normalize_hour(cls, value: Any) -> int:
+        """把小时规范化到 0-23。"""
+
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 0
+        return parsed % 24
+
+
+class TelegramUserObservabilityConfig(PluginConfigBase):
+    """日志与自我改进配置。"""
+
+    __ui_label__: ClassVar[str] = "日志与自我改进"
+    __ui_order__: ClassVar[int] = 5
+
+    enable_transcript_log: bool = Field(
+        default=True,
+        description="记录结构化聊天日志（JSONL），用于事后审查是否像真人。",
+        json_schema_extra={"label": "启用聊天记录日志", "order": 0},
+    )
+    enable_self_improvement: bool = Field(
+        default=True,
+        description="启用自我改进：把经验写入 SOUL.md 与 SKILL.md。",
+        json_schema_extra={"label": "启用自我改进", "order": 1},
+    )
+    reply_wait_seconds: float = Field(
+        default=180.0,
+        description="发言后等待多少秒判定有没有人接话。",
+        json_schema_extra={"label": "接话判定窗口（秒）", "order": 2},
+    )
+
+    @field_validator("reply_wait_seconds", mode="before")
+    @classmethod
+    def _normalize_wait(cls, value: Any) -> float:
+        """把等待窗口规范化为非负浮点数。"""
+
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return 180.0
+        return parsed if parsed >= 0 else 180.0
 
 
 class TelegramUserChatConfig(PluginConfigBase):
@@ -275,6 +397,10 @@ class TelegramUserPluginSettings(PluginConfigBase):
     plugin: TelegramUserPluginOptions = Field(default_factory=TelegramUserPluginOptions)
     telegram_account: TelegramAccountConfig = Field(default_factory=TelegramAccountConfig)
     behavior: TelegramUserBehaviorConfig = Field(default_factory=TelegramUserBehaviorConfig)
+    quiet_hours: TelegramUserQuietHoursConfig = Field(default_factory=TelegramUserQuietHoursConfig)
+    observability: TelegramUserObservabilityConfig = Field(
+        default_factory=TelegramUserObservabilityConfig
+    )
     chat: TelegramUserChatConfig = Field(default_factory=TelegramUserChatConfig)
 
     def should_connect(self) -> bool:
