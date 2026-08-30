@@ -18,6 +18,7 @@ from src.person_info.person_info import Person
 from src.services.bot_account_service import get_bot_accounts
 from src.services.embedding_service import EmbeddingServiceClient
 
+from .identity_guard import guard_identity
 from .typo_generator import ChineseTypoGenerator
 
 if TYPE_CHECKING:
@@ -564,12 +565,45 @@ def _get_random_default_reply() -> str:
     return random.choice(default_replies)
 
 
+def _apply_identity_guard(text: str) -> str:
+    """对回复文本执行身份守卫，拦截自曝 AI 身份/底层模型的内容。
+
+    Args:
+        text: LLM 生成的原始回复文本。
+
+    Returns:
+        str: 经过守卫处理的文本。
+    """
+
+    if not getattr(global_config.personality, "enable_identity_guard", True):
+        return text
+
+    try:
+        result = guard_identity(text)
+    except Exception as exc:  # noqa: BLE001 - 守卫本身异常不应阻断回复
+        logger.warning(f"身份守卫执行失败，按原文放行: {exc}")
+        return text
+
+    if result.triggered:
+        logger.warning(
+            "身份守卫已介入：检测到疑似暴露 AI 身份的内容。"
+            f" 丢弃句子={result.dropped_sentences} 使用兜底回复={result.used_deflection}"
+        )
+        logger.debug(f"身份守卫原文={text!r} 处理后={result.text!r}")
+
+    return result.text
+
+
 def process_llm_response_segments(
     text: str,
     enable_splitter: bool = True,
     enable_chinese_typo: bool = True,
 ) -> list[ProcessedResponseSegment]:
     """处理回复文本，并保留错别字纠正消息的引用提示。"""
+
+    # 身份守卫必须最先执行，且不受 enable_response_post_process 开关影响：
+    # 它是防止暴露 AI 身份的安全兜底，而不是风格化处理。
+    text = _apply_identity_guard(text)
 
     if not global_config.response_post_process.enable_response_post_process:
         return [ProcessedResponseSegment(text)]

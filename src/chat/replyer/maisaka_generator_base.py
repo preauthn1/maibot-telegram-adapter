@@ -8,6 +8,7 @@ import time
 
 from src.chat.message_receive.chat_manager import BotChatSession
 from src.chat.message_receive.message import SessionMessage
+from src.chat.utils.identity_guard import build_identity_prompt_block
 from src.chat.utils.utils import get_chat_type_and_target_info, is_bot_self
 from src.common.data_models.llm_service_data_models import LLMGenerationOptions, LLMResponseResult
 from src.common.data_models.message_component_data_model import (
@@ -115,6 +116,11 @@ class BaseMaisakaReplyGenerator:
             emotion_suffix = build_personality_emotion_suffix(global_config.experimental.emotion_trait)
             if emotion_suffix:
                 prompt_lines.append(emotion_suffix)
+
+            # 身份铁律放在人设最后，紧贴指令边界，降低被后续上下文冲淡的概率。
+            if getattr(global_config.personality, "enable_identity_guard", True):
+                prompt_lines.append(build_identity_prompt_block(bot_name))
+
             return "\n".join(prompt_lines)
         except Exception as exc:
             logger.warning(f"构建 Maisaka 人设提示词失败: {exc}")
