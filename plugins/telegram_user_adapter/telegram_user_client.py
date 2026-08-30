@@ -244,6 +244,82 @@ class TelegramUserClient:
         except Exception as exc:  # noqa: BLE001 - 已读失败不影响主流程
             self._logger.debug(f"标记已读失败: {exc}")
 
+    async def send_reaction(
+        self,
+        entity: Any,
+        message_id: int,
+        emoticon: str,
+        *,
+        big: bool = False,
+    ) -> None:
+        """给一条消息点表情回应。
+
+        Telethon 1.44 没有 ``client.send_reaction`` 也没有 ``Message.react``，
+        只能走原始 MTProto 请求。
+
+        与 ``mark_read`` / ``simulate_typing`` 不同，这里**不吞异常**：
+        表情被拒（表情不被允许、消息已删、被禁言、FloodWait）都需要让调用方
+        知道并据此拉黑或退避，吞掉会导致一直重试、反而更像脚本。
+
+        Args:
+            entity: 目标会话实体或原始 chat_id（注意不能带 topic 后缀）。
+            message_id: 要回应的消息 ID（原始 Telegram 消息 ID）。
+            emoticon: 表情字符，例如 "👍"。
+            big: 是否播放放大动画。真人默认不放大，保持 False。
+
+        Raises:
+            RuntimeError: 客户端尚未连接。
+            telethon.errors.RPCError: 由调用方按具体错误类型处理。
+        """
+
+        from telethon.tl.functions.messages import SendReactionRequest
+        from telethon.tl.types import ReactionEmoji
+
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+
+        await self._client(
+            SendReactionRequest(
+                peer=entity,
+                msg_id=message_id,
+                reaction=[ReactionEmoji(emoticon=emoticon)],
+                big=big,
+                # 只有从扩展表情面板选择时才该置 True；快捷气泡点选保持 False，
+                # 也避免把程序选的表情污染账号的“最近使用”列表。
+                add_to_recent=False,
+            )
+        )
+
+    async def get_available_reactions(self, entity: Any) -> Any:
+        """读取某个会话允许的表情集合。
+
+        Args:
+            entity: 目标会话实体。
+
+        Returns:
+            Any: ``ChatReactionsAll`` / ``ChatReactionsSome`` / ``ChatReactionsNone``；
+                字段缺省（None）表示管理员没有特别设置，等价于允许标准表情。
+
+        Raises:
+            RuntimeError: 客户端尚未连接。
+        """
+
+        from telethon.tl.functions.channels import GetFullChannelRequest
+        from telethon.tl.functions.messages import GetFullChatRequest
+        from telethon.tl.types import Channel, Chat
+
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+
+        if isinstance(entity, Channel):
+            full = await self._client(GetFullChannelRequest(channel=entity))
+            return full.full_chat.available_reactions
+        if isinstance(entity, Chat):
+            full = await self._client(GetFullChatRequest(chat_id=entity.id))
+            return full.full_chat.available_reactions
+        # 私聊没有 available_reactions 字段，标准表情都可用。
+        return None
+
     async def simulate_typing(self, entity: Any, seconds: float) -> None:
         """在目标会话中模拟“正在输入…”。
 
