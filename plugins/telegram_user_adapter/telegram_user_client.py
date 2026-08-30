@@ -201,6 +201,24 @@ class TelegramUserClient:
             event_filter = events.NewMessage()
         self._client.add_event_handler(handler, event_filter)
 
+    def add_raw_update_handler(self, handler: Callable[[Any], Any], update_types: Any) -> None:
+        """注册原始 MTProto 更新事件处理器。
+
+        NewMessage 事件不覆盖「表情回应（reaction）」这类更新，只能通过
+        ``events.Raw`` 监听底层 MTProto Update 才能拿到。
+
+        Args:
+            handler: 接收 Telethon 原始 Update 对象的异步回调。
+            update_types: 需要过滤的 Update 类型（单个类或类列表）。
+        """
+
+        from telethon import events
+
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+
+        self._client.add_event_handler(handler, events.Raw(types=update_types))
+
     async def run_until_disconnected(self) -> None:
         """阻塞直到连接断开。"""
 

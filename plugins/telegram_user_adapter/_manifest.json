@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "name": "Telegram 真人账号适配器",
   "description": "使用 MTProto (Telethon) 以真人 Telegram 账号身份收发消息，让麦麦看起来就是一个普通用户而不是 Bot",
   "author": {
@@ -28,7 +28,9 @@
       "version_spec": ">=1.36.0"
     }
   ],
-  "capabilities": [],
+  "capabilities": [
+    "maisaka.context.append"
+  ],
   "i18n": {
     "default_locale": "zh-CN",
     "supported_locales": [
