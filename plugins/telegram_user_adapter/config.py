@@ -296,7 +296,7 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         json_schema_extra={"label": "连发冷却（秒）", "order": 26},
     )
     per_user_reply_limit: int = Field(
-        default=12,
+        default=20,
         description=(
             "同一个人在观察窗口内最多能引发多少次回复。"
             "防止有人靠连续刷屏把 token 烧光；正常聊天远达不到这个数。"
@@ -321,7 +321,7 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         try:
             parsed = int(value)
         except (TypeError, ValueError):
-            return 12
+            return 20
         return max(1, parsed)
 
     @field_validator("max_consecutive_replies", mode="before")

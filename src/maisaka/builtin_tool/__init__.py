@@ -31,6 +31,8 @@ from .view_forward_message import get_tool_spec as get_view_forward_message_tool
 from .view_forward_message import handle_tool as handle_view_forward_message_tool
 from .wait import get_tool_spec as get_wait_tool_spec
 from .wait import handle_tool as handle_wait_tool
+from .web_search import get_tool_spec as get_web_search_tool_spec
+from .web_search import handle_tool as handle_web_search_tool
 
 BuiltinToolHandler = Callable[[ToolInvocation, Optional[ToolExecutionContext]], Awaitable[ToolExecutionResult]]
 BuiltinToolRawHandler = Callable[
@@ -103,6 +105,9 @@ BUILTIN_TOOL_ENTRIES: List[BuiltinToolEntry] = [
         stage="action",
     ),
     BuiltinToolEntry("switch_chat", get_switch_chat_tool_spec, handle_switch_chat_tool, stage="action"),
+    # 联网搜索：遇到不认识的新名词时查一下，避免硬编或答"不知道"——
+    # 这两种反应在群聊里都不像真人。
+    BuiltinToolEntry("web_search", get_web_search_tool_spec, handle_web_search_tool, stage="action"),
 ]
 
 
