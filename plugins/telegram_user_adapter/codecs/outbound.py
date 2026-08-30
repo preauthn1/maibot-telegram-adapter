@@ -37,6 +37,10 @@ class TelegramUserOutboundCodec:
         self._max_typing_delay = 12.0
         self._enable_humanize = True
         self._max_emoji = 1
+        self._quote_probability = 0.15
+        # 最近一次发送实际使用的 reply_to，及它是否属于\"引用\"（而非 topic 路由）。
+        self._last_reply_to: Optional[int] = None
+        self._last_reply_is_quote = False
         self._presence: Any = None
         self._last_typing_seconds = 0.0
         self._last_humanize_rules: list[str] = []
@@ -60,6 +64,7 @@ class TelegramUserOutboundCodec:
         max_typing_delay: float,
         enable_humanize: bool = True,
         max_emoji: int = 1,
+        quote_probability: float = 0.15,
     ) -> None:
         """配置拟人化发送行为。
 
@@ -70,6 +75,7 @@ class TelegramUserOutboundCodec:
             max_typing_delay: 最长打字时间。
             enable_humanize: 是否启用中文拟人化改写。
             max_emoji: 单条消息 emoji 上限。
+            quote_probability: 回复时带引用的概率（0-1）。
         """
 
         self._simulate_typing = simulate_typing
@@ -78,6 +84,31 @@ class TelegramUserOutboundCodec:
         self._max_typing_delay = max_typing_delay
         self._enable_humanize = enable_humanize
         self._max_emoji = max_emoji
+        self._quote_probability = quote_probability
+
+    def _should_quote(self) -> bool:
+        """按配置概率决定本次回复是否带引用。
+
+        真人在群里很少条条都点\"回复\"，绝大多数时候是直接说话靠上下文对齐。
+        每条都带引用会让对话看起来像工单系统，是最容易被识破的特征之一。
+
+        Returns:
+            bool: 本次是否保留引用。
+        """
+
+        return random.random() < self._quote_probability
+
+    @property
+    def last_reply_is_quote(self) -> bool:
+        """最近一次发送是否带了\"引用\"。
+
+        topic 群为路由而带的 reply_to 不算引用，因此不会计入。
+
+        Returns:
+            bool: 带引用时为 ``True``。
+        """
+
+        return self._last_reply_is_quote
 
     @property
     def last_typing_seconds(self) -> float:
@@ -153,9 +184,20 @@ class TelegramUserOutboundCodec:
         reply_to = self._safe_int(additional_config.get("reply_message_id"))
         if reply_to is None:
             reply_to = self._extract_reply_to_from_segments(raw_message)
+
+        # 引用降频：真人不会每句都引用，条条带引用是机器人最明显的特征之一。
+        # 注意必须放在 topic 兜底之前——话题群的 reply_to 是路由所需，不能被丢掉。
+        if reply_to is not None and not self._should_quote():
+            reply_to = None
+
         if reply_to is None and parsed_thread_id is not None:
             # 话题群必须带上 topic 根消息 ID，否则消息会落到 General。
             reply_to = parsed_thread_id
+
+        # 记录本次实际使用的引用，供 transcript 验证降频是否生效。
+        # 区分\"引用型\"和\"topic 路由型\"：后者是路由必需，不算真正的引用。
+        self._last_reply_to = reply_to
+        self._last_reply_is_quote = reply_to is not None and reply_to != parsed_thread_id
 
         payloads = raw_message if isinstance(raw_message, list) else []
         if not payloads:

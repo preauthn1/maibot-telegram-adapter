@@ -14,11 +14,12 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Any, ClassVar, Dict, Optional, cast
+from typing import Any, ClassVar, Dict, List, Optional, cast
 
 import asyncio
 import contextlib
 import json
+import random
 import time
 
 from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase
@@ -31,8 +32,10 @@ from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
 from .filters import TelegramUserChatFilter
 from .presence import PresenceManager
-from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion
+from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
+from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion, inspect_own_message
 from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
+from .spam_filter import detect_spam
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
 from .utils import parse_topic_group_id
@@ -70,6 +73,18 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # (原始chat_id:int, 消息id:int) -> (会话键, 消息摘要)，用于把\"别人给我发的
         # 消息点了表情\"匹配回具体会话与内容。用有界 OrderedDict 防止长期泄漏。
         self._sent_messages: "OrderedDict[tuple[int, int], tuple[str, str]]" = OrderedDict()
+        # 主动点表情的节流策略，未启用时为 None。
+        self._reaction_policy: Optional[ReactionPolicy] = None
+        # 正在执行的点表情任务，持引用防止被 GC 回收。
+        self._reaction_tasks: set[asyncio.Task[None]] = set()
+        # chat_id -> 该会话允许的表情集合（None 表示不限制），避免重复查询。
+        self._allowed_reactions_cache: Dict[str, Optional[set[str]]] = {}
+        # 每个会话连续发言（中间没有别人说话）的条数，用于抑制刷屏式接话。
+        self._consecutive_replies: Dict[str, int] = {}
+        # 触发连发上限的时刻，用于冷却计时。
+        self._consecutive_blocked_at: Dict[str, float] = {}
+        # (会话键, 发送者ID) -> 最近消息时间戳，用于识别单人刷屏。
+        self._user_message_times: Dict[tuple[str, str], List[float]] = {}
 
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否登录。"""
@@ -130,6 +145,19 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return {"success": False, "error": "Telegram 真人账号适配器未初始化"}
 
         chat_id = self._resolve_outbound_chat_id(message)
+
+        # 连发抑制：真人不会在群里贴着一个人连续接话。线上真实翻车样本是
+        # 22 条消息里我们插了 7 句，对方随即质问\"ai？\"。超过上限就闭嘴，
+        # 直到别人说话把计数重置。
+        if chat_id and self._is_consecutive_limited(chat_id):
+            if self._transcript is not None:
+                await self._transcript.log_event(
+                    chat_id,
+                    "consecutive_limit_drop",
+                    {"consecutive": self._consecutive_replies.get(chat_id, 0)},
+                )
+            return {"success": False, "error": "连续发言已达上限，本条不发送"}
+
         priority = self._resolve_priority(chat_id)
         enqueued_at = time.monotonic()
 
@@ -200,6 +228,29 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         sent_text = self._extract_text_from_message(message)
         self._last_outbound_text[chat_id] = sent_text
 
+        # 连发计数 +1。别人插话时会在入站侧清零。
+        self._consecutive_replies[chat_id] = self._consecutive_replies.get(chat_id, 0) + 1
+
+        # 出站自省：检查\"我刚才说的话\"本身有没有越界（怼人、顺着下流话题接话）。
+        # 人设约束只是概率性的，模型仍可能翻车；把翻车样本记下来回灌 prompt，
+        # 才能让同类错误越来越少，而不是每次都靠人工发现再改词库。
+        violation_kind, violation_hits = inspect_own_message(sent_text)
+        if violation_kind and self._self_improvement is not None:
+            await self._self_improvement.record_outcome(
+                ChatOutcome(
+                    chat_id=chat_id,
+                    text=sent_text,
+                    violation_kind=violation_kind,
+                    violation_hits=violation_hits,
+                )
+            )
+            if self._transcript is not None:
+                await self._transcript.log_event(
+                    chat_id=chat_id,
+                    event="self_violation",
+                    detail={"kind": violation_kind, "hits": violation_hits},
+                )
+
         inbound_at = self._last_inbound_at.get(chat_id)
         reply_latency = (time.monotonic() - inbound_at) if inbound_at else None
         typing_seconds = outbound_codec.last_typing_seconds
@@ -216,6 +267,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 reply_latency_seconds=reply_latency,
                 priority=priority,
                 humanize_rules=outbound_codec.last_humanize_rules,
+                reply_is_quote=outbound_codec.last_reply_is_quote,
             )
 
         # 发言后清除该群的提及标记，避免长期占用高优先级。
@@ -323,6 +375,77 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             if candidate:
                 return str(candidate)
         return ""
+
+    def _is_user_flooding(self, session_key: str, sender_id: str) -> bool:
+        """判断某个用户是否在刷屏消耗 token。
+
+        只统计\"引发我们回复\"的消息，正常你来我往的聊天远达不到上限；
+        真被刷屏时只对该用户静音，群里其他人不受影响。
+
+        Args:
+            session_key: 会话键。
+            sender_id: 发送者 ID。
+
+        Returns:
+            bool: 该用户已超限时返回 ``True``。
+        """
+
+        if not sender_id:
+            return False
+
+        settings = self._load_settings()
+        limit = settings.behavior.per_user_reply_limit
+        window = settings.behavior.per_user_window
+
+        key = (session_key, sender_id)
+        now = time.monotonic()
+        stamps = self._user_message_times.setdefault(key, [])
+
+        # 丢弃窗口外的记录，保持列表有界。
+        cutoff = now - window
+        stamps[:] = [t for t in stamps if t >= cutoff]
+        stamps.append(now)
+
+        if len(stamps) > limit:
+            self.ctx.logger.info(
+                f"用户消息过于频繁，暂时不回复: chat={session_key} "
+                f"sender={sender_id} 窗口内={len(stamps)}条 上限={limit}"
+            )
+            return True
+        return False
+
+    def _is_consecutive_limited(self, chat_id: str) -> bool:
+        """判断某会话是否已达连续发言上限。
+
+        Args:
+            chat_id: 会话键。
+
+        Returns:
+            bool: 达到上限且仍在冷却期内时返回 ``True``。
+        """
+
+        settings = self._load_settings()
+        limit = settings.behavior.max_consecutive_replies
+        count = self._consecutive_replies.get(chat_id, 0)
+        if count < limit:
+            return False
+
+        # 达到上限后进入冷却；冷却结束自动放行并清零，
+        # 避免\"一旦触发就永久闭嘴\"。
+        blocked_at = self._consecutive_blocked_at.get(chat_id)
+        now = time.monotonic()
+        if blocked_at is None:
+            self._consecutive_blocked_at[chat_id] = now
+            self.ctx.logger.info(
+                f"连续发言达到上限({limit})，进入冷却: chat={chat_id}"
+            )
+            return True
+
+        if (now - blocked_at) >= settings.behavior.consecutive_cooldown:
+            self._consecutive_replies[chat_id] = 0
+            self._consecutive_blocked_at.pop(chat_id, None)
+            return False
+        return True
 
     def _resolve_priority(self, chat_id: str) -> int:
         """按是否被 @ / 回复决定发送优先级。
@@ -489,6 +612,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             max_typing_delay=behavior.max_typing_delay,
             enable_humanize=behavior.enable_humanize,
             max_emoji=behavior.max_emoji_per_message,
+            quote_probability=behavior.quote_probability,
         )
         self._outbound_codec.set_presence_manager(self._presence)
 
@@ -503,6 +627,18 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._send_queue.start()
 
         self._chat_filter = TelegramUserChatFilter(self.ctx.logger)
+
+        # 主动点表情：默认关闭，开启后按概率/冷却/每小时上限三重节流。
+        if behavior.send_reactions:
+            self._reaction_policy = ReactionPolicy(
+                probability=behavior.reaction_probability,
+                chat_cooldown=behavior.reaction_chat_cooldown,
+                hourly_limit=behavior.reaction_hourly_limit,
+            )
+            self.ctx.logger.info(
+                f"主动表情回应已启用: 概率={behavior.reaction_probability} "
+                f"冷却={behavior.reaction_chat_cooldown}s 每小时上限={behavior.reaction_hourly_limit}"
+            )
 
         self._tg_client.add_message_handler(
             self._on_new_message,
@@ -609,6 +745,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._last_outbound_text.clear()
         self._sent_messages.clear()
 
+        # 取消未完成的点表情任务，避免连接已断还在尝试发请求。
+        for task in list(self._reaction_tasks):
+            if not task.done():
+                task.cancel()
+        self._reaction_tasks.clear()
+        self._reaction_policy = None
+        self._allowed_reactions_cache.clear()
+
     async def _run_loop(self) -> None:
         """保持 Telethon 事件循环运行直到断开。"""
 
@@ -701,6 +845,21 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 )
             return
 
+        # 广告直接丢弃：跟广告搭话纯烧 token，而且真人看到广告是划过去的，
+        # 逐条认真回复本身就是机器人特征。必须在进上下文之前拦掉。
+        is_spam, spam_signals = detect_spam(incoming_text)
+        if is_spam:
+            self.ctx.logger.info(
+                f"检测到广告，已丢弃: session={session_key} 信号={spam_signals}"
+            )
+            if self._transcript is not None:
+                await self._transcript.log_event(
+                    chat_id=session_key,
+                    event="spam_dropped",
+                    detail={"signals": spam_signals, "sender_id": str(sender_id)},
+                )
+            return
+
         # NSFW 内容直接丢弃整条消息，不进上下文、不进 Host、不触发回复。
         # 必须在入站侧拦：一旦进了上下文，即使这轮不复述，也会带偏后续几轮的
         # 语气和话题走向，出站过滤堵不住这个口子。
@@ -719,6 +878,25 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return
 
         self._last_inbound_at[session_key] = time.monotonic()
+
+        # 别人说话了，连发链条断开，重新计数。
+        self._consecutive_replies.pop(session_key, None)
+        self._consecutive_blocked_at.pop(session_key, None)
+
+        # 防刷 token：同一个人在窗口内引发过多回复时暂时不再理他，
+        # 但不影响群里其他人正常对话。
+        if self._is_user_flooding(session_key, str(sender_id)):
+            if self._transcript is not None:
+                await self._transcript.log_event(
+                    chat_id=session_key,
+                    event="user_flood_ignored",
+                    detail={"sender_id": str(sender_id)},
+                )
+            return
+
+        # 主动点表情：放在 NSFW 拦截之后，避免给不良内容点赞。
+        # 用独立任务跑，点表情要等待随机停顿，绝不能阻塞入站路由。
+        self._maybe_schedule_reaction(event, chat_id, incoming_text)
 
         if is_mention:
             # 需求 5：被 @ 或被回复时，该群下次发送享有最高优先级。
@@ -753,6 +931,137 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             )
         except Exception as exc:  # noqa: BLE001 - 路由失败需要暴露具体消息
             self.ctx.logger.error(f"Telegram 消息路由到 Host 失败: {exc}")
+
+    def _maybe_schedule_reaction(self, event: Any, chat_id: str, text: str) -> None:
+        """按策略决定是否给这条消息点表情，并异步执行。
+
+        Args:
+            event: Telethon 入站事件。
+            chat_id: 原始会话 ID（不含 topic 后缀）。
+            text: 消息文本，用于挑选贴合语境的表情。
+        """
+
+        policy = self._reaction_policy
+        if policy is None:
+            return
+
+        message_id = self._safe_int(getattr(event.message, "id", None))
+        if message_id is None:
+            return
+        if not policy.should_react(chat_id, message_id):
+            return
+
+        task = asyncio.create_task(
+            self._do_send_reaction(event, chat_id, message_id, text),
+            name=f"telegram_user_adapter.reaction.{chat_id}.{message_id}",
+        )
+        # 保留引用避免任务被 GC，完成后自动移除。
+        self._reaction_tasks.add(task)
+        task.add_done_callback(self._reaction_tasks.discard)
+
+    async def _do_send_reaction(
+        self, event: Any, chat_id: str, message_id: int, text: str
+    ) -> None:
+        """真正执行一次表情回应。
+
+        Args:
+            event: Telethon 入站事件。
+            chat_id: 原始会话 ID。
+            message_id: 目标消息 ID。
+            text: 消息文本。
+        """
+
+        from telethon import errors
+
+        policy = self._reaction_policy
+        tg_client = self._tg_client
+        if policy is None or tg_client is None:
+            return
+
+        settings = self._load_settings()
+        behavior = settings.behavior
+
+        # 先停顿再点：秒点表情是最明显的脚本特征。
+        delay = random.uniform(behavior.reaction_min_delay, behavior.reaction_max_delay)
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return
+
+        try:
+            entity = await self._safe_get_chat(event)
+            if entity is None:
+                return
+
+            allowed = await self._resolve_chat_allowed_reactions(chat_id, entity)
+            if allowed is not None and not allowed:
+                # 空集合意味着该会话明确禁用了表情回应。
+                policy.mark_chat_disabled(chat_id)
+                return
+
+            emoji = policy.pick_emoji(chat_id, text, allowed)
+            if emoji is None:
+                return
+
+            await tg_client.send_reaction(entity, message_id, emoji)
+            policy.mark_reacted(chat_id, message_id)
+
+            if self._transcript is not None:
+                await self._transcript.log_event(
+                    chat_id=chat_id,
+                    event="reaction_sent",
+                    detail={"message_id": message_id, "emoji": emoji, "delay": round(delay, 2)},
+                )
+        except errors.ReactionInvalidError:
+            # 该表情在这个会话不被允许：拉黑，不再重试同一个表情。
+            self.ctx.logger.debug(f"表情不被允许，已拉黑: chat={chat_id}")
+        except errors.ReactionsTooManyError:
+            # 这条消息上的表情种类已达上限，跳过即可。
+            self.ctx.logger.debug(f"消息表情种类已满: chat={chat_id} msg={message_id}")
+        except (
+            errors.ChatWriteForbiddenError,
+            errors.UserBannedInChannelError,
+            errors.ChannelPrivateError,
+        ):
+            # 没有权限就别再在这个会话点表情了。
+            policy.mark_chat_disabled(chat_id)
+            self.ctx.logger.info(f"无权在该会话点表情，已停用: chat={chat_id}")
+        except (errors.MessageIdInvalidError, errors.MsgIdInvalidError):
+            # 消息已被删除，忽略。
+            self.ctx.logger.debug(f"目标消息不存在: chat={chat_id} msg={message_id}")
+        except errors.FloodWaitError as exc:
+            # 触发限流说明动作太频繁，直接停用该会话的表情回应等下次重启。
+            policy.mark_chat_disabled(chat_id)
+            self.ctx.logger.warning(f"点表情触发限流 {exc.seconds}s，已停用该会话表情: chat={chat_id}")
+        except asyncio.CancelledError:
+            raise
+
+    async def _resolve_chat_allowed_reactions(
+        self, chat_id: str, entity: Any
+    ) -> Optional[set[str]]:
+        """解析并缓存某会话允许的表情集合。
+
+        每次点表情都查一次 GetFullChannel 太浪费，这里做进程内缓存。
+
+        Args:
+            chat_id: 会话 ID。
+            entity: 会话实体。
+
+        Returns:
+            Optional[set[str]]: 允许的表情集合；``None`` 表示不限制。
+        """
+
+        if chat_id in self._allowed_reactions_cache:
+            return self._allowed_reactions_cache[chat_id]
+
+        tg_client = self._tg_client
+        if tg_client is None:
+            return None
+
+        available = await tg_client.get_available_reactions(entity)
+        allowed = resolve_allowed_reactions(available)
+        self._allowed_reactions_cache[chat_id] = allowed
+        return allowed
 
     async def _on_reaction_update(self, update: Any) -> None:
         """处理一条表情回应更新。

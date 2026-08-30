@@ -223,6 +223,139 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
             "order": 17,
         },
     )
+    quote_probability: float = Field(
+        default=0.15,
+        description="回复时带引用的概率（0-1）。真人很少每句都引用，频繁引用是机器人最明显的特征之一。",
+        json_schema_extra={
+            "hint": "话题群路由所需的 reply_to 不受此概率影响，始终保留。",
+            "label": "引用概率",
+            "order": 18,
+        },
+    )
+
+    @field_validator("quote_probability", mode="before")
+    @classmethod
+    def _normalize_quote_probability(cls, value: Any) -> float:
+        """把引用概率规范化到 0-1。"""
+
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return 0.15
+        return min(1.0, max(0.0, parsed))
+
+    send_reactions: bool = Field(
+        default=False,
+        description="主动给别人的消息点表情。默认关闭：新账号一上线就高频点表情很容易被判定为自动化。",
+        json_schema_extra={
+            "hint": "点表情不发消息，是一种低成本的\"我在看\"信号。",
+            "label": "主动点表情",
+            "order": 19,
+        },
+    )
+    reaction_probability: float = Field(
+        default=0.08,
+        description="单条消息触发点表情的概率（0-1）。真人不会逢消息必点。",
+        json_schema_extra={"label": "点表情概率", "order": 20},
+    )
+    reaction_min_delay: float = Field(
+        default=1.5,
+        description="点表情前的最小停顿（秒）。秒点是明显的脚本特征。",
+        json_schema_extra={"label": "点表情最小延迟（秒）", "order": 21},
+    )
+    reaction_max_delay: float = Field(
+        default=6.0,
+        description="点表情前的最大停顿（秒）。",
+        json_schema_extra={"label": "点表情最大延迟（秒）", "order": 22},
+    )
+    reaction_chat_cooldown: float = Field(
+        default=90.0,
+        description="同一会话两次点表情的最小间隔（秒）。",
+        json_schema_extra={"label": "同会话点表情冷却（秒）", "order": 23},
+    )
+    reaction_hourly_limit: int = Field(
+        default=20,
+        description="每小时全局点表情次数上限，硬性防封。",
+        json_schema_extra={"label": "每小时点表情上限", "order": 24},
+    )
+    max_consecutive_replies: int = Field(
+        default=3,
+        description=(
+            "同一会话内连续发言的上限。超过后强制冷却，直到别人插话才重置。"
+            "真人不会在陌生大群里贴着一个人连续接话，这是被识破的头号原因。"
+        ),
+        json_schema_extra={
+            "hint": "线上真实翻车：22 条消息里插了 7 句，随即被质问\"ai？\"。",
+            "label": "连续发言上限",
+            "order": 25,
+        },
+    )
+    consecutive_cooldown: float = Field(
+        default=180.0,
+        description="触发连续发言上限后的冷却时长（秒）。",
+        json_schema_extra={"label": "连发冷却（秒）", "order": 26},
+    )
+    per_user_reply_limit: int = Field(
+        default=12,
+        description=(
+            "同一个人在观察窗口内最多能引发多少次回复。"
+            "防止有人靠连续刷屏把 token 烧光；正常聊天远达不到这个数。"
+        ),
+        json_schema_extra={
+            "hint": "达到上限后暂时不再回复此人，但仍正常回复其他人。",
+            "label": "单用户回复上限",
+            "order": 27,
+        },
+    )
+    per_user_window: float = Field(
+        default=600.0,
+        description="单用户回复上限的统计窗口（秒）。",
+        json_schema_extra={"label": "单用户统计窗口（秒）", "order": 28},
+    )
+
+    @field_validator("per_user_reply_limit", mode="before")
+    @classmethod
+    def _normalize_per_user_limit(cls, value: Any) -> int:
+        """把单用户回复上限规范化为正整数。"""
+
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 12
+        return max(1, parsed)
+
+    @field_validator("max_consecutive_replies", mode="before")
+    @classmethod
+    def _normalize_max_consecutive(cls, value: Any) -> int:
+        """把连续发言上限规范化为正整数。"""
+
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 3
+        return max(1, parsed)
+
+    @field_validator("reaction_hourly_limit", mode="before")
+    @classmethod
+    def _normalize_reaction_limit(cls, value: Any) -> int:
+        """把每小时上限规范化为非负整数。"""
+
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 20
+        return max(0, parsed)
+
+    @field_validator("reaction_probability", mode="before")
+    @classmethod
+    def _normalize_reaction_probability(cls, value: Any) -> float:
+        """把点表情概率规范化到 0-1。"""
+
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return 0.08
+        return min(1.0, max(0.0, parsed))
 
     @field_validator(
         "typing_chars_per_second",
