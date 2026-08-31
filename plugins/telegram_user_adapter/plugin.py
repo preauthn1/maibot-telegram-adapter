@@ -39,6 +39,7 @@ from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
 from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion, inspect_own_message
 from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
+from .small_chat import SmallChatModerator
 from .spam_filter import detect_spam
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
@@ -95,6 +96,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._provocation = ProvocationResponder()
         # 频率能力是否已失败过，避免逐条刷同样的错误日志。
         self._frequency_cap_failed = False
+        # 小群参与率约束：某休闲小群实测 63.6%，远高于技术群的 12%。
+        self._small_chat = SmallChatModerator()
         # 频道发布器与目标；未配置时保持 None，表示功能关闭。
         self._channel_publisher: Optional[ChannelPublisher] = None
         self._channel_target: Optional[str] = None
