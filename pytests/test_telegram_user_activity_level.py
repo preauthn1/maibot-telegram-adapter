@@ -1,12 +1,12 @@
-"""活跃度提升测试。
+"""活跃度参数的安全边界测试（封禁后修订版）。
 
-线上实测整体参与率仅 6.9%（配置上限 30%），压制主要来自：
-- 95 次「距上次发言不足 12 秒」
-- 33 次「参与率已超上限」
+历史：2026-08-31 为提高活跃度，把参与率上限提到 0.45、发言间隔
+降到 9s、权重下限提到 0.6、基准倍率提到 1.4，结果当天 15 时
+单小时出站 107 条，账号被 Telegram 反垃圾系统限制
+（SpamBot: "your account was limited"）。
 
-提升活跃度的同时必须守住反识破底线：`MIN_REPLY_GAP_SECONDS` 和
-阅读延迟是账号被当面质问 "ai？" 之后加的防护，不能为了活跃而回退。
-本测试锁定"可以更活跃、但不能秒回"这条边界。
+教训：局部参数各自合规不代表全局安全。这个文件现在锁定的是
+**上界**（防止再次调过头），全局总量由 send_budget 负责。
 """
 
 from pathlib import Path
@@ -19,16 +19,16 @@ from telegram_user_adapter import small_chat as sc  # noqa: E402
 from telegram_user_adapter.small_chat import SmallChatModerator  # noqa: E402
 
 
-def test_reply_ratio_allows_more_participation() -> None:
-    """参与率上限应高于线上实测的 6.9%，给出提升空间。"""
+def test_reply_ratio_stays_conservative() -> None:
+    """参与率上限不得回到触发封禁的 0.45。"""
 
-    assert sc.SMALL_CHAT_REPLY_RATIO >= 0.40
+    assert sc.SMALL_CHAT_REPLY_RATIO <= 0.30
 
 
-def test_min_reply_gap_still_blocks_instant_reply() -> None:
-    """最小发言间隔不得低于 8 秒：秒回是被识破的直接原因。"""
+def test_min_reply_gap_restored() -> None:
+    """发言间隔须回到 15s 以上：9s 配合多群并发直接导致封禁。"""
 
-    assert sc.MIN_REPLY_GAP_SECONDS >= 8.0
+    assert sc.MIN_REPLY_GAP_SECONDS >= 15.0
 
 
 def test_read_delay_floor_preserved() -> None:

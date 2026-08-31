@@ -39,7 +39,7 @@ _MEAN_SHARE = sum(_HUMAN_HOURLY_SHARE.values()) / len(_HUMAN_HOURLY_SHARE)
 # 下限从 0.15 提到 0.20：这个值与互动权重下限是乘法关系，
 # 0.40 × 0.15 = 0.06 意味着冷群只剩 6% 发言能力。深夜静默由
 # _DEEP_SLEEP_MULTIPLIER 单独负责，这里不必再压那么狠。
-MIN_MULTIPLIER = 0.20
+MIN_MULTIPLIER = 0.15
 MAX_MULTIPLIER = 1.8
 
 # 深度睡眠时段：真人占比低于该阈值的小时，额外压制。

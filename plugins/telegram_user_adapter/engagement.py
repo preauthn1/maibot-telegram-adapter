@@ -31,9 +31,21 @@ WINDOW_SECONDS = 1800.0
 #
 # 抬高下限只影响"冷群"的沉默程度，多人互动抬权重、单人刷屏被压
 # 这两个区分能力不受影响（见 test_telegram_user_weight_floor）。
-MIN_MULTIPLIER = 0.6
+MIN_MULTIPLIER = 0.4
 MAX_MULTIPLIER = 2.0
-BASE_MULTIPLIER = 1.0
+
+# 有互动时的基准倍率。
+#
+# 从 1.0 提到 1.4：用户要求把发言意愿提到"talk_value 1.3~1.5"的水平，
+# 但主程序 talk_value 被 Pydantic 限制在 ge=0/le=1，当前 1.0 已是硬上限，
+# 填 1.1 就会被校验拒绝。
+#
+# 等效路径是同一条乘法链：runtime._get_effective_reply_frequency 返回
+# talk_value(≤1) × _talk_frequency_adjust(本模块写回，无上限)。
+# 因此把基准抬到 1.4，效果等同于 talk_value=1.4 而不触碰配置约束。
+#
+# 冷群仍由 MIN_MULTIPLIER 压在 0.6，不会变成自言自语。
+BASE_MULTIPLIER = 0.9
 GAIN = 1.0
 
 # 饱和常数：互动次数达到该量级后收益递减，避免线性膨胀。
@@ -47,6 +59,16 @@ DECAY_HALFLIFE_MINUTES = 30.0
 
 # 单个用户在窗口内最多计入多少次互动，防止一人刷高权重。
 PER_USER_CAP = 5
+
+# 普通群聊活动相对"被 @"的权重折扣。
+#
+# 被 @ / 被回复是最强的"该我说话"信号，计 1.0；群里单纯有人聊天
+# 说明场子是热的，值得比死群积极，但不该等同于被指名，故打 0.35 折。
+#
+# 没有这一项时，compute_multiplier 的 `if not events: return self._min`
+# 会让所有"无人 @"的群恒定停在最低倍率——线上实测 8 个群权重
+# 全是 0.77，这正是账号在活跃群里长时间潜水的原因。
+ACTIVITY_WEIGHT = 0.20
 
 
 class ChatEngagementTracker:
@@ -76,6 +98,8 @@ class ChatEngagementTracker:
         self._last_engagement: Dict[str, float] = {}
         # chat_id -> 上次写回 Host 的倍率，避免重复写入
         self._applied: Dict[str, float] = {}
+        # chat_id -> 普通群聊活动（没 @ 我们，但群在聊天）
+        self._activity: Dict[str, deque[Tuple[float, str]]] = {}
 
     def record_engagement(self, chat_id: str, user_id: str) -> None:
         """记录一次真实互动（被 @、被回复、或有人接我们的话）。
@@ -94,6 +118,42 @@ class ChatEngagementTracker:
         self._last_engagement[chat_id] = now
         self._prune(chat_id, now)
 
+    def record_activity(self, chat_id: str, user_id: str) -> None:
+        """记录一次普通群聊活动（有人说话，但没 @ 我们）。
+
+        原实现只在被 @ / 被回复时记 ``record_engagement``，于是
+        ``compute_multiplier`` 里 ``if not events: return self._min``
+        让"没人 @ 我们"的群恒定停在最低倍率——线上实测 8 个群
+        权重全是 0.77，BASE_MULTIPLIER 根本走不到，表现就是
+        群里聊得热火朝天而账号一直潜水。
+
+        普通活动的权重低于被 @（见 ``ACTIVITY_WEIGHT``）：
+        群里有人说话说明"场子是热的"，值得比死群更积极，
+        但仍不如有人指名找我们。
+
+        Args:
+            chat_id: 会话 ID。
+            user_id: 发言者 ID。
+        """
+
+        if not chat_id or not user_id:
+            return
+
+        now = time.monotonic()
+        activity = self._activity.setdefault(chat_id, deque())
+        activity.append((now, user_id))
+        self._prune_activity(chat_id, now)
+
+    def _prune_activity(self, chat_id: str, now: float) -> None:
+        """丢弃窗口外的普通活动记录。"""
+
+        activity = self._activity.get(chat_id)
+        if activity is None:
+            return
+        cutoff = now - self._window
+        while activity and activity[0][0] < cutoff:
+            activity.popleft()
+
     def _prune(self, chat_id: str, now: float) -> None:
         """丢弃窗口外的事件，保持内存有界。"""
 
@@ -107,6 +167,10 @@ class ChatEngagementTracker:
     def compute_multiplier(self, chat_id: str) -> float:
         """计算某会话当前的发言频率倍率。
 
+        被 @ / 被回复（``record_engagement``）权重最高；
+        群里单纯有人说话（``record_activity``）按 ``ACTIVITY_WEIGHT``
+        折算后计入——否则"没人 @ 我们"的群会恒定停在最低倍率。
+
         Args:
             chat_id: 会话 ID。
 
@@ -116,14 +180,29 @@ class ChatEngagementTracker:
 
         now = time.monotonic()
         self._prune(chat_id, now)
+        self._prune_activity(chat_id, now)
         events = self._events.get(chat_id)
-        if not events:
+        activity = self._activity.get(chat_id)
+        if not events and not activity:
             return self._min
 
         # 每个用户的计数设上限：一个人刷再多也顶不满权重。
-        per_user: Dict[str, int] = {}
-        for _, uid in events:
-            per_user[uid] = min(per_user.get(uid, 0) + 1, PER_USER_CAP)
+        per_user: Dict[str, float] = {}
+        for _, uid in events or ():
+            per_user[uid] = min(per_user.get(uid, 0.0) + 1.0, float(PER_USER_CAP))
+
+        # 普通活动按折扣计入，且同样受 per-user 上限约束，
+        # 防止一个人自言自语撑起整个群的权重。
+        activity_per_user: Dict[str, float] = {}
+        for _, uid in activity or ():
+            activity_per_user[uid] = min(
+                activity_per_user.get(uid, 0.0) + 1.0, float(PER_USER_CAP)
+            )
+        for uid, count in activity_per_user.items():
+            per_user[uid] = min(
+                per_user.get(uid, 0.0) + count * ACTIVITY_WEIGHT,
+                float(PER_USER_CAP),
+            )
 
         engaged_events = float(sum(per_user.values()))
         distinct_users = float(len(per_user))
@@ -133,7 +212,8 @@ class ChatEngagementTracker:
         # 多样性：只有一个人在互动时拿不满分，这是核心防刷手段。
         diversity = min(1.0, distinct_users / DIVERSITY_TARGET)
 
-        # 时间衰减：久无互动则回落。
+        # 时间衰减：久无互动则回落。被 @ 才刷新衰减基准，
+        # 普通活动不刷新——否则一个长期灌水的群会永久保持高权重。
         last = self._last_engagement.get(chat_id, now)
         idle_minutes = max(0.0, (now - last) / 60.0)
         decay = 0.5 ** (idle_minutes / DECAY_HALFLIFE_MINUTES)
