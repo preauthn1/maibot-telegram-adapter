@@ -272,7 +272,33 @@ class TelegramUserOutboundCodec:
                 if seg.get("type") == "text" and is_noise_text(str(seg.get("data", ""))):
                     self._logger.info(f"丢弃单字噪音段: {str(seg.get('data', ''))!r}")
                     continue
-                current_reply = reply_to if not sent_any else None
+
+                # 预算按段检查，不能只在批次开头查一次。
+                #
+                # 原来 check() 在函数入口调一次、record() 每段调一次：
+                # 一条回复拆 N 段就超限 N 倍。实测 10 段一次全发，
+                # minute_limit=5 时记到 10。封禁当天 15:18 单分钟 8 条、
+                # 5 个分钟超过 5 条/分，正是这么来的。
+                if sent_any:
+                    seg_allowed, seg_reason = self._send_budget.check()
+                    if not seg_allowed:
+                        self._logger.warning(
+                            f"发送预算拦截后续分段: {seg_reason} chat={chat_id}"
+                        )
+                        break
+
+                # 引用与 topic 路由是两回事，不能一起抹掉。
+                #
+                # 话题群里 reply_to 同时承担「回复某条」与「发到哪个话题」
+                # 两个职责。原来「只有第一段带 reply_to」的引用降频逻辑
+                # 把 topic 路由也一并清空，导致第 2 段起掉进 General——
+                # 上下文断裂，在人工审核视角极为扎眼。
+                if not sent_any:
+                    current_reply = reply_to
+                else:
+                    # 后续段不再引用具体消息，但必须留在同一话题里
+                    current_reply = parsed_thread_id
+
                 try:
                     sent = await self._send_segment(entity, chat_id, seg, current_reply)
                 except Exception as exc:  # noqa: BLE001 - 单段失败不阻断其他段
