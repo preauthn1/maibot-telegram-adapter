@@ -224,7 +224,7 @@ class TelegramUserOutboundCodec:
                     continue
                 current_reply = reply_to if not sent_any else None
                 try:
-                    sent = await self._send_segment(entity, seg, current_reply)
+                    sent = await self._send_segment(entity, chat_id, seg, current_reply)
                 except Exception as exc:  # noqa: BLE001 - 单段失败不阻断其他段
                     errors.append(f"{seg.get('type', 'unknown')}: {exc}")
                     continue
@@ -243,11 +243,18 @@ class TelegramUserOutboundCodec:
         external_id = str(getattr(last_sent, "id", "") or "")
         return {"success": True, "external_message_id": external_id or None}
 
-    async def _send_segment(self, entity: Any, seg: Dict[str, Any], reply_to: Optional[int]) -> Any:
+    async def _send_segment(
+        self,
+        entity: Any,
+        chat_id: str,
+        seg: Dict[str, Any],
+        reply_to: Optional[int],
+    ) -> Any:
         """发送单个消息段。
 
         Args:
             entity: 目标会话实体。
+            chat_id: 目标会话 ID，供每群画像约束使用。
             seg: 消息段字典。
             reply_to: 要回复的消息 ID。
 

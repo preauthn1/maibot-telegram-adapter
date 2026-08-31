@@ -41,7 +41,14 @@ class _RecordingCodec(TelegramUserOutboundCodec):
     async def _resolve_entity(self, chat_id: str) -> Any:
         return object()
 
-    async def _send_segment(self, entity: Any, seg: Dict[str, Any], reply_to: Optional[int]) -> Any:
+    async def _send_segment(
+        self,
+        entity: Any,
+        chat_id: str,
+        seg: Dict[str, Any],
+        reply_to: Optional[int],
+    ) -> Any:
+        del entity, chat_id, seg
         self.used_reply_to.append(reply_to)
         return _StubMessage()
 
@@ -51,6 +58,20 @@ class _StubLogger:
     def debug(self, *a: Any, **k: Any) -> None: ...
     def warning(self, *a: Any, **k: Any) -> None: ...
     def error(self, *a: Any, **k: Any) -> None: ...
+
+
+class _SendingClient:
+    """真实走 ``_send_segment`` 路径的最小 Telegram 客户端桩。"""
+
+    def __init__(self) -> None:
+        self.sent: List[tuple[Any, str, Optional[int]]] = []
+
+    async def get_entity(self, chat_id: Any) -> Any:
+        return chat_id
+
+    async def send_text(self, entity: Any, text: str, *, reply_to: Optional[int] = None) -> _StubMessage:
+        self.sent.append((entity, text, reply_to))
+        return _StubMessage(99)
 
 
 def _build_message(group_id: str, reply_message_id: Optional[int]) -> Dict[str, Any]:
@@ -63,6 +84,35 @@ def _build_message(group_id: str, reply_message_id: Optional[int]) -> Dict[str, 
         "message_info": {"additional_config": additional},
         "raw_message": [{"type": "text", "data": "测试内容"}],
     }
+
+
+@pytest.mark.asyncio
+async def test_humanized_text_send_reaches_telegram_client() -> None:
+    """启用拟人化时，普通文本必须走到 Telegram 客户端而非 NameError。
+
+    该用例直接执行生产 ``_send_segment`` 路径，防止测试子类覆盖该方法
+    后掩盖局部变量作用域错误。
+    """
+
+    client = _SendingClient()
+    codec = TelegramUserOutboundCodec(client, _StubLogger())
+    codec.set_behavior(
+        simulate_typing=False,
+        typing_cps=6.0,
+        min_think_delay=0.0,
+        max_typing_delay=0.0,
+        enable_humanize=True,
+        quote_probability=0.0,
+    )
+
+    result = await codec.send_outbound_message(
+        _build_message("-1009000000004", None),
+        {},
+    )
+
+    assert result == {"success": True, "external_message_id": "99"}
+    assert len(client.sent) == 1
+    assert client.sent[0][0] == -1009000000004
 
 
 @pytest.mark.asyncio
