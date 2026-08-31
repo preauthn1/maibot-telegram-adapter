@@ -1445,7 +1445,11 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         message_id = self._safe_int(getattr(event.message, "id", None))
         if message_id is None:
             return
-        if not policy.should_react(chat_id, message_id):
+        # 用 reserve 而不是 should_react：判定通过后要隔 1.5-6.0 秒才真正
+        # 发表情，若此时才记账，这段延迟就是 check-then-act 窗口——
+        # 群里在窗口内连来多条消息时每条都读到旧状态，冷却与限流全部失效
+        # （实测 20 条消息 20 个表情全部发出，应为 1 条）。
+        if not policy.reserve(chat_id, message_id):
             return
 
         task = asyncio.create_task(
@@ -1475,6 +1479,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if policy is None or tg_client is None:
             return
 
+        # 是否真的把表情发出去了。额度在 reserve() 阶段就已占用，
+        # 所有没发出去的路径都要在 finally 里归还。
+        reaction_sent = False
+
         settings = self._load_settings()
         behavior = settings.behavior
 
@@ -1483,7 +1491,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         try:
             await asyncio.sleep(delay)
         except asyncio.CancelledError:
-            return
+            # 这条 return 在主 try 之外，不会走到下面的 finally，
+            # 必须在这里显式归还预占的额度。
+            policy.release(chat_id, message_id)
+            raise
 
         try:
             entity = await self._safe_get_chat(event)
@@ -1501,7 +1512,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 return
 
             await tg_client.send_reaction(entity, message_id, emoji)
-            policy.mark_reacted(chat_id, message_id)
+            # 额度已在 reserve() 时占用，这里只标记"确实发出去了"，
+            # 供 finally 判断是否需要回滚。
+            reaction_sent = True
 
             if self._transcript is not None:
                 await self._transcript.log_event(
@@ -1532,6 +1545,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             self.ctx.logger.warning(f"点表情触发限流 {exc.seconds}s，已停用该会话表情: chat={chat_id}")
         except asyncio.CancelledError:
             raise
+        finally:
+            # 没真正发出去就把额度还回去。
+            #
+            # 不发出去的路径很多：表情被拒、消息已删、无权限、
+            # 触发限流、pick_emoji 返回 None、allowed 集合为空。
+            # 逐条手工回滚容易漏，统一在 finally 处理。
+            # 漏回滚会让该会话静默地再也不点表情。
+            if not reaction_sent:
+                policy.release(chat_id, message_id)
 
     async def _resolve_chat_allowed_reactions(
         self, chat_id: str, entity: Any
