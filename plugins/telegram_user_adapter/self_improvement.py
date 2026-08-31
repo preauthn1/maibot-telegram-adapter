@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import asyncio
 import json
@@ -99,13 +99,27 @@ def _merge_generated_block(existing: str, generated: str) -> str:
     if not existing.strip():
         return generated + "\n"
 
-    begin = existing.find(_AUTO_BEGIN)
-    end = existing.find(_AUTO_END)
+    # 标记必须整行精确匹配，不能用 str.find 子串搜索。
+    #
+    # 标记文本本身写着「请勿手工编辑」，运维在文档里解释这套机制
+    # 是极自然的行为。用子串搜索的话，正文里内联提到 BEGIN/END
+    # 就会被当成真标记，中间的说明文字全部被吞，且合并结果里出现
+    # BEGIN×2 END×2，文件结构永久损坏。
+    lines = existing.splitlines(keepends=True)
+    begin_index: Optional[int] = None
+    end_index: Optional[int] = None
+    for position, line in enumerate(lines):
+        stripped = line.strip()
+        if begin_index is None and stripped == _AUTO_BEGIN:
+            begin_index = position
+        elif begin_index is not None and stripped == _AUTO_END:
+            end_index = position
+            break
 
-    if begin != -1 and end != -1 and end > begin:
-        head = existing[:begin]
-        tail = existing[end + len(_AUTO_END) :]
-        return head + generated + tail
+    if begin_index is not None and end_index is not None:
+        head = "".join(lines[:begin_index])
+        tail = "".join(lines[end_index + 1 :])
+        return head + generated + ("\n" if not generated.endswith("\n") else "") + tail
 
     # 首次迁移：老文件没有标记，其中既有程序生成的旧段落，
     # 也可能有人工补写的段落。按标题切分，丢掉程序拥有的旧段落，
