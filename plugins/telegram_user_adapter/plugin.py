@@ -98,7 +98,40 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否登录。"""
 
+        await self._verify_capabilities()
         await self._restart_if_needed()
+
+    async def _verify_capabilities(self) -> None:
+        """启动时实探一次所需能力，权限缺失立刻报错。
+
+        动机：``frequency.set_adjust`` 曾因未在 _manifest.json 声明而被
+        E_CAPABILITY_DENIED 拒绝，但异常在调用处被 except 成 warning，
+        群权重调度整整一轮提交都处于静默失效状态而没人发现。
+
+        与其依赖每个调用点都正确记日志，不如在启动时集中探一次——
+        权限这类问题在启动时就是确定的，没必要等到运行时逐条试错。
+        """
+
+        # 用无害的探测值调用一次：只为触发权限校验，不改变实际行为。
+        # chat_id 传空串时 Host 不会命中任何会话。
+        try:
+            await self.ctx.call_capability(
+                "frequency.set_adjust", chat_id="", value=1.0
+            )
+        except Exception as exc:  # noqa: BLE001 - 探测失败本身就是要报的结果
+            message = str(exc)
+            if "E_CAPABILITY_DENIED" in message:
+                self.ctx.logger.error(
+                    "能力自检失败：frequency.set_adjust 未获授权，"
+                    "群权重调度将不生效。请在 _manifest.json 的 capabilities "
+                    f"中声明该能力。原始错误: {message}"
+                )
+                return
+            # 其他错误（如空 chat_id 被拒）说明权限是通的，只是参数无效。
+            self.ctx.logger.debug(f"能力自检：frequency.set_adjust 权限正常 ({message})")
+            return
+
+        self.ctx.logger.debug("能力自检：frequency.set_adjust 权限正常")
 
     async def on_unload(self) -> None:
         """插件卸载时断开连接。"""
