@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from collections import OrderedDict
+from collections import deque, OrderedDict
 from typing import Any, ClassVar, Dict, List, Optional, cast
 
 import asyncio
@@ -98,6 +98,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._frequency_cap_failed = False
         # 小群参与率约束：某休闲小群实测 63.6%，远高于技术群的 12%。
         self._small_chat = SmallChatModerator()
+        # 各会话近期发言者，用于估算群规模（小群 vs 大群）。
+        self._recent_speakers: Dict[str, deque[str]] = {}
         # 频道发布器与目标；未配置时保持 None，表示功能关闭。
         self._channel_publisher: Optional[ChannelPublisher] = None
         self._channel_target: Optional[str] = None
@@ -302,6 +304,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                     detail={"kind": violation_kind, "hits": violation_hits},
                 )
 
+        # 记入小群参与率统计，并处理道别后的静默期。
+        self._small_chat.record_outbound(chat_id, sent_text)
+
         inbound_at = self._last_inbound_at.get(chat_id)
         reply_latency = (time.monotonic() - inbound_at) if inbound_at else None
         typing_seconds = outbound_codec.last_typing_seconds
@@ -426,6 +431,37 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             if candidate:
                 return str(candidate)
         return ""
+
+    def _recent_speaker_count(self, session_key: str) -> int:
+        """估算会话近期的活跃发言人数。
+
+        用于区分"小群"与"大群"：同样的发言量在 4 人小群里很扎眼，
+        在几百人的群里则会被稀释。
+
+        Args:
+            session_key: 会话 ID。
+
+        Returns:
+            int: 近期不同发言者的数量。
+        """
+
+        speakers = self._recent_speakers.get(session_key)
+        return len(speakers) if speakers else 1
+
+    def _note_speaker(self, session_key: str, sender_id: str) -> None:
+        """记录一个发言者，用于估算会话规模。
+
+        只保留最近的若干人：群成员会变化，太久以前的发言者不能
+        代表当前的活跃规模。
+
+        Args:
+            session_key: 会话 ID。
+            sender_id: 发言者 ID。
+        """
+
+        speakers = self._recent_speakers.setdefault(session_key, deque(maxlen=40))
+        if sender_id not in speakers:
+            speakers.append(sender_id)
 
     async def _maybe_publish_to_channel(
         self, session_key: str, text: str, message_dict: Dict[str, Any]
@@ -1201,6 +1237,22 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 is_mention=is_mention,
                 has_media=getattr(event.message, "media", None) is not None,
             )
+
+        # 小群参与率约束：不路由给 Host 就不会产生回复。
+        #
+        # 某休闲小群实测参与率 63.6%（技术群只有 12-13%），别人说 3 句
+        # 我们接 2 句。小群人少、消息密，话多会被迅速聚焦——该群
+        # 正是第一个有人当面问 "ai？" 的地方。
+        self._note_speaker(session_key, str(sender_id))
+        self._small_chat.record_inbound(session_key)
+        suppressed, suppress_reason = self._small_chat.should_suppress(
+            session_key,
+            member_count=self._recent_speaker_count(session_key),
+            is_directed=is_mention,
+        )
+        if suppressed:
+            self.ctx.logger.info(f"小群约束跳过本条: {session_key} {suppress_reason}")
+            return
 
         external_message_id = f"{chat_id}:{getattr(event.message, 'id', '')}"
         try:
