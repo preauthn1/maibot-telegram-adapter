@@ -1224,6 +1224,11 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         # 每条入站都同步一次作息倍率——只在被 @ 时更新的话，
         # 深夜没人 @ 我们时作息压制就不会生效。
+        #
+        # 同时把这条消息记为「普通群聊活动」：只记被 @ 的话，
+        # compute_multiplier 会因 events 为空而恒返回最低倍率，
+        # 表现就是群里聊得火热而账号一直潜水（实测 8 个群全是 0.77）。
+        self._engagement.record_activity(session_key, str(sender_id))
         await self._sync_engagement_multiplier(session_key)
 
         # 模拟真人的「读完再回」延迟。

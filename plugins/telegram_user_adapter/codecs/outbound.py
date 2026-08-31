@@ -17,6 +17,7 @@ from ..humanize import humanize_chat_text, is_emoji_only
 from ..high_risk_chats import should_block as high_risk_should_block
 from ..output_sanity import detect_pollution
 from ..outbound_noise import is_noise_text
+from ..send_budget import SendBudget
 from ..telegram_user_client import TelegramUserClient
 from ..utils import estimate_typing_seconds, parse_topic_group_id
 
@@ -34,6 +35,8 @@ class TelegramUserOutboundCodec:
 
         self._tg = tg_client
         self._logger = logger
+        # 全局发送预算，跨群统计单位时间总量（见 send_budget 模块注释）
+        self._send_budget = SendBudget()
         self._simulate_typing = True
         self._typing_cps = 6.0
         self._min_think_delay = 0.8
@@ -180,6 +183,16 @@ class TelegramUserOutboundCodec:
         if not chat_id:
             return {"success": False, "error": "无法确定目标 chat_id"}
 
+        # 全局发送预算：不看是哪个群，只管单位时间总量。
+        #
+        # 2026-08-31 账号被 Telegram 反垃圾系统限制，事后复盘发现
+        # 15 时单小时出站 107 条。此前每个群的间隔与参与率都合规，
+        # 但十几个群并发时没有任何一处在看全局总量。
+        allowed, budget_reason = self._send_budget.check()
+        if not allowed:
+            self._logger.warning(f"发送预算拦截: {budget_reason} chat={chat_id}")
+            return {"success": False, "error": f"发送预算拦截: {budget_reason}"}
+
         entity = await self._resolve_entity(chat_id)
         if entity is None:
             return {"success": False, "error": f"无法解析目标会话: {chat_id}"}
@@ -237,6 +250,9 @@ class TelegramUserOutboundCodec:
                     continue
                 sent_any = True
                 last_sent = sent
+                # 每个成功发出的段都计入全局预算——真人看到的是"几条消息"，
+                # 而不是"一次回复"，所以按段计数才反映真实刷屏程度。
+                self._send_budget.record()
         finally:
             # 无论成功与否都安排下线，避免异常路径把账号永久挂在线上。
             if self._presence is not None:
