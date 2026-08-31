@@ -155,9 +155,15 @@ def test_farewell_silence_ignores_mention() -> None:
 
 
 def test_ratio_limit_matches_tech_groups() -> None:
-    """上限应当接近技术群的实测水平（12-15%），而非某休闲小群的 63%。"""
+    """上限需高于线上实测参与率，同时远低于某休闲小群的 63%。
 
-    assert 0.15 <= SMALL_CHAT_REPLY_RATIO <= 0.35
+    2026-08-31 实测九个白名单群整体参与率仅 6.9%（最低群 1.7%），
+    说明 0.30 的旧上限从未成为瓶颈——真正的压制来自发言间隔。
+    上限放宽到 0.45 以留出活跃空间，上界仍卡在 0.50 以下，
+    避免退回"别人说 3 句我们接 2 句"的刷屏状态。
+    """
+
+    assert 0.15 <= SMALL_CHAT_REPLY_RATIO <= 0.50
 
 
 def test_window_prunes_old_records() -> None:
