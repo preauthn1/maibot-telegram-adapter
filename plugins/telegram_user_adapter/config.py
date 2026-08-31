@@ -459,6 +459,92 @@ class TelegramUserObservabilityConfig(PluginConfigBase):
         return parsed if parsed >= 0 else 180.0
 
 
+class TelegramUserChannelPublishConfig(PluginConfigBase):
+    """频道发布配置。
+
+    核心约束是**发布时间不能有规律**——定时发帖比内容本身更容易
+    暴露自动化。因此这里只提供随机延迟区间与配额，不提供固定周期。
+    """
+
+    __ui_label__: ClassVar[str] = "频道发布"
+    __ui_order__: ClassVar[int] = 6
+
+    enabled: bool = Field(
+        default=False,
+        description="是否把群里有价值的内容整理后发到自己的频道。",
+        json_schema_extra={"label": "启用频道发布", "order": 0},
+    )
+    target: str = Field(
+        default="",
+        description="目标频道（@用户名或数字 ID）。",
+        json_schema_extra={"label": "目标频道", "order": 1},
+    )
+    daily_quota: int = Field(
+        default=4,
+        description="每日发布上限。频道是个人性质的，一天刷十几条不正常。",
+        json_schema_extra={"label": "每日上限", "order": 2},
+    )
+    min_interval_seconds: float = Field(
+        default=3600.0,
+        description="两次发布之间的最小间隔（秒）。",
+        json_schema_extra={"label": "最小间隔（秒）", "order": 3},
+    )
+    delay_min_seconds: float = Field(
+        default=300.0,
+        description="发布前随机延迟的下限（秒）。",
+        json_schema_extra={"label": "随机延迟下限（秒）", "order": 4},
+    )
+    delay_max_seconds: float = Field(
+        default=5400.0,
+        description="发布前随机延迟的上限（秒）。绝不定时发布。",
+        json_schema_extra={"label": "随机延迟上限（秒）", "order": 5},
+    )
+    forwardable_chats: List[str] = Field(
+        default_factory=list,
+        description=(
+            "允许原生转发的来源群。原生转发会带 Forwarded from，"
+            "等于公开自己潜伏在哪些群，因此默认留空，只做无署名摘要。"
+        ),
+        json_schema_extra={"label": "可原生转发的群", "order": 6},
+    )
+
+    @field_validator("daily_quota", mode="before")
+    @classmethod
+    def _normalize_quota(cls, value: Any) -> int:
+        """把每日配额规范化为正整数。"""
+
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 4
+        return parsed if parsed > 0 else 4
+
+    @field_validator(
+        "min_interval_seconds",
+        "delay_min_seconds",
+        "delay_max_seconds",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_seconds(cls, value: Any) -> float:
+        """把秒数规范化为非负浮点数。"""
+
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return parsed if parsed >= 0 else 0.0
+
+    @field_validator("forwardable_chats", mode="before")
+    @classmethod
+    def _normalize_chats(cls, value: Any) -> List[str]:
+        """把来源群列表规范化为字符串列表。"""
+
+        if not isinstance(value, (list, tuple)):
+            return []
+        return [str(item).strip() for item in value if str(item).strip()]
+
+
 class TelegramUserChatConfig(PluginConfigBase):
     """聊天名单配置。"""
 
@@ -553,6 +639,9 @@ class TelegramUserPluginSettings(PluginConfigBase):
         default_factory=TelegramUserObservabilityConfig
     )
     chat: TelegramUserChatConfig = Field(default_factory=TelegramUserChatConfig)
+    channel_publish: TelegramUserChannelPublishConfig = Field(
+        default_factory=TelegramUserChannelPublishConfig
+    )
 
     def should_connect(self) -> bool:
         """判断当前配置是否要求建立连接。"""
