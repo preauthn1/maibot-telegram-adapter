@@ -58,14 +58,14 @@ def test_capacity_evicts_oldest() -> None:
 
     memory = PeopleMemory(max_facts_per_person=3)
     for index in range(5):
-        memory.remember("user-1", f"事实{index}", now=1000.0 + index)
+        memory.remember("user-1", f"我用设备{index}", now=1000.0 + index)
 
     facts = memory.recall("user-1")
 
     assert len(facts) == 3
     texts = [fact.text for fact in facts]
-    assert "事实0" not in texts, "最旧的应被淘汰"
-    assert "事实4" in texts, "最新的应保留"
+    assert "我用设备0" not in texts, "最旧的应被淘汰"
+    assert "我用设备4" in texts, "最新的应保留"
 
 
 def test_people_are_isolated() -> None:
@@ -124,7 +124,7 @@ def test_fact_carries_timestamp() -> None:
     """事实要带时间戳，便于淘汰与人工排查。"""
 
     memory = PeopleMemory()
-    memory.remember("user-1", "在深圳", now=1234.0)
+    memory.remember("user-1", "我在深圳", now=1234.0)
 
     fact = memory.recall("user-1")[0]
 
