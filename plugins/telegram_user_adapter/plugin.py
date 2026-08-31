@@ -1321,17 +1321,20 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         await asyncio.sleep(read_delay)
 
         if self._debouncer.is_superseded(session_key, arrival_token, str(sender_id)):
-            # 被 @ / 被回复的消息不参与合并：那是指名要我们答的，
-            # 因为别人后面又说了几句就装没看见，比逐条应答更反常。
-            if is_mention:
-                self.ctx.logger.info(
-                    f"防抖合并跳过（被指名）: {session_key} 仍按原消息作答"
-                )
-            else:
-                self.ctx.logger.info(
-                    f"防抖合并: {session_key} 阅读期间有新消息到达，交给后一条统一作答"
-                )
-                return
+            # 被 @ 也一样合并。
+            #
+            # 最初担心「被指名却不答」，所以给 mention 开了豁免。但那样
+            # 同一人在 2 秒内连 @ 三次就会连回三句——比不答更反常，
+            # 也正是 debounce 模块注释里记录的封号成因之一。
+            #
+            # 现在的 is_superseded 只在「同发送者 + 间隔≤2s」时才判让位，
+            # 且最后一条永远不会被判让位，因此至少答一次是有保证的：
+            # 连 @ 三次 → 前两条让位，第三条作答。
+            self.ctx.logger.info(
+                f"防抖合并: {session_key} 同一人连发，交给最后一条统一作答"
+                f"{'（被指名）' if is_mention else ''}"
+            )
+            return
 
 
         await self._record_inbound_feedback(session_key, incoming_text)

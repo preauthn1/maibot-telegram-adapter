@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 
 import sys
@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins"))
 from telegram_user_adapter.human_rhythm import (  # noqa: E402
     CN_TZ,
     MAX_MULTIPLIER,
-    MIN_MULTIPLIER,
     get_activity_multiplier,
 )
 
