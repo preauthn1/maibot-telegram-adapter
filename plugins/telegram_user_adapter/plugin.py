@@ -30,7 +30,6 @@ from .codecs.reactions import ReactionInfo, parse_reaction_update
 from .config import TelegramUserPluginSettings
 from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
-from .channel_publisher import ChannelPost, ChannelPublisher, select_valuable_messages
 from .edit_tracker import EditTracker
 from .engagement import ChatEngagementTracker
 from .filters import TelegramUserChatFilter
@@ -110,10 +109,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 各会话近期发言者，用于估算群规模（小群 vs 大群）。
         self._recent_speakers: Dict[str, deque[str]] = {}
         # 频道发布器与目标；未配置时保持 None，表示功能关闭。
-        self._channel_publisher: Optional[ChannelPublisher] = None
-        self._channel_target: Optional[str] = None
         # 持有延迟发布任务的强引用，避免被 GC 提前回收。
-        self._channel_tasks: set[asyncio.Task[None]] = set()
 
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否登录。"""
@@ -476,89 +472,6 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if sender_id not in speakers:
             speakers.append(sender_id)
 
-    async def _maybe_publish_to_channel(
-        self, session_key: str, text: str, message_dict: Dict[str, Any]
-    ) -> None:
-        """把有价值的群消息按节奏转发到自己的频道。
-
-        节奏控制全部交给 ChannelPublisher：随机延迟、每日配额、
-        最小间隔、静默时段、来源去重。这里只负责筛内容和实际发送。
-
-        Args:
-            session_key: 来源会话。
-            text: 消息正文。
-            message_dict: 入站消息字典。
-        """
-
-        publisher = self._channel_publisher
-        if publisher is None or self._channel_target is None:
-            return
-
-        # 内容筛选保守：宁可少发，不可发垃圾。
-        # 频道内容质量差本身也是一种暴露。
-        picked = select_valuable_messages([{"text": text}], limit=1)
-        if not picked:
-            return
-
-        raw_id = message_dict.get("message_id")
-        post = ChannelPost(
-            text=text,
-            source_chat_id=session_key,
-            source_message_id=int(raw_id) if raw_id else None,
-        )
-        if publisher.is_duplicate(post):
-            return
-
-        decision = publisher.can_publish(monotonic_now=time.monotonic())
-        if not decision.allowed:
-            self.ctx.logger.debug(f"频道发布跳过: {decision.reason}")
-            return
-
-        # 先占位再延迟：并发入站时避免多条同时通过配额检查。
-        publisher.mark_published(post, monotonic_now=time.monotonic())
-        self.ctx.logger.info(
-            f"频道发布已排程: 来源={session_key} 延迟={decision.delay_seconds:.0f}秒"
-        )
-        self._channel_tasks.add(
-            asyncio.create_task(self._deliver_channel_post(post, decision.delay_seconds))
-        )
-
-    async def _deliver_channel_post(self, post: ChannelPost, delay: float) -> None:
-        """延迟后真正发出频道消息。
-
-        延迟是防暴露的关键：消息一出现就立刻转发，时间相关性太强，
-        一看就是自动化。
-
-        Args:
-            post: 待发布内容。
-            delay: 随机延迟秒数。
-        """
-
-        try:
-            await asyncio.sleep(delay)
-        except asyncio.CancelledError:
-            return
-
-        client = self._tg_client
-        publisher = self._channel_publisher
-        if client is None or publisher is None or self._channel_target is None:
-            return
-
-        try:
-            entity = await client.get_entity(self._channel_target)
-            if publisher.should_forward(post):
-                await client.forward_to_channel(
-                    entity, post.source_chat_id, post.source_message_id
-                )
-            else:
-                await client.publish_to_channel(entity, post.text)
-        except Exception as exc:  # noqa: BLE001 - 发布失败不影响聊天主流程
-            # 明确报错而非静默：整个功能没生效必须能被发现。
-            self.ctx.logger.error(f"频道发布失败: target={self._channel_target} {exc}")
-            return
-
-        self.ctx.logger.info(f"频道发布成功: {post.text[:30]!r}")
-
     async def _send_provocation_reply(
         self, session_key: str, text: str, message_dict: Dict[str, Any]
     ) -> None:
@@ -790,27 +703,6 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         behavior = settings.behavior
         quiet = settings.quiet_hours
         observability = settings.observability
-
-        # 按配置构建频道发布器。未启用或没填目标时保持 None，
-        # 让 _maybe_publish_to_channel 直接短路。
-        channel = settings.channel_publish
-        if channel.enabled and channel.target.strip():
-            self._channel_target = channel.target.strip()
-            self._channel_publisher = ChannelPublisher(
-                daily_quota=channel.daily_quota,
-                min_interval=channel.min_interval_seconds,
-                delay_min=channel.delay_min_seconds,
-                delay_max=channel.delay_max_seconds,
-                forwardable_chats=set(channel.forwardable_chats),
-            )
-            self.ctx.logger.info(
-                f"频道发布已启用: target={self._channel_target} "
-                f"每日上限={channel.daily_quota} "
-                f"随机延迟={channel.delay_min_seconds:.0f}-{channel.delay_max_seconds:.0f}秒"
-            )
-        else:
-            self._channel_target = None
-            self._channel_publisher = None
 
         self._tg_client = TelegramUserClient(
             api_id=account.api_id,
@@ -1242,7 +1134,6 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self.ctx.logger.info(f"阅读延迟 {read_delay:.1f} 秒后处理")
         await asyncio.sleep(read_delay)
 
-        await self._maybe_publish_to_channel(session_key, incoming_text, message_dict)
 
         await self._record_inbound_feedback(session_key, incoming_text)
 
