@@ -664,10 +664,14 @@ class BaseMaisakaReplyGenerator:
             "正常回复": "",
             "长回复": "可以针对问题做出较为详细的评论和说明",
         }
+        # 模型给出的 reply_style 未必是登记过的三个值：实测出现过
+        # "简短回复"（近义词）和 "normal"（英文），各 3 次，直接下标取值
+        # 会 KeyError 并让整次回复生成失败。风格提示只是锦上添花，
+        # 取不到时降级为空串即可，不该因此丢掉一次发言。
         normalized_reply_style = reply_style.strip()
         if not normalized_reply_style:
             return ""
-        return style_messages[normalized_reply_style]
+        return style_messages.get(normalized_reply_style, "")
 
     def _build_history_messages(
         self,
