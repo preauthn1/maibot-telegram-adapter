@@ -30,6 +30,7 @@ from .codecs.reactions import ReactionInfo, parse_reaction_update
 from .config import TelegramUserPluginSettings
 from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
+from .debounce import InboundDebouncer
 from .edit_tracker import EditTracker
 from .engagement import ChatEngagementTracker
 from .filters import TelegramUserChatFilter
@@ -41,6 +42,7 @@ from .high_risk_chats import (
     is_tech_topic,
 )
 from .human_rhythm import get_activity_multiplier
+from .people_memory import PeopleMemory
 from .presence import PresenceManager
 from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
@@ -50,6 +52,8 @@ from .small_chat import SmallChatModerator, estimate_read_delay
 from .spam_filter import detect_spam
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
+from .trigger import TriggerLevel, TriggerManager
+from .usage_stats import ModelPricing, UsageTracker
 from .utils import parse_topic_group_id
 
 
@@ -105,6 +109,27 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._frequency_cap_failed = False
         # 小群参与率约束：某休闲小群实测 63.6%，远高于技术群的 12%。
         self._small_chat = SmallChatModerator()
+        # 入站防抖：把连续到达的消息聚合成一次处理（见 debounce 模块注释）
+        self._debouncer = InboundDebouncer()
+        # 触发分级：区分「必须答」「值得插话」「随便聊」（见 trigger 模块注释）
+        self._trigger = TriggerManager()
+        # 人物记忆：记住群友的稳定事实（见 people_memory 模块注释）
+        self._people = PeopleMemory()
+        # 用量统计：按模型/会话记 token 与成本（见 usage_stats 模块注释）
+        #
+        # 单价按实际在用的模型配置（美元/百万 token）。GLM flash 档
+        # 目前免费，DeepSeek 走密钥池但仍按公开价折算，便于估算
+        # "如果全部走付费会花多少"。
+        self._usage = UsageTracker(
+            pricing={
+                "glm-5.3-flash": ModelPricing(0.0, 0.0),
+                "deepseek-chat": ModelPricing(0.27, 1.10),
+            }
+        )
+        # Host 未把实际模型名回传插件层，先用主用模型标识记账。
+        self._active_model_name = "glm-5.3-flash"
+        # 每 N 次出站写一次用量洞察，避免每条都写膨胀 transcript。
+        self._usage_log_interval = 50
         self._edit_tracker = EditTracker()
         # 各会话近期发言者，用于估算群规模（小群 vs 大群）。
         self._recent_speakers: Dict[str, deque[str]] = {}
@@ -315,6 +340,22 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         # 记入小群参与率统计，并处理道别后的静默期。
         self._small_chat.record_outbound(chat_id, sent_text)
+        # 触发冷却在这里才记账——必须是"真的发出去了"。
+        # 放在决策阶段记账会导致被后续关卡拦掉时白白消耗冷却。
+        self._trigger.record_response(chat_id)
+
+        # 记一次出站的用量。
+        #
+        # Host 没有把 token 用量回传到插件层，所以这里按已发出的
+        # 文本长度估算 completion，prompt 用该会话的上下文规模估算。
+        # 估算值不能当账单用，但足以回答"哪个群最烧 token""均值
+        # 是不是在涨"——后者是上下文膨胀的早期信号。
+        self._record_usage_estimate(chat_id, sent_text)
+
+        # 每 N 次出站落盘一次洞察：内存统计进程重启就归零，
+        # transcript 是落盘的，事后才能查"上周哪个群最烧钱"。
+        if self._usage.totals().calls % self._usage_log_interval == 0:
+            await self._log_usage_insight()
 
         inbound_at = self._last_inbound_at.get(chat_id)
         reply_latency = (time.monotonic() - inbound_at) if inbound_at else None
@@ -440,6 +481,70 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             if candidate:
                 return str(candidate)
         return ""
+
+    def _record_usage_estimate(self, chat_id: str, sent_text: str) -> None:
+        """按出站文本估算并记录一次用量。
+
+        Host 未把真实 token 用量回传插件层，所以这里用估算值。
+        中文约 1.5 字符/token，英文约 4 字符/token，取 2.0 折中。
+        prompt 侧按该会话近期发言者数量粗估上下文规模——人多的群
+        上下文更长，这与实测的 token 分布一致。
+
+        估算不能当账单，但足以回答"哪个群最烧 token"和"均值是不是
+        在涨"，后者是上下文膨胀的早期信号。
+
+        Args:
+            chat_id: 会话标识。
+            sent_text: 已发出的文本。
+        """
+
+        chars_per_token = 2.0
+        completion = max(1, int(len(sent_text) / chars_per_token))
+
+        # 上下文规模随近期发言者数量增长：每人约带 300 token 的历史，
+        # 基线 800 token 是系统提示与人格设定。
+        speaker_count = self._recent_speaker_count(chat_id)
+        prompt = 800 + speaker_count * 300
+
+        self._usage.record(
+            model=self._active_model_name,
+            session=chat_id,
+            prompt=prompt,
+            completion=completion,
+        )
+
+    async def _log_usage_insight(self) -> None:
+        """把用量洞察写入 transcript 事件日志。
+
+        写进 transcript 而不是只留在内存：进程重启后内存统计归零，
+        但 transcript 是落盘的，事后能查"上周哪个群最烧钱"。
+        """
+
+        if self._transcript is None:
+            return
+
+        totals = self._usage.totals()
+        if totals.calls == 0:
+            return
+
+        top = [
+            {"session": name, "tokens": bucket.total_tokens, "calls": bucket.calls}
+            for name, bucket in self._usage.top_sessions(limit=5)
+        ]
+        await self._transcript.log_event(
+            chat_id="__usage__",
+            event="usage_insight",
+            detail={
+                "calls": totals.calls,
+                "prompt_tokens": totals.prompt_tokens,
+                "completion_tokens": totals.completion_tokens,
+                "avg_tokens_per_call": round(
+                    self._usage.average_tokens_per_call(), 1
+                ),
+                "estimated_cost": round(self._usage.total_cost(), 6),
+                "top_sessions": top,
+            },
+        )
 
     def _recent_speaker_count(self, session_key: str) -> int:
         """估算会话近期的活跃发言人数。
@@ -789,6 +894,20 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         )
         self._outbound_codec.set_presence_manager(self._presence)
 
+        # 把 SKILL.md 里积累的失败模式载入发言前自检。
+        #
+        # self_improvement 负责事后把教训写进 SKILL.md，这里负责
+        # 在发言前把它们读回来用上——否则积累的经验只是存档，
+        # 不会真正阻止重犯。
+        if self._self_improvement is not None and self._self_improvement.enabled:
+            skill_text = self._self_improvement.skill_path.read_text(
+                encoding="utf-8", errors="replace"
+            )
+            pattern_count = self._outbound_codec.refresh_lessons(skill_text)
+            self.ctx.logger.info(
+                f"发言前自检已载入 {pattern_count} 条失败模式"
+            )
+
         self._send_queue = SendQueue(
             self.ctx.logger,
             quiet_start_hour=quiet.start_hour,
@@ -1123,16 +1242,34 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._engagement.record_activity(session_key, str(sender_id))
         await self._sync_engagement_multiplier(session_key)
 
-        # 模拟真人的「读完再回」延迟。
+        # 模拟真人的「读完再回」延迟，并在此期间做突发合并。
         #
         # 8-30 在某休闲小群 50 秒内以 4/4/1/2 秒的间隔连续接话 4 次，
         # 对方立刻发出 "ai？"。人在手机上光是读完一句就不止 1 秒。
         #
         # 必须放在入站侧而不是发送队列内：队列是全局串行的，
         # 在 action 里 sleep 会让每条消息独占队列十几秒，直接堵死出站。
+        #
+        # 防抖（突发合并）：真人是「听完再说」——群里连着来五句，
+        # 人读完再回一次，不会逐条应答。逐条机械响应比发言总量
+        # 更能解释账号为何被看出不是真人（2026-08-31 因用户举报被封）。
+        arrival_token = self._debouncer.note_arrival(session_key)
         read_delay = estimate_read_delay(incoming_text)
         self.ctx.logger.info(f"阅读延迟 {read_delay:.1f} 秒后处理")
         await asyncio.sleep(read_delay)
+
+        if self._debouncer.is_superseded(session_key, arrival_token):
+            # 被 @ / 被回复的消息不参与合并：那是指名要我们答的，
+            # 因为别人后面又说了几句就装没看见，比逐条应答更反常。
+            if is_mention:
+                self.ctx.logger.info(
+                    f"防抖合并跳过（被指名）: {session_key} 仍按原消息作答"
+                )
+            else:
+                self.ctx.logger.info(
+                    f"防抖合并: {session_key} 阅读期间有新消息到达，交给后一条统一作答"
+                )
+                return
 
 
         await self._record_inbound_feedback(session_key, incoming_text)
@@ -1170,6 +1307,31 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 f"技术话题回避: {session_key} text={incoming_text[:30]!r}"
             )
             return
+
+        # 触发分级：区分「必须答」「关注话题」「随便聊」三档。
+        #
+        # 此前只有 small_chat 的单一间隔，所有场景一视同仁，两头都不像
+        # 真人：被 @ 了还在潜水（某群实测 25 次决策 0 次回复），
+        # 闲聊时又话太密（15 时 107 条）。真人是被点名就答、
+        # 闲聊看心情，这两件事的节奏本就不同。
+        #
+        # 注意 evaluate 是纯判断，冷却记账在发送成功后才做——
+        # 参考实现在判断时就记账，导致后续被参与率或内容过滤拦掉时
+        # 冷却已被白白消耗，表现为"该说话时反而沉默"。
+        trigger = self._trigger.evaluate(
+            session_key,
+            incoming_text,
+            is_private=bool(getattr(event, "is_private", False)),
+            is_directed=is_mention,
+        )
+        if not trigger.should_respond:
+            self.ctx.logger.info(
+                f"触发分级跳过本条: {session_key} {trigger.reason}"
+            )
+            return
+        self.ctx.logger.debug(
+            f"触发档位={trigger.level.value} 原因={trigger.reason} chat={session_key}"
+        )
 
         # 高风险群用更严格的参与率与间隔覆盖默认值。
         risk_ratio = get_reply_ratio(session_key)
