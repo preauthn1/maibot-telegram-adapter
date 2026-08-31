@@ -70,15 +70,25 @@ def test_should_react_alone_does_not_throttle() -> None:
     )
 
 
-def test_release_returns_quota() -> None:
-    """发送失败时归还额度，下一条应能重新通过。"""
+def test_release_returns_hourly_quota_only() -> None:
+    """回滚只还小时额度，冷却刻意不还。
 
-    policy = _make_policy()
+    早先的实现连冷却一起还，导致「发送失败之后反而点得更频繁」，
+    与限流意图相反。现在的语义是：额度还回去（不白占小时配额），
+    但冷却继续计时（失败不等于可以立刻再来一次）。
+    """
+
+    # 冷却设为 0，单独观察小时额度这一项
+    policy = ReactionPolicy(probability=1.0, chat_cooldown=0.0, hourly_limit=2)
 
     assert policy.reserve("chat-a", 1) is True
-    policy.release("chat-a", 1)
+    assert policy.reserve("chat-a", 2) is True
+    assert policy.reserve("chat-a", 3) is False, "小时额度已用尽"
 
-    assert policy.reserve("chat-a", 2) is True, "回滚后额度没还回来"
+    # 回滚一次，额度应当还回来
+    policy.release("chat-a", 2)
+
+    assert policy.reserve("chat-a", 4) is True, "回滚后小时额度没还回来"
 
 
 def test_release_without_reserve_is_safe() -> None:
@@ -117,3 +127,54 @@ def test_separate_chats_have_own_cooldown() -> None:
     assert policy.reserve("chat-a", 1) is True
     assert policy.reserve("chat-b", 1) is True
     assert policy.reserve("chat-a", 2) is False
+
+
+def test_release_preserves_cooldown() -> None:
+    """回滚不该清空冷却——否则一次失败就让下一条立刻放行。
+
+    回归审计发现：release() 直接 pop 掉 _last_reaction_at，
+    冷却完全绕过。而 plugin.py 的 finally 里几乎每条失败路径
+    都会触发 release（pick_emoji 返回 None、消息已删、无权限、
+    FloodWait），实战触发频率不低。
+    """
+
+    policy = _make_policy()
+
+    # 占用成功但发送失败 → 回滚
+    assert policy.reserve("chat-a", 1) is True
+    policy.release("chat-a", 1)
+
+    # 回滚只该还额度，不该把冷却也抹掉。
+    # 若冷却被清空，下一条会立刻放行——表现为失败后反而更频繁。
+    assert policy.reserve("chat-a", 2) is False, "回滚清空了冷却"
+
+
+def test_release_does_not_affect_other_chats() -> None:
+    """回滚 A 会话不该动到 B 会话的状态。
+
+    原实现 pop 列表尾部，弹掉的可能是别的会话刚追加的时间戳。
+    """
+
+    policy = _make_policy()
+
+    assert policy.reserve("chat-a", 1) is True
+    assert policy.reserve("chat-b", 1) is True
+
+    policy.release("chat-a", 1)
+
+    # B 的冷却必须还在
+    assert policy.reserve("chat-b", 2) is False, "回滚 A 影响了 B 的冷却"
+
+
+def test_released_message_not_reacted_twice() -> None:
+    """同一条消息回滚后不该被二次点表情。
+
+    对同一条消息点两次是明显的脚本行为。_reacted 不该回滚。
+    """
+
+    policy = ReactionPolicy(probability=1.0, chat_cooldown=0.0, hourly_limit=100)
+
+    assert policy.reserve("chat-a", 42) is True
+    policy.release("chat-a", 42)
+
+    assert policy.reserve("chat-a", 42) is False, "同一条消息被二次点表情"

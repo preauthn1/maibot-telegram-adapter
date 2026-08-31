@@ -354,44 +354,52 @@ class TelegramUserOutboundCodec:
                     )
                 text = humanized.text
 
-                # 最后一道关卡：拦截模型输出泄漏。
-                #
-                # 8-30 曾在某休闲小群发出 "假false"——中英混杂的布尔值，
-                # 9 秒前刚有人问过 "ai？"，这条基本坐实了怀疑。
-                # 这类文本一次泄漏就足以暴露，宁可少说一句也不能发出去。
-                polluted, reasons = detect_pollution(text)
-                if polluted:
-                    self._logger.error(
-                        f"拦截污染文本，不发送: {text!r} 命中={reasons}"
-                    )
-                    return None
+                # 以下三道是**安全拦截**，与 humanize 无关，因此放在
+            # 开关外面（NSFW 检测同理）。
+            #
+            # 曾经它们缩在 if self._enable_humanize 块内：关掉改写
+            # 开关（本意只是"别改我的话"）会连带失去全部防护，实测
+            # "假false"、'assistant: 好的'、'{"role": "user"}'、
+            # "作为一个AI我不能这么说" 全部照发。
 
-                # 发言前自检：用已积累的教训拦住重犯。
-                #
-                # self_improvement 是事后学习——发出去才知道被质疑。
-                # 借鉴 Hermes「动手前先加载相关知识」的做法，把
-                # SKILL.md 里记录的失败模式在发言前先匹配一遍。
-                # 账号已因用户举报被封过一次，事后补救来不及。
-                verdict = review_draft(text, store=self._lesson_store)
-                if not verdict.allowed:
-                    self._logger.warning(
-                        f"发言前自检拦截: chat={chat_id} {verdict.reason} text={text!r}"
-                    )
-                    return None
+            # 最后一道关卡：拦截模型输出泄漏。
+            #
+            # 8-30 曾在某休闲小群发出 "假false"——中英混杂的布尔值，
+            # 9 秒前刚有人问过 "ai？"，这条基本坐实了怀疑。
+            # 这类文本一次泄漏就足以暴露，宁可少说一句也不能发出去。
+            polluted, reasons = detect_pollution(text)
+            if polluted:
+                self._logger.error(
+                    f"拦截污染文本，不发送: {text!r} 命中={reasons}"
+                )
+                return None
 
-                # 高风险群的额外约束：长度与语气。
-                #
-                # 某高风险小群中位消息仅 13 字、13 人熟人圈，
-                # 我们只发过 1 条就被当面问 "你是大语言模型吗？"。
-                # 这种圈子的破绽不是说错话，而是说得太齐整。
-                blocked, block_reason = high_risk_should_block(str(chat_id), text)
-                if blocked:
-                    self._logger.info(
-                        f"高风险群拦截: chat={chat_id} {block_reason} text={text!r}"
-                    )
-                    return None
+            # 发言前自检：用已积累的教训拦住重犯。
+            #
+            # self_improvement 是事后学习——发出去才知道被质疑。
+            # 借鉴 Hermes「动手前先加载相关知识」的做法，把
+            # SKILL.md 里记录的失败模式在发言前先匹配一遍。
+            # 账号已因用户举报被封过一次，事后补救来不及。
+            verdict = review_draft(text, store=self._lesson_store)
+            if not verdict.allowed:
+                self._logger.warning(
+                    f"发言前自检拦截: chat={chat_id} {verdict.reason} text={text!r}"
+                )
+                return None
 
-                # 改写后又变成纯 emoji 的，同样不发。
+            # 高风险群的额外约束：长度与语气。
+            #
+            # 某高风险小群中位消息仅 13 字、13 人熟人圈，
+            # 我们只发过 1 条就被当面问 "你是大语言模型吗？"。
+            # 这种圈子的破绽不是说错话，而是说得太齐整。
+            blocked, block_reason = high_risk_should_block(str(chat_id), text)
+            if blocked:
+                self._logger.info(
+                    f"高风险群拦截: chat={chat_id} {block_reason} text={text!r}"
+                )
+                return None
+
+            # 改写后又变成纯 emoji 的，同样不发。
                 if is_emoji_only(text):
                     self._logger.info(f"改写后仅剩 emoji，不发送: {text!r}")
                     return None
