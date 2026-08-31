@@ -33,6 +33,7 @@ from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_N
 from .engagement import ChatEngagementTracker
 from .filters import TelegramUserChatFilter
 from .presence import PresenceManager
+from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
 from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion, inspect_own_message
 from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
@@ -88,6 +89,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._user_message_times: Dict[tuple[str, str], List[float]] = {}
         # 各群互动质量追踪，用于动态调整发言意愿。
         self._engagement = ChatEngagementTracker()
+        # 针对性挑衅的回应节奏控制（每人只回一次）。
+        self._provocation = ProvocationResponder()
 
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否登录。"""
@@ -378,6 +381,45 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             if candidate:
                 return str(candidate)
         return ""
+
+    async def _send_provocation_reply(
+        self, session_key: str, text: str, message_dict: Dict[str, Any]
+    ) -> None:
+        """发送一条挑衅回应。
+
+        绕过 LLM 直接发固定话术：被骂时不需要推理，而且固定话术
+        可控——不会因为模型被激怒而说出更难听的话。
+
+        引用对方那条消息，让回应指向明确，避免群里其他人误会。
+
+        Args:
+            session_key: 会话键。
+            text: 要发送的话。
+            message_dict: 触发本次回应的入站消息。
+        """
+
+        client = self._client
+        if client is None:
+            return
+
+        reply_to = message_dict.get("message_id")
+        try:
+            entity = await client.get_entity(session_key)
+            await client.client.send_message(
+                entity,
+                text,
+                reply_to=int(reply_to) if reply_to else None,
+            )
+        except Exception as exc:  # noqa: BLE001 - 回应失败不影响主流程
+            self.ctx.logger.warning(f"挑衅回应发送失败: chat={session_key} {exc}")
+            return
+
+        if self._transcript is not None:
+            await self._transcript.log_event(
+                chat_id=session_key,
+                event="provocation_reply",
+                detail={"text": text},
+            )
 
     async def _sync_engagement_multiplier(self, chat_id: str) -> None:
         """把该会话的互动权重写回 Host 的发言频率调节槽。
@@ -931,6 +973,31 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if is_mention:
             # 需求 5：被 @ 或被回复时，该群下次发送享有最高优先级。
             self._recent_mentions[session_key] = time.monotonic()
+
+            # 被点名辱骂时硬气回一句。只在\"直接针对我们\"时触发——
+            # 群里骂别人不关我们的事，泛化判断会误伤无辜的人。
+            # 回应不带脏字，且同一个人只回一次：对方要的就是反应，
+            # 给一次就够，继续纠缠不再理会。
+            is_provoked, provoke_hits = detect_provocation(
+                incoming_text, is_directed=True
+            )
+            if is_provoked:
+                comeback = self._provocation.build_response(
+                    session_key, str(sender_id)
+                )
+                if comeback is not None:
+                    self.ctx.logger.info(
+                        f"检测到针对性挑衅，回应一次: chat={session_key} "
+                        f"sender={sender_id} 命中={provoke_hits}"
+                    )
+                    await self._send_provocation_reply(
+                        session_key, comeback, message_dict
+                    )
+                else:
+                    self.ctx.logger.info(
+                        f"挑衅冷却中，不再回应: chat={session_key} sender={sender_id}"
+                    )
+                return
 
             # 被 @ 或被回复是最可靠的\"真实互动\"信号：记入群权重。
             # 注意按人去重（tracker 内部对单用户设了计数上限），
