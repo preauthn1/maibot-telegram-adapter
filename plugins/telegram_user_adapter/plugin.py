@@ -31,6 +31,7 @@ from .config import TelegramUserPluginSettings
 from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
 from .channel_publisher import ChannelPost, ChannelPublisher, select_valuable_messages
+from .edit_tracker import EditTracker
 from .engagement import ChatEngagementTracker
 from .filters import TelegramUserChatFilter
 from .high_risk_chats import (
@@ -105,6 +106,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._frequency_cap_failed = False
         # 小群参与率约束：某休闲小群实测 63.6%，远高于技术群的 12%。
         self._small_chat = SmallChatModerator()
+        self._edit_tracker = EditTracker()
         # 各会话近期发言者，用于估算群规模（小群 vs 大群）。
         self._recent_speakers: Dict[str, deque[str]] = {}
         # 频道发布器与目标；未配置时保持 None，表示功能关闭。
@@ -924,6 +926,12 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             incoming_only=behavior.ignore_outgoing_from_other_devices,
         )
 
+        # 编辑事件：真人常改口，且改写身份质问是探测手法，必须感知。
+        self._tg_client.add_edit_handler(
+            self._on_message_edited,
+            incoming_only=behavior.ignore_outgoing_from_other_devices,
+        )
+
         # 表情回应走 raw MTProto 更新，NewMessage 事件覆盖不到。
         if behavior.receive_reactions:
             from telethon.tl import types as _tl_types
@@ -1282,6 +1290,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return
 
         external_message_id = f"{chat_id}:{getattr(event.message, 'id', '')}"
+        # 记录"我方将对这条消息作答"，供编辑追踪判定探测模式：
+        # 我方回复过的消息事后被改写，是身份探测的典型手法。
+        inbound_message_id = getattr(event.message, "id", None)
+        if inbound_message_id is not None:
+            self._edit_tracker.note_reply(
+                chat_id=str(chat_id),
+                message_id=int(inbound_message_id),
+            )
         try:
             await self.ctx.gateway.route_message(
                 gateway_name=TELEGRAM_USER_GATEWAY_NAME,
@@ -1423,6 +1439,52 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         allowed = resolve_allowed_reactions(available)
         self._allowed_reactions_cache[chat_id] = allowed
         return allowed
+
+    async def _on_message_edited(self, event: Any) -> None:
+        """处理一条消息编辑事件。
+
+        真人频繁改口（白名单群实测平均 10.9%，某高风险群 27%），而该高风险群
+        两次身份质问（"你是大语言模型吗？"、"你是一个猫娘"）都被编辑过，
+        属于"发问→看反应→改内容→再看反应"的探测手法。
+
+        **不走 route_message**：编辑不是一条新的待回复消息。真人不会因为对方
+        改了个字就再答一遍，那反而是紧盯消息流的机器特征。这里只做两件事：
+        更新本地上下文中的原文，以及在命中探测模式时留下告警日志。
+
+        Args:
+            event: Telethon ``MessageEdited.Event`` 对象。
+        """
+
+        raw_chat_id = getattr(event, "chat_id", None)
+        if raw_chat_id is None:
+            return
+        chat_id = str(raw_chat_id)
+
+        message_id = getattr(event.message, "id", None)
+        if message_id is None:
+            return
+
+        new_text = str(getattr(event.message, "text", "") or "")
+        record = self._edit_tracker.note_edit(
+            chat_id=chat_id,
+            message_id=int(message_id),
+            new_text=new_text,
+        )
+        if record is None:
+            return
+
+        if record.we_replied:
+            self.ctx.logger.warning(
+                f"我方已回复的消息被编辑: chat={chat_id} mid={message_id} "
+                f"新文本={new_text[:60]!r}"
+            )
+        else:
+            self.ctx.logger.info(f"消息被编辑: chat={chat_id} mid={message_id}")
+
+        if self._edit_tracker.is_probe_pattern(chat_id=chat_id):
+            self.ctx.logger.warning(
+                f"检测到身份探测式编辑: chat={chat_id} —— 对方改写了我方回复过的质问"
+            )
 
     async def _on_reaction_update(self, update: Any) -> None:
         """处理一条表情回应更新。
