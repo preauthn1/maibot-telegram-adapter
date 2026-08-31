@@ -18,6 +18,7 @@ from ..humanize import humanize_chat_text, is_emoji_only
 from ..high_risk_chats import should_block as high_risk_should_block
 from ..output_sanity import detect_pollution
 from ..outbound_noise import is_noise_text
+from ..pre_send_review import LessonStore, review_draft
 from ..send_budget import SendBudget
 from ..telegram_user_client import TelegramUserClient
 from ..utils import estimate_typing_seconds, parse_topic_group_id
@@ -40,6 +41,8 @@ class TelegramUserOutboundCodec:
         self._send_budget = SendBudget()
         # 注意力焦点，限制同时活跃的群数（见 attention_focus 模块注释）
         self._attention = AttentionFocus()
+        # 发言前自检用的教训库，由 refresh_lessons 从 SKILL.md 载入
+        self._lesson_store = LessonStore()
         self._simulate_typing = True
         self._typing_cps = 6.0
         self._min_think_delay = 0.8
@@ -54,6 +57,22 @@ class TelegramUserOutboundCodec:
         self._last_typing_seconds = 0.0
         self._last_humanize_rules: list[str] = []
         self._last_original_text = ""
+
+    def refresh_lessons(self, skill_markdown: str) -> int:
+        """从 SKILL.md 文本重载发言前自检的教训库。
+
+        支持热加载：人在 SKILL.md 里补一条失败模式，不用重启
+        就能在下一条发言时生效。
+
+        Args:
+            skill_markdown: SKILL.md 全文。
+
+        Returns:
+            int: 载入的模式条数。
+        """
+
+        self._lesson_store = LessonStore.from_markdown(skill_markdown)
+        return len(self._lesson_store.patterns)
 
     def set_presence_manager(self, presence: Any) -> None:
         """注入在线状态管理器。
@@ -344,6 +363,19 @@ class TelegramUserOutboundCodec:
                 if polluted:
                     self._logger.error(
                         f"拦截污染文本，不发送: {text!r} 命中={reasons}"
+                    )
+                    return None
+
+                # 发言前自检：用已积累的教训拦住重犯。
+                #
+                # self_improvement 是事后学习——发出去才知道被质疑。
+                # 借鉴 Hermes「动手前先加载相关知识」的做法，把
+                # SKILL.md 里记录的失败模式在发言前先匹配一遍。
+                # 账号已因用户举报被封过一次，事后补救来不及。
+                verdict = review_draft(text, store=self._lesson_store)
+                if not verdict.allowed:
+                    self._logger.warning(
+                        f"发言前自检拦截: chat={chat_id} {verdict.reason} text={text!r}"
                     )
                     return None
 
