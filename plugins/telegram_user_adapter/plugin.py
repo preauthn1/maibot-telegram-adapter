@@ -245,6 +245,21 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 )
             return {"success": False, "error": "连续发言已达上限，本条不发送"}
 
+        # 检查通过就立刻预占名额，而不是等发送成功再加。
+        #
+        # 原实现「检查在入队前、自增在发送成功后」之间隔着整条队列
+        # 等待 + 发送间隔 + 打字模拟，可能几十秒。Host 短时间下发多条
+        # 出站消息（拆段回复、多轮并发决策）时，它们看到的计数全是 0，
+        # 于是全部放行——max_consecutive_replies 形同虚设。
+        # 而 config.py 对该项的描述是「贴着一个人连续接话是被识破的
+        # 头号原因」。失败路径在 finally 里回滚。
+        reserved_chat = ""
+        if chat_id:
+            self._consecutive_replies[chat_id] = (
+                self._consecutive_replies.get(chat_id, 0) + 1
+            )
+            reserved_chat = chat_id
+
         priority = self._resolve_priority(chat_id)
         enqueued_at = time.monotonic()
 
@@ -259,6 +274,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             )
         except QuietHoursError:
             # 静默时段：安静丢弃，绝不向聊天回显任何内容（需求 4 + 9）。
+            self._release_consecutive(reserved_chat)
             if self._transcript is not None and chat_id:
                 await self._transcript.log_event(
                     chat_id,
@@ -267,8 +283,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 )
             return {"success": False, "error": "quiet_hours", "silent": True}
         except asyncio.CancelledError:
+            self._release_consecutive(reserved_chat)
             raise
         except Exception as exc:  # noqa: BLE001 - 出站异常统一转成静默失败
+            self._release_consecutive(reserved_chat)
             self.ctx.logger.error(f"Telegram 发送失败: {exc}")
             if self._transcript is not None and chat_id:
                 await self._transcript.log_event(
@@ -278,6 +296,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 )
             # 需求 9：出错绝不向聊天回显，只返回失败让上游静默处理。
             return {"success": False, "error": str(exc), "silent": True}
+
+        if not result.get("success"):
+            # 发送未成功，把预占的名额还回去
+            self._release_consecutive(reserved_chat)
 
         if result.get("success") and chat_id:
             await self._after_successful_send(
@@ -314,9 +336,6 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         sent_text = self._extract_text_from_message(message)
         self._last_outbound_text[chat_id] = sent_text
-
-        # 连发计数 +1。别人插话时会在入站侧清零。
-        self._consecutive_replies[chat_id] = self._consecutive_replies.get(chat_id, 0) + 1
 
         # 出站自省：检查\"我刚才说的话\"本身有没有越界（怼人、顺着下流话题接话）。
         # 人设约束只是概率性的，模型仍可能翻车；把翻车样本记下来回灌 prompt，
@@ -716,6 +735,24 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             )
             return True
         return False
+
+    def _release_consecutive(self, chat_id: str) -> None:
+        """归还一个已预占但最终没发出去的连发名额。
+
+        预占是为了修复 TOCTOU（检查在入队前、自增在发送成功后，
+        中间隔着整条队列，导致并发下 max_consecutive_replies 失效）。
+        但预占之后每条失败路径都必须回滚，否则一次静默丢弃或发送
+        失败就会永久占用名额，几次之后该群彻底闭嘴。
+
+        Args:
+            chat_id: 之前预占时记下的会话 ID；空串表示没预占过。
+        """
+
+        if not chat_id:
+            return
+        current = self._consecutive_replies.get(chat_id, 0)
+        if current > 0:
+            self._consecutive_replies[chat_id] = current - 1
 
     def _is_consecutive_limited(self, chat_id: str) -> bool:
         """判断某会话是否已达连续发言上限。
