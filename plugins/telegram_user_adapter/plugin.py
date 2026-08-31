@@ -39,7 +39,7 @@ from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
 from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion, inspect_own_message
 from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
-from .small_chat import SmallChatModerator
+from .small_chat import SmallChatModerator, estimate_read_delay
 from .spam_filter import detect_spam
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
@@ -1170,6 +1170,17 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 每条入站都同步一次作息倍率——只在被 @ 时更新的话，
         # 深夜没人 @ 我们时作息压制就不会生效。
         await self._sync_engagement_multiplier(session_key)
+
+        # 模拟真人的「读完再回」延迟。
+        #
+        # 8-30 在某休闲小群 50 秒内以 4/4/1/2 秒的间隔连续接话 4 次，
+        # 对方立刻发出 "ai？"。人在手机上光是读完一句就不止 1 秒。
+        #
+        # 必须放在入站侧而不是发送队列内：队列是全局串行的，
+        # 在 action 里 sleep 会让每条消息独占队列十几秒，直接堵死出站。
+        read_delay = estimate_read_delay(incoming_text)
+        self.ctx.logger.info(f"阅读延迟 {read_delay:.1f} 秒后处理")
+        await asyncio.sleep(read_delay)
 
         await self._maybe_publish_to_channel(session_key, incoming_text, message_dict)
 
