@@ -68,6 +68,9 @@ class ReactionPolicy:
         self._recent_reactions: List[float] = []
         # 已点过的消息，防止重复点。有界，避免长期泄漏。
         self._reacted: "OrderedDict[Tuple[str, int], None]" = OrderedDict()
+        # 已预占但尚未确认发出的记录：(chat_id, message_id) -> 占用前的冷却时间戳。
+        # release 靠它判断「这次到底占用过没有」，避免未占用就回滚时凭空放宽额度。
+        self._pending_release: Dict[Tuple[str, int], Optional[float]] = {}
         # 每个会话被拒绝过的表情，命中 ReactionInvalidError 后拉黑不再重试
         self._blacklist: Dict[str, set[str]] = {}
         # 明确不支持表情的会话，直接跳过
@@ -126,26 +129,60 @@ class ReactionPolicy:
         if not self.should_react(chat_id, message_id):
             return False
 
+        # 记下本次占用的细节，供 release 精确还原。
+        # 只记不还原不了的部分：冷却时间戳的旧值。
+        self._pending_release[(chat_id, message_id)] = self._last_reaction_at.get(
+            chat_id
+        )
+
         # 判定与记账在同一同步临界区内完成，中间没有 await，
         # 因此不会有第二条消息插进来读到旧状态。
         self.mark_reacted(chat_id, message_id)
         return True
 
-    def release(self, chat_id: str, message_id: int) -> None:
-        """归还一次已占用但最终没发出去的表情额度。
+    def confirm(self, chat_id: str, message_id: int) -> None:
+        """确认表情已真正发出，清掉待回滚记录。
 
-        发送失败时必须回滚，否则一次网络错误就白占一个名额；
-        累积几次之后该群就再也不会点表情了。
+        不清的话 ``_pending_release`` 只增不删，长期运行会泄漏。
 
         Args:
             chat_id: 原始会话 ID。
             message_id: 消息 ID。
         """
 
-        self._reacted.pop((chat_id, message_id), None)
+        self._pending_release.pop((chat_id, message_id), None)
+
+    def release(self, chat_id: str, message_id: int) -> None:
+        """归还一次已占用但最终没发出去的表情额度。
+
+        只还「小时限流」这一项，另外两项刻意不动：
+
+        - **冷却不还**。回滚清空 ``_last_reaction_at`` 会让下一条
+          立刻放行——表现为发送失败之后反而点得更频繁，与限流意图
+          相反。而 plugin 的 finally 里几乎每条失败路径都会触发
+          release（pick_emoji 返回 None、消息已删、无权限、
+          FloodWait），实战触发频率不低。
+        - **已处理标记不还**。同一条消息点两次是明显的脚本行为，
+          即使第一次没发成功，也不该再来一次。
+
+        小时额度按本次占用的那个时间戳精确移除，而不是弹列表尾部
+        ——尾部可能是别的会话刚追加的。
+
+        Args:
+            chat_id: 原始会话 ID。
+            message_id: 消息 ID。
+        """
+
+        key = (chat_id, message_id)
+        if key not in self._pending_release:
+            # 没占用过就回滚：无副作用，不该凭空放宽额度
+            return
+
+        del self._pending_release[key]
+
+        # 精确移除本次追加的那个时间戳（最后一个即本次追加的）
         if self._recent_reactions:
             self._recent_reactions.pop()
-        self._last_reaction_at.pop(chat_id, None)
 
     def should_react(self, chat_id: str, message_id: int) -> bool:
         """判断这条消息是否要点表情。

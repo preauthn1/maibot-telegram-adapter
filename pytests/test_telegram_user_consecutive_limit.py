@@ -173,7 +173,7 @@ def test_normal_conversation_not_flagged_as_flood() -> None:
 
     p = _FloodPlugin(limit=12, window=600.0)
     blocked = 0
-    for i in range(10):
+    for _ in range(10):
         p.now += 30.0  # 每30秒说一句，很正常
         if p.is_flooding("-100X", "user1"):
             blocked += 1
@@ -185,7 +185,7 @@ def test_rapid_flood_is_blocked() -> None:
 
     p = _FloodPlugin(limit=12, window=600.0)
     blocked = 0
-    for i in range(30):
+    for _ in range(30):
         p.now += 1.0  # 每秒一条
         if p.is_flooding("-100X", "spammer"):
             blocked += 1
@@ -196,7 +196,7 @@ def test_flood_limit_is_per_user() -> None:
     """一个人刷屏不该影响群里其他人。"""
 
     p = _FloodPlugin(limit=5, window=600.0)
-    for i in range(10):
+    for _ in range(10):
         p.now += 1.0
         p.is_flooding("-100X", "spammer")
     # 另一个正常用户不受影响
@@ -207,7 +207,7 @@ def test_flood_window_expires() -> None:
     """窗口过后重新计数，不能永久拉黑。"""
 
     p = _FloodPlugin(limit=5, window=600.0)
-    for i in range(10):
+    for _ in range(10):
         p.now += 1.0
         p.is_flooding("-100X", "user1")
     # 窗口过去
