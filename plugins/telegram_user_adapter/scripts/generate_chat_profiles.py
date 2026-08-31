@@ -5,7 +5,6 @@
 """
 
 import asyncio
-import sys
 import tomllib
 from collections import Counter
 from datetime import timedelta, timezone

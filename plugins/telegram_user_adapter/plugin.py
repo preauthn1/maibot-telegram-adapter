@@ -52,7 +52,7 @@ from .small_chat import SmallChatModerator, estimate_read_delay
 from .spam_filter import detect_spam
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
-from .trigger import TriggerLevel, TriggerManager
+from .trigger import TriggerManager
 from .usage_stats import ModelPricing, UsageTracker
 from .utils import parse_topic_group_id
 
@@ -1253,12 +1253,12 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 防抖（突发合并）：真人是「听完再说」——群里连着来五句，
         # 人读完再回一次，不会逐条应答。逐条机械响应比发言总量
         # 更能解释账号为何被看出不是真人（2026-08-31 因用户举报被封）。
-        arrival_token = self._debouncer.note_arrival(session_key)
+        arrival_token = self._debouncer.note_arrival(session_key, str(sender_id))
         read_delay = estimate_read_delay(incoming_text)
         self.ctx.logger.info(f"阅读延迟 {read_delay:.1f} 秒后处理")
         await asyncio.sleep(read_delay)
 
-        if self._debouncer.is_superseded(session_key, arrival_token):
+        if self._debouncer.is_superseded(session_key, arrival_token, str(sender_id)):
             # 被 @ / 被回复的消息不参与合并：那是指名要我们答的，
             # 因为别人后面又说了几句就装没看见，比逐条应答更反常。
             if is_mention:
