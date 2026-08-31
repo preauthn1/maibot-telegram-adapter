@@ -597,14 +597,39 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if client is None:
             return
 
+        queue = self._send_queue
+        if queue is None:
+            self.ctx.logger.warning("发送队列未就绪，跳过挑衅回应")
+            return
+
         reply_to = message_dict.get("message_id")
-        try:
+
+        async def _do_send() -> None:
+            """在队列内执行实际发送。"""
+
             entity = await client.get_entity(session_key)
+            # 打字停顿：被骂之后一两秒内秒回固定话术，是最扎眼的
+            # 脚本特征——而且恰好发生在对方正在试探我们的时刻。
+            await asyncio.sleep(random.uniform(2.5, 6.0))
             await client.client.send_message(
                 entity,
                 text,
                 reply_to=int(reply_to) if reply_to else None,
             )
+
+        try:
+            # 必须走队列：直接 send_message 会同时绕过全局串行、
+            # 发送预算、注意力焦点、静默时段复检、连发上限与打字
+            # 模拟共 6 道闸门，破坏"真人不会在两个群同时打字"的
+            # 核心不变量，且该条不计入任何统计。
+            await queue.submit(
+                _do_send,
+                priority=PRIORITY_MENTION,
+                label=session_key,
+            )
+        except QuietHoursError:
+            self.ctx.logger.info(f"静默时段，放弃挑衅回应: chat={session_key}")
+            return
         except Exception as exc:  # noqa: BLE001 - 回应失败不影响主流程
             self.ctx.logger.warning(f"挑衅回应发送失败: chat={session_key} {exc}")
             return
