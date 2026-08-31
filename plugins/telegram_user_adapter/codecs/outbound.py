@@ -14,6 +14,7 @@ import random
 
 from ..content_safety import detect_nsfw
 from ..humanize import humanize_chat_text, is_emoji_only
+from ..high_risk_chats import should_block as high_risk_should_block
 from ..output_sanity import detect_pollution
 from ..telegram_user_client import TelegramUserClient
 from ..utils import estimate_typing_seconds, parse_topic_group_id
@@ -300,6 +301,18 @@ class TelegramUserOutboundCodec:
                 if polluted:
                     self._logger.error(
                         f"拦截污染文本，不发送: {text!r} 命中={reasons}"
+                    )
+                    return None
+
+                # 高风险群的额外约束：长度与语气。
+                #
+                # 「某高风险小群」中位消息仅 13 字、13 人熟人圈，
+                # 我们只发过 1 条就被当面问 "你是大语言模型吗？"。
+                # 这种圈子的破绽不是说错话，而是说得太齐整。
+                blocked, block_reason = high_risk_should_block(str(chat_id), text)
+                if blocked:
+                    self._logger.info(
+                        f"高风险群拦截: chat={chat_id} {block_reason} text={text!r}"
                     )
                     return None
 

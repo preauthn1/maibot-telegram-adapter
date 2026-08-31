@@ -33,6 +33,13 @@ from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_N
 from .channel_publisher import ChannelPost, ChannelPublisher, select_valuable_messages
 from .engagement import ChatEngagementTracker
 from .filters import TelegramUserChatFilter
+from .high_risk_chats import (
+    bind_store as bind_chat_profiles,
+    blocks_tech,
+    get_min_gap,
+    get_reply_ratio,
+    is_tech_topic,
+)
 from .human_rhythm import get_activity_multiplier
 from .presence import PresenceManager
 from .provocation import ProvocationResponder, detect_provocation
@@ -108,6 +115,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否登录。"""
+
+        # 绑定每群画像卡（data/plugins/<id>/chats/<chat_id>/SKILL.md）。
+        # 卡片支持热加载，改完保存即生效，不用重启。
+        bind_chat_profiles(self.ctx.paths.data_dir / "chats")
 
         await self._verify_capabilities()
         await self._restart_if_needed()
@@ -1245,10 +1256,26 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 正是第一个有人当面问 "ai？" 的地方。
         self._note_speaker(session_key, str(sender_id))
         self._small_chat.record_inbound(session_key)
+        # 技术话题一概不接。
+        #
+        # 「某高风险小群」全是资深从业者，讨论的是 MTE 内存标记、
+        # GPL 许可证豁免、JLS 握手伪装这种深度内容。技术回答说浅了
+        # 露怯、说深了更可疑，闭嘴才是最优解——只在纯闲聊时露面。
+        if blocks_tech(session_key) and is_tech_topic(incoming_text, session_key):
+            self.ctx.logger.info(
+                f"技术话题回避: {session_key} text={incoming_text[:30]!r}"
+            )
+            return
+
+        # 高风险群用更严格的参与率与间隔覆盖默认值。
+        risk_ratio = get_reply_ratio(session_key)
+        risk_gap = get_min_gap(session_key)
         suppressed, suppress_reason = self._small_chat.should_suppress(
             session_key,
             member_count=self._recent_speaker_count(session_key),
             is_directed=is_mention,
+            ratio_override=risk_ratio,
+            min_gap_override=risk_gap,
         )
         if suppressed:
             self.ctx.logger.info(f"小群约束跳过本条: {session_key} {suppress_reason}")

@@ -189,6 +189,8 @@ class SmallChatModerator:
         member_count: int,
         is_directed: bool = False,
         now: Optional[float] = None,
+        ratio_override: Optional[float] = None,
+        min_gap_override: Optional[float] = None,
     ) -> Tuple[bool, str]:
         """判断这次是否应当忍住不说。
 
@@ -197,6 +199,8 @@ class SmallChatModerator:
             member_count: 该会话近期的活跃人数。
             is_directed: 是否被 @ 或被回复。被直接问到时不该装死。
             now: 单调时钟读数。
+            ratio_override: 参与率上限覆盖值，供高风险群收紧。
+            min_gap_override: 最小间隔覆盖值，供高风险群收紧。
 
         Returns:
             Tuple[bool, str]: ``(是否压制, 原因)``。
@@ -205,6 +209,9 @@ class SmallChatModerator:
         current = now if now is not None else time.monotonic()
         state = self._state(chat_id)
         self._prune(state, current)
+
+        ratio_limit = ratio_override if ratio_override is not None else self._ratio_limit
+        min_gap = min_gap_override if min_gap_override is not None else self._min_gap
 
         # 道别静默期：即使被 @ 也保持沉默，否则"我睡了"就成了谎话。
         if current < state.silent_until:
@@ -216,11 +223,11 @@ class SmallChatModerator:
             return False, ""
 
         # 连续接话太快：真人打字加思考做不到 1 秒接话。
-        if state.last_reply_at > 0 and (current - state.last_reply_at) < self._min_gap:
-            return True, f"距上次发言不足 {self._min_gap:.0f} 秒"
+        if state.last_reply_at > 0 and (current - state.last_reply_at) < min_gap:
+            return True, f"距上次发言不足 {min_gap:.0f} 秒"
 
-        # 只在小群压制参与率。大群里同样的发言量会被稀释掉。
-        if member_count > SMALL_CHAT_MEMBER_LIMIT:
+        # 高风险群即使人多也要压制：那种熟人技术圈里新面孔话多最扎眼。
+        if ratio_override is None and member_count > SMALL_CHAT_MEMBER_LIMIT:
             return False, ""
 
         inbound = len(state.inbound)
@@ -229,8 +236,8 @@ class SmallChatModerator:
             return False, ""
 
         ratio = len(state.outbound) / inbound
-        if ratio >= self._ratio_limit:
-            return True, f"小群参与率 {ratio:.0%} 已超上限 {self._ratio_limit:.0%}"
+        if ratio >= ratio_limit:
+            return True, f"参与率 {ratio:.0%} 已超上限 {ratio_limit:.0%}"
 
         return False, ""
 
