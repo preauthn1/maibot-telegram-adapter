@@ -98,8 +98,13 @@ def chat_id_aliases(chat_id: str) -> set[str]:
     Telegram 的超级群同时存在 ``-100xxxx``、``100xxxx``、``xxxx`` 三种写法，
     名单匹配时需要一并考虑。
 
+    话题群（forum）的 session_key 还带 ``::tg-topic::mt=NNN`` 后缀。
+    白名单里通常只写群号，若不剥离后缀，两个别名集合就没有交集，
+    话题群消息会被静默丢弃——而这条日志只有 debug 级，极难发现。
+    因此这里同时返回「带后缀」和「剥离后缀」两套别名。
+
     Args:
-        chat_id: 原始 chat_id 字符串。
+        chat_id: 原始 chat_id 字符串，可带话题后缀。
 
     Returns:
         set[str]: 等价 ID 集合。
@@ -110,7 +115,14 @@ def chat_id_aliases(chat_id: str) -> set[str]:
         return set()
 
     aliases = {normalized}
-    signless = normalized[1:] if normalized.startswith("-") else normalized
+
+    # 话题群：把裸群号一并纳入，使配置写群号即可命中所有话题。
+    base_chat_id = normalized
+    if _TOPIC_GROUP_SPLITTER in normalized:
+        base_chat_id = normalized.split(_TOPIC_GROUP_SPLITTER, 1)[0]
+        aliases.add(base_chat_id)
+
+    signless = base_chat_id[1:] if base_chat_id.startswith("-") else base_chat_id
     if signless:
         aliases.add(signless)
     if signless.startswith("100") and len(signless) > 3:
