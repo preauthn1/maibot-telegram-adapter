@@ -1,35 +1,29 @@
 """高风险群的专用约束。
 
-「某高风险小群」(-1009000000001) 是目前最难的一关，实测特征：
-
-- 活跃 13 人的熟人小圈子，前 3 人占 71% 发言
-- 消息密度仅 2.4 条/小时，非常安静
-- 消息中位长度 **13 字**，平均 37 字——极短句
-- 内容硬核：MTE、GPL 许可证、JLS 协议、SoC 成本、Pixel 内存标记
-
-我们在该群只发过 1 条（已被删除），3.5 小时后就被当面质问
-"你是大语言模型吗？"。
+有些群是熟人小圈子：人少、安静、话题专业、句子极短。这类群里
+新面孔话多会被迅速聚焦，实测出现过只发一条就被当面质问的情况。
 
 这类群的破绽不在"说错话"，而在"说得太齐整"：真人在这种圈子里
 是短促、跳跃、带梗的，而模型倾向输出完整通顺的句子。
 
-因此该模块的核心是**长度约束**与**极低参与率**，而不是内容过滤。
+因此本模块的核心是**长度约束**与**极低参与率**，而不是内容过滤。
+
+具体的群画像不写在代码里，而是放在
+``data/plugins/<plugin_id>/chats/<chat_id>/SKILL.md``——
+群的性质会随时间漂移，改卡即生效比改代码重启更实用，
+也避免把会话 ID、群名这类隐私写进版本库。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Optional, Set, Tuple
+from typing import Optional, Tuple
 
 import re
 
 from .chat_profiles import ChatProfile, ChatProfileStore
 
-# 画像卡仓库。由插件启动时注入实际路径；未注入时退回硬编码画像。
-#
-# 画像卡放在 data/plugins/<id>/chats/<chat_id>/SKILL.md，
-# 每群一份，带 YAML frontmatter 存参数、正文写观察记录。
-# 群的性质会随时间漂移，改卡即生效比改代码重启更实用。
+# 画像卡仓库。由插件启动时注入实际路径。
 _STORE: Optional[ChatProfileStore] = None
 
 
@@ -57,24 +51,8 @@ def _profile(chat_id: str) -> Optional[ChatProfile]:
     return _STORE.get(str(chat_id)) if _STORE is not None else None
 
 
-# 高风险群及其画像。key 为 chat_id 字符串。
-HIGH_RISK_CHATS: Dict[str, Dict[str, float]] = {
-    # 某高风险小群：13 人熟人圈，中位 13 字，2.4 条/小时
-    "-1009000000001": {
-        "max_chars": 24.0,
-        "reply_ratio": 0.08,
-        "min_gap_seconds": 900.0,
-    },
-}
-
-# 禁止谈技术的群。
-#
-# 这些群里全是相关领域的资深从业者，技术话题说浅了露怯、说深了
-# 更可疑——「某高风险小群」讨论的是 MTE 内存标记、GPL 许可证豁免、
-# JLS 握手伪装这种深度内容，任何似是而非的回答都会立刻暴露。
-#
-# 结论：技术话题一概不接，只在纯闲聊时露面。
-NO_TECH_CHATS: Set[str] = {"-1009000000001"}
+# 未配置画像卡时的默认值：不施加额外约束。
+_DEFAULT_MAX_CHARS = 0.0
 
 # 技术话题特征词。命中即判定为技术讨论。
 #
@@ -163,9 +141,7 @@ def blocks_tech(chat_id: str) -> bool:
     """
 
     card = _profile(chat_id)
-    if card is not None:
-        return card.block_tech
-    return str(chat_id) in NO_TECH_CHATS
+    return card.block_tech if card is not None else False
 
 # 默认画像：未列出的群不做额外约束。
 _DEFAULT_MAX_CHARS = 0.0
@@ -182,11 +158,11 @@ def is_high_risk(chat_id: str) -> bool:
     """
 
     card = _profile(chat_id)
-    if card is not None:
-        # 有画像卡不等于高风险——低风险群同样有卡，只是不设约束。
-        # 以是否真的配了约束为准。
-        return bool(card.max_chars or card.reply_ratio or card.block_tech)
-    return str(chat_id) in HIGH_RISK_CHATS
+    if card is None:
+        return False
+    # 有画像卡不等于高风险——低风险群同样有卡，只是不设约束。
+    # 以是否真的配了约束为准。
+    return bool(card.max_chars or card.reply_ratio or card.block_tech)
 
 
 def get_max_chars(chat_id: str) -> float:
@@ -200,10 +176,7 @@ def get_max_chars(chat_id: str) -> float:
     """
 
     card = _profile(chat_id)
-    if card is not None:
-        return card.max_chars
-    profile = HIGH_RISK_CHATS.get(str(chat_id))
-    return profile["max_chars"] if profile else _DEFAULT_MAX_CHARS
+    return card.max_chars if card is not None else _DEFAULT_MAX_CHARS
 
 
 def get_reply_ratio(chat_id: str) -> Optional[float]:
@@ -217,10 +190,7 @@ def get_reply_ratio(chat_id: str) -> Optional[float]:
     """
 
     card = _profile(chat_id)
-    if card is not None:
-        return card.reply_ratio
-    profile = HIGH_RISK_CHATS.get(str(chat_id))
-    return profile["reply_ratio"] if profile else None
+    return card.reply_ratio if card is not None else None
 
 
 def get_min_gap(chat_id: str) -> Optional[float]:
@@ -234,10 +204,7 @@ def get_min_gap(chat_id: str) -> Optional[float]:
     """
 
     card = _profile(chat_id)
-    if card is not None:
-        return card.min_gap_seconds
-    profile = HIGH_RISK_CHATS.get(str(chat_id))
-    return profile["min_gap_seconds"] if profile else None
+    return card.min_gap_seconds if card is not None else None
 
 
 # 在这类技术圈里显得"不是自己人"的表达。
