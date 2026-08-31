@@ -24,6 +24,17 @@ ENGAGEMENT_WINDOW_SECONDS = 180.0
 # 参与窗口内允许的最大退避。仍然退避（避免刷屏），但不至于错过整段对话。
 ENGAGEMENT_MAX_BACKOFF_SECONDS = 30.0
 
+# 空闲计数的衰减周期。超过这段时间没有任何新消息，计数回退一级。
+#
+# 解决的问题：``_count`` 原本只在真正发言时才清零，而消息稀疏的群
+# 很难凑够 ``bypass_pending_count`` 条来绕过退避，于是会长期卡在
+# 封顶值。实测慢速群（某低频群、Project X）连续 14-35 分钟停在 300 秒，
+# 而活跃群 1-4 分钟就能靠消息量自然绕过。
+#
+# 加入衰减后，群安静下来时退避会逐步回落，新话题开始时能更快跟上，
+# 而不必等到攒够 6 条消息。
+IDLE_DECAY_SECONDS = 300.0
+
 
 class IdleBackoffController:
     """维护连续空闲结束后的消息触发退避。"""
@@ -33,6 +44,8 @@ class IdleBackoffController:
         self._count = 0
         self._until = 0.0
         self._last_spoke_at = 0.0
+        # 上次记账时刻，用于计算空闲计数的衰减。
+        self._last_cycle_at = 0.0
 
     def _is_engaged(self) -> bool:
         """判断是否处于「刚发过言」的参与窗口内。
@@ -43,7 +56,24 @@ class IdleBackoffController:
 
         if self._last_spoke_at <= 0:
             return False
-        return (time.time() - self._last_spoke_at) < ENGAGEMENT_WINDOW_SECONDS
+        return (time.monotonic() - self._last_spoke_at) < ENGAGEMENT_WINDOW_SECONDS
+
+    def _decay_idle_count(self) -> None:
+        """按空闲时长回退连续计数。
+
+        群安静下来时让退避逐步回落：每过 ``IDLE_DECAY_SECONDS`` 降一级。
+        否则消息稀疏的群会一直卡在封顶值，等到有人开新话题时反应迟钝。
+        """
+
+        if self._count <= 0 or self._last_cycle_at <= 0:
+            return
+
+        elapsed = time.monotonic() - self._last_cycle_at
+        if elapsed < IDLE_DECAY_SECONDS:
+            return
+
+        steps = int(elapsed // IDLE_DECAY_SECONDS)
+        self._count = max(0, self._count - steps)
 
     def _get_backoff_seconds(self) -> float:
         base_seconds = max(0.0, float(global_config.chat.reply_timing.no_action_backoff_base_seconds))
@@ -66,11 +96,12 @@ class IdleBackoffController:
         """清理连续空闲退避状态。"""
         self._count = 0
         self._until = 0.0
+        self._last_cycle_at = 0.0
 
     def note_spoke(self) -> None:
         """记录本轮真的发言了，开启参与窗口。"""
 
-        self._last_spoke_at = time.time()
+        self._last_spoke_at = time.monotonic()
 
     def record_cycle_result(self, cycle_end_reason: str) -> None:
         """按整轮结束原因维护空闲退避状态。"""
@@ -86,13 +117,18 @@ class IdleBackoffController:
             self.reset()
             return
 
+        # 先按空闲时长回退计数，再累加本轮。
+        # 群冷下来一段时间后，退避应当逐步回落而不是永远卡在封顶。
+        self._decay_idle_count()
+        self._last_cycle_at = time.monotonic()
+
         self._count += 1
         backoff_seconds = self._get_backoff_seconds()
         if backoff_seconds <= 0:
             self._until = 0.0
             return
 
-        self._until = time.time() + backoff_seconds
+        self._until = time.monotonic() + backoff_seconds
         logger.info(
             f"{runtime.log_prefix} 连续空闲退避已更新: "
             "来源=planner "
@@ -113,7 +149,7 @@ class IdleBackoffController:
         if self._until <= 0:
             return False
 
-        remaining_seconds = self._until - time.time()
+        remaining_seconds = self._until - time.monotonic()
         if remaining_seconds <= 0:
             self._until = 0.0
             return False
