@@ -5,9 +5,11 @@ from typing import Any, Literal, Optional
 import asyncio
 import hashlib
 import heapq
+import io
 import random
 import re
 
+from PIL import Image as PILImage
 from rapidfuzz.distance import Levenshtein
 from rich.traceback import install
 from sqlmodel import select
@@ -401,6 +403,19 @@ class EmojiManager:
             raise e
 
         logger.info(f"表情包不存在于数据库中，准备缓存新表情包，哈希值: {hash_str}")
+
+        # 先确认这是 PIL 能识别的图片，再落盘。
+        #
+        # Telegram 的动态贴纸是 MP4/WebM 视频，走的也是表情包这条路径。
+        # 原先的顺序是「写 .tmp → 解析」，解析失败时 .tmp 会永久残留，
+        # 表情包维护任务每 10 分钟扫一次就抛一次 UnidentifiedImageError，
+        # 实测两小时内攒了 11 个孤儿文件、36 次 Traceback。
+        try:
+            with PILImage.open(io.BytesIO(emoji_bytes)) as probe:
+                probe.verify()
+        except Exception as exc:
+            raise ValueError(f"不是可识别的图片，跳过缓存（哈希 {hash_str}）: {exc}") from exc
+
         tmp_file_path = EMOJI_DIR / f"{hash_str}.tmp"
         with tmp_file_path.open("wb") as file:
             file.write(emoji_bytes)
