@@ -29,7 +29,8 @@
     }
   ],
   "capabilities": [
-    "maisaka.context.append"
+    "maisaka.context.append",
+    "frequency.set_adjust"
   ],
   "i18n": {
     "default_locale": "zh-CN",
