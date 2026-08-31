@@ -201,3 +201,24 @@ def test_arrival_tokens_are_per_chat() -> None:
     debouncer.note_arrival("chat-b", "bob")
 
     assert debouncer.is_superseded("chat-a", token_a, "alice") is False
+
+
+def test_last_message_always_answers() -> None:
+    """连发场景下最后一条永不让位——这是「至少答一次」的保证。
+
+    plugin.py 移除了 mention 豁免（连 @ 三次会连回三句，比不答更
+    反常）。移除的前提是：合并逻辑本身必须保证至少有一条会作答，
+    否则被指名时会彻底装死。
+    """
+
+    debouncer = InboundDebouncer()
+
+    tokens = [debouncer.note_arrival("chat-a", "alice") for _ in range(5)]
+
+    verdicts = [
+        debouncer.is_superseded("chat-a", token, "alice") for token in tokens
+    ]
+
+    assert verdicts[-1] is False, "最后一条被判让位，会导致无人作答"
+    assert all(verdicts[:-1]), "前面几条应当全部让位给最后一条"
+    assert verdicts.count(False) == 1, "有且只有一条作答"
