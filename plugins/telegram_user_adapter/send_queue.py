@@ -232,53 +232,86 @@ class SendQueue:
         return await future
 
     async def _run(self) -> None:
-        """后台串行执行队列中的发送任务。"""
+        """后台串行执行队列中的发送任务。
+
+        整个循环包在 try/finally 里：worker 无论因何种原因退出，
+        都必须复位 ``_running`` 并叫醒所有等待者。
+
+        原实现的三条异常出口都直接结束协程而不复位标志，导致
+        ``start()`` 因幂等守卫拒绝重建 worker，而 ``submit()`` 仍然
+        放行并永久 ``await future``——没有超时也没有日志，
+        整条出站通道死锁，账号表现为"彻底哑掉"。
+        """
 
         loop = asyncio.get_running_loop()
-        while self._running:
-            if not self._heap:
-                self._not_empty.clear()
+        try:
+            while self._running:
+                if not self._heap:
+                    self._not_empty.clear()
+                    try:
+                        await self._not_empty.wait()
+                    except asyncio.CancelledError:
+                        return
+                    continue
+
+                item = heapq.heappop(self._heap)
+                if item.future.cancelled():
+                    continue
+
+                # 静默时段可能在排队期间到来，出队时重新检查。
+                if self.in_quiet_hours():
+                    if not item.future.done():
+                        item.future.set_exception(QuietHoursError("当前处于静默时段，不发送消息"))
+                    continue
+
+                # 两条消息之间保持自然间隔，避免连珠炮。
+                gap = random.uniform(self._min_gap, self._max_gap)
+                elapsed = loop.time() - self._last_sent_at
+                if self._last_sent_at > 0 and elapsed < gap:
+                    try:
+                        await asyncio.sleep(gap - elapsed)
+                    except asyncio.CancelledError:
+                        if not item.future.done():
+                            item.future.cancel()
+                        return
+
                 try:
-                    await self._not_empty.wait()
-                except asyncio.CancelledError:
-                    return
-                continue
-
-            item = heapq.heappop(self._heap)
-            if item.future.cancelled():
-                continue
-
-            # 静默时段可能在排队期间到来，出队时重新检查。
-            if self.in_quiet_hours():
-                if not item.future.done():
-                    item.future.set_exception(QuietHoursError("当前处于静默时段，不发送消息"))
-                continue
-
-            # 两条消息之间保持自然间隔，避免连珠炮。
-            gap = random.uniform(self._min_gap, self._max_gap)
-            elapsed = loop.time() - self._last_sent_at
-            if self._last_sent_at > 0 and elapsed < gap:
-                try:
-                    await asyncio.sleep(gap - elapsed)
+                    result = await item.action()
                 except asyncio.CancelledError:
                     if not item.future.done():
                         item.future.cancel()
-                    return
+                    raise
+                except Exception as exc:  # noqa: BLE001 - 异常回传给提交方处理
+                    if not item.future.done():
+                        item.future.set_exception(exc)
+                else:
+                    if not item.future.done():
+                        item.future.set_result(result)
+                finally:
+                    self._last_sent_at = loop.time()
+        finally:
+            # 无论正常退出还是异常/取消，都必须复位，否则 start()
+            # 拒绝重建 worker、submit() 永久挂起。
+            self._running = False
+            self._drain_pending(
+                RuntimeError("发送队列 worker 已退出，任务未能发出")
+            )
 
-            try:
-                result = await item.action()
-            except asyncio.CancelledError:
-                if not item.future.done():
-                    item.future.cancel()
-                raise
-            except Exception as exc:  # noqa: BLE001 - 异常回传给提交方处理
-                if not item.future.done():
-                    item.future.set_exception(exc)
-            else:
-                if not item.future.done():
-                    item.future.set_result(result)
-            finally:
-                self._last_sent_at = loop.time()
+    def _drain_pending(self, error: BaseException) -> None:
+        """把堆中所有等待的任务以异常结束。
+
+        按 AGENTS.md「错误要及时完整暴露」：worker 已死时，
+        调用方应立刻拿到错误，而不是无限等待一个永远不会有人
+        处理的 future。
+
+        Args:
+            error: 要设置给这些 future 的异常。
+        """
+
+        while self._heap:
+            item = heapq.heappop(self._heap)
+            if not item.future.done():
+                item.future.set_exception(error)
 
     @property
     def pending_count(self) -> int:
