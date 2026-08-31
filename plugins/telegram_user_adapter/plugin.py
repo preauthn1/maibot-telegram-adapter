@@ -1563,6 +1563,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             # 额度已在 reserve() 时占用，这里只标记"确实发出去了"，
             # 供 finally 判断是否需要回滚。
             reaction_sent = True
+            policy.confirm(chat_id, message_id)
 
             if self._transcript is not None:
                 await self._transcript.log_event(
