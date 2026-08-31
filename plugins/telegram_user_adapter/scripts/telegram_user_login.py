@@ -39,7 +39,9 @@ try:
     from telethon.sessions import StringSession
 except ImportError:
     print("缺少依赖 telethon，请先安装：uv pip install telethon cryptg", file=sys.stderr)
-    raise SystemExit(1)
+    # from None：这是给人看的安装提示，原始 ImportError 的堆栈
+    # 只会干扰阅读，不需要链在后面。
+    raise SystemExit(1) from None
 
 
 # 默认把 session 写到插件数据目录之外的独立文件，避免误提交。

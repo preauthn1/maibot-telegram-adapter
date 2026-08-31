@@ -16,6 +16,7 @@
 """
 
 import asyncio
+import time
 from pathlib import Path
 
 import sys
@@ -147,22 +148,47 @@ def test_jitter_varies_wait() -> None:
     assert all(5.0 <= value <= 7.0 for value in waits)
 
 
-def test_burst_merge_supersedes_earlier() -> None:
-    """突发合并：连续消息只由最后一条作答。
+def test_same_sender_burst_is_merged() -> None:
+    """同一个人连发多条，只由最后一条作答——那是一句话被拆开了。"""
 
-    这是接入 plugin.py 的实际方式——不改变消息流结构，
-    只让先到的消息在睡完阅读延迟后发现自己已被取代而退出。
+    debouncer = InboundDebouncer()
+
+    first = debouncer.note_arrival("chat-a", "alice")
+    second = debouncer.note_arrival("chat-a", "alice")
+    third = debouncer.note_arrival("chat-a", "alice")
+
+    assert debouncer.is_superseded("chat-a", first, "alice") is True
+    assert debouncer.is_superseded("chat-a", second, "alice") is True
+    assert debouncer.is_superseded("chat-a", third, "alice") is False
+
+
+def test_different_sender_does_not_merge() -> None:
+    """别人插话不该让我方放弃发言。
+
+    这是修复的核心：最初实现「阅读期间有任何新消息就放弃」，
+    用封禁当天真实数据回放，活跃群 86-93% 消息被放弃，等于装死。
+    而实测真人 85.5% 的发言都在「别人刚说完 2 秒内」——
+    真人不因群活跃闭嘴，行为与之相反。
     """
 
     debouncer = InboundDebouncer()
 
-    first = debouncer.note_arrival("chat-a")
-    second = debouncer.note_arrival("chat-a")
-    third = debouncer.note_arrival("chat-a")
+    token = debouncer.note_arrival("chat-a", "alice")
+    debouncer.note_arrival("chat-a", "bob")
 
-    assert debouncer.is_superseded("chat-a", first) is True
-    assert debouncer.is_superseded("chat-a", second) is True
-    assert debouncer.is_superseded("chat-a", third) is False
+    assert debouncer.is_superseded("chat-a", token, "alice") is False
+
+
+def test_stale_burst_not_merged() -> None:
+    """同一个人隔太久又说话，不算连发。"""
+
+    debouncer = InboundDebouncer(burst_gap=0.01)
+
+    token = debouncer.note_arrival("chat-a", "alice")
+    debouncer.note_arrival("chat-a", "alice")
+    time.sleep(0.05)
+
+    assert debouncer.is_superseded("chat-a", token, "alice") is False
 
 
 def test_arrival_tokens_are_per_chat() -> None:
@@ -170,8 +196,8 @@ def test_arrival_tokens_are_per_chat() -> None:
 
     debouncer = InboundDebouncer()
 
-    token_a = debouncer.note_arrival("chat-a")
-    debouncer.note_arrival("chat-b")
-    debouncer.note_arrival("chat-b")
+    token_a = debouncer.note_arrival("chat-a", "alice")
+    debouncer.note_arrival("chat-b", "bob")
+    debouncer.note_arrival("chat-b", "bob")
 
-    assert debouncer.is_superseded("chat-a", token_a) is False
+    assert debouncer.is_superseded("chat-a", token_a, "alice") is False
