@@ -12,6 +12,7 @@ import asyncio
 import base64
 import random
 
+from ..attention_focus import AttentionFocus
 from ..content_safety import detect_nsfw
 from ..humanize import humanize_chat_text, is_emoji_only
 from ..high_risk_chats import should_block as high_risk_should_block
@@ -37,6 +38,8 @@ class TelegramUserOutboundCodec:
         self._logger = logger
         # 全局发送预算，跨群统计单位时间总量（见 send_budget 模块注释）
         self._send_budget = SendBudget()
+        # 注意力焦点，限制同时活跃的群数（见 attention_focus 模块注释）
+        self._attention = AttentionFocus()
         self._simulate_typing = True
         self._typing_cps = 6.0
         self._min_think_delay = 0.8
@@ -193,6 +196,16 @@ class TelegramUserOutboundCodec:
             self._logger.warning(f"发送预算拦截: {budget_reason} chat={chat_id}")
             return {"success": False, "error": f"发送预算拦截: {budget_reason}"}
 
+        # 注意力焦点：真人不会同一时段在十几个群里活跃。
+        #
+        # 实测 1128 条真人「用户×小时」记录中，跨 ≥3 个群发言的为 0，
+        # 前 15 名高发言者里 14 个只在 1 个群。我方封禁前那 107 条
+        # 散在 12 个群，这个分布才是真正扎眼的地方。
+        focus_allowed, focus_reason = self._attention.check(chat_id)
+        if not focus_allowed:
+            self._logger.info(f"注意力焦点拦截: {focus_reason} chat={chat_id}")
+            return {"success": False, "error": f"注意力焦点拦截: {focus_reason}"}
+
         entity = await self._resolve_entity(chat_id)
         if entity is None:
             return {"success": False, "error": f"无法解析目标会话: {chat_id}"}
@@ -253,6 +266,8 @@ class TelegramUserOutboundCodec:
                 # 每个成功发出的段都计入全局预算——真人看到的是"几条消息"，
                 # 而不是"一次回复"，所以按段计数才反映真实刷屏程度。
                 self._send_budget.record()
+                # 同步刷新注意力焦点：这个群成为（或保持）当前关注对象。
+                self._attention.record(chat_id)
         finally:
             # 无论成功与否都安排下线，避免异常路径把账号永久挂在线上。
             if self._presence is not None:
