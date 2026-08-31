@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-import pytest
 
 from src.services.context_merge import merge_consecutive_messages
 
