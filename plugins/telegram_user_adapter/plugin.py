@@ -640,6 +640,39 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         reply_to = message_dict.get("message_id")
 
+        # 连发上限同样适用于挑衅回应。
+        #
+        # 被骂时恰恰是最需要克制的时刻，却曾是唯一能突破连发上限的
+        # 路径——对方一直骂、我们就一直接话，正中下怀。
+        if self._is_consecutive_limited(session_key):
+            self.ctx.logger.info(
+                f"连发已达上限，放弃挑衅回应: chat={session_key}"
+            )
+            return
+
+        # 预占名额，失败路径回滚（与主发送路径同一套语义）
+        self._consecutive_replies[session_key] = (
+            self._consecutive_replies.get(session_key, 0) + 1
+        )
+
+        # 发送预算与注意力焦点：这两道闸门实现在 codec 里，而这里
+        # 直接调 client.send_message 不经过 codec，必须自己查。
+        budget_ok, budget_reason = self._send_budget.check()
+        if not budget_ok:
+            self._release_consecutive(session_key)
+            self.ctx.logger.warning(
+                f"发送预算拦截挑衅回应: {budget_reason} chat={session_key}"
+            )
+            return
+
+        focus_ok, focus_reason = self._attention.check(session_key)
+        if not focus_ok:
+            self._release_consecutive(session_key)
+            self.ctx.logger.info(
+                f"注意力焦点拦截挑衅回应: {focus_reason} chat={session_key}"
+            )
+            return
+
         async def _do_send() -> None:
             """在队列内执行实际发送。"""
 
@@ -654,21 +687,26 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             )
 
         try:
-            # 必须走队列：直接 send_message 会同时绕过全局串行、
-            # 发送预算、注意力焦点、静默时段复检、连发上限与打字
-            # 模拟共 6 道闸门，破坏"真人不会在两个群同时打字"的
-            # 核心不变量，且该条不计入任何统计。
+            # 必须走队列：直接 send_message 会绕过全局串行、静默时段
+            # 复检与打字模拟。预算/焦点/连发这三道因为实现在 codec 里，
+            # 已在上面单独检查过。
             await queue.submit(
                 _do_send,
                 priority=PRIORITY_MENTION,
                 label=session_key,
             )
         except QuietHoursError:
+            self._release_consecutive(session_key)
             self.ctx.logger.info(f"静默时段，放弃挑衅回应: chat={session_key}")
             return
         except Exception as exc:  # noqa: BLE001 - 回应失败不影响主流程
+            self._release_consecutive(session_key)
             self.ctx.logger.warning(f"挑衅回应发送失败: chat={session_key} {exc}")
             return
+
+        # 发出去了就记账，否则这条消息在预算/焦点统计里凭空消失
+        self._send_budget.record()
+        self._attention.record(session_key)
 
         if self._transcript is not None:
             await self._transcript.log_event(
