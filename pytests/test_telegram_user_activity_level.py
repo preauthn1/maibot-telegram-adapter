@@ -20,15 +20,23 @@ from telegram_user_adapter.small_chat import SmallChatModerator  # noqa: E402
 
 
 def test_reply_ratio_stays_conservative() -> None:
-    """参与率上限不得回到触发封禁的 0.45。"""
+    """参与率上限不得回到触发封禁的 0.45，但也不必压到反常沉默。
 
-    assert sc.SMALL_CHAT_REPLY_RATIO <= 0.30
+    实测真人单群小时峰值 68.9~80 条，0.25 偏紧；
+    跨多群并发这个真正的异常由 attention_focus 负责。
+    """
+
+    assert 0.30 <= sc.SMALL_CHAT_REPLY_RATIO <= 0.40
 
 
 def test_min_reply_gap_restored() -> None:
-    """发言间隔须回到 15s 以上：9s 配合多群并发直接导致封禁。"""
+    """发言间隔不得回到 9s，但真人在单群内连续接话可以更快。
 
-    assert sc.MIN_REPLY_GAP_SECONDS >= 15.0
+    9s 配合 12 群并发导致封禁；现在并发已由 attention_focus 限制，
+    单群内 14s 仍高于"读完+思考+打字"的物理下限。
+    """
+
+    assert 12.0 <= sc.MIN_REPLY_GAP_SECONDS <= 18.0
 
 
 def test_read_delay_floor_preserved() -> None:

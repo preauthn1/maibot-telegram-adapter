@@ -21,12 +21,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins"))
 from telegram_user_adapter.send_budget import SendBudget  # noqa: E402
 
 
-def test_hourly_cap_is_humanlike() -> None:
-    """每小时上限须显著低于触发封禁的 107 条。"""
+def test_hourly_cap_matches_human_range() -> None:
+    """每小时上限须落在真人实测区间内。
+
+    实测 563 个真人：单群峰值最高 80 条、前 10 名平均 68.9 条。
+    定太低（如 30）会让账号反常沉默；定太高则失去防护意义。
+    """
 
     budget = SendBudget()
 
-    assert budget.hourly_limit <= 40
+    assert 45 <= budget.hourly_limit <= 75
 
 
 def test_blocks_after_hourly_limit() -> None:

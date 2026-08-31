@@ -22,13 +22,17 @@ from telegram_user_adapter.engagement import ChatEngagementTracker  # noqa: E402
 def test_idle_baseline_within_safe_band() -> None:
     """零互动基线需落在合理区间：过低显得反常，过高触发风控。"""
 
-    assert 0.3 <= eng.MIN_MULTIPLIER <= 0.5
+    assert 0.4 <= eng.MIN_MULTIPLIER <= 0.6
 
 
-def test_base_multiplier_below_one() -> None:
-    """基准倍率不得超过 1.0——1.4 是导致封禁的设置之一。"""
+def test_base_multiplier_bounded() -> None:
+    """基准倍率不得回到 1.4（导致封禁），但可略高于 1。
 
-    assert eng.BASE_MULTIPLIER <= 1.0
+    真人实测能到 68.9 条/小时，0.9 偏保守；
+    跨多群并发的异常由 attention_focus 拦截。
+    """
+
+    assert 1.0 <= eng.BASE_MULTIPLIER <= 1.2
 
 
 def test_combined_floor_not_degenerate() -> None:
