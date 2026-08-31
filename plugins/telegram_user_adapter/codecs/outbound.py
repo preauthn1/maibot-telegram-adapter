@@ -15,7 +15,6 @@ import random
 from ..content_safety import detect_nsfw
 from ..humanize import humanize_chat_text, is_emoji_only
 from ..output_sanity import detect_pollution
-from ..small_chat import estimate_read_delay
 from ..telegram_user_client import TelegramUserClient
 from ..utils import estimate_typing_seconds, parse_topic_group_id
 
@@ -302,18 +301,6 @@ class TelegramUserOutboundCodec:
                     self._logger.error(
                         f"拦截污染文本，不发送: {text!r} 命中={reasons}"
                     )
-                    return None
-
-                # 模拟真人的「读完再回」延迟。
-                #
-                # 8-30 在某休闲小群 50 秒内以 4/4/1/2 秒的间隔连续接话
-                # 4 次，对方立刻发出 "ai？"。人在手机上光是读完一句
-                # 就不止 1 秒——秒回是最直观的机器特征。
-                delay = estimate_read_delay(text)
-                self._logger.debug(f"阅读延迟 {delay:.1f} 秒后再发送")
-                try:
-                    await asyncio.sleep(delay)
-                except asyncio.CancelledError:
                     return None
 
                 # 改写后又变成纯 emoji 的，同样不发。
