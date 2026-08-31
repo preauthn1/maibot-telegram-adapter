@@ -1,14 +1,10 @@
 """高风险群约束测试。
 
-「某高风险小群」(-1009000000001) 实测画像：
-- 活跃 13 人熟人圈，前 3 人占 71% 发言
-- 2.4 条/小时，非常安静
-- 消息中位长度 13 字、平均 37 字
-- 内容硬核：MTE、GPL、JLS、SoC
+模拟一个熟人小圈子的画像：人少、安静、句子极短、话题专业。
+实测中这类群里只发一条就会被当面质问是不是 AI。
 
-我们只发过 1 条（已被删除），3.5 小时后被当面质问
-"你是大语言模型吗？"。这类圈子的破绽不是说错话，
-而是说得太齐整。
+画像本身来自 data/plugins/<id>/chats/<chat_id>/SKILL.md，
+测试里用 tmp 目录构造，不依赖真实群数据。
 """
 
 from __future__ import annotations
@@ -17,8 +13,11 @@ from pathlib import Path
 
 import sys
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins"))
 
+from telegram_user_adapter import high_risk_chats as hr  # noqa: E402
 from telegram_user_adapter.high_risk_chats import (  # noqa: E402
     blocks_tech,
     get_max_chars,
@@ -34,9 +33,51 @@ from telegram_user_adapter.small_chat import SmallChatModerator  # noqa: E402
 PROXY_CHAT = "-1009000000001"
 NORMAL_CHAT = "-1009000000003"
 
+# 高风险群画像：对应"14 人、3.2 条/小时、中位 13 字"这类圈子
+_HIGH_RISK_CARD = """---
+title: "高风险小群"
+max_chars: 23
+reply_ratio: 0.08
+min_gap_seconds: 900
+block_tech: true
+---
+
+# 高风险小群
+
+人少、安静、话题专业，新面孔话多会被迅速聚焦。
+"""
+
+# 低风险群画像：人多话杂，不设约束
+_NORMAL_CARD = """---
+title: "普通群"
+---
+
+# 普通群
+
+人多话杂，发言会被稀释。
+"""
+
+
+@pytest.fixture(autouse=True)
+def _bind_profiles(tmp_path: Path):
+    """为每个用例准备画像卡目录并绑定。
+
+    高风险画像不再硬编码在代码里，测试也就必须自带画像卡——
+    这样测的才是真实的加载链路。
+    """
+
+    for chat_id, card in ((PROXY_CHAT, _HIGH_RISK_CARD), (NORMAL_CHAT, _NORMAL_CARD)):
+        chat_dir = tmp_path / chat_id
+        chat_dir.mkdir(parents=True, exist_ok=True)
+        (chat_dir / "SKILL.md").write_text(card, encoding="utf-8")
+
+    hr.bind_store(tmp_path)
+    yield
+    hr._STORE = None
+
 
 def test_proxy_chat_marked_high_risk() -> None:
-    """某高风险小群必须在高风险名单内。"""
+    """高风险小群必须在高风险名单内。"""
 
     assert is_high_risk(PROXY_CHAT)
     assert not is_high_risk(NORMAL_CHAT)
