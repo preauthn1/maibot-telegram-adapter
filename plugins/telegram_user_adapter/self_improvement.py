@@ -67,6 +67,69 @@ _SKILL_HEADER = """# SKILL.md — 聊天经验
 
 """
 
+# 程序自动生成区的边界标记。
+#
+# 这个文件是人机共写的：程序写统计与怀疑记录，人写「禁用表达」
+# 等经验段落（pre_send_review 只读人写的那一段）。
+# 用显式标记圈出程序拥有的范围，重写时只替换标记之间的内容，
+# 标记之外的一律原样保留。
+#
+# 原实现整体覆盖，每次发言反馈都会抹掉人工段落——实测一次
+# record_outcome 就让禁用模式从 22 条归零，且是静默失效。
+_AUTO_BEGIN = "<!-- AUTO-GENERATED:BEGIN 本区块由程序维护，请勿手工编辑 -->"
+_AUTO_END = "<!-- AUTO-GENERATED:END -->"
+
+
+def _merge_generated_block(existing: str, generated: str) -> str:
+    """把程序生成区合并进已有文本，保留标记之外的内容。
+
+    三种情况：
+    - 已有标记：只替换标记之间的内容
+    - 无标记但有旧格式内容：把生成区放在文件头部，旧内容保留在后
+    - 空文件：直接用生成区
+
+    Args:
+        existing: 文件现有内容。
+        generated: 程序生成的区块（含首尾标记）。
+
+    Returns:
+        str: 合并后的完整文本。
+    """
+
+    if not existing.strip():
+        return generated + "\n"
+
+    begin = existing.find(_AUTO_BEGIN)
+    end = existing.find(_AUTO_END)
+
+    if begin != -1 and end != -1 and end > begin:
+        head = existing[:begin]
+        tail = existing[end + len(_AUTO_END) :]
+        return head + generated + tail
+
+    # 首次迁移：老文件没有标记，其中既有程序生成的旧段落，
+    # 也可能有人工补写的段落。按标题切分，丢掉程序拥有的旧段落，
+    # 只保留人工内容——否则旧统计段会残留，文件越写越乱。
+    owned_titles = ("## 统计", "## ⚠️ 应避免的表达", "## 被怀疑的场景记录", "## 有效表达")
+
+    kept: List[str] = []
+    skipping = False
+    for line in existing.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            # 遇到新的二级标题，重新判断这一段归谁
+            skipping = any(stripped.startswith(title) for title in owned_titles)
+        elif stripped.startswith("# "):
+            # 一级标题（文件头）总是保留
+            skipping = False
+        if not skipping:
+            kept.append(line)
+
+    remainder = "\n".join(kept).strip()
+    if not remainder:
+        return generated + "\n"
+    return generated + "\n\n" + remainder + "\n"
+
 
 def detect_suspicion(text: str) -> bool:
     """检测对方消息是否在怀疑我们不是真人。
@@ -357,7 +420,16 @@ class SelfImprovementStore:
             self._logger.warning(f"写入 prompt 经验文件失败: {exc}")
 
     def _rewrite_skill_file(self) -> None:
-        """根据当前统计重写 SKILL.md。"""
+        """更新 SKILL.md 中程序拥有的区块，保留其余内容。
+
+        为什么必须做合并而不是整体重写：这个文件是**人机共写**的。
+        程序写统计与怀疑记录，人写「禁用表达」等经验段落
+        （``pre_send_review`` 只认人写的那一段）。
+
+        原实现直接 write_text 整体覆盖，每次发言反馈都会抹掉人工
+        段落——实测一次 record_outcome 就让禁用模式从 22 条归零，
+        导致发言前身份泄漏自检静默失效。
+        """
 
         total = int(self._state.get("total_messages", 0))
         got_reply = int(self._state.get("got_reply", 0))
@@ -367,7 +439,7 @@ class SelfImprovementStore:
         suspicion_rate = (suspected / total * 100) if total else 0.0
 
         lines = [
-            _SKILL_HEADER,
+            _AUTO_BEGIN,
             "## 统计\n",
             f"- 累计发言：{total}",
             f"- 有人接话：{got_reply}（{reply_rate:.1f}%）",
@@ -396,10 +468,21 @@ class SelfImprovementStore:
         else:
             lines.append("（暂无）")
 
-        lines.append("")
+        lines.append(_AUTO_END)
+        generated = "\n".join(lines)
+
+        # 必须读**原始**内容而不是 _safe_read：后者会剥掉标题与
+        # 说明文字（那是为了不污染 prompt），用它合并会把这些
+        # 内容永久删掉。
+        try:
+            existing = self._skill_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            existing = ""
+
+        merged = _merge_generated_block(existing, generated)
 
         try:
-            self._skill_path.write_text("\n".join(lines), encoding="utf-8")
+            self._skill_path.write_text(merged, encoding="utf-8")
         except OSError as exc:
             self._logger.warning(f"写入 SKILL.md 失败: {exc}")
 
