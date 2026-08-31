@@ -16,6 +16,7 @@ from ..content_safety import detect_nsfw
 from ..humanize import humanize_chat_text, is_emoji_only
 from ..high_risk_chats import should_block as high_risk_should_block
 from ..output_sanity import detect_pollution
+from ..outbound_noise import is_noise_text
 from ..telegram_user_client import TelegramUserClient
 from ..utils import estimate_typing_seconds, parse_topic_group_id
 
@@ -221,6 +222,10 @@ class TelegramUserOutboundCodec:
         try:
             for seg in payloads:
                 if self._is_local_only_segment(seg):
+                    continue
+                # 丢弃错别字纠正产生的单字噪音：真人不会孤零零发一个"什"。
+                if seg.get("type") == "text" and is_noise_text(str(seg.get("data", ""))):
+                    self._logger.info(f"丢弃单字噪音段: {str(seg.get('data', ''))!r}")
                     continue
                 current_reply = reply_to if not sent_any else None
                 try:
