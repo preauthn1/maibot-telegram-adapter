@@ -114,7 +114,13 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 触发分级：区分「必须答」「值得插话」「随便聊」（见 trigger 模块注释）
         self._trigger = TriggerManager()
         # 人物记忆：记住群友的稳定事实（见 people_memory 模块注释）
+        # on_load 会换成带落盘路径的实例
         self._people = PeopleMemory()
+        # 距上次落盘攒了多少条新事实
+        self._people_dirty = 0
+        # 攒够多少条就落一次盘。20 条：够摊薄写盘开销，
+        # 又不至于崩溃时丢太多。
+        self._people_save_interval = 20
         # 用量统计：按模型/会话记 token 与成本（见 usage_stats 模块注释）
         #
         # 单价按实际在用的模型配置（美元/百万 token）。GLM flash 档
@@ -142,6 +148,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 绑定每群画像卡（data/plugins/<id>/chats/<chat_id>/SKILL.md）。
         # 卡片支持热加载，改完保存即生效，不用重启。
         bind_chat_profiles(self.ctx.paths.data_dir / "chats")
+
+        # 人物记忆改为落盘：__init__ 阶段拿不到 ctx.paths，所以在这里
+        # 换成带路径的实例。纯内存版重启即失忆，"记住群友"就成了空话。
+        self._people = PeopleMemory(
+            storage_path=self.ctx.paths.data_dir / "people_memory.json",
+            logger=self.ctx.logger,
+        )
+        self.ctx.logger.info(f"人物记忆已载入 {self._people.known_people()} 人")
 
         await self._verify_capabilities()
         await self._restart_if_needed()
@@ -179,7 +193,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self.ctx.logger.debug("能力自检：frequency.set_adjust 权限正常")
 
     async def on_unload(self) -> None:
-        """插件卸载时断开连接。"""
+        """插件卸载时断开连接并保存记忆。"""
+
+        # 先存记忆再断连接：断连可能抛异常，那样记忆就白攒了。
+        self._people.save()
 
         await self._stop_client()
 
@@ -1413,6 +1430,34 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return
 
         external_message_id = f"{chat_id}:{getattr(event.message, 'id', '')}"
+
+        # 把这个人的既有事实挂进 additional_config，供 Host 组 prompt 时使用。
+        #
+        # 此前只有 SOUL.md（我是谁）和 SKILL.md（怎么说话），没有任何地方
+        # 记「对方是谁」。同一个人昨天说过在用 OpenWrt，今天再聊路由毫无
+        # 印象——真人群友之间会记得"这人搞前端""那位有台 NAS"。
+        person_block = self._people.build_prompt_block(str(sender_id))
+        if person_block:
+            message_info = message_dict.setdefault("message_info", {})
+            additional = message_info.setdefault("additional_config", {})
+            additional["telegram_user_person_facts"] = person_block
+            self.ctx.logger.debug(
+                f"注入人物记忆: sender={sender_id} 共 "
+                f"{len(person_block.splitlines())} 条"
+            )
+
+        # 顺带从这条消息里学：对方自己说出来的稳定事实值得记住。
+        # is_durable_fact 会拒掉"正在装系统"这类临时状态。
+        if self._people.remember(str(sender_id), incoming_text):
+            # 记住了新东西就攒一笔，够 20 条落一次盘。
+            #
+            # 只在 on_unload 存的话，进程被 kill -9 或崩溃就全丢了——
+            # 而这个账号本来就可能因为封禁、限流被强制中断。
+            self._people_dirty += 1
+            if self._people_dirty >= self._people_save_interval:
+                self._people.save()
+                self._people_dirty = 0
+
         # 记录"我方将对这条消息作答"，供编辑追踪判定探测模式：
         # 我方回复过的消息事后被改写，是身份探测的典型手法。
         inbound_message_id = getattr(event.message, "id", None)
