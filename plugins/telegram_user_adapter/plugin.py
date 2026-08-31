@@ -1258,7 +1258,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._small_chat.record_inbound(session_key)
         # 技术话题一概不接。
         #
-        # 「某高风险小群」全是资深从业者，讨论的是 MTE 内存标记、
+        # 某高风险小群全是资深从业者，讨论的是 MTE 内存标记、
         # GPL 许可证豁免、JLS 握手伪装这种深度内容。技术回答说浅了
         # 露怯、说深了更可疑，闭嘴才是最优解——只在纯闲聊时露面。
         if blocks_tech(session_key) and is_tech_topic(incoming_text, session_key):

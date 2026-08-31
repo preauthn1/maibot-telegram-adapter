@@ -306,7 +306,7 @@ class TelegramUserOutboundCodec:
 
                 # 高风险群的额外约束：长度与语气。
                 #
-                # 「某高风险小群」中位消息仅 13 字、13 人熟人圈，
+                # 某高风险小群中位消息仅 13 字、13 人熟人圈，
                 # 我们只发过 1 条就被当面问 "你是大语言模型吗？"。
                 # 这种圈子的破绽不是说错话，而是说得太齐整。
                 blocked, block_reason = high_risk_should_block(str(chat_id), text)

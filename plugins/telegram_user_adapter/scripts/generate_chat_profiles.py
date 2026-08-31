@@ -17,7 +17,8 @@ from telethon.sessions import StringSession
 PLUGIN_DIR = Path("plugins/telegram_user_adapter")
 OUT_ROOT = Path("data/plugins/preauthn1.telegram-user-adapter/chats")
 CN = timezone(timedelta(hours=8))
-ME = 1000000001
+# 自己的账号 ID，运行时从已登录会话读取，避免写死在版本库里。
+ME = 0
 
 TECH_WORDS = [
     "vless", "vmess", "trojan", "wireguard", "reality", "xray", "mihomo",
@@ -126,6 +127,10 @@ async def main():
 
     client = TelegramClient(StringSession(acc["session_string"]), acc["api_id"], acc["api_hash"])
     await client.connect()
+
+    global ME
+    me = await client.get_me()
+    ME = me.id
 
     for gid in groups:
         try:
