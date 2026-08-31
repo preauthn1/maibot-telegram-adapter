@@ -32,7 +32,7 @@ import time
 #
 # 放宽上限只是解开"话太少"这一侧的约束，秒回防护（MIN_REPLY_GAP_SECONDS
 # 与阅读延迟）保持不变——被识破的直接原因是反应太快，不是话太多。
-SMALL_CHAT_REPLY_RATIO = 0.25
+SMALL_CHAT_REPLY_RATIO = 0.35
 
 # 判定为"小群"的活跃人数上限。人少的群里话多会被迅速聚焦，
 # 大群里同样的发言量则会被稀释掉。
@@ -64,7 +64,7 @@ FAREWELL_SILENCE_MAX = 7200.0
 # 真人在聊得起劲时连续接话的间隔确实短于 12 秒，但 9 秒仍高于
 # "读完+思考+打字" 的物理下限，不会退回被质问 "ai？" 时那种
 # 4/4/1/2 秒的秒回节奏。
-MIN_REPLY_GAP_SECONDS = 20.0
+MIN_REPLY_GAP_SECONDS = 14.0
 
 # 看到对方消息后的「阅读+思考」延迟范围（秒）。
 #
