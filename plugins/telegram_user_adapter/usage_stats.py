@@ -24,7 +24,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Mapping, Optional, Tuple
 
 _MILLION = 1_000_000.0

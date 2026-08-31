@@ -22,10 +22,19 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Awaitable, Callable, DefaultDict, Dict, List, Optional
+from typing import Awaitable, Callable, DefaultDict, Dict, List, Tuple
 
 import asyncio
 import random
+import time
+
+# 判定"同一个人连发"的最大间隔（秒）。
+#
+# 2.0 秒：用封禁当天真实数据回放校准。最初实现是"阅读期间有任何
+# 新消息就放弃"，活跃群 86-93% 消息被放弃，等于装死；而实测真人
+# 85.5% 的发言都在"别人刚说完 2 秒内"，真人不因群活跃闭嘴。
+# 收紧为"同发送者 + 间隔≤2s"后放弃率 18.8%，精确命中"一句话拆多条"。
+DEFAULT_BURST_GAP_SECONDS = 2.0
 
 # 默认聚合等待时长（秒）。
 #
@@ -47,16 +56,19 @@ class InboundDebouncer:
         *,
         delay: float = DEFAULT_DELAY_SECONDS,
         jitter: float = DEFAULT_JITTER_SECONDS,
+        burst_gap: float = DEFAULT_BURST_GAP_SECONDS,
     ) -> None:
         """初始化防抖器。
 
         Args:
             delay: 基础等待时长（秒）。
             jitter: 在基础时长上叠加的随机抖动上限（秒）。
+            burst_gap: 判定"同一个人连发"的最大间隔（秒）。
         """
 
         self.delay = delay
         self.jitter = jitter
+        self.burst_gap = burst_gap
         # session_key -> 待处理的消息文本
         self._pending: DefaultDict[str, List[str]] = defaultdict(list)
         # session_key -> 该会话的处理循环
@@ -65,6 +77,8 @@ class InboundDebouncer:
         self._callbacks: Dict[str, FlushCallback] = {}
         # session_key -> 到达计数，用于「突发合并」判定
         self._arrivals: Dict[str, int] = {}
+        # session_key -> (最近发送者, 到达时刻)，判定是否同一个人连发
+        self._last_sender: Dict[str, Tuple[str, float]] = {}
 
     def next_wait(self) -> float:
         """返回本次的等待时长（含抖动）。
@@ -138,15 +152,15 @@ class InboundDebouncer:
 
         return len(self._pending.get(session_key, []))
 
-    def note_arrival(self, session_key: str) -> int:
+    def note_arrival(self, session_key: str, sender_id: str = "") -> int:
         """登记一条消息到达，返回本条的序号。
 
         配合 ``is_superseded`` 实现「突发合并」：调用方先取序号，
-        睡完阅读延迟后检查自己是否已被更新的消息取代。
-        这样一串连续消息只由最后一条作答，而不是逐条应答。
+        睡完阅读延迟后检查自己是否已被同一个人的后续消息取代。
 
         Args:
             session_key: 会话标识。
+            sender_id: 发送者标识，用于判定是否属于同一个人的连发。
 
         Returns:
             int: 本条消息的序号。
@@ -154,20 +168,49 @@ class InboundDebouncer:
 
         current = self._arrivals.get(session_key, 0) + 1
         self._arrivals[session_key] = current
+        self._last_sender[session_key] = (sender_id, time.monotonic())
         return current
 
-    def is_superseded(self, session_key: str, token: int) -> bool:
-        """判断持有 ``token`` 的消息是否已被更新的消息取代。
+    def is_superseded(
+        self, session_key: str, token: int, sender_id: str = ""
+    ) -> bool:
+        """判断持有 ``token`` 的消息是否应让位给后续消息。
+
+        只在「后续消息来自同一发送者，且间隔极短」时才让位——
+        那是一句话被拆成几条发的情况，本就该只回一次。
+
+        为什么必须加这两个条件：最初的实现是「阅读期间有任何新消息
+        就放弃」，用封禁当天真实数据回放，活跃群 86-93% 的消息会被
+        放弃，账号会从"话太密"直接翻车成"几乎装死"。而实测真人在
+        同等密度下 85.5% 的发言都发生在"别人刚说完 2 秒内"——
+        真人根本不因为群活跃就闭嘴，行为与之相反。
+
+        收紧后放弃率降到 18.8%，精确命中"一句话拆多条"而不误伤
+        正常群聊（数据见 /tmp/verify_debounce_fix.py 的回放对比）。
 
         Args:
             session_key: 会话标识。
             token: ``note_arrival`` 返回的序号。
+            sender_id: 本条消息的发送者标识。
 
         Returns:
-            bool: 已被取代则为 True。
+            bool: 应让位则为 True。
         """
 
-        return self._arrivals.get(session_key, 0) > token
+        if self._arrivals.get(session_key, 0) <= token:
+            return False
+
+        last = self._last_sender.get(session_key)
+        if last is None:
+            return False
+
+        last_sender, last_at = last
+        # 不同人说话不算连发：真人在这种情况下照样插话
+        if not sender_id or last_sender != sender_id:
+            return False
+
+        # 间隔过长也不算连发，那是同一个人隔了一会儿又想起一句
+        return (time.monotonic() - last_at) <= self.burst_gap
 
     async def shutdown(self) -> None:
         """取消所有处理循环，用于插件卸载。"""
