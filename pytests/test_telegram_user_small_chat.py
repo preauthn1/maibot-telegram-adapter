@@ -176,3 +176,51 @@ def test_window_prunes_old_records() -> None:
     mod.record_inbound(GENSHIN, now=5000.0)
     stats = mod.stats(GENSHIN)
     assert stats["inbound"] < 5
+
+
+def test_farewell_not_triggered_by_technical_talk() -> None:
+    """技术讨论里的常用词不该被当成道别。
+
+    审计发现的 P0：道别正则全是无锚定子串匹配，技术群里说
+    「镜像下了」「他睡了没」都会命中，导致账号立刻进入
+    40-120 分钟静默。更糟的是静默检查在 is_directed 之前，
+    静默期内被 @ 也不回——正是"被点名还在潜水"的行为异常。
+    """
+
+    false_positives = [
+        "我下了个 app",
+        "把镜像下了",
+        "下了单等发货",
+        "娃睡了终于清静",
+        "他睡了没",
+        "猫睡了",
+        "他明天见客户",
+        "说好明天见面的",
+        "昨晚晚安都没说",
+        "不说了这个话题太敏感",
+        "我先撤回一下",
+        "我先走一步这个方案",
+    ]
+
+    wrongly_matched = [text for text in false_positives if is_farewell(text)]
+
+    assert not wrongly_matched, f"这些不是道别却被误判：{wrongly_matched}"
+
+
+def test_real_farewell_still_detected() -> None:
+    """真正的道别仍要能识别——修窄不能修死。"""
+
+    real_farewells = [
+        "我先睡了",
+        "睡了",
+        "晚安",
+        "不聊了",
+        "下线了",
+        "明天见",
+        "我先撤了",
+        "睡觉去了",
+    ]
+
+    missed = [text for text in real_farewells if not is_farewell(text)]
+
+    assert not missed, f"这些是道别却没识别出来：{missed}"
