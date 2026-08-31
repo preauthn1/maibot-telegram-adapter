@@ -32,6 +32,7 @@ from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
 from .engagement import ChatEngagementTracker
 from .filters import TelegramUserChatFilter
+from .human_rhythm import get_activity_multiplier
 from .presence import PresenceManager
 from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
@@ -91,6 +92,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._engagement = ChatEngagementTracker()
         # 针对性挑衅的回应节奏控制（每人只回一次）。
         self._provocation = ProvocationResponder()
+        # 频率能力是否已失败过，避免逐条刷同样的错误日志。
+        self._frequency_cap_failed = False
 
     async def on_load(self) -> None:
         """插件加载时根据配置决定是否登录。"""
@@ -432,6 +435,12 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         """
 
         multiplier = self._engagement.compute_multiplier(chat_id)
+
+        # 叠加真人作息曲线：深夜压到极低、傍晚抬高。
+        # 实测账号 95% 发言挤在 07-09 点，而真人这三小时只占 20%，
+        # 这种\"每天固定时段集中说话\"的模式比说错话更容易暴露。
+        multiplier *= get_activity_multiplier()
+
         if not self._engagement.should_apply(chat_id, multiplier):
             return
 
@@ -440,7 +449,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 "frequency.set_adjust", chat_id=chat_id, value=multiplier
             )
         except Exception as exc:  # noqa: BLE001 - 能力调用失败不应影响消息处理
-            self.ctx.logger.warning(f"写回发言频率倍率失败: chat={chat_id} {exc}")
+            # 只在首次失败时告警。权限缺失这类问题会每条消息复现一次，
+            # 逐条打日志会淹没真正有用的信息；但也不能静默——
+            # 否则功能整个没生效都发现不了。
+            if not self._frequency_cap_failed:
+                self._frequency_cap_failed = True
+                self.ctx.logger.error(
+                    f"发言频率倍率写回失败，群权重调度将不生效: {exc}"
+                )
             return
 
         self._engagement.mark_applied(chat_id, multiplier)
@@ -1004,6 +1020,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             # 一个人反复 @ 我们顶不高这个群的权重，防的就是刷 token。
             self._engagement.record_engagement(session_key, str(sender_id))
             await self._sync_engagement_multiplier(session_key)
+
+        # 每条入站都同步一次作息倍率——只在被 @ 时更新的话，
+        # 深夜没人 @ 我们时作息压制就不会生效。
+        await self._sync_engagement_multiplier(session_key)
 
         await self._record_inbound_feedback(session_key, incoming_text)
 
