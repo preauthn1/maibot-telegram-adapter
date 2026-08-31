@@ -102,8 +102,57 @@ class ReactionPolicy:
         cutoff = now - 3600.0
         self._recent_reactions = [t for t in self._recent_reactions if t >= cutoff]
 
+    def reserve(self, chat_id: str, message_id: int) -> bool:
+        """判断是否点表情；判定通过则**立刻**占用额度。
+
+        为什么必须合成一步：调用方拿到 True 之后会起一个独立任务，
+        在 1.5-6.0 秒随机延迟之后才发表情、再调 ``mark_reacted``。
+        而冷却与限流状态只在 ``mark_reacted`` 里更新，于是这段延迟
+        构成 check-then-act 窗口——群里在窗口内连来多条消息时，
+        每条读到的都是尚未推进的旧状态，**全部放行**。
+
+        实测（probability=1.0、chat_cooldown=300s、hourly_limit=5，
+        灌入 20 条消息）：20 条全部通过，20 个表情全部发出，应为 1 条。
+        表现为几秒内对一串消息批量点表情，正是本模块要防的脚本行为。
+
+        Args:
+            chat_id: 原始会话 ID。
+            message_id: 消息 ID。
+
+        Returns:
+            bool: 是否应当点表情；为 True 时额度已占用。
+        """
+
+        if not self.should_react(chat_id, message_id):
+            return False
+
+        # 判定与记账在同一同步临界区内完成，中间没有 await，
+        # 因此不会有第二条消息插进来读到旧状态。
+        self.mark_reacted(chat_id, message_id)
+        return True
+
+    def release(self, chat_id: str, message_id: int) -> None:
+        """归还一次已占用但最终没发出去的表情额度。
+
+        发送失败时必须回滚，否则一次网络错误就白占一个名额；
+        累积几次之后该群就再也不会点表情了。
+
+        Args:
+            chat_id: 原始会话 ID。
+            message_id: 消息 ID。
+        """
+
+        self._reacted.pop((chat_id, message_id), None)
+        if self._recent_reactions:
+            self._recent_reactions.pop()
+        self._last_reaction_at.pop(chat_id, None)
+
     def should_react(self, chat_id: str, message_id: int) -> bool:
         """判断这条消息是否要点表情。
+
+        注意：本方法只做判定、**不推进任何状态**。异步场景下
+        应当改用 ``reserve()``，否则判定与记账之间的延迟会构成
+        check-then-act 窗口，让冷却与限流在突发流量下失效。
 
         Args:
             chat_id: 原始会话 ID。
