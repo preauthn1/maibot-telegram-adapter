@@ -31,7 +31,7 @@ WINDOW_SECONDS = 1800.0
 #
 # 抬高下限只影响"冷群"的沉默程度，多人互动抬权重、单人刷屏被压
 # 这两个区分能力不受影响（见 test_telegram_user_weight_floor）。
-MIN_MULTIPLIER = 0.4
+MIN_MULTIPLIER = 0.5
 MAX_MULTIPLIER = 2.0
 
 # 有互动时的基准倍率。
@@ -45,7 +45,7 @@ MAX_MULTIPLIER = 2.0
 # 因此把基准抬到 1.4，效果等同于 talk_value=1.4 而不触碰配置约束。
 #
 # 冷群仍由 MIN_MULTIPLIER 压在 0.6，不会变成自言自语。
-BASE_MULTIPLIER = 0.9
+BASE_MULTIPLIER = 1.1
 GAIN = 1.0
 
 # 饱和常数：互动次数达到该量级后收益递减，避免线性膨胀。
