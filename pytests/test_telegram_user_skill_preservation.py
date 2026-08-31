@@ -113,3 +113,48 @@ def test_repeated_rewrites_do_not_duplicate(tmp_path: Path) -> None:
 
     assert text.count("## 禁用表达") == 1, "人工段落被重复追加"
     assert text.count("## 统计") == 1, "程序段落被重复追加"
+
+
+def test_inline_marker_mention_does_not_eat_content() -> None:
+    """人工文档里提到标记字符串时，不该吞掉中间的说明文字。
+
+    标记文本本身就写着「请勿手工编辑」，运维在文档里解释这套
+    机制是极自然的行为——结果恰好触发数据丢失。
+
+    原实现用 str.find 子串搜索首个 BEGIN 和首个 END，人工正文里
+    内联提到这两个词就会被当成真标记，中间的说明全部消失，
+    且合并结果里出现 BEGIN×2 END×2，文件结构永久损坏。
+    """
+
+    from telegram_user_adapter.self_improvement import (
+        _AUTO_BEGIN,
+        _AUTO_END,
+        _merge_generated_block,
+    )
+
+    existing = f"""# 说话习惯
+
+## 机制说明
+
+程序在 `{_AUTO_BEGIN}` 与 `{_AUTO_END}` 之间写统计，
+这段说明极其重要，请勿删除。
+
+{_AUTO_BEGIN}
+- 旧的程序内容
+{_AUTO_END}
+
+## ⚠️ 禁用表达
+
+- 作为一个AI
+"""
+
+    merged = _merge_generated_block(existing, f"{_AUTO_BEGIN}\n- 新内容\n{_AUTO_END}")
+
+    assert "这段说明极其重要，请勿删除" in merged, "人工说明文字被吞掉了"
+    assert "作为一个AI" in merged, "禁用表达段丢失"
+    assert merged.count(_AUTO_BEGIN) == 2, (
+        f"标记数量异常（{merged.count(_AUTO_BEGIN)} 个 BEGIN）："
+        "正文里的内联提及 + 真标记各 1 个才对，结构不该被破坏"
+    )
+    assert "旧的程序内容" not in merged, "旧的程序段应被替换"
+    assert "新内容" in merged, "新内容没写进去"
