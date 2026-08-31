@@ -1,0 +1,29 @@
+[Unit]
+Description=Telegram 姓氏时间显示守护进程（tgtime，UTC+8）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/MaiBot
+ExecStart=/root/MaiBot/.venv/bin/python /root/MaiBot/tgtime_daemon.py
+Restart=always
+RestartSec=30
+TimeoutStopSec=20
+KillSignal=SIGTERM
+Environment=TZ=Asia/Shanghai
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tgtime
+
+# 与主程序共用 StringSession（只读取，不新建 .session 文件），
+# 独立成服务的目的是避免被 MaiBot 进程树的 SIGTERM 连带杀掉。
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=full
+ProtectHome=false
+ReadWritePaths=/root/MaiBot
+
+[Install]
+WantedBy=multi-user.target

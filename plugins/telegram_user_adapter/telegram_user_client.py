@@ -201,6 +201,29 @@ class TelegramUserClient:
             event_filter = events.NewMessage()
         self._client.add_event_handler(handler, event_filter)
 
+    def add_edit_handler(self, handler: Callable[[Any], Any], *, incoming_only: bool) -> None:
+        """注册消息编辑事件处理器。
+
+        真人频繁使用编辑功能（白名单群实测平均 10.9%，某高风险群 27%），
+        只监听 ``NewMessage`` 会对编辑完全无感知，既可能按旧文本作答，
+        也无法识别"发问→改内容→看反应"的身份探测手法。
+
+        Args:
+            handler: 接收 Telethon ``MessageEdited.Event`` 的异步回调。
+            incoming_only: 为 ``True`` 时仅监听他人编辑，忽略本账号的编辑。
+        """
+
+        from telethon import events
+
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+
+        if incoming_only:
+            event_filter = events.MessageEdited(incoming=True)
+        else:
+            event_filter = events.MessageEdited()
+        self._client.add_event_handler(handler, event_filter)
+
     def add_raw_update_handler(self, handler: Callable[[Any], Any], update_types: Any) -> None:
         """注册原始 MTProto 更新事件处理器。
 
