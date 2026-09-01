@@ -30,6 +30,8 @@ from typing import Deque, Dict, Optional, Tuple
 
 import time
 
+from .unlimited_mode import is_unlimited
+
 # 每小时全局发送上限。
 #
 # 最初设 30 条，依据是"封禁前峰值 107 条太高"。后来实测推翻了这个
@@ -105,6 +107,11 @@ class SendBudget:
 
         current = now if now is not None else time.monotonic()
         last_hour, last_minute = self._counts(current)
+
+        # 极端实验模式：仍照常记账（record 不受影响），只是不再拒绝，
+        # 这样事后能统计"如果有限制会被挡掉多少"。
+        if is_unlimited():
+            return True, ""
 
         if last_minute >= self.minute_limit:
             return False, (

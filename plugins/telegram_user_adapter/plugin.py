@@ -53,6 +53,7 @@ from .spam_filter import detect_spam
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
 from .trigger import TriggerManager
+from .unlimited_mode import describe as describe_unlimited, is_unlimited
 from .usage_stats import ModelPricing, UsageTracker
 from .utils import parse_topic_group_id
 
@@ -825,6 +826,12 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if count < limit:
             return False
 
+        # 极端实验模式：解除连发上限。
+        # 放在计数之后返回，保证 self._consecutive_replies 仍在累加，
+        # 事后可从日志统计"正常模式下会被挡掉多少次"。
+        if is_unlimited():
+            return False
+
         # 达到上限后进入冷却；冷却结束自动放行并清零，
         # 避免\"一旦触发就永久闭嘴\"。
         blocked_at = self._consecutive_blocked_at.get(chat_id)
@@ -1175,6 +1182,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if tg_client is None:
             return
 
+        # 频率限制状态必须在启动日志里显式可见：
+        # 事后分析 transcript 时要能确定这段数据产生于哪种模式。
+        self.ctx.logger.warning(f"发言频率策略: {describe_unlimited()}")
         self.ctx.logger.info("Telegram 真人账号适配器开始监听消息...")
         try:
             await tg_client.run_until_disconnected()
