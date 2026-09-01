@@ -26,10 +26,14 @@ def test_idle_baseline_within_safe_band() -> None:
 
 
 def test_base_multiplier_bounded() -> None:
-    """基准倍率不得回到 1.4（导致封禁），但可略高于 1。
+    """基准倍率不得回到 1.4（导致封禁），但单群场景可用到区间上限。
 
-    真人实测能到 68.9 条/小时，0.9 偏保守；
-    跨多群并发的异常由 attention_focus 拦截。
+    真人实测单群小时峰值最高 80 条、前 10 名平均 68.9 条，
+    因此 1.2 仍在真人量级内。
+
+    上限 1.2 的依据：导致封禁的 1.4 是在 12 群并发下发生的，
+    真正的异常是并发会话数（真人跨 ≥3 群为 0/1128），
+    该维度现由 attention_focus 独立拦截。
     """
 
     assert 1.0 <= eng.BASE_MULTIPLIER <= 1.2
