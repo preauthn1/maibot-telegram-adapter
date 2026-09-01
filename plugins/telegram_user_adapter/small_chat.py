@@ -24,6 +24,8 @@ import random
 import re
 import time
 
+from .unlimited_mode import is_unlimited
+
 # 小群参与率上限。超过这个比例就明显比真人话多。
 #
 # 从 0.30 提到 0.45：线上实测九个白名单群的真实参与率只有 6.9%
@@ -245,6 +247,11 @@ class SmallChatModerator:
         current = now if now is not None else time.monotonic()
         state = self._state(chat_id)
         self._prune(state, current)
+
+        # 极端实验模式：解除参与率上限与最小间隔。
+        # _prune 已执行，状态仍在维护，切回正常模式立即恢复约束。
+        if is_unlimited():
+            return False, ""
 
         ratio_limit = ratio_override if ratio_override is not None else self._ratio_limit
         min_gap = min_gap_override if min_gap_override is not None else self._min_gap

@@ -29,6 +29,8 @@ from typing import Dict, Optional, Tuple
 
 import time
 
+from .unlimited_mode import is_unlimited
+
 # 同一时间窗内最多在几个群活跃。
 #
 # 真人实测最多观测到 2 个群（1128 条记录中跨 ≥3 群的为 0）。
@@ -97,6 +99,12 @@ class AttentionFocus:
 
         # 已在焦点内的会话继续放行：真人会在同一个群持续聊下去。
         if chat_id in self._last_active:
+            return True, ""
+
+        # 极端实验模式：不再限制并发会话数。
+        # 注意单群场景下这一层本就不会触发（只有 1 个会话），
+        # 解除它主要是为了让实验条件干净——不留任何频率类拦截。
+        if is_unlimited():
             return True, ""
 
         if len(self._last_active) >= self.max_concurrent_chats:
