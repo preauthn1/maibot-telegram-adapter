@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional, Sequence
 
 import asyncio
@@ -60,6 +60,13 @@ from src.maisaka.memory.mid_term import is_mid_term_memory_message
 from src.maisaka.focus import focus_mode_manager
 from src.maisaka.visual.message_limiter import limit_latest_images_in_messages
 from src.maisaka.visual.mode_utils import resolve_enable_visual_planner
+
+# Planner prompt 中"当前时间"使用的时区。
+#
+# 服务器可能跑在 UTC 上，而 bot 人设是中国大陆的学生。
+# 若用裸 datetime.now()，模型会照着 UTC 说出"现在才五点"，
+# 而群里真实是凌晨一点——这是直接的身份暴露。
+_CN_TZ = timezone(timedelta(hours=8))
 
 PLANNER_TOOL_HINT_SOURCE = "planner_tool_hint"
 REQUEST_TYPE_BY_REQUEST_KIND = {
@@ -780,9 +787,19 @@ class MaisakaChatLoopService:
 
     @staticmethod
     def _build_current_time_user_message() -> str:
-        """构建追加到请求末尾的当前时间消息。"""
+        """构建追加到请求末尾的当前时间消息。
 
-        return MaisakaChatLoopService._build_time_user_message(datetime.now())
+        显式绑定 UTC+8：这条时间会直接进 Planner 的 prompt，
+        模型据此说出"现在几点"。曾因服务器时区为 UTC 而让 bot 在
+        北京时间凌晨 1 点说"现在才五点"，是明确的身份暴露事件。
+
+        不依赖系统时区（datetime.now() 的裸调用）——那是隐式依赖，
+        运维改一次时区就会静默复发。
+        """
+
+        return MaisakaChatLoopService._build_time_user_message(
+            datetime.now(_CN_TZ)
+        )
 
     @staticmethod
     def _append_time_user_message(items: List[ContextItem], timestamp: datetime) -> None:
