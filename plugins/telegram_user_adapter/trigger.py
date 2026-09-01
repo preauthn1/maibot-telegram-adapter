@@ -33,6 +33,8 @@ from typing import Dict, Optional, Sequence, Tuple
 
 import time
 
+from .unlimited_mode import is_unlimited
+
 # 群聊闲聊冷却（秒）。
 #
 # 45 秒：真人在群里闲聊不会每隔十几秒就冒一句。
@@ -151,6 +153,14 @@ class TriggerManager:
         # 被点名：真人不会因为"刚说过话"就不理人。
         if is_directed:
             return TriggerDecision(True, TriggerLevel.FORCED, "被 @ 或被回复")
+
+        # 极端实验模式：解除全部冷却。
+        #
+        # 45s 群聊冷却是"真人正常对话时我们却停了"的直接原因：
+        # 对方连说几句，我们答完第一句后要等 45s，中间的话全被跳过。
+        # 冷却记账（record_response）不受影响，切回正常模式立即恢复。
+        if is_unlimited():
+            return TriggerDecision(True, TriggerLevel.CASUAL, "实验模式：冷却已解除")
 
         if is_private:
             elapsed = self._elapsed(session_key, current)

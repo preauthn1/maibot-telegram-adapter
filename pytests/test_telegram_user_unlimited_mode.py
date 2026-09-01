@@ -18,6 +18,7 @@ from plugins.telegram_user_adapter import unlimited_mode
 from plugins.telegram_user_adapter.attention_focus import AttentionFocus
 from plugins.telegram_user_adapter.send_budget import SendBudget
 from plugins.telegram_user_adapter.small_chat import SmallChatModerator
+from plugins.telegram_user_adapter.trigger import TriggerManager
 
 _ENV_KEY = "TG_UNLIMITED_MODE"
 
@@ -138,6 +139,63 @@ def test_small_chat_unlimited(unlimited) -> None:
 
     assert suppress is False
     assert reason == ""
+
+
+def test_trigger_cooldown_blocks_in_normal_mode(normal) -> None:
+    """正常模式：群聊冷却必须仍然拦截。"""
+
+    manager = TriggerManager(group_cooldown=45.0)
+    chat = "-1009000000001"
+    manager.record_response(chat, now=1000.0)
+
+    decision = manager.evaluate(
+        chat, "随便聊聊", is_private=False, is_directed=False, now=1010.0
+    )
+
+    assert decision.should_respond is False
+    assert "冷却中" in decision.reason
+
+
+def test_trigger_cooldown_unlimited(unlimited) -> None:
+    """实验模式：冷却解除。
+
+    45s 群聊冷却是"真人正常对话时我们却停了"的直接原因——
+    对方连说几句，我们答完第一句后中间的话全被跳过。
+    """
+
+    manager = TriggerManager(group_cooldown=45.0)
+    chat = "-1009000000001"
+    manager.record_response(chat, now=1000.0)
+
+    decision = manager.evaluate(
+        chat, "随便聊聊", is_private=False, is_directed=False, now=1001.0
+    )
+
+    assert decision.should_respond is True
+
+
+def test_all_frequency_gates_wired() -> None:
+    """所有频率类闸门都必须接上开关。
+
+    上一轮漏接了 TriggerManager，导致实验模式下 45s 群聊冷却仍在
+    拦截、表现为"聊到一半不理人"。本测试列出全部频率闸门文件，
+    新增闸门时若忘记接线会当场失败。
+    """
+
+    plugin_dir = Path("plugins/telegram_user_adapter")
+    frequency_modules = [
+        "send_budget.py",
+        "attention_focus.py",
+        "small_chat.py",
+        "trigger.py",
+        "plugin.py",
+    ]
+
+    for name in frequency_modules:
+        source = (plugin_dir / name).read_text(encoding="utf-8")
+        assert "is_unlimited" in source, (
+            f"{name} 是频率闸门但未接入实验开关"
+        )
 
 
 def test_identity_guards_not_gated_by_unlimited() -> None:
