@@ -1,11 +1,30 @@
 """Maisaka 空闲退避状态。"""
 
 from typing import TYPE_CHECKING
+import os
 import time
 
 from src.common.logger import get_logger
 from src.config.config import global_config
 from src.maisaka.mode_policy import is_idle_cycle_reason
+
+
+def _is_unlimited_mode() -> bool:
+    """是否处于极端实验模式（解除频率类限制）。
+
+    与插件侧 telegram_user_adapter/unlimited_mode.py 读同一个环境变量。
+    这里不 import 插件模块——主程序不应依赖插件。
+
+    Returns:
+        True 表示解除空闲退避。
+    """
+
+    return os.environ.get("TG_UNLIMITED_MODE", "").strip() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 if TYPE_CHECKING:
     from src.maisaka.runtime import MaisakaHeartFlowChatting
@@ -144,6 +163,15 @@ class IdleBackoffController:
             return False
 
         if not runtime.chat_stream.is_group_session:
+            return False
+
+        # 极端实验模式：解除空闲退避。
+        #
+        # 退避是实测拦截次数最多的一层（25 分钟内 7 次），
+        # 会在群冷下来后逐级拉长 Planner 的触发间隔，
+        # 表现为"真人开始说话了但我们要过很久才反应"。
+        # record_cycle_result 仍照常记账，切回正常模式立即恢复。
+        if _is_unlimited_mode():
             return False
 
         if self._until <= 0:
