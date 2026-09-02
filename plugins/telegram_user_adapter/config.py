@@ -186,13 +186,27 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
     )
     online_linger_min: float = Field(
         default=4.0,
-        description="发言后保持在线的最短秒数。",
-        json_schema_extra={"label": "发言后在线最短时长（秒）", "order": 11},
+        description=(
+            "【已废弃】发言后保持在线的最短秒数。"
+            "驻留时长现由 presence_schedule 管理（分钟级）——"
+            "秒级驻留实测无效：入站消息中位间隔 8.7 秒，每条触发 mark_read，"
+            "每次 API 调用把在线续期 5 分钟，秒级下线定时器永远追不上。"
+            "保留字段仅为兼容旧配置文件，代码已不再读取。"
+        ),
+        json_schema_extra={
+            "hidden": True,
+            "label": "已废弃：由 presence_schedule 管理",
+            "order": 11,
+        },
     )
     online_linger_max: float = Field(
         default=15.0,
-        description="发言后保持在线的最长秒数。",
-        json_schema_extra={"label": "发言后在线最长时长（秒）", "order": 12},
+        description="【已废弃】同 online_linger_min，改由 presence_schedule 管理。",
+        json_schema_extra={
+            "hidden": True,
+            "label": "已废弃：由 presence_schedule 管理",
+            "order": 12,
+        },
     )
     min_send_gap: float = Field(
         default=1.5,

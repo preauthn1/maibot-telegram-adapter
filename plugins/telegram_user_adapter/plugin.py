@@ -44,6 +44,7 @@ from .high_risk_chats import (
 from .human_rhythm import get_activity_multiplier
 from .people_memory import PeopleMemory
 from .presence import PresenceManager
+from .presence_schedule import PresenceSchedule
 from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
 from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion, inspect_own_message
@@ -76,6 +77,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._transcript: Optional[ChatTranscriptLogger] = None
         self._self_improvement: Optional[SelfImprovementStore] = None
         self._run_task: Optional[asyncio.Task[None]] = None
+        self._presence_task: Optional[asyncio.Task[None]] = None
         self._stop_requested: bool = False
         self._self_account_id: str = ""
 
@@ -976,13 +978,22 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         # 登录后立刻置为离线，避免 Telethon 连接本身让账号显示在线（需求 10）。
         if behavior.online_only_when_chatting:
+            # 作息调度与状态上报解耦：调度器决定"此刻能否在线"，
+            # PresenceManager 只负责执行。
+            #
+            # 原实现用 online_linger_min/max（4-15 秒）做下线延迟，
+            # 实测无效——入站消息中位间隔 8.7 秒，每条都触发 mark_read，
+            # 每次 API 调用把在线续期 5 分钟，下线定时器永远追不上。
+            presence_schedule = PresenceSchedule()
             self._presence = PresenceManager(
                 self._tg_client,
                 self.ctx.logger,
-                linger_min=behavior.online_linger_min,
-                linger_max=behavior.online_linger_max,
+                schedule=presence_schedule,
             )
             await self._presence.force_offline()
+            self.ctx.logger.info(
+                f"在线作息已启用: {presence_schedule.describe()}"
+            )
 
         self._transcript = ChatTranscriptLogger(
             self.ctx.paths.data_dir / "transcripts",
@@ -1086,6 +1097,36 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._stop_requested = False
         self._run_task = asyncio.create_task(self._run_loop(), name="telegram_user_adapter.run")
 
+        # 作息巡检：发送链路只在"要发言"时才改状态，但作息边界
+        # （比如凌晨 0 点入睡）不一定正好有发言。需要独立任务把账号
+        # 从"忘了下线"的状态里拉回来。
+        if self._presence is not None:
+            self._presence_task = asyncio.create_task(
+                self._presence_watch_loop(),
+                name="telegram_user_adapter.presence_watch",
+            )
+
+    async def _presence_watch_loop(self) -> None:
+        """周期校正在线状态，使其符合作息表。
+
+        每分钟检查一次：足够及时（作息边界误差 < 1 分钟），
+        又不会自己变成高频 API 调用源——只有确实需要下线时才发请求。
+        """
+
+        while not self._stop_requested:
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                return
+
+            presence = self._presence
+            if presence is None:
+                return
+            try:
+                await presence.enforce_schedule()
+            except Exception as exc:  # noqa: BLE001 - 巡检失败不应中断插件
+                self.ctx.logger.debug(f"作息巡检失败: {exc}")
+
     def _write_account_profile(self, me: Any, username: Optional[str]) -> None:
         """把当前账号资料写给主程序，供 prompt 场景说明使用。
 
@@ -1139,6 +1180,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             with contextlib.suppress(Exception):
                 await self._send_queue.stop()
             self._send_queue = None
+
+        # 先停巡检任务再强制下线，否则巡检可能在下线后又醒来一次。
+        presence_task = self._presence_task
+        self._presence_task = None
+        if presence_task is not None:
+            presence_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await presence_task
 
         if self._presence is not None:
             with contextlib.suppress(Exception):
@@ -1217,6 +1266,24 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if behavior.ignore_self_messages and str(sender_id) == self._self_account_id:
             return
 
+        # 睡眠时段：整条入站处理链路早退。
+        #
+        # 这是 24 小时在线的根治点。Telegram 的机制是"调用任意 API 就
+        # 把账号标记在线 5 分钟"，而入站处理链路上会打 API 的地方很多：
+        #     event.get_sender()  ← 每条消息都调，与 mark_read 一样密集
+        #     event.get_chat()
+        #     get_entity() / download_media()
+        #     send_read_acknowledge()
+        #     client.action(typing) / send_reaction()
+        # 逐个加闸门必然漏（codex 审计指出我最初只堵了 mark_read 一个），
+        # 所以在链路最前面统一早退——睡着的人本来就不处理消息。
+        #
+        # 早退不丢消息：Telegram 服务端保留历史，醒来后 Planner
+        # 仍可通过上下文读到这段时间的群聊内容。
+        presence = self._presence
+        if presence is not None and not presence.allows_read_receipt():
+            return
+
         sender = None
         with contextlib.suppress(Exception):
             sender = await event.get_sender()
@@ -1232,6 +1299,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if not allowed:
             return
 
+        # 已读回执。作息闸门已在链路最前面统一早退，这里不再重复判断。
         if behavior.mark_read:
             if behavior.read_delay > 0:
                 await asyncio.sleep(behavior.read_delay)
@@ -1573,6 +1641,18 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         policy = self._reaction_policy
         tg_client = self._tg_client
         if policy is None or tg_client is None:
+            return
+
+        # 睡眠时段不点表情。
+        #
+        # 表情回应是延迟执行的独立任务（reserve 时可能还醒着，
+        # 延迟几秒后已进入睡眠窗口），且 send_reaction /
+        # get_available_reactions 都是 API 调用会续期在线。
+        # codex 审计指出：若不在这里拦，开启主动表情后
+        # 睡眠时段仍会被续期。
+        presence = self._presence
+        if presence is not None and not presence.allows_read_receipt():
+            policy.release(chat_id, message_id)
             return
 
         # 是否真的把表情发出去了。额度在 reserve() 阶段就已占用，
