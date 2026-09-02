@@ -799,7 +799,10 @@ file_formatter = structlog.stdlib.ProcessorFormatter(
         structlog.stdlib.add_log_level,
         structlog.stdlib.PositionalArgumentsFormatter(),
         normalize_embedded_event_dict,
-        structlog.processors.TimeStamper(fmt="iso"),
+        # utc=False 与本文件另外两处 TimeStamper 保持一致：
+        # 漏掉时 JSON 日志会带 Z 后缀写 UTC，与 journalctl、transcript
+        # 的本地时间差 8 小时，排查时极易把同一时刻误判成不同日期。
+        structlog.processors.TimeStamper(fmt="iso", utc=False),
         structlog.processors.CallsiteParameterAdder(
             parameters=[structlog.processors.CallsiteParameter.PATHNAME, structlog.processors.CallsiteParameter.LINENO]
         ),
