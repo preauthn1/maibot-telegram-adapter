@@ -74,10 +74,37 @@ def test_engagement_window_expires(controller: IdleBackoffController) -> None:
     """参与窗口过期后恢复正常退避，避免永久高频打扰群聊。"""
 
     controller.note_spoke()
-    controller._last_spoke_at = time.time() - ib.ENGAGEMENT_WINDOW_SECONDS - 1
+    # 必须用 time.monotonic()：_is_engaged() 读的是单调时钟。
+    #
+    # 原来这里写 time.time()，两个时钟基准差了约 17.8 亿秒
+    # （Unix 纪元 vs 开机以来）。相减得到巨大负数，
+    # `负数 < 180` 恒为真 → 永远判定"参与中"，退避被压在 30 秒，
+    # 断言 `30.0 > 30.0` 必然失败。测试从写下起就没真正验证过窗口过期。
+    controller._last_spoke_at = time.monotonic() - ib.ENGAGEMENT_WINDOW_SECONDS - 1
     _drive_idle(controller, 6)
 
     assert controller._get_backoff_seconds() > ib.ENGAGEMENT_MAX_BACKOFF_SECONDS
+
+
+def test_engagement_uses_monotonic_clock(controller: IdleBackoffController) -> None:
+    """回归：参与窗口必须基于单调时钟判定。
+
+    锁死上面那个 bug——若实现改回 time.time()，
+    用 monotonic 设置的时间戳会让判定失效。
+    """
+
+    controller.note_spoke()
+    # 用单调时钟设一个明确"很久以前"的时刻
+    controller._last_spoke_at = time.monotonic() - ib.ENGAGEMENT_WINDOW_SECONDS * 10
+
+    assert controller._is_engaged() is False, (
+        "参与窗口判定未使用 time.monotonic()，时钟基准不一致"
+    )
+
+    # 反向：刚发言应判定为参与中
+    controller._last_spoke_at = time.monotonic()
+
+    assert controller._is_engaged() is True
 
 
 def test_speaking_opens_engagement_window(controller: IdleBackoffController) -> None:
