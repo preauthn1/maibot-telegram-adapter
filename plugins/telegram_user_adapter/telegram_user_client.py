@@ -366,6 +366,7 @@ class TelegramUserClient:
         text: str,
         *,
         reply_to: Optional[int] = None,
+        parse_mode: Optional[str] = None,
     ) -> Any:
         """发送文本消息。
 
@@ -373,6 +374,10 @@ class TelegramUserClient:
             entity: 目标会话实体或 ID。
             text: 文本内容。
             reply_to: 要回复的消息 ID。
+            parse_mode: Telegram 解析模式（``"md"`` / ``"html"``）。
+                默认 ``None`` 表示纯文本发送——普通聊天必须走这条路，
+                否则文本里的 ``*`` ``_`` `` ` `` 会被当成格式标记吃掉
+                或直接触发 400。只有含命令/代码块的消息才应传值。
 
         Returns:
             Any: Telethon 返回的已发送消息对象。
@@ -380,7 +385,9 @@ class TelegramUserClient:
 
         if self._client is None:
             raise RuntimeError("Telegram 客户端尚未连接")
-        return await self._client.send_message(entity, text, reply_to=reply_to)
+        return await self._client.send_message(
+            entity, text, reply_to=reply_to, parse_mode=parse_mode
+        )
 
     async def send_file(
         self,
