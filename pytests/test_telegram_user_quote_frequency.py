@@ -69,7 +69,14 @@ class _SendingClient:
     async def get_entity(self, chat_id: Any) -> Any:
         return chat_id
 
-    async def send_text(self, entity: Any, text: str, *, reply_to: Optional[int] = None) -> _StubMessage:
+    async def send_text(
+        self,
+        entity: Any,
+        text: str,
+        *,
+        reply_to: Optional[int] = None,
+        parse_mode: Optional[str] = None,
+    ) -> _StubMessage:
         self.sent.append((entity, text, reply_to))
         return _StubMessage(99)
 
