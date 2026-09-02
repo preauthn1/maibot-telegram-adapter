@@ -30,6 +30,7 @@ from telegram_user_adapter.humanize import (  # noqa: E402
 from telegram_user_adapter.config import TelegramUserChatConfig  # noqa: E402
 from telegram_user_adapter.filters import TelegramUserChatFilter  # noqa: E402
 from telegram_user_adapter.presence import PresenceManager  # noqa: E402
+from telegram_user_adapter.presence_schedule import PresenceSchedule  # noqa: E402
 from telegram_user_adapter.self_improvement import (  # noqa: E402
     ChatOutcome,
     SelfImprovementStore,
@@ -704,7 +705,12 @@ async def test_presence_reports_online_then_offline() -> None:
     """应先上报在线，最终上报离线。"""
 
     tg = _FakeTgClient()
-    presence = PresenceManager(tg, _StubLogger())
+    # 注入无限制作息：默认作息 00:00-07:00 判定为睡眠，
+    # 会让本测试在凌晨运行时失败。这里关心的是上报逻辑本身，
+    # 不是作息判定，因此消除时钟依赖。
+    presence = PresenceManager(
+        tg, _StubLogger(), schedule=PresenceSchedule(windows=[])
+    )
 
     await presence.go_online()
     assert presence.is_online
@@ -720,7 +726,9 @@ async def test_presence_deduplicates_repeated_online() -> None:
     """重复上线不应重复上报，避免状态抖动被识别。"""
 
     tg = _FakeTgClient()
-    presence = PresenceManager(tg, _StubLogger())
+    presence = PresenceManager(
+        tg, _StubLogger(), schedule=PresenceSchedule(windows=[])
+    )
 
     await presence.go_online()
     await presence.go_online()
@@ -734,7 +742,11 @@ async def test_presence_survives_inverted_linger_config() -> None:
     """linger_min > linger_max 属于配置错误，但不能让发送流程崩溃。"""
 
     tg = _FakeTgClient()
-    presence = PresenceManager(tg, _StubLogger(), linger_min=15.0, linger_max=4.0)
+    presence = PresenceManager(
+        tg,
+        _StubLogger(),
+        schedule=PresenceSchedule(windows=[], linger_min=15.0, linger_max=4.0),
+    )
 
     await presence.go_online()
     await presence.schedule_offline()
