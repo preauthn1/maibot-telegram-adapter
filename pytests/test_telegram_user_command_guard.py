@@ -1,6 +1,6 @@
 """命令/代码块完整性保护。
 
-真实事故（2026-09-02 16:41-16:42，CMLiussss 群）：
+真实事故（2026-09-02 16:41-16:42，某技术交流群）：
   16:41:43 出站  "...yabs就这条curl -sL yabs.sh"
   16:41:53 出站  "|bash解锁测试"          ← 同一条命令被拆成两条发出
 
@@ -145,11 +145,25 @@ class TestProtectCommands:
 
         assert protect_commands(text) == text
 
+    def test_does_not_split_chinese_words(self) -> None:
+        """不能把中文逐字拆开。
+
+        回归测试：前置断言漏了排除中文时，"找就github" 里每个中文字
+        都被当成"命令字符+中文"的边界，整句被拆成 "下 次 想 自 己 找"。
+        """
+
+        text = "bash <(curl -L -s media.is/valuexyz)下次想自己找就github搜"
+
+        out = protect_commands(text)
+
+        assert "下次想自己找" in out, f"中文被拆开了: {out!r}"
+        assert " 下 次 " not in out
+
 
 class TestStripToolMarkup:
     """工具调用标记泄漏——最高等级的身份暴露。
 
-    真实事故（2026-09-02 23:00，CMLiussss 群）：
+    真实事故（2026-09-02 23:00，某技术交流群）：
         出站 "对就这个</arg_value></tool_call>"
 
     没有任何人类会打出这种字符串，一次就是当场坐实。

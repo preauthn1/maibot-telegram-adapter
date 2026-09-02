@@ -1,6 +1,6 @@
 """命令 URL 有效性验证测试。
 
-真实事故（2026-09-02 16:42，CMLiussss 群）：
+真实事故（2026-09-02 16:42，某技术交流群）：
     出站 "bash <(curl -L -s media.isvaluexyz)下次想自己找就github搜这俩名字就有"
 
 实测 media.isvaluexyz 的 DNS 根本解析不出来（curl 返回 000），
