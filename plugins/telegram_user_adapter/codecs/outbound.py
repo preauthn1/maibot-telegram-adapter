@@ -13,11 +13,22 @@ import base64
 import random
 
 from ..attention_focus import AttentionFocus
+from ..command_guard import (
+    format_command_segments,
+    merge_split_commands,
+    protect_commands,
+    strip_tool_markup,
+)
+from ..command_url_guard import (
+    extract_command_urls,
+    verify_urls_resolvable,
+)
 from ..content_safety import detect_nsfw
 from ..humanize import humanize_chat_text, is_emoji_only
 from ..high_risk_chats import should_block as high_risk_should_block
 from ..output_sanity import detect_pollution
 from ..outbound_noise import is_noise_text
+from ..persona_guard import check_persona_consistency
 from ..pre_send_review import LessonStore, review_draft
 from ..send_budget import SendBudget
 from ..telegram_user_client import TelegramUserClient
@@ -248,6 +259,24 @@ class TelegramUserOutboundCodec:
         self._last_reply_is_quote = reply_to is not None and reply_to != parsed_thread_id
 
         payloads = raw_message if isinstance(raw_message, list) else []
+
+        # 合并被上游拆散的命令段。
+        #
+        # 2026-09-02 16:41 发出过两条：
+        #   "...yabs就这条curl -sL yabs.sh"
+        #   "|bash解锁测试"                    ← 10 秒后才发出管道符
+        # 同一条 `curl -sL yabs.sh | bash` 被拆成两条，两条都是废的，
+        # 别人复制第一条跑不通。真人贴命令不会把管道符拆到下一条。
+        #
+        # 必须在分段循环之前做：循环里每段都查发送预算，
+        # 预算耗尽会 break，正好把命令切断在半路。
+        if payloads:
+            merged_payloads = merge_split_commands(payloads)
+            if len(merged_payloads) != len(payloads):
+                self._logger.info(
+                    f"合并被拆散的命令段: {len(payloads)} -> {len(merged_payloads)} 段"
+                )
+            payloads = merged_payloads
         if not payloads:
             return {"success": False, "error": "消息段为空"}
 
@@ -361,6 +390,27 @@ class TelegramUserOutboundCodec:
                 self._logger.warning(f"出站内容命中 NSFW，已拦截不发送: 命中={nsfw_hits}")
                 return None
 
+            # 工具调用标记泄漏：放在所有处理之前。
+            #
+            # 2026-09-02 23:00 发出过 "对就这个</arg_value></tool_call>"，
+            # 当时 rewritten=False、identity_guard_triggered=False——
+            # 三层防护全部放行，因为它们都是黑名单、只认已记录的中文话术，
+            # 而 XML 标记是模型输出层的全新故障形态。
+            #
+            # 没有任何人类会打出这种字符串，一次就是当场坐实，
+            # 因此不受 enable_humanize 开关控制。
+            stripped = strip_tool_markup(text)
+            if stripped != text:
+                self._logger.error(
+                    f"出站文本含工具调用标记，已剥离: {text!r} -> {stripped!r}"
+                )
+                self._last_humanize_rules.append("tool_markup_stripped")
+                text = stripped
+                if not text.strip():
+                    # 整条都是标记，剥离后为空——丢弃整条，不发空消息
+                    self._logger.error("整条消息均为工具标记，已丢弃")
+                    return None
+
             if self._enable_humanize:
                 # 只有 emoji / 标点的回复一律不发：emoji 只能在句子里起辅助作用。
                 # 放在改写之前判断，避免改写把正常句子削成只剩 emoji 后误判。
@@ -400,6 +450,25 @@ class TelegramUserOutboundCodec:
                 )
                 return None
 
+            # 人设一致性：拦截与人设矛盾的身份自述。
+            #
+            # 2026-09-02 23:00:39 有人吐槽高中作息，模型顺着话题即兴说了
+            # "我刚高中毕业没多久"——人设是大二女大学生，差着一到两年。
+            #
+            # 这个群极度排斥「小孩哥」：全天 467 条消息提到该词，
+            # 有 CM_Unban_bot 联网 ban 机制专门对付，还讨论过建 GitHub
+            # 名单公示 TG ID。自称刚高中毕业等于自报家门踩红线，
+            # 而我们此前还跟着骂过小孩哥，前后对照就是把柄。
+            #
+            # 与频率无关，属身份类防护，不受 enable_humanize 开关控制。
+            persona = check_persona_consistency(text)
+            if not persona.allowed:
+                self._logger.error(
+                    f"人设一致性拦截: chat={chat_id} {persona.reason} "
+                    f"命中={persona.matched!r} text={text!r}"
+                )
+                return None
+
             # 发言前自检：用已积累的教训拦住重犯。
             #
             # self_improvement 是事后学习——发出去才知道被质疑。
@@ -426,12 +495,48 @@ class TelegramUserOutboundCodec:
                 return None
 
             # 改写后又变成纯 emoji 的，同样不发。
-                if is_emoji_only(text):
-                    self._logger.info(f"改写后仅剩 emoji，不发送: {text!r}")
+            if is_emoji_only(text):
+                self._logger.info(f"改写后仅剩 emoji，不发送: {text!r}")
+                return None
+
+            # 命令格式保护：补分隔 + 代码块包裹。
+            #
+            # 2026-09-02 16:42 发出过
+            #   "bash <(curl -L -s media.isvaluexyz)下次想自己找就github搜"
+            # 命令与中文直接粘连、没有任何分隔，而且 URL 少了斜杠、
+            # 复制出去根本跑不通。真人贴命令会用独立消息或代码块。
+            #
+            # parse_mode 只对含命令的消息启用：普通聊天一旦开 Markdown，
+            # 文本里的 * _ ` 会被当成格式标记吃掉或直接触发 400。
+            text = protect_commands(text)
+
+            # 安装命令的 URL 必须真实存在。
+            #
+            # 同一条消息里的 media.isvaluexyz 实测 DNS 解析不出来，
+            # 是模型编的（对照：同场景的 yabs.sh 返回 200）。
+            # 技术群里真的有人复制执行，跑不通回头追究时，
+            # 一条编造的安装命令就是白纸黑字的证据。
+            #
+            # 只查 DNS 不发 HTTP：DNS 失败是确定性证据，
+            # HTTP 状态码会受墙和限流影响，用它判断会大量误拦。
+            cmd_urls = extract_command_urls(text)
+            if cmd_urls:
+                resolvable, bad_hosts = await asyncio.to_thread(
+                    verify_urls_resolvable, cmd_urls
+                )
+                if not resolvable:
+                    self._logger.error(
+                        f"安装命令含无法解析的域名，已拦截: chat={chat_id} "
+                        f"域名={bad_hosts} text={text!r}"
+                    )
                     return None
 
+            formatted, parse_mode = format_command_segments(text)
+
             await self._humanize_before_send(entity, len(text))
-            return await self._tg.send_text(entity, text, reply_to=reply_to)
+            return await self._tg.send_text(
+                entity, formatted, reply_to=reply_to, parse_mode=parse_mode
+            )
 
         if seg_type == "image":
             if binary_b64:
