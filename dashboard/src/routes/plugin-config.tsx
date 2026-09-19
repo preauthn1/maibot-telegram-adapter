@@ -1480,6 +1480,8 @@ function PluginConfigEditor({ plugin, onBack, initialTab }: PluginConfigEditorPr
 }
 
 // 主页面组件 - 包装 RestartProvider
+import { TelegramOnboarding } from '../components/telegram-onboarding'
+
 export function PluginConfigPage() {
   return (
     <RestartProvider>
@@ -1583,6 +1585,7 @@ function PluginConfigPageContent() {
     <>
       <ScrollArea className="h-full">
       <div className="space-y-4 p-4 sm:space-y-6 sm:p-6">
+        <TelegramOnboarding />
         {!adapterManagement && (
         <div className="flex flex-nowrap items-center gap-2 sm:gap-3">
           <div className="relative min-w-0 flex-1 basis-0 sm:basis-72">
