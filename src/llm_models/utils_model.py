@@ -60,6 +60,7 @@ from src.llm_models.payload_content.tool_option import (
     normalize_tool_options,
 )
 from src.llm_models.utils import compress_messages, llm_usage_recorder
+from src.llm_models.vision_preprocessing import prepare_vision_messages
 
 install(extra_lines=3)
 
@@ -923,8 +924,16 @@ class LLMOrchestrator:
         retry_remain = max(1, retry_remain)
         max_attempts = retry_remain
         model_info = request.model_info
-        original_response_request = request if isinstance(request, ResponseRequest) else None
         active_request: ClientRequest = request
+        if isinstance(request, ResponseRequest):
+            # 在首次 Provider 调用前压缩，覆盖普通识图和上下文中的图片。
+            try:
+                prepared_items = prepare_vision_messages(request.context_items)
+            except ValueError as exc:
+                raise ModelAttemptFailed("视觉图片预处理失败", original_exception=exc) from exc
+            if prepared_items != request.context_items:
+                active_request = request.copy_with(context_items=prepared_items)
+        original_response_request = active_request if isinstance(active_request, ResponseRequest) else None
 
         def ensure_attempt_snapshot(error: Exception) -> None:
             """确保内置或插件 Provider 的每次失败都有统一快照记录。"""

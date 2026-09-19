@@ -12,6 +12,7 @@ from src.common.database.database import get_db_session
 from src.common.database.database_model import HighFrequencyTerm
 from src.common.data_models.message_component_data_model import TextComponent
 
+from src.common.jieba_dict import ensure_user_dict_loaded
 from src.maisaka.context.messages import SessionBackedMessage
 
 _URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
@@ -457,6 +458,10 @@ def _normalize_term_for_match(value: object) -> str:
 
 
 def _tokenize_meaningful_terms(text: str) -> list[str]:
+    # 加载技术群自定义词典，避免"家宽"被切成"家/宽"这类高频误切。
+    # 内部幂等，重复调用不会重复读文件。
+    ensure_user_dict_loaded()
+
     cleaned_text = _remove_tokenization_noise(text)
     terms: list[str] = []
 

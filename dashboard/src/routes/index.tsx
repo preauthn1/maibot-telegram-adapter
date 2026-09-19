@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { RestartOverlay } from '@/components/restart-overlay'
+import { ServiceControls } from '@/components/service-controls'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -996,6 +997,8 @@ function IndexPageContent() {
             </svg>
           </span>
         </div>
+
+        <ServiceControls />
 
         <HomeCardManager
           cards={orderedHomeCards}

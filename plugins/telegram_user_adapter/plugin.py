@@ -14,12 +14,14 @@
 from __future__ import annotations
 
 from collections import deque, OrderedDict
-from typing import Any, ClassVar, Dict, List, Optional, cast
+from typing import Any, ClassVar, Dict, List, Optional, Set, cast
 
 import asyncio
 import contextlib
 import json
 import random
+from datetime import datetime, timedelta, timezone
+
 import time
 
 from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase
@@ -28,9 +30,14 @@ from .codecs import TelegramUserInboundCodec
 from .codecs.outbound import TelegramUserOutboundCodec
 from .codecs.reactions import ReactionInfo, parse_reaction_update
 from .config import TelegramUserPluginSettings
-from .content_safety import detect_nsfw
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
+from .content_safety import detect_nsfw
 from .debounce import InboundDebouncer
+from .doubt_response import (
+    DOUBT_REACTION,
+    is_doubt_aimed_at_us,
+    should_react_to_doubt,
+)
 from .edit_tracker import EditTracker
 from .engagement import ChatEngagementTracker
 from .filters import TelegramUserChatFilter
@@ -44,13 +51,16 @@ from .high_risk_chats import (
 from .human_rhythm import get_activity_multiplier
 from .people_memory import PeopleMemory
 from .presence import PresenceManager
+from .private_deflect import build_deflect_reply, should_deflect_private
 from .presence_schedule import PresenceSchedule
 from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
+from .read_notifications import ReadNotificationsWorker
 from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion, inspect_own_message
 from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
 from .small_chat import SmallChatModerator, estimate_read_delay
 from .spam_filter import detect_spam
+from .style_profiles import sync_style_profiles
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
 from .trigger import TriggerManager
@@ -78,6 +88,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._self_improvement: Optional[SelfImprovementStore] = None
         self._run_task: Optional[asyncio.Task[None]] = None
         self._presence_task: Optional[asyncio.Task[None]] = None
+        self._style_profile_task: Optional[asyncio.Task[None]] = None
+        self._read_notifications_task: Optional[asyncio.Task[None]] = None
+        self._read_notifications: Optional[ReadNotificationsWorker] = None
         self._stop_requested: bool = False
         self._self_account_id: str = ""
 
@@ -96,6 +109,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._reaction_policy: Optional[ReactionPolicy] = None
         # 正在执行的点表情任务，持引用防止被 GC 回收。
         self._reaction_tasks: set[asyncio.Task[None]] = set()
+        # chat_id -> 今日已做过质疑回应的 message_id 列表。
+        # 用于给 🤡 回应单独限流，避免"逢质疑必怼"的脚本特征。
+        self._doubt_reactions_today: Dict[str, List[str]] = {}
+        # 上述记录所属日期，跨天自动清空（防泄漏 + 防上限永久失效）。
+        self._doubt_reactions_day: str = ""
+        # chat_id -> 我们最近一次发言的单调时钟，判断旁敲是否冲我们来的。
+        self._last_spoke_at: Dict[str, float] = {}
+        # 已发过"发不了私信"挡箭牌的用户，避免重复回同一句。
+        self._private_deflected: Set[str] = set()
         # chat_id -> 该会话允许的表情集合（None 表示不限制），避免重复查询。
         self._allowed_reactions_cache: Dict[str, Optional[set[str]]] = {}
         # 每个会话连续发言（中间没有别人说话）的条数，用于抑制刷屏式接话。
@@ -151,6 +173,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 绑定每群画像卡（data/plugins/<id>/chats/<chat_id>/SKILL.md）。
         # 卡片支持热加载，改完保存即生效，不用重启。
         bind_chat_profiles(self.ctx.paths.data_dir / "chats")
+        self._refresh_style_profiles()
 
         # 人物记忆改为落盘：__init__ 阶段拿不到 ctx.paths，所以在这里
         # 换成带路径的实例。纯内存版重启即失忆，"记住群友"就成了空话。
@@ -162,6 +185,25 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         await self._verify_capabilities()
         await self._restart_if_needed()
+
+    def _refresh_style_profiles(self) -> None:
+        """从本部署本地 transcript 刷新各聊天流画像。"""
+
+        updated = sync_style_profiles(self.ctx.paths.data_dir)
+        self.ctx.logger.info(f"本地聊天流风格画像已刷新: {len(updated)} 个")
+
+    async def _style_profile_refresh_loop(self) -> None:
+        """定期重建画像，使运行中新积累的账号用语自然进入本群画像。"""
+
+        while not self._stop_requested:
+            try:
+                await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                return
+            try:
+                self._refresh_style_profiles()
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                self.ctx.logger.error(f"本地聊天流风格画像刷新失败: {exc}")
 
     async def _verify_capabilities(self) -> None:
         """启动时实探一次所需能力，权限缺失立刻报错。
@@ -278,6 +320,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             self._consecutive_replies[chat_id] = (
                 self._consecutive_replies.get(chat_id, 0) + 1
             )
+            # 记录发言时刻，用于判断"不点名的旁敲是否冲我们来的"。
+            # 台风「搁这训练大模型来了」就发生在我们发言 54 秒后。
+            self._last_spoke_at[chat_id] = time.monotonic()
             reserved_chat = chat_id
 
         priority = self._resolve_priority(chat_id)
@@ -1078,6 +1123,24 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             incoming_only=behavior.ignore_outgoing_from_other_devices,
         )
 
+        # 通知已读与生成回复/点表情分离；仅复用本连接，不创建新 session。
+        from telethon.tl import types as _notification_types
+
+        self._read_notifications = ReadNotificationsWorker(
+            self._tg_client.client, self._notification_group_ids, self.ctx.logger
+        )
+        self._tg_client.add_raw_update_handler(
+            self._on_notification_update,
+            [
+                _notification_types.UpdateMessageReactions,
+                _notification_types.UpdateNewChannelMessage,
+                _notification_types.UpdateNewMessage,
+                _notification_types.UpdateEditChannelMessage,
+                _notification_types.UpdateEditMessage,
+                _notification_types.UpdateShortChatMessage,
+            ],
+        )
+
         # 表情回应走 raw MTProto 更新，NewMessage 事件覆盖不到。
         if behavior.receive_reactions:
             from telethon.tl import types as _tl_types
@@ -1096,6 +1159,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         self._stop_requested = False
         self._run_task = asyncio.create_task(self._run_loop(), name="telegram_user_adapter.run")
+        self._read_notifications_task = asyncio.create_task(
+            self._read_notifications.run(), name="telegram_user_adapter.read_notifications"
+        )
+        # 连接重建完成后再启动画像刷新，避免被前面的 _stop_client 取消。
+        self._style_profile_task = asyncio.create_task(
+            self._style_profile_refresh_loop(),
+            name="telegram_user_adapter.style_profile_refresh",
+        )
 
         # 作息巡检：发送链路只在"要发言"时才改状态，但作息边界
         # （比如凌晨 0 点入睡）不一定正好有发言。需要独立任务把账号
@@ -1105,6 +1176,34 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 self._presence_watch_loop(),
                 name="telegram_user_adapter.presence_watch",
             )
+
+    def _notification_group_ids(self) -> List[str]:
+        """只允许显式群白名单；空名单/黑名单模式不扩大读取范围。"""
+        settings = self._load_settings()
+        if (
+            not settings.behavior.mark_read
+            or not settings.chat.enable_group_chat
+            or settings.chat.group_list_type != "whitelist"
+        ):
+            return []
+        return settings.chat.group_list
+
+    async def _on_notification_update(self, update: Any) -> None:
+        """只唤醒已读队列，独立于作息、回复和主动表情设置。"""
+        from telethon import utils
+        from telethon.tl import types
+
+        worker = self._read_notifications
+        if worker is None:
+            return
+        if isinstance(update, types.UpdateMessageReactions):
+            peer = update.peer
+        elif isinstance(update, types.UpdateShortChatMessage):
+            peer = types.PeerChat(update.chat_id)
+        else:
+            peer = update.message.peer_id
+        if isinstance(peer, (types.PeerChat, types.PeerChannel)):
+            worker.notify(utils.get_peer_id(peer))
 
     async def _presence_watch_loop(self) -> None:
         """周期校正在线状态，使其符合作息表。
@@ -1164,6 +1263,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         self._stop_requested = True
 
+        # 先取消并等待通知 RPC，再断开共享连接；重建时不会留下旧 worker。
+        read_notifications_task = self._read_notifications_task
+        self._read_notifications_task = None
+        self._read_notifications = None
+        if read_notifications_task is not None:
+            read_notifications_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await read_notifications_task
+
         for task in list(self._pending_outcome.values()):
             if not task.done():
                 task.cancel()
@@ -1180,6 +1288,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             with contextlib.suppress(Exception):
                 await self._send_queue.stop()
             self._send_queue = None
+
+        # 先停画像刷新任务，避免关闭数据目录时还有写入。
+        style_profile_task = self._style_profile_task
+        self._style_profile_task = None
+        if style_profile_task is not None:
+            style_profile_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await style_profile_task
 
         # 先停巡检任务再强制下线，否则巡检可能在下线后又醒来一次。
         presence_task = self._presence_task
@@ -1297,6 +1413,21 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             sender_is_bot=bool(getattr(sender, "bot", False)),
         )
         if not allowed:
+            # 陌生人私聊：发一句挡箭牌再收手。
+            #
+            # 静默丢弃比回一句更可疑——对方消息发出去毫无反应，
+            # 会觉得"这人怎么已读不回"。用"被双向了发不了私信"
+            # 这个 Telegram 真实机制当理由，群里技术人都懂。
+            #
+            # 事故背景：2026-09-03 早上我们在群里耐心答疑，
+            # 一个自称"纯新手"的成员当晚私聊要资源。我们自己
+            # 10:42 还在群里说"这种上赶着要的我怀疑是收号的"。
+            #
+            # 只回一次：每条私聊都回"发不了私信"才是机器人。
+            if bool(getattr(event, "is_private", False)) and not bool(
+                getattr(sender, "bot", False)
+            ):
+                await self._maybe_deflect_private(event, str(sender_id))
             return
 
         # 已读回执。作息闸门已在链路最前面统一早退，这里不再重复判断。
@@ -1609,6 +1740,44 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         message_id = self._safe_int(getattr(event.message, "id", None))
         if message_id is None:
             return
+
+        # 质疑我们是 AI 的消息：优先走独立通道，用 🤡 阴阳回去。
+        #
+        # 2026-09-03 群里两次旁敲（14:36「搁这训练大模型来了」、
+        # 15:22「聊天机器人ban了吧，看了眼疼」），都是台风起头、
+        # hiayu 秒复读。真人被阴阳会甩个表情怼回去，
+        # AI 才会认真解释"我不是机器人"——解释本身就是最强的 AI 特征。
+        #
+        # 必须确认是冲我们来的：实测 08-31 有人连发 12 条指认另一个
+        # 群成员是 AI，那是别人的事，我们插嘴回表情等于自己引火。
+        #
+        # 触发条件独立（不走 0.05 常规概率），但**共享** ReactionPolicy
+        # 的冷却与每小时额度——质疑回应也算一次表情动作，
+        # 不该因为"是质疑"就突破整体频率上限。
+        replied_to_us = self._is_reply_to_us(event)
+        recently_spoke = self._spoke_within(chat_id, seconds=120)
+        if is_doubt_aimed_at_us(
+            text, replied_to_us=replied_to_us, recently_spoke=recently_spoke
+        ):
+            today = self._doubt_reactions_for(chat_id)
+            if should_react_to_doubt(today) and policy.reserve(
+                chat_id, message_id
+            ):
+                today.append(str(message_id))
+                self._logger.info(
+                    f"检测到针对我们的 AI 质疑，安排表情回应: chat={chat_id} "
+                    f"(回复我们={replied_to_us} 刚发言={recently_spoke})"
+                )
+                task = asyncio.create_task(
+                    self._do_send_reaction(
+                        event, chat_id, message_id, text, force_emoji=DOUBT_REACTION
+                    ),
+                    name=f"telegram_user_adapter.doubt.{chat_id}.{message_id}",
+                )
+                self._reaction_tasks.add(task)
+                task.add_done_callback(self._reaction_tasks.discard)
+            return
+
         # 用 reserve 而不是 should_react：判定通过后要隔 1.5-6.0 秒才真正
         # 发表情，若此时才记账，这段延迟就是 check-then-act 窗口——
         # 群里在窗口内连来多条消息时每条都读到旧状态，冷却与限流全部失效
@@ -1624,8 +1793,119 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._reaction_tasks.add(task)
         task.add_done_callback(self._reaction_tasks.discard)
 
+    def _doubt_reactions_for(self, chat_id: str) -> List[str]:
+        """取该会话今日的质疑回应记录，跨天自动清空。
+
+        不清理会有两个问题：dict 只增不减造成内存泄漏，
+        以及每日上限用完后永久失效（再也不回应质疑）。
+
+        Args:
+            chat_id: 会话标识。
+
+        Returns:
+            List[str]: 今日已回应的 message_id 列表，可原地追加。
+        """
+
+        today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+        if self._doubt_reactions_day != today:
+            self._doubt_reactions_day = today
+            self._doubt_reactions_today.clear()
+        return self._doubt_reactions_today.setdefault(chat_id, [])
+
+    def _is_reply_to_us(self, event: Any) -> bool:
+        """判断入站消息是否直接回复了我们。
+
+        Args:
+            event: Telethon 入站事件。
+
+        Returns:
+            bool: 回复我们返回 ``True``。
+        """
+
+        if not self._self_account_id:
+            return False
+        reply = getattr(event.message, "reply_to", None)
+        if reply is None:
+            return False
+        # Telethon 在不同版本里字段名不一致，两个都试
+        for attr in ("reply_to_peer_id", "reply_to_msg_id"):
+            if getattr(reply, attr, None) is None:
+                continue
+        text = str(getattr(event.message, "text", "") or "")
+        # 转录格式会把被回复者写进文本，形如 [回复<name:id>：...]
+        return self._self_account_id in text
+
+    def _spoke_within(self, chat_id: str, *, seconds: float) -> bool:
+        """判断我们最近是否在该会话发过言。
+
+        用于识别不点名的旁敲——台风"搁这训练大模型来了"
+        就发生在我们发言 54 秒之后。
+
+        Args:
+            chat_id: 会话标识。
+            seconds: 时间窗口（秒）。
+
+        Returns:
+            bool: 窗口内发过言返回 ``True``。
+        """
+
+        last = self._last_spoke_at.get(chat_id)
+        if last is None:
+            return False
+        return (time.monotonic() - last) <= seconds
+
+    async def _maybe_deflect_private(self, event: Any, sender_id: str) -> None:
+        """对陌生人私聊发一句挡箭牌。
+
+        用"被双向了发不了私信"作为理由——这是 Telegram 真实机制
+        （双向机器人转发/隐私设置限制非联系人私信），群里技术人都懂，
+        比"我不想聊"自然，也不会显得针对某个人。
+
+        同一个人只挡一次：每条私聊都回同一句才是机器人行为。
+
+        Args:
+            event: Telethon 入站事件。
+            sender_id: 私聊发起者 ID。
+        """
+
+        settings = self._settings
+        if settings is None:
+            return
+
+        whitelist = set(settings.chat.private_list)
+        if not should_deflect_private(
+            sender_id=sender_id,
+            whitelist=whitelist,
+            already_deflected=self._private_deflected,
+        ):
+            return
+
+        # 作息闸门：睡觉时间不该有任何出站动作
+        presence = self._presence
+        if presence is not None and not presence.allows_read_receipt():
+            self._logger.info(f"作息期内跳过私聊挡箭牌: user={sender_id}")
+            return
+
+        reply = build_deflect_reply()
+        try:
+            # 模拟真人打字延迟，避免秒回
+            await asyncio.sleep(random.uniform(3.0, 12.0))
+            await event.reply(reply)
+            self._private_deflected.add(sender_id)
+            self._logger.info(f"已对陌生私聊发挡箭牌: user={sender_id}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # 发送失败不重试——对方可能已把我们拉黑，重试只会刷日志
+            self._logger.warning(f"私聊挡箭牌发送失败: user={sender_id} err={exc}")
+
     async def _do_send_reaction(
-        self, event: Any, chat_id: str, message_id: int, text: str
+        self,
+        event: Any,
+        chat_id: str,
+        message_id: int,
+        text: str,
+        force_emoji: Optional[str] = None,
     ) -> None:
         """真正执行一次表情回应。
 
@@ -1634,6 +1914,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             chat_id: 原始会话 ID。
             message_id: 目标消息 ID。
             text: 消息文本。
+            force_emoji: 指定表情；用于质疑回应固定发 🤡，
+                不走关键词匹配。该表情不在群里允许集合中时放弃发送。
         """
 
         from telethon import errors
@@ -1683,7 +1965,16 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 policy.mark_chat_disabled(chat_id)
                 return
 
-            emoji = policy.pick_emoji(chat_id, text, allowed)
+            if force_emoji is not None:
+                # 质疑回应：固定表情，不走关键词匹配。
+                # 群里禁用了该表情就放弃——换别的容易词不达意。
+                emoji = (
+                    force_emoji
+                    if allowed is None or force_emoji in allowed
+                    else None
+                )
+            else:
+                emoji = policy.pick_emoji(chat_id, text, allowed)
             if emoji is None:
                 return
 

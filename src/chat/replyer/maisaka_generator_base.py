@@ -10,7 +10,7 @@ from src.chat.message_receive.chat_manager import BotChatSession
 from src.chat.message_receive.message import SessionMessage
 from src.chat.utils.chat_experience import build_experience_prompt_block
 from src.chat.utils.identity_guard import build_identity_prompt_block
-from src.chat.utils.scene_context import build_scene_context_block
+from src.chat.utils.scene_context import build_chat_style_context_block, build_scene_context_block
 from src.chat.utils.utils import get_chat_type_and_target_info, is_bot_self
 from src.common.data_models.llm_service_data_models import LLMGenerationOptions, LLMResponseResult
 from src.common.data_models.message_component_data_model import (
@@ -128,6 +128,10 @@ class BaseMaisakaReplyGenerator:
             scene_block = build_scene_context_block(getattr(self, "chat_stream", None))
             if scene_block:
                 prompt_lines.append(scene_block)
+
+            style_block = build_chat_style_context_block(getattr(self, "chat_stream", None))
+            if style_block:
+                prompt_lines.append(style_block)
 
             # 身份铁律放在人设最后，紧贴指令边界，降低被后续上下文冲淡的概率。
             if global_config.personality.enable_identity_guard:

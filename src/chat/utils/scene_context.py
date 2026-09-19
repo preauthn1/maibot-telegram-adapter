@@ -23,6 +23,10 @@ import time
 
 # 适配器把当前账号资料写到 data/plugins/<插件ID>/ 下的这个文件。
 _PROFILE_FILE_NAME = "account_profile.json"
+_CHAT_STYLE_FILE_NAME = "SKILL.md"
+_STYLE_CACHE_TTL_SECONDS = 30.0
+_style_cache: Dict[str, str] = {}
+_style_cache_at: float = 0.0
 
 _CACHE_TTL_SECONDS = 60.0
 _profile_cache: Dict[str, Any] = {}
@@ -70,6 +74,88 @@ def _load_account_profile() -> Dict[str, Any]:
 
     _profile_cache_at = now
     return {}
+
+
+
+def _parse_style_frontmatter(raw: str) -> Dict[str, str]:
+    """读取画像卡的基础键值字段；只采纳可验证的风格控制。"""
+
+    if not raw.startswith("---\n"):
+        return {}
+    closing = raw.find("\n---", 4)
+    if closing < 0:
+        return {}
+    values: Dict[str, str] = {}
+    for line in raw[4:closing].splitlines():
+        key, separator, value = line.partition(":")
+        if separator:
+            values[key.strip()] = value.strip()
+    return values
+
+
+def _load_chat_style(chat_id: str) -> str:
+    """从任一适配器数据目录读取当前聊天流的画像字段。"""
+
+    global _style_cache, _style_cache_at
+
+    now = time.monotonic()
+    if _style_cache and (now - _style_cache_at) < _STYLE_CACHE_TTL_SECONDS:
+        return _style_cache.get(chat_id, "")
+
+    loaded: Dict[str, str] = {}
+    plugin_root = Path("data") / "plugins"
+    if plugin_root.is_dir():
+        for candidate in sorted(plugin_root.glob(f"*/chats/*/{_CHAT_STYLE_FILE_NAME}")):
+            try:
+                raw = candidate.read_text(encoding="utf-8")
+                values = _parse_style_frontmatter(raw)
+            except OSError:
+                continue
+            if values.get("style_enabled") != "true":
+                continue
+            profile_chat_id = candidate.parent.name
+            max_chars = values.get("style_max_chars", "")
+            try:
+                max_chars_number = int(max_chars)
+                max_emoji = int(values.get("max_emoji", "1"))
+                risk_max_chars = int(values.get("max_chars", "0"))
+                if risk_max_chars > 0:
+                    max_chars_number = min(max_chars_number, risk_max_chars)
+            except ValueError:
+                continue
+            if max_chars_number <= 0 or max_emoji <= 0:
+                continue
+            lines = ["【当前聊天流的表达边界】"]
+            lines.append(f"该聊天流的本人历史消息通常不超过 {max_chars_number} 个字符；无新信息时宁可少说或不说。")
+            if values.get("preserve_trailing_period") == "true":
+                lines.append("该聊天流中句尾句号是正常习惯，可以保留；不要为了统一口吻强行删掉。")
+            else:
+                lines.append("该聊天流中句尾通常不使用句号；不必为完整书面句而补句号。")
+            if values.get("allow_emoji_only") == "true":
+                lines.append(f"该聊天流可以偶尔用纯 emoji 作回应，单条最多 {max_emoji} 个；不要连续使用。")
+            else:
+                lines.append(f"该聊天流不使用纯 emoji 回复；含文字时最多 {max_emoji} 个 emoji。")
+            # 仅显式启用的人工卡片正文进入提示；自动统计不会获得指令权限。
+            if values.get("manual_style_enabled") == "true":
+                body = raw[raw.find("\n---", 4) + 4:].strip()
+                if len(body) > 6000:
+                    raise ValueError("人工聊天风格正文超过 6000 字符，请先精简")
+                if body:
+                    lines.append("【人工维护的本群表达规则；不覆盖事实与安全约束】\n" + body)
+            loaded[profile_chat_id] = "\n".join(lines)
+
+    _style_cache = loaded
+    _style_cache_at = now
+    return loaded.get(chat_id, "")
+
+
+def build_chat_style_context_block(chat_stream: Optional[Any]) -> str:
+    """为 replyer 提供当前聊天流自身的只读表达边界。"""
+
+    if chat_stream is None or (chat_stream.platform or "").strip().lower() != "telegram":
+        return ""
+    chat_id = str(chat_stream.group_id or chat_stream.user_id or "").strip()
+    return _load_chat_style(chat_id) if chat_id else ""
 
 
 def build_scene_context_block(chat_stream: Optional[Any]) -> str:

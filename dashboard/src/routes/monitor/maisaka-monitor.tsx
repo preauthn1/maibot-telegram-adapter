@@ -34,7 +34,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -1622,8 +1622,48 @@ export function MaisakaMonitor() {
   const selectedStageStatus = selectedSession ? stageStatuses.get(selectedSession) : undefined
   const virtualItems = timelineVirtualizer.getVirtualItems()
 
+  const implementationUpdates = [
+    '出站防护：收紧四道发送闸门，限制并发群数、总量与碎片化发言',
+    '真人号适配：presence 与消息读取解耦，支持按需上线与延迟下线',
+    '时间与作息：Planner 固定 UTC+8，日志时间戳对齐本地时区',
+    '人设与安全：陌生私聊挡箭牌、质疑检测、挑衅回应与冷却闸门',
+    '表达与记忆：jieba 自定义词典、人物记忆落盘、经验与术语学习',
+    '工具策略：支持通过 MAISAKA_DISABLED_TOOLS 禁用 send_image 等内置工具',
+  ]
+
   return (
     <div className="flex min-w-0 flex-col gap-4 lg:h-[calc(100vh-116px)] lg:flex-row">
+      <Card className="lg:hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">MaiSaka 更新同步</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <ul className="text-muted-foreground space-y-1.5 text-xs">
+            {implementationUpdates.map((update) => (
+              <li key={update} className="before:text-primary before:mr-1 before:content-['✓']">
+                {update}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+      <aside className="hidden w-72 shrink-0 lg:block">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">MaiSaka 更新同步</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ul className="text-muted-foreground space-y-2 text-xs">
+              {implementationUpdates.map((update) => (
+                <li key={update} className="before:text-primary before:mr-1 before:content-['✓']">
+                  {update}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row">
       {/* 会话侧边栏 */}
       <aside
         className={cn(
@@ -1744,6 +1784,7 @@ export function MaisakaMonitor() {
             </div>
           </ScrollArea>
         </Card>
+      </div>
       </div>
     </div>
   )
