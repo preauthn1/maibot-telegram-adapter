@@ -4,6 +4,7 @@ from typing import Any, Optional
 import traceback
 
 from src.chat.replyer.replyer_manager import replyer_manager
+from src.chat.utils.utils import is_bot_self
 from src.cli.maisaka_cli_sender import CLI_PLATFORM_NAME, render_cli_message
 from src.common.data_models.reply_generation_data_models import ReplyGenerationResult, build_reply_monitor_detail
 from src.common.logger import get_logger
@@ -92,6 +93,16 @@ def get_tool_spec() -> ToolSpec:
             "type": "boolean",
             "description": "以引用回复的方式发送这条回复，当发言人数过多，聊天比较乱时使用。",
             "default": True,
+        },
+        "reply_action": {
+            "type": "string",
+            "description": (
+                "默认 reply：回复用户消息，不能以机器人自身历史消息为目标。"
+                "仅明确要补充自己上一条发言时选择 supplement_self，并将 msg_id 指向该发言。"
+                "用户引用机器人消息仍属于普通 reply，不应选择 supplement_self。"
+            ),
+            "enum": ["reply", "supplement_self"],
+            "default": "reply",
         },
         "reply_reference": {
             "type": "string",
@@ -328,6 +339,16 @@ async def handle_tool(
         return tool_ctx.build_failure_result(
             invocation.tool_name,
             f"未找到要回复的目标消息，msg_id={target_message_id}",
+        )
+
+    # 只判断解析后的目标消息作者；用户引用机器人消息仍然是用户发言。
+    if (
+        is_bot_self(target_message.platform, target_message.message_info.user_info.user_id)
+        and invocation_arguments.get("reply_action", "reply") != "supplement_self"
+    ):
+        return tool_ctx.build_failure_result(
+            invocation.tool_name,
+            "普通 reply 不能以机器人自身历史消息为目标，请选择用户消息。",
         )
 
     try:

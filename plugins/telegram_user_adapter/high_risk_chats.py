@@ -51,6 +51,12 @@ def _profile(chat_id: str) -> Optional[ChatProfile]:
     return _STORE.get(str(chat_id)) if _STORE is not None else None
 
 
+def get_chat_profile(chat_id: str) -> Optional[ChatProfile]:
+    """返回指定聊天流的热加载画像卡。"""
+
+    return _profile(chat_id)
+
+
 # 未配置画像卡时的默认值：不施加额外约束。
 _DEFAULT_MAX_CHARS = 0.0
 

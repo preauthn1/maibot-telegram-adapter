@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
@@ -23,6 +24,10 @@ import asyncio
 import heapq
 import itertools
 import random
+import time
+
+# 内部上下文只传递候选入队时刻，不读取入站消息时间或可伪造的消息字段。
+candidate_enqueued_at: ContextVar[Optional[float]] = ContextVar("candidate_enqueued_at", default=None)
 
 # UTC+8
 _CN_TZ = timezone(timedelta(hours=8))
@@ -225,7 +230,7 @@ class SendQueue:
             action=action,
             future=future,
             label=label,
-            enqueued_at=loop.time(),
+            enqueued_at=time.monotonic(),
         )
         heapq.heappush(self._heap, item)
         self._not_empty.set()
@@ -275,6 +280,7 @@ class SendQueue:
                             item.future.cancel()
                         return
 
+                token = candidate_enqueued_at.set(item.enqueued_at)
                 try:
                     result = await item.action()
                 except asyncio.CancelledError:
@@ -288,6 +294,7 @@ class SendQueue:
                     if not item.future.done():
                         item.future.set_result(result)
                 finally:
+                    candidate_enqueued_at.reset(token)
                     self._last_sent_at = loop.time()
         finally:
             # 无论正常退出还是异常/取消，都必须复位，否则 start()
