@@ -35,6 +35,11 @@ class ChatProfile:
         min_gap_seconds: 两次发言最小间隔；None 表示用默认值。
         block_tech: 是否回避技术话题。
         extra_keywords: 该群额外的禁谈关键词。
+        style_enabled: 是否按该会话的风格控制出站文本。
+        allow_emoji_only: 是否允许纯 emoji 作为该会话的短反应。
+        max_emoji: 单条消息可保留的 emoji 上限；None 表示使用全局默认。
+        preserve_trailing_period: 是否保留该会话原本的句尾句号。
+        style_max_chars: 从该会话自身样本推导的长度上限；0 表示不限制。
         notes: 人类可读的观察记录。
     """
 
@@ -45,6 +50,11 @@ class ChatProfile:
     min_gap_seconds: Optional[float] = None
     block_tech: bool = False
     extra_keywords: Set[str] = field(default_factory=set)
+    style_enabled: bool = False
+    allow_emoji_only: bool = False
+    max_emoji: Optional[int] = None
+    preserve_trailing_period: bool = False
+    style_max_chars: float = 0.0
     notes: str = ""
 
 
@@ -125,6 +135,16 @@ def parse_profile(chat_id: str, text: str) -> ChatProfile:
             profile.block_tech = bool(value)
         elif key == "extra_keywords" and isinstance(value, list):
             profile.extra_keywords = {str(item).lower() for item in value}
+        elif key == "style_enabled":
+            profile.style_enabled = bool(value)
+        elif key == "allow_emoji_only":
+            profile.allow_emoji_only = bool(value)
+        elif key == "max_emoji" and isinstance(value, (int, float)):
+            profile.max_emoji = max(0, int(value))
+        elif key == "preserve_trailing_period":
+            profile.preserve_trailing_period = bool(value)
+        elif key == "style_max_chars" and isinstance(value, (int, float)):
+            profile.style_max_chars = max(0.0, float(value))
 
     return profile
 
