@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import re
 import sys
 
 APP_PATH = Path("/opt/plugin-stats/app.py")
