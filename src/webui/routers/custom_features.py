@@ -263,9 +263,9 @@ def snapshot(response: Response) -> Dict[str, Any]:
         "runtime_note": "仅读取落盘产物，非实时进程状态；不证明插件已加载、账号已连接或功能已生效。",
         "profiles": _profiles(), "artifacts": _artifacts(), "guards": _events(),
         "lab": {
-            "url": "https://agent.080933.xyz/",
-            "evidence": "部署 ingress /etc/cloudflared/maibot-group-lab.yml 的 hostname 映射到独立 18793；未探测当前公网可用性。",
-            "auth_note": "独立实验室密码登录，使用自己的 HttpOnly、SameSite=Strict 的 lab_session Cookie（12 小时）。管理面板登录不等于实验室登录，无单点登录；不会传递管理令牌、Telegram session 或密码。",
+            "url": "https://example.com/",
+            "evidence": "独立实验室应用的外链信息（部署地址由使用者自行配置）。",
+            "auth_note": "实验室使用独立认证，不复用管理面板、Telegram session 或密码。",
             "isolation_note": "独立实验室应用；仅提供外链，不嵌入、不迁移、不代理其导入/消息/重置操作。进入后操作属于实验室，非本页只读操作。",
         },
     }

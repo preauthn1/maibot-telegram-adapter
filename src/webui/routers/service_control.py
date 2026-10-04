@@ -47,7 +47,8 @@ async def control_service(action: Literal['start', 'stop', 'restart'], request: 
     if os.environ.get('MAIBOT_SYSTEMD_CONTROL') != '1':
         raise HTTPException(403, '此部署未启用 systemd 控制')
     # Cookie 认证的写操作须携带同源 Origin，阻止跨站请求。
-    if request.headers.get('origin') not in {'https://maibot.080933.xyz', 'http://127.0.0.1:7999', 'http://localhost:7999', 'http://127.0.0.1:8001', 'http://localhost:8001'}:
+    origins = os.getenv("MAIBOT_ALLOWED_ORIGINS", "http://127.0.0.1:7999,http://localhost:7999,http://127.0.0.1:8001,http://localhost:8001").split(",")
+    if request.headers.get('origin') not in set(filter(None, origins)):
         raise HTTPException(403, '不允许的请求来源')
     if request.headers.get('x-maibot-service-control') != '1':
         raise HTTPException(403, '缺少操作确认头')
