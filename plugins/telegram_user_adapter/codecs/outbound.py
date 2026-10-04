@@ -1,0 +1,1041 @@
+"""Telegram 真人账号出站消息编解码。
+
+把主程序的出站 MessageDict 转换为 Telethon 发送动作，并在发送前插入
+拟人化的已读/正在输入行为。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+import asyncio
+import base64
+import random
+import time
+
+from ..acknowledgement_context import acknowledgement_word
+from ..attention_focus import AttentionFocus
+from ..command_guard import (
+    format_command_segments,
+    merge_split_commands,
+    protect_commands,
+    strip_tool_markup,
+)
+from ..command_url_guard import (
+    extract_command_urls,
+    verify_urls_resolvable,
+)
+from ..anti_policing import is_group_policing
+from ..content_safety import detect_nsfw
+from ..fragment_guard import limit_message_segments
+from ..high_risk_chats import get_chat_profile, should_block as high_risk_should_block
+from ..humanize import humanize_chat_text, is_emoji_only
+from ..low_information import LowInformationGuard, LowInformationTargetReservation, is_low_information
+from ..send_queue import candidate_enqueued_at
+from ..output_sanity import detect_pollution
+from ..official_stickers import OfficialDuckStickers, PACK_SHORT_NAME, enabled as stickers_enabled
+from ..outbound_noise import is_noise_text
+from ..persona_guard import check_persona_consistency
+from ..pre_send_review import LessonStore, review_draft
+from ..reply_reuse_guard import ReplyReuseGuard
+from ..unlimited_mode import frequency_scope, is_unlimited, scoped_frequency
+from ..send_budget import SendBudget
+from ..telegram_user_client import TelegramUserClient
+from ..utils import estimate_typing_seconds, parse_topic_group_id
+
+
+class LowInformationTargetReservedError(Exception):
+    """同一明确目标的泛化回复正在发送。"""
+
+
+@dataclass(frozen=True)
+class ChatStylePolicy:
+    """本会话出站文本的风格控制。
+
+    仅当画像卡显式启用时才覆盖全局默认，避免把缺少真实样本的聊天流
+    误判为拥有某种个人化风格。
+    """
+
+    allow_emoji_only: bool = False
+    max_emoji: int = 1
+    drop_trailing_period: bool = True
+    max_chars: int = 0
+
+
+class TelegramUserOutboundCodec:
+    """将 Host 出站消息转换为 Telethon 调用。"""
+
+    def __init__(
+        self, tg_client: TelegramUserClient, logger: Any, *,
+        low_information_window: int = 10, low_information_limit: int = 2,
+        low_information_budget_seconds: float = 15.0,
+    ) -> None:
+        """初始化出站编解码器。
+
+        Args:
+            tg_client: 已连接的真人账号客户端。
+            logger: 插件日志器。
+        """
+
+        self._tg = tg_client
+        self.stickers = OfficialDuckStickers()
+        self._logger = logger
+        # 全局发送预算，跨群统计单位时间总量（见 send_budget 模块注释）
+        self._send_budget = SendBudget()
+        # 注意力焦点，限制同时活跃的群数（见 attention_focus 模块注释）
+        self._attention = AttentionFocus()
+        # 发言前自检用的教训库，由 refresh_lessons 从 SKILL.md 载入
+        self._lesson_store = LessonStore()
+        # 避免短泛化回复跨群复制；没有自然替代时宁可不发。
+        self._reply_reuse_guard = ReplyReuseGuard()
+        self._low_information_guard = LowInformationGuard(
+            window_size=low_information_window, limit=low_information_limit
+        )
+        self._low_information_targets = LowInformationTargetReservation()
+        self._acknowledgement_pending: set[tuple[str, str]] = set()
+        if low_information_budget_seconds < 0:
+            raise ValueError("低信息回复预算不能为负")
+        self._low_information_budget_seconds = low_information_budget_seconds
+        self._simulate_typing = True
+        self._typing_cps = 6.0
+        self._min_think_delay = 0.8
+        self._max_typing_delay = 12.0
+        self._enable_humanize = True
+        self._max_emoji = 1
+        self._quote_probability = 0.15
+        # 最近一次发送实际使用的 reply_to，及它是否属于\"引用\"（而非 topic 路由）。
+        self._last_reply_to: Optional[int] = None
+        self._last_reply_is_quote = False
+        self._presence: Any = None
+        self._last_typing_seconds = 0.0
+        self._last_humanize_rules: list[str] = []
+        self._last_original_text = ""
+
+    def refresh_lessons(self, skill_markdown: str) -> int:
+        """从 SKILL.md 文本重载发言前自检的教训库。
+
+        支持热加载：人在 SKILL.md 里补一条失败模式，不用重启
+        就能在下一条发言时生效。
+
+        Args:
+            skill_markdown: SKILL.md 全文。
+
+        Returns:
+            int: 载入的模式条数。
+        """
+
+        self._lesson_store = LessonStore.from_markdown(skill_markdown)
+        return len(self._lesson_store.patterns)
+
+    def set_presence_manager(self, presence: Any) -> None:
+        """注入在线状态管理器。
+
+        Args:
+            presence: :class:`PresenceManager` 实例；``None`` 表示不管理在线状态。
+        """
+
+        self._presence = presence
+
+    def set_behavior(
+        self,
+        *,
+        simulate_typing: bool,
+        typing_cps: float,
+        min_think_delay: float,
+        max_typing_delay: float,
+        enable_humanize: bool = True,
+        max_emoji: int = 1,
+        quote_probability: float = 0.15,
+    ) -> None:
+        """配置拟人化发送行为。
+
+        Args:
+            simulate_typing: 是否模拟正在输入。
+            typing_cps: 每秒键入字符数。
+            min_think_delay: 最小思考停顿。
+            max_typing_delay: 最长打字时间。
+            enable_humanize: 是否启用中文拟人化改写。
+            max_emoji: 单条消息 emoji 上限。
+            quote_probability: 回复时带引用的概率（0-1）。
+        """
+
+        self._simulate_typing = simulate_typing
+        self._typing_cps = typing_cps
+        self._min_think_delay = min_think_delay
+        self._max_typing_delay = max_typing_delay
+        self._enable_humanize = enable_humanize
+        self._max_emoji = max_emoji
+        self._quote_probability = quote_probability
+
+    def resolve_style_policy(self, chat_id: str) -> ChatStylePolicy:
+        """按会话画像返回本次出站文本的风格策略。
+
+        没有画像或画像未显式启用时，严格沿用原本的全局行为，不能凭
+        空把一个聊天流改成“个性化”。
+        """
+
+        profile = get_chat_profile(chat_id)
+        if profile is None or not profile.style_enabled:
+            return ChatStylePolicy(max_emoji=self._max_emoji)
+        # 历史 P90 是描述统计，不是发送上限。用自动出站反推硬限制
+        # 会使下一轮语料越来越短；这里只执行人工明确配置的限制。
+        max_chars = int(profile.max_chars)
+        return ChatStylePolicy(
+            allow_emoji_only=profile.allow_emoji_only,
+            max_emoji=profile.max_emoji if profile.max_emoji is not None else self._max_emoji,
+            drop_trailing_period=not profile.preserve_trailing_period,
+            max_chars=max_chars,
+        )
+
+    def _should_quote(self) -> bool:
+        """按配置概率决定本次回复是否带引用。
+
+        真人在群里很少条条都点\"回复\"，绝大多数时候是直接说话靠上下文对齐。
+        每条都带引用会让对话看起来像工单系统，是最容易被识破的特征之一。
+
+        Returns:
+            bool: 本次是否保留引用。
+        """
+
+        return random.random() < self._quote_probability
+
+    @property
+    def last_reply_is_quote(self) -> bool:
+        """最近一次发送是否带了\"引用\"。
+
+        topic 群为路由而带的 reply_to 不算引用，因此不会计入。
+
+        Returns:
+            bool: 带引用时为 ``True``。
+        """
+
+        return self._last_reply_is_quote
+
+    @property
+    def last_typing_seconds(self) -> float:
+        """最近一次发送的模拟打字总时长。
+
+        Returns:
+            float: 秒数。
+        """
+
+        return self._last_typing_seconds
+
+    @property
+    def last_humanize_rules(self) -> list[str]:
+        """最近一次发送命中的拟人化规则。
+
+        Returns:
+            list[str]: 规则名列表。
+        """
+
+        return list(self._last_humanize_rules)
+
+    @property
+    def last_original_text(self) -> str:
+        """最近一次发送在拟人化处理前的文本。
+
+        Returns:
+            str: 原始文本。
+        """
+
+        return self._last_original_text
+
+    async def send_outbound_message(self, message: Dict[str, Any], route: Dict[str, Any]) -> Dict[str, Any]:
+        """发送一条出站消息。
+
+        Args:
+            message: 主程序给出的标准消息字典。
+            route: Platform IO 路由信息。
+
+        Returns:
+            Dict[str, Any]: 标准化的发送结果。
+        """
+
+        del route
+
+        message_info = message.get("message_info", {})
+        raw_message = message.get("raw_message", [])
+        group_info = message_info.get("group_info")
+        user_info = message_info.get("user_info")
+        additional_config = message_info.get("additional_config", {}) or {}
+
+        chat_id: Optional[str] = None
+        parsed_thread_id: Optional[int] = None
+
+        target_group_id = self._clean_optional_str(additional_config.get("platform_io_target_group_id"))
+        target_user_id = self._clean_optional_str(additional_config.get("platform_io_target_user_id"))
+
+        if target_group_id:
+            chat_id, parsed_thread_id = parse_topic_group_id(target_group_id)
+        elif group_info and group_info.get("group_id"):
+            chat_id, parsed_thread_id = parse_topic_group_id(group_info["group_id"])
+        elif target_user_id:
+            chat_id = target_user_id
+        elif user_info and user_info.get("user_id"):
+            chat_id = str(user_info["user_id"])
+
+        if not chat_id:
+            return {"success": False, "error": "无法确定目标 chat_id"}
+
+        # 全局发送预算：不看是哪个群，只管单位时间总量。
+        #
+        # 2026-08-31 账号被 Telegram 反垃圾系统限制，事后复盘发现
+        # 15 时单小时出站 107 条。此前每个群的间隔与参与率都合规，
+        # 但十几个群并发时没有任何一处在看全局总量。
+        allowed, budget_reason = self._send_budget.check(chat_id)
+        if not allowed:
+            self._logger.warning(f"发送预算拦截: {budget_reason} chat={chat_id}")
+            return {"success": False, "error": f"发送预算拦截: {budget_reason}"}
+
+        # 注意力焦点：真人不会同一时段在十几个群里活跃。
+        #
+        # 实测 1128 条真人「用户×小时」记录中，跨 ≥3 个群发言的为 0，
+        # 前 15 名高发言者里 14 个只在 1 个群。我方封禁前那 107 条
+        # 散在 12 个群，这个分布才是真正扎眼的地方。
+        focus_allowed, focus_reason = self._attention.check(chat_id)
+        if not focus_allowed:
+            self._logger.info(f"注意力焦点拦截: {focus_reason} chat={chat_id}")
+            return {"success": False, "error": f"注意力焦点拦截: {focus_reason}"}
+
+        entity = await self._resolve_entity(chat_id)
+        if entity is None:
+            return {"success": False, "error": f"无法解析目标会话: {chat_id}"}
+
+        reply_to = self._safe_int(additional_config.get("reply_message_id"))
+        if reply_to is None:
+            reply_to = self._extract_reply_to_from_segments(raw_message)
+
+        # 此值是上游明确指定的回复对象；后面的引用降频会改变实际
+        # Telegram reply_to，但不能抹掉这个结构化目标，用于压制同一对象的
+        # 并发泛化回复。没有明确对象时不猜测，也不按 topic 根消息去重。
+        explicit_target_message_id = reply_to
+        acknowledgement = acknowledgement_word(
+            raw_message, explicit_target_message_id, additional_config.get("reply_message_id")
+        )
+
+        # 按真实消息间隔决定是否显示引用，不用消息ID差估算条数。
+        if reply_to is not None:
+            newer_messages = await self._tg.client.get_messages(
+                entity, min_id=reply_to, limit=4
+            )
+            # 原规则保留：新消息超过 3 条时目标已被刷上去，不引用就看不出
+            # 在回谁，必须带引用。
+            keep_quote = len(newer_messages) > 3
+            # 补充：真实屏幕上的媒体（图片/视频/贴纸/GIF/文件/语音）占的
+            # 纵向高度远大于一行文字，几条就能把目标顶出可视区（屏幕滚走，
+            # 与上下文 token 窗口无关）。此时即便新消息不足 4 条也要保留
+            # 引用，否则对方得往上翻才知道在回哪条——需要锚定目标的回复
+            # （如危机安抚）尤其不能丢引用。
+            if not keep_quote and any(
+                self._has_screen_media(m) for m in newer_messages
+            ):
+                keep_quote = True
+            if not keep_quote:
+                reply_to = None
+
+        if reply_to is None and parsed_thread_id is not None:
+            # 话题群必须带上 topic 根消息 ID，否则消息会落到 General。
+            reply_to = parsed_thread_id
+
+        # 记录本次实际使用的引用，供 transcript 验证降频是否生效。
+        # 区分\"引用型\"和\"topic 路由型\"：后者是路由必需，不算真正的引用。
+        self._last_reply_to = reply_to
+        self._last_reply_is_quote = reply_to is not None and reply_to != parsed_thread_id
+
+        # 目标已滚离可视区（新消息多或含屏幕媒体）才会保留真正的引用。
+        # 这种情况下，一条多段回复若只有首段锚定目标、后续段飘着，会在
+        # 期间插入的消息把后半句（如"或正在伤害自己…"）挤到错误上下文旁。
+        # 因此目标滚走时让每一段都锚回同一目标；目标还在可视区内则沿用
+        # 旧行为（真人不会每行都点回复）。
+        anchor_target = reply_to if self._last_reply_is_quote else None
+
+        payloads = raw_message if isinstance(raw_message, list) else []
+
+        # 合并被上游拆散的命令段。
+        #
+        # 2026-09-02 16:41 发出过两条：
+        #   "...yabs就这条curl -sL yabs.sh"
+        #   "|bash解锁测试"                    ← 10 秒后才发出管道符
+        # 同一条 `curl -sL yabs.sh | bash` 被拆成两条，两条都是废的，
+        # 别人复制第一条跑不通。真人贴命令不会把管道符拆到下一条。
+        #
+        # 必须在分段循环之前做：循环里每段都查发送预算，
+        # 预算耗尽会 break，正好把命令切断在半路。
+        if payloads:
+            merged_payloads = merge_split_commands(payloads)
+            if len(merged_payloads) != len(payloads):
+                self._logger.info(
+                    f"合并被拆散的命令段: {len(payloads)} -> {len(merged_payloads)} 段"
+                )
+            payloads = merged_payloads
+
+            # 限制碎片化：一次发言最多 3 条。
+            #
+            # 事故 2026-09-03：两次被群里点名（14:36「搁这训练大模型来了」、
+            # 15:22「聊天机器人ban了吧，看了眼疼」），都紧跟在我们连发之后。
+            # 侦察显示我们发言长度中位 10 字、P90 仅 23 字，而群里真人是
+            # 14 / 57 字——我们把一个完整意思拆成多条短消息发，
+            # 既有刷屏感，也是典型 AI 腔（真人写整段，AI 分行发短句）。
+            #
+            # 放在命令合并之后：先保证 `curl ... | bash` 不被拆断，
+            # 再压缩段数。非文本段（图片/表情）不计入上限。
+            # 段数合并不是频率限制：频率实验名单只放宽节奏，不允许一次回复拆成多条刷屏。
+            limited = limit_message_segments(payloads)
+            if len(limited) != len(payloads):
+                self._logger.info(
+                    f"限制发言碎片: {len(payloads)} -> {len(limited)} 段"
+                )
+                payloads = limited
+        # 只替换独立情绪回复，不给正文附加重复贴纸。混合批次拒绝贴纸段。
+        visible = [s for s in payloads if not self._is_local_only_segment(s)]
+        if stickers_enabled() and len(visible) == 1 and visible[0].get("type") == "text":
+            candidate = visible[0].get("data")
+            if self.stickers.select(candidate) is not None:
+                payloads = [{"type": "sticker", "data": candidate}]
+        elif len(visible) > 1:
+            payloads = [s for s in payloads if s.get("type") not in {"emoji", "sticker"}]
+        if not payloads:
+            return {"success": False, "error": "消息段为空"}
+
+        # 重置本次发送的观测指标。
+        self._last_typing_seconds = 0.0
+        self._last_humanize_rules = []
+        self._last_original_text = ""
+
+        # 只在真正要发言时上线（需求 10）。
+        if self._presence is not None:
+            with frequency_scope(chat_id):
+                await self._presence.go_online()
+
+        last_sent: Any = None
+        errors: List[str] = []
+        sent_any = False
+        # 调用局部收集器：并发发送之间不能共享候选或结果。
+        text_observations: List[Dict[str, Any]] = []
+
+        try:
+            for seg in payloads:
+                if self._is_local_only_segment(seg):
+                    continue
+                # 丢弃错别字纠正产生的单字噪音：真人不会孤零零发一个"什"。
+                if seg.get("type") == "text" and is_noise_text(str(seg.get("data", ""))):
+                    self._logger.info(f"丢弃单字噪音段: {str(seg.get('data', ''))!r}")
+                    continue
+
+                # 预算按段检查，不能只在批次开头查一次。
+                #
+                # 原来 check() 在函数入口调一次、record() 每段调一次：
+                # 一条回复拆 N 段就超限 N 倍。实测 10 段一次全发，
+                # minute_limit=5 时记到 10。封禁当天 15:18 单分钟 8 条、
+                # 5 个分钟超过 5 条/分，正是这么来的。
+                if sent_any:
+                    seg_allowed, seg_reason = self._send_budget.check(chat_id)
+                    if not seg_allowed:
+                        self._logger.warning(
+                            f"发送预算拦截后续分段: {seg_reason} chat={chat_id}"
+                        )
+                        break
+
+                # 引用与 topic 路由是两回事，不能一起抹掉。
+                #
+                # 话题群里 reply_to 同时承担「回复某条」与「发到哪个话题」
+                # 两个职责。原来「只有第一段带 reply_to」的引用降频逻辑
+                # 把 topic 路由也一并清空，导致第 2 段起掉进 General——
+                # 上下文断裂，在人工审核视角极为扎眼。
+                if not sent_any:
+                    current_reply = reply_to
+                elif anchor_target is not None:
+                    # 目标已滚离可视区：这是一条需要锚定的回复，后续段也挂回
+                    # 同一目标，避免后半句飘着或锚到期间插入的错误上下文。
+                    # 在话题群里引用话题内的目标同样满足路由要求。
+                    current_reply = anchor_target
+                else:
+                    # 后续段不再引用具体消息，但必须留在同一话题里
+                    current_reply = parsed_thread_id
+
+                try:
+                    sent = await self._send_segment(
+                        entity,
+                        chat_id,
+                        seg,
+                        current_reply,
+                        explicit_target_message_id=explicit_target_message_id if not sent_any else None,
+                        observations=text_observations,
+                        acknowledgement=acknowledgement,
+                    )
+                except LowInformationTargetReservedError:
+                    errors.append("low_information_target_repeat")
+                    continue
+                except Exception as exc:  # noqa: BLE001 - 单段失败不阻断其他段
+                    errors.append(f"{seg.get('type', 'unknown')}: {exc}")
+                    continue
+                if sent is None:
+                    continue
+                sent_any = True
+                last_sent = sent
+                # 每个成功发出的段都计入全局预算——真人看到的是"几条消息"，
+                # 而不是"一次回复"，所以按段计数才反映真实刷屏程度。
+                self._send_budget.record()
+                if str(seg.get("type") or "").strip() not in {"text", "emoji", "sticker"}:
+                    self._low_information_guard.record("")
+                # 同步刷新注意力焦点：这个群成为（或保持）当前关注对象。
+                self._attention.record(chat_id)
+        finally:
+            # 无论成功与否都安排下线，避免异常路径把账号永久挂在线上。
+            if self._presence is not None:
+                await self._presence.schedule_offline()
+
+        if not sent_any:
+            if errors == ["low_information_target_repeat"]:
+                return {
+                    "success": False,
+                    "error": "同一目标已有低信息回复在发送",
+                    "error_code": "low_information_target_repeat",
+                }
+            if not errors:
+                # 没有任何段抛平台异常：全部被本地出站闸门（管人话术、污染、
+                # 复用、长度等）拦下，不是平台失败，不能进入权限状态机。
+                return {"success": False, "error": "所有消息段被出站闸门拦截", "error_code": "local_guard_blocked"}
+            return {"success": False, "error": "; ".join(errors)}
+
+        external_id = str(getattr(last_sent, "id", "") or "")
+        # v1 仅为纯文本批次承诺完整正文；失败/拦截段不在成功观测中。
+        # 媒体与混合段不声明支持，避免一条文本覆盖整个原始消息。
+        metadata: Dict[str, Any] = {}
+        if (any(isinstance(seg, dict) and seg.get("type") == "text" for seg in raw_message)
+                and all(isinstance(seg, dict) and seg.get("type") in ("text", "reply", "at")
+                        for seg in raw_message)):
+            parts = [observation["confirmed_content"] for observation in text_observations]
+            if any(o.get("native_sticker") for o in text_observations):
+                parts = [None]
+            metadata["delivery_content"] = {
+                "version": 1,
+                "scope": "text_only",
+                "complete": bool(parts) and all(part is not None for part in parts),
+                "parts": parts,
+            }
+        return {"success": True, "external_message_id": external_id or None,
+                "text_observations": text_observations, "metadata": metadata}
+
+    @staticmethod
+    def _confirmed_text_content(sent: Any, transport: str, parse_mode: Optional[str]) -> Optional[Dict[str, str]]:
+        """Telethon Message.message 为实体应用后的正文；.text 会反向渲染 Markdown。
+
+        不在成功发送后猜测未知解析模式，也不让可选回执读取异常导致重发。
+        实体负责显示样式，正文保留换行/代码内容，不保留 Markdown 包装符。
+        """
+        try:
+            mid = str(getattr(sent, "id", "") or "")
+            body = getattr(sent, "message", None)
+            if isinstance(body, str) and body and mid:
+                return {"message_id": mid, "text": body, "source": "telegram_message"}
+            if parse_mode is None and mid:
+                return {"message_id": mid, "text": transport, "source": "unparsed_transport"}
+        except Exception:
+            return None
+        return None
+
+    @scoped_frequency("chat_id")
+    async def _send_segment(
+        self,
+        entity: Any,
+        chat_id: str,
+        seg: Dict[str, Any],
+        reply_to: Optional[int],
+        *,
+        explicit_target_message_id: Optional[int] = None,
+        observations: Optional[List[Dict[str, Any]]] = None,
+        acknowledgement: Optional[str] = None,
+    ) -> Any:
+        """发送单个消息段。
+
+        Args:
+            entity: 目标会话实体。
+            chat_id: 目标会话 ID，供每群画像约束使用。
+            seg: 消息段字典。
+            reply_to: 要回复的消息 ID。
+
+        Returns:
+            Any: Telethon 返回的消息对象；本段无需发送时返回 ``None``。
+        """
+
+        enqueued_at = candidate_enqueued_at.get()
+        if enqueued_at is None:
+            enqueued_at = time.monotonic()
+        seg_type = str(seg.get("type") or "").strip()
+        seg_data = seg.get("data", "")
+        binary_b64 = seg.get("binary_data_base64", "")
+
+        if seg_type == "text":
+            text = seg_data if isinstance(seg_data, str) else str(seg_data)
+            if not text.strip():
+                return None
+
+            original_candidate = text
+            self._last_original_text = text
+
+            # NSFW 兜底：入站已经拦过一道，这里防的是模型自己生成露骨内容
+            # （被诱导、或人设漂移）。与 humanize 无关，因此不受其开关控制。
+            is_nsfw, nsfw_hits = detect_nsfw(text)
+            if is_nsfw:
+                self._logger.warning(f"出站内容命中 NSFW，已拦截不发送: 命中={nsfw_hits}")
+                return None
+
+            # 工具调用标记泄漏：放在所有处理之前。
+            #
+            # 2026-09-02 23:00 发出过 "对就这个</arg_value></tool_call>"，
+            # 当时 rewritten=False、identity_guard_triggered=False——
+            # 三层防护全部放行，因为它们都是黑名单、只认已记录的中文话术，
+            # 而 XML 标记是模型输出层的全新故障形态。
+            #
+            # 没有任何人类会打出这种字符串，一次就是当场坐实，
+            # 因此不受 enable_humanize 开关控制。
+            stripped = strip_tool_markup(text)
+            if stripped != text:
+                self._logger.error(
+                    f"出站文本含工具调用标记，已剥离: {text!r} -> {stripped!r}"
+                )
+                self._last_humanize_rules.append("tool_markup_stripped")
+                text = stripped
+                if not text.strip():
+                    # 整条都是标记，剥离后为空——丢弃整条，不发空消息
+                    self._logger.error("整条消息均为工具标记，已丢弃")
+                    return None
+
+            style_policy = self.resolve_style_policy(chat_id)
+            if self._enable_humanize:
+                # 纯 emoji 是否可作为短反应，必须由当前聊天流的画像明确授权；
+                # 不能再用一个全局禁令抹掉真实账号在熟人群里的既有习惯。
+                if is_emoji_only(text) and not style_policy.allow_emoji_only:
+                    self._logger.info(f"跳过当前会话未授权的纯 emoji/标点回复: {text!r}")
+                    return None
+
+                humanized = humanize_chat_text(
+                    text,
+                    drop_trailing_period=style_policy.drop_trailing_period,
+                    max_emoji=style_policy.max_emoji,
+                )
+                if humanized.became_empty:
+                    # 整条都是助手腔，跳过发送。真人不会为了说话而说话。
+                    self._logger.info(f"跳过纯助手腔消息，不发送: {text!r}")
+                    return None
+                if humanized.changed:
+                    self._last_humanize_rules.extend(humanized.applied_rules)
+                    self._logger.debug(
+                        f"拟人化改写: {text!r} -> {humanized.text!r} 规则={humanized.applied_rules}"
+                    )
+                text = humanized.text
+
+                # max_chars 来自群内 P95 长度，只是风格参考（已注入提示词）。
+                # 以它为硬线会整条丢弃略长但有用的回复（链接、就医提醒等），
+                # 生成后被吞掉反而显得冷淡；硬拦截只防明显的长篇说教。
+                hard_ceiling = max(style_policy.max_chars * 3, 80) if style_policy.max_chars else 0
+                if hard_ceiling and len(text) > hard_ceiling:
+                    self._logger.info(
+                        f"聊天流风格长度上限拦截: chat={chat_id} "
+                        f"长度={len(text)} 上限={hard_ceiling} 风格P95={style_policy.max_chars}"
+                    )
+                    return None
+
+                # 以下三道是**安全拦截**，与 humanize 无关，因此放在
+            # 开关外面（NSFW 检测同理）。
+            #
+            # 曾经它们缩在 if self._enable_humanize 块内：关掉改写
+            # 开关（本意只是"别改我的话"）会连带失去全部防护，实测
+            # "假false"、'assistant: 好的'、'{"role": "user"}'、
+            # "作为一个AI我不能这么说" 全部照发。
+
+            # 最后一道关卡：拦截模型输出泄漏。
+            #
+            # 8-30 曾在某休闲小群发出 "假false"——中英混杂的布尔值，
+            # 9 秒前刚有人问过 "ai？"，这条基本坐实了怀疑。
+            # 这类文本一次泄漏就足以暴露，宁可少说一句也不能发出去。
+            # 群聊（负数 chat_id）里不当风纪委员：劝撤回/提举报/喊管理一律不发。
+            # 见 anti_policing.py 的 2026-10-03 被踢事故说明。
+            if str(chat_id).startswith("-") and is_group_policing(text):
+                self._logger.info(f"群聊管人话术拦截，不发送: chat={chat_id} text={text!r}")
+                return None
+
+            polluted, reasons = detect_pollution(text)
+            if polluted:
+                self._logger.error(
+                    f"拦截污染文本，不发送: {text!r} 命中={reasons}"
+                )
+                return None
+
+            # 人设一致性：拦截与人设矛盾的身份自述。
+            #
+            # 2026-09-02 23:00:39 有人吐槽高中作息，模型顺着话题即兴说了
+            # "我刚高中毕业没多久"——人设是大二女大学生，差着一到两年。
+            #
+            # 这个群极度排斥「小孩哥」：全天 467 条消息提到该词，
+            # 有 CM_Unban_bot 联网 ban 机制专门对付，还讨论过建 GitHub
+            # 名单公示 TG ID。自称刚高中毕业等于自报家门踩红线，
+            # 而我们此前还跟着骂过小孩哥，前后对照就是把柄。
+            #
+            # 与频率无关，属身份类防护，不受 enable_humanize 开关控制。
+            persona = check_persona_consistency(text)
+            if not persona.allowed:
+                self._logger.error(
+                    f"人设一致性拦截: chat={chat_id} {persona.reason} "
+                    f"命中={persona.matched!r} text={text!r}"
+                )
+                return None
+
+            # 发言前自检：用已积累的教训拦住重犯。
+            #
+            # self_improvement 是事后学习——发出去才知道被质疑。
+            # 借鉴 Hermes「动手前先加载相关知识」的做法，把
+            # SKILL.md 里记录的失败模式在发言前先匹配一遍。
+            # 账号已因用户举报被封过一次，事后补救来不及。
+            verdict = review_draft(text, store=self._lesson_store)
+            if not verdict.allowed:
+                self._logger.warning(
+                    f"发言前自检拦截: chat={chat_id} {verdict.reason} text={text!r}"
+                )
+                return None
+
+            # 高风险群的额外约束：长度与语气。
+            #
+            # 某高风险小群中位消息仅 13 字、13 人熟人圈，
+            # 我们只发过 1 条就被当面问 "你是大语言模型吗？"。
+            # 这种圈子的破绽不是说错话，而是说得太齐整。
+            blocked, block_reason = high_risk_should_block(str(chat_id), text)
+            if blocked:
+                self._logger.info(
+                    f"高风险群拦截: chat={chat_id} {block_reason} text={text!r}"
+                )
+                return None
+
+            # 画像明确允许的纯 emoji 短反应，不能在后续统一规则里再次误拦。
+            if is_emoji_only(text) and not style_policy.allow_emoji_only:
+                self._logger.info(f"改写后当前会话未授权的纯 emoji，不发送: {text!r}")
+                return None
+
+            # 同一句短泛化回应如果刚在另一个聊天流发过，会成为跨群可见的
+            # 自动化指纹。此处拒绝发送，不用同义词改写制造新的模板。
+            now = time.monotonic()
+            # 原始完整 payload 与最终输出都必须满足契约。
+            is_acknowledgement = acknowledgement is not None and text == acknowledgement
+            if not is_unlimited(chat_id) and not is_acknowledgement and self._reply_reuse_guard.is_recent_repeat(chat_id, text, now=now):
+                self._logger.info(f"同聊天流短回复复读，跳过发送: chat={chat_id} text={text!r}")
+                return None
+            if not is_unlimited(chat_id) and not is_acknowledgement and self._reply_reuse_guard.is_recent_cross_chat_duplicate(chat_id, text, now=now):
+                self._logger.info(f"跨聊天流短回复重复，跳过发送: chat={chat_id} text={text!r}")
+                return None
+
+            # 命令格式保护：补分隔 + 代码块包裹。
+            #
+            # 2026-09-02 16:42 发出过
+            #   "bash <(curl -L -s media.isvaluexyz)下次想自己找就github搜"
+            # 命令与中文直接粘连、没有任何分隔，而且 URL 少了斜杠、
+            # 复制出去根本跑不通。真人贴命令会用独立消息或代码块。
+            #
+            # parse_mode 只对含命令的消息启用：普通聊天一旦开 Markdown，
+            # 文本里的 * _ ` 会被当成格式标记吃掉或直接触发 400。
+            text = protect_commands(text)
+
+            # 仅检查命令 URL 的格式及本机 DNS 明确负答，不验证脚本存在性或可信性。
+            # 临时解析故障保持不确定；DNS 成功也不证明命令有效。
+            # 在线程中运行同步解析，避免阻塞事件循环；系统解析器仍无硬截止时间。
+            cmd_urls = extract_command_urls(text)
+            if cmd_urls:
+                resolvable, bad_hosts = await asyncio.to_thread(
+                    verify_urls_resolvable, cmd_urls
+                )
+                if not resolvable:
+                    self._logger.error(
+                        "命令 URL 检查未通过，已拦截；失败项数=%d", len(bad_hosts)
+                    )
+                    return None
+
+            formatted, parse_mode = format_command_segments(text)
+
+            if not is_unlimited(chat_id) and not is_acknowledgement and not self._low_information_guard.allows(text):
+                self._logger.info("低信息动作族限频，跳过发送")
+                return None
+            short_lived = is_acknowledgement or is_low_information(text)
+            if not is_unlimited(chat_id) and short_lived and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
+                self._logger.info("低信息候选已过期，跳过发送")
+                return None
+            target_reserved = False
+            target_key = (chat_id, str(explicit_target_message_id))
+            if target_key in self._acknowledgement_pending:
+                raise LowInformationTargetReservedError()
+            if not is_unlimited(chat_id) and short_lived and explicit_target_message_id is not None:
+                target_reserved = self._low_information_targets.reserve(
+                    chat_id, str(explicit_target_message_id), now=time.monotonic()
+                )
+                if not target_reserved:
+                    self._logger.info(
+                        f"同一明确目标已有低信息回复在发送，跳过: "
+                        f"chat={chat_id} target={explicit_target_message_id}"
+                    )
+                    raise LowInformationTargetReservedError()
+            if is_acknowledgement:
+                self._acknowledgement_pending.add(target_key)
+            try:
+                await self._humanize_before_send(entity, len(text))
+                # 等待/输入期间也会过期，必须在真实发送边界再检查。
+                if not is_unlimited(chat_id) and short_lived and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
+                    self._logger.info("低信息候选等待后过期，跳过发送")
+                    if target_reserved:
+                        self._low_information_targets.release(chat_id, str(explicit_target_message_id))
+                    return None
+                # 等待期间其他成功发送也会消耗预算；契约不获得额外配额。
+                allowed, reason = self._send_budget.check(chat_id)
+                if not allowed:
+                    if target_reserved:
+                        self._low_information_targets.release(*target_key)
+                    self._logger.info(f"发送前预算拦截: {reason}")
+                    return None
+                sent = await self._tg.send_text(
+                    entity, formatted, reply_to=reply_to, parse_mode=parse_mode
+                )
+            except BaseException:
+                if target_reserved:
+                    self._low_information_targets.release(chat_id, str(explicit_target_message_id))
+                raise
+            finally:
+                if is_acknowledgement:
+                    self._acknowledgement_pending.discard(target_key)
+            if sent is None and target_reserved:
+                self._low_information_targets.release(chat_id, str(explicit_target_message_id))
+            if sent is not None:
+                if is_acknowledgement and target_reserved:
+                    # 成功窗口从发送完成开始；进行中由 pending 独立保护。
+                    self._low_information_targets.release(*target_key)
+                    self._low_information_targets.reserve(*target_key, now=time.monotonic())
+                if observations is not None:
+                    observations.append({
+                        "message_id": str(getattr(sent, "id", "") or ""),
+                        "original_text": original_candidate,
+                        "text": formatted,
+                        "parse_mode": parse_mode,
+                        "confirmed_content": self._confirmed_text_content(sent, formatted, parse_mode),
+                        "reply_is_quote": reply_to is not None,
+                    })
+                # 契约不污染泛化计数，也不以 False 挤掉已有低信息记录。
+                if not is_acknowledgement:
+                    self._low_information_guard.record(text)
+                    self._reply_reuse_guard.record(chat_id, text, now=time.monotonic())
+            return sent
+
+        if seg_type == "image":
+            if binary_b64:
+                await self._humanize_before_send(entity, 0)
+                return await self._tg.send_file(
+                    entity,
+                    base64.b64decode(binary_b64),
+                    file_name="image.png",
+                    reply_to=reply_to,
+                )
+            if isinstance(seg_data, str) and seg_data.startswith("http"):
+                await self._humanize_before_send(entity, 0)
+                return await self._tg.send_text(entity, seg_data, reply_to=reply_to)
+            return None
+
+        if seg_type in ("emoji", "sticker"):
+            if not stickers_enabled() or binary_b64:
+                return None
+            selected = self.stickers.select(seg_data)
+            if selected is None or not self.stickers.reserve(chat_id):
+                return None
+            success = False
+            target_reserved = False
+            try:
+                if not is_unlimited(chat_id) and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
+                    return None
+                emoji, document = selected
+                if not is_unlimited(chat_id) and not self._low_information_guard.allows("哈哈"):
+                    return None
+                if not is_unlimited(chat_id) and explicit_target_message_id is not None:
+                    target_reserved = self._low_information_targets.reserve(
+                        chat_id, str(explicit_target_message_id), now=time.monotonic()
+                    )
+                    if not target_reserved:
+                        raise LowInformationTargetReservedError()
+                allowed, _ = self._send_budget.check(chat_id)
+                if not allowed:
+                    return None
+                # 无额外 sleep；原有发送队列负责静默时段和间隔。
+                sent = await self._tg.send_native_sticker(
+                    entity, {"pack": PACK_SHORT_NAME, "emoji": emoji, "document_id": document.id},
+                    self.stickers, reply_to=reply_to,
+                )
+                success = sent is not None
+                if success:
+                    self._low_information_guard.record("哈哈")
+                    if observations is not None:
+                        observations.append({
+                            "message_id": str(sent.id), "original_text": emoji,
+                            "text": f"[原生贴纸 {PACK_SHORT_NAME} {emoji}]",
+                            "parse_mode": None, "confirmed_content": None,
+                            "reply_is_quote": reply_to is not None,
+                            "native_sticker": {"pack": PACK_SHORT_NAME, "set_id": self.stickers._set_id,
+                                               "document_id": document.id, "emoji": emoji},
+                        })
+                return sent
+            finally:
+                self.stickers.finish(chat_id, success=success)
+                if target_reserved and not success:
+                    self._low_information_targets.release(chat_id, str(explicit_target_message_id))
+
+        if seg_type == "voice":
+            if not binary_b64:
+                return None
+            await self._humanize_before_send(entity, 0)
+            return await self._tg.send_file(
+                entity,
+                base64.b64decode(binary_b64),
+                file_name="voice.ogg",
+                reply_to=reply_to,
+                voice_note=True,
+            )
+
+        if self._is_local_only_segment(seg):
+            return None
+
+        if seg_type:
+            self._logger.debug(f"跳过不支持的发送类型: {seg_type}")
+        return None
+
+    async def _humanize_before_send(self, entity: Any, text_length: int) -> None:
+        """在发送前插入拟人化停顿与输入状态。
+
+        Args:
+            entity: 目标会话实体。
+            text_length: 待发送文本长度；非文本传 0。
+        """
+
+        if is_unlimited():
+            return
+        delay = estimate_typing_seconds(
+            text_length,
+            self._typing_cps,
+            self._min_think_delay,
+            self._max_typing_delay,
+        )
+        # 加入 ±20% 抖动，避免固定节奏被识别为脚本。
+        delay *= random.uniform(0.8, 1.2)
+        self._last_typing_seconds += delay
+
+        if self._simulate_typing:
+            await self._tg.simulate_typing(entity, delay)
+        else:
+            await asyncio.sleep(delay)
+
+    async def _resolve_entity(self, chat_id: str) -> Any:
+        """解析目标会话实体。
+
+        Args:
+            chat_id: 目标 chat_id 字符串。
+
+        Returns:
+            Any: Telethon 实体；解析失败时返回 ``None``。
+        """
+
+        try:
+            numeric_id = int(chat_id)
+        except (TypeError, ValueError):
+            numeric_id = None
+
+        try:
+            return await self._tg.get_entity(numeric_id if numeric_id is not None else chat_id)
+        except Exception as exc:  # noqa: BLE001 - 解析失败回退到裸 ID
+            self._logger.debug(f"get_entity({chat_id}) 失败，回退裸 ID: {exc}")
+            return numeric_id if numeric_id is not None else chat_id
+
+    @staticmethod
+    def _has_screen_media(message: Any) -> bool:
+        """判断一条消息是否带占据屏幕高度的媒体。
+
+        图片/视频/贴纸/GIF/文件/语音在聊天界面里占的纵向空间远大于一行
+        文字，几条就能把被引用的目标顶出可视区（屏幕滚走，与上下文
+        token 窗口无关）。用于在新消息不足 4 条时仍决定保留引用。
+
+        Args:
+            message: Telethon 消息对象。
+
+        Returns:
+            bool: 带屏幕媒体返回 ``True``。
+        """
+
+        if message is None:
+            return False
+        # Telethon 对常见媒体提供便捷属性，任一命中即视为占屏媒体。
+        for attr in ("photo", "video", "sticker", "gif", "document", "voice", "video_note"):
+            if getattr(message, attr, None):
+                return True
+        return False
+
+    @staticmethod
+    def _is_local_only_segment(seg: Dict[str, Any]) -> bool:
+        """判断消息段是否只参与本地语义。
+
+        Args:
+            seg: 消息段字典。
+
+        Returns:
+            bool: 属于本地语义段时返回 ``True``。
+        """
+
+        seg_type = str(seg.get("type") or "").strip()
+        return seg_type in {"reply", "at", "forward", "dict"}
+
+    def _extract_reply_to_from_segments(self, raw_message: Any) -> Optional[int]:
+        """从消息段中提取回复目标。
+
+        Args:
+            raw_message: 出站消息段列表。
+
+        Returns:
+            Optional[int]: 回复目标消息 ID。
+        """
+
+        if not isinstance(raw_message, list):
+            return None
+        for seg in raw_message:
+            if not isinstance(seg, dict) or seg.get("type") != "reply":
+                continue
+            data = seg.get("data")
+            if isinstance(data, dict):
+                return self._safe_int(data.get("target_message_id"))
+            return self._safe_int(data)
+        return None
+
+    @staticmethod
+    def _safe_int(value: Any) -> Optional[int]:
+        """安全地把任意值转换为整数。
+
+        Args:
+            value: 原始值。
+
+        Returns:
+            Optional[int]: 转换结果；失败时返回 ``None``。
+        """
+
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _clean_optional_str(value: Any) -> Optional[str]:
+        """把值规范化为去空白字符串。
+
+        Args:
+            value: 原始值。
+
+        Returns:
+            Optional[str]: 非空字符串；否则返回 ``None``。
+        """
+
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None

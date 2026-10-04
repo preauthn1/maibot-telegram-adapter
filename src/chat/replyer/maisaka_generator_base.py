@@ -8,6 +8,10 @@ import time
 
 from src.chat.message_receive.chat_manager import BotChatSession
 from src.chat.message_receive.message import SessionMessage
+from src.chat.utils.chat_experience import build_scoped_experience_prompt_block
+from src.chat.replyer.density import density_prompt_line, density_violation, length_ceiling, target_length
+from src.chat.utils.identity_guard import build_identity_prompt_block
+from src.chat.utils.scene_context import build_chat_style_context_block, build_scene_context_block
 from src.chat.utils.utils import get_chat_type_and_target_info, is_bot_self
 from src.common.data_models.llm_service_data_models import LLMGenerationOptions, LLMResponseResult
 from src.common.data_models.message_component_data_model import (
@@ -109,16 +113,47 @@ class BaseMaisakaReplyGenerator:
 
             prompt_personality = global_config.personality.personality.strip()
             if not prompt_personality:
-                prompt_personality = "是人类。"
+                prompt_personality = "是以群友口吻聊天的自动账号，说话随意自然，不编造现实经历。"
 
             prompt_lines = [f"你的名字是{bot_name}{bot_aliases}。", prompt_personality]
             emotion_suffix = build_personality_emotion_suffix(global_config.experimental.emotion_trait)
             if emotion_suffix:
                 prompt_lines.append(emotion_suffix)
+
+            # 场景说明（在哪个平台、私聊还是群聊、对面是谁）。
+            # 放在身份铁律之前：这是事实陈述，不该冲淡铁律的指令优先级。
+            #
+            # 用 getattr 而非直接访问：本方法可能在 chat_stream 尚未装配时被调用
+            # （测试用 object.__new__ 绕过 __init__ 即是一例）。缺少场景说明只是
+            # 少一段上下文，绝不能让整个人设 prompt 降级成默认值。
+            scene_block = build_scene_context_block(getattr(self, "chat_stream", None))
+            if scene_block:
+                prompt_lines.append(scene_block)
+
+            style_block = build_chat_style_context_block(getattr(self, "chat_stream", None))
+            if style_block:
+                prompt_lines.append(style_block)
+
+            # Phase 5.1：心情只作为一行辅助信息，不决定内容；读取失败直接跳过。
+            try:
+                from src.maisaka.state_model import get_state_store
+
+                stream_session_id = getattr(getattr(self, "chat_stream", None), "session_id", "") or ""
+                mood_hint = get_state_store().mood_hint(stream_session_id) if stream_session_id else ""
+                if mood_hint:
+                    prompt_lines.append(f"（当下状态，仅供参考：{mood_hint}）")
+            except Exception:  # noqa: BLE001
+                pass
+
+            # 身份铁律放在人设最后，紧贴指令边界，降低被后续上下文冲淡的概率。
+            if global_config.personality.enable_identity_guard:
+                prompt_lines.append(build_identity_prompt_block(bot_name))
+
+            # 自动经验是待核实参考：不进入 system identity，见 _build_experience_reference_message。
             return "\n".join(prompt_lines)
         except Exception as exc:
             logger.warning(f"构建 Maisaka 人设提示词失败: {exc}")
-            return "你的名字是麦麦。\n是人类。"
+            return "你是自动助手。角色配置读取失败，不要编造身份、经历或与对方的关系。"
 
     @staticmethod
     def _select_reply_style() -> str:
@@ -161,9 +196,27 @@ class BaseMaisakaReplyGenerator:
             return ""
 
         plain_text = message.processed_plain_text.strip()
-        _, body = parse_speaker_content(plain_text)
+        original = message.original_message
+        if message.visible_text_prefix is not None:
+            prefix = message.visible_text_prefix
+            body = plain_text[len(prefix):] if plain_text.startswith(prefix) else plain_text
+        elif original is not None:
+            from src.maisaka.context.message_adapter import format_speaker_content
+
+            user = original.message_info.user_info
+            prefix = format_speaker_content(
+                user.user_cardname or user.user_nickname or user.user_id,
+                "",
+                original.timestamp,
+                None if original.is_notify else original.message_id,
+            )
+            # 昵称可以包含 ]；按结构化来源重建前缀，避免正则把昵称尾部当正文。
+            body = plain_text[len(prefix):] if plain_text.startswith(prefix) else plain_text
+        else:
+            _, body = parse_speaker_content(plain_text)
         normalized_body = body.strip()
-        return self._normalize_content(normalized_body) if normalized_body else ""
+        # 已发送历史用于后续事实核对，预览截断会丢失尾部否定并破坏代码格式。
+        return normalized_body
 
     def _build_target_message_block(self, reply_message: Optional[SessionMessage]) -> str:
         if reply_message is None:
@@ -175,7 +228,8 @@ class BaseMaisakaReplyGenerator:
         target_message_id = reply_message.message_id.strip() if reply_message.message_id else "未知"
         # target_time = reply_message.timestamp.strftime("%Y-%m-%d %H:%M:%S")
         quote_ids = extract_quote_ids_from_message_sequence(reply_message.raw_message)
-        target_content = self._normalize_content(self._build_target_message_content(reply_message), limit=300)
+        # 当前任务不是日志预览：截断尾部可能丢失否定、格式要求或最新纠正。
+        target_content = self._build_target_message_content(reply_message).strip()
         if not target_content:
             target_content = "[无可见文本内容]"
 
@@ -205,7 +259,14 @@ class BaseMaisakaReplyGenerator:
         # )
         # return "\n".join(target_lines)
 
+        from html import escape
+        # 与历史使用相同的账号命名空间，昵称不能作为唯一身份依据。
+        sender_metadata = (
+            f'<sender sender_id="{escape(str(user_info.user_id), quote=True)}" '
+            f'sender_platform="{escape(str(reply_message.platform), quote=True)}" />'
+        )
         target_lines = [
+            sender_metadata,
             f"你想要回复的消息是 {sender_name} 发送的 msg_id为 {target_message_id} 的消息，你这次要回复的就是这条目标消息，不要把其他历史消息当成当前回复对象。",
         ]
         if quote_ids:
@@ -224,16 +285,25 @@ class BaseMaisakaReplyGenerator:
 
     def _build_target_message_content(self, reply_message: SessionMessage) -> str:
         rendered_parts: List[str] = []
+        text_fragments: List[str] = []
+
+        def flush_text() -> None:
+            if text_fragments:
+                # 连续文本组件是原文分片，不可逐片 strip 或插入分隔符。
+                rendered_parts.append("".join(text_fragments))
+                text_fragments.clear()
 
         for component in reply_message.raw_message.components:
             if isinstance(component, TextComponent):
                 if component.text:
-                    rendered_parts.append(component.text)
+                    text_fragments.append(component.text)
                 continue
 
             if isinstance(component, ReplyComponent):
+                # 引用元数据不渲染为正文，也不应切断两侧的原始文本分片。
                 continue
 
+            flush_text()
             if isinstance(component, AtComponent):
                 rendered_at = self._render_target_at_component(component)
                 if rendered_at:
@@ -251,7 +321,18 @@ class BaseMaisakaReplyGenerator:
             if isinstance(component, VoiceComponent):
                 rendered_parts.append(component.content.strip() or "[语音消息]")
 
-        normalized_content = " ".join(part.strip() for part in rendered_parts if part and part.strip()).strip()
+        flush_text()
+        # 媒体标记两侧已有空白时保留原分段，仅在无分隔时补空格。
+        joined_parts: List[str] = []
+        previous_part = ""
+        for part in rendered_parts:
+            if not part:
+                continue
+            if previous_part and not previous_part[-1].isspace() and not part[0].isspace():
+                joined_parts.append(" ")
+            joined_parts.append(part)
+            previous_part = part
+        normalized_content = "".join(joined_parts).strip()
         if normalized_content:
             return normalized_content
         return (reply_message.processed_plain_text or "").strip()
@@ -437,15 +518,15 @@ class BaseMaisakaReplyGenerator:
         locale = BaseMaisakaReplyGenerator._get_prompt_locale()
         if locale.startswith("en"):
             return (
-                "Please do not output any extra content (including unnecessary prefixes or suffixes, "
-                "colons, brackets, stickers, plain at, or @). Only output the message content itself."
+                "Output only the requested message, without unrelated prefixes or suffixes. "
+                "Preserve punctuation, brackets, JSON, code, quotations, and other formatting required by the current user request."
             )
         if locale.startswith("ja"):
             return (
-                "余計な内容（不要な前置きや後置き、コロン、括弧、スタンプ、通常の at や @ など）は出力せず、"
-                "発言内容だけを出力してください。"
+                "無関係な前置きや後置きを加えず、求められた発言内容だけを出力してください。"
+                "今回のユーザーの要求に必要な句読点、括弧、JSON、コード、引用などの形式は保持してください。"
             )
-        return "请注意不要输出多余内容(包括不必要的前后缀，冒号，括号，表情包，@等 )，只输出发言内容就好。"
+        return "只输出本轮要求的发言内容，不添加无关前后缀；保留用户明确要求的标点、括号、JSON、代码、引用及其他格式。"
 
     @staticmethod
     def _replace_regex_capture_groups(reaction: str, match: re.Match[str]) -> str:
@@ -561,14 +642,25 @@ class BaseMaisakaReplyGenerator:
                 reply_style=self._select_reply_style(),
             )
         except Exception:
-            system_prompt = "你是一个友好的 AI 助手，请根据聊天记录自然回复。"
+            # 模板失败不能同时撤掉身份、事实和明确交互要求的边界。
+            logger.warning("回复模板加载失败，使用带事实边界的最小提示")
+            system_prompt = (
+                "你是自动助手。回复模板加载失败，请根据当前对话回应。\n"
+                + build_identity_prompt_block("自动助手")
+            )
 
+        # 人数是事实范围，不随口语风格收窄；模板失败路径同样保留此边界。
+        system_prompt += (
+            "\n\n代写和润色不得擅自确定人数。原文“我们”未明确人数时，保留“我们”或“咱们”，"
+            "不要改成“咱俩、我们俩、两个人”。原文明示两人则可使用双人表达；"
+            "明示三人或更多时保留该人数。只调整措辞，不增加事实。"
+        )
         return system_prompt
 
     def _build_reply_instruction(self) -> str:
         return (
-            "请自然地回复。不要输出多余说明、括号、@ 或额外标记，"
-            "只输出实际要发言的内容。"
+            "请自然地回复，只输出本轮实际要发言的内容。默认不要添加与回答无关的说明、@ 或额外标记；"
+            "但如果用户本轮明确要求 JSON、括号、引用、代码或其他格式，必须保留并遵循该格式。"
         )
 
     @staticmethod
@@ -637,14 +729,18 @@ class BaseMaisakaReplyGenerator:
         """根据 reply 工具参数构建本次回复的篇幅要求。"""
 
         style_messages = {
-            "简短表达": "请简短的回复，允许句子残缺，奇怪表达，倒装，省略，符合口语习惯，符合省力随意回复习惯",
+            "简短表达": "请用简短、自然的口语回复。可以省略不影响理解的赘述，但保留关键否定、条件、对象归属和必要步骤；不要为了缩短而改变原意或故意制造残缺、奇怪表达。优先满足用户当前明确的内容和格式要求。",
             "正常回复": "",
             "长回复": "可以针对问题做出较为详细的评论和说明",
         }
+        # 模型给出的 reply_style 未必是登记过的三个值：实测出现过
+        # "简短回复"（近义词）和 "normal"（英文），各 3 次，直接下标取值
+        # 会 KeyError 并让整次回复生成失败。风格提示只是锦上添花，
+        # 取不到时降级为空串即可，不该因此丢掉一次发言。
         normalized_reply_style = reply_style.strip()
         if not normalized_reply_style:
             return ""
-        return style_messages[normalized_reply_style]
+        return style_messages.get(normalized_reply_style, "")
 
     def _build_history_messages(
         self,
@@ -691,6 +787,7 @@ class BaseMaisakaReplyGenerator:
         stream_id: Optional[str] = None,
         enable_visual_message: bool = False,
         reply_tool_args: Optional[Dict[str, Any]] = None,
+        memory_references: tuple[str, ...] = (),
     ) -> List[ContextItem]:
         items: List[ContextItem] = []
         keywords_reaction_prompt = self._build_keyword_reaction_prompt(
@@ -720,10 +817,25 @@ class BaseMaisakaReplyGenerator:
         )
 
         items.append(ContextItemBuilder().set_role(RoleType.System).add_text_content(system_prompt).build())
+        if any(isinstance(reference, str) and reference.strip() for reference in memory_references):
+            # 与已实测候选保持同一位置：独立来源规则，绝不将记忆正文升为系统指令。
+            from src.maisaka.context.memory_reference_policy import MEMORY_REFERENCE_POLICY
+            items.append(ContextItemBuilder().set_role(RoleType.System).add_text_content(MEMORY_REFERENCE_POLICY).build())
         items.extend(self._build_history_messages(chat_history, enable_visual_message))
         if expression_habits.strip():
             items.append(
                 ContextItemBuilder().set_role(RoleType.User).add_text_content(expression_habits.strip()).build()
+            )
+        # 未核实的自动经验只作为低优先级参考资料，不具有指令权限。
+        experience_block = build_scoped_experience_prompt_block(getattr(self, "chat_stream", None))
+        if experience_block:
+            from src.maisaka.context.memory_reference_policy import MEMORY_REFERENCE_POLICY
+
+            items.append(
+                ContextItemBuilder()
+                .set_role(RoleType.User)
+                .add_text_content(MEMORY_REFERENCE_POLICY + "\n" + experience_block)
+                .build()
             )
         if temporary_reply_style_message:
             items.append(
@@ -731,11 +843,16 @@ class BaseMaisakaReplyGenerator:
             )
         if reply_reference_message:
             items.append(ContextItemBuilder().set_role(RoleType.User).add_text_content(reply_reference_message).build())
-        items.append(ContextItemBuilder().set_role(RoleType.User).add_text_content(final_user_message).build())
         if requested_reply_style_message:
             items.append(
                 ContextItemBuilder().set_role(RoleType.User).add_text_content(requested_reply_style_message).build()
             )
+        # 仅由调用方按当前轮次收集；参考不是新的用户指令，保留来源说明与正文。
+        for reference in memory_references:
+            if isinstance(reference, str) and reference.strip():
+                items.append(ContextItemBuilder().set_role(RoleType.User).add_text_content(reference).build())
+        # 篇幅偏好是辅助信息，当前任务要求保持在最后，避免风格覆盖明确格式。
+        items.append(ContextItemBuilder().set_role(RoleType.User).add_text_content(final_user_message).build())
         if enable_visual_message:
             return limit_latest_images_in_messages(
                 items,
@@ -1001,6 +1118,7 @@ class BaseMaisakaReplyGenerator:
         selected_expressions: Optional[List[Dict[str, Any]]] = None,
         sub_agent_runner: Optional[Callable[[str], Awaitable[str]]] = None,
         reply_tool_args: Optional[Dict[str, Any]] = None,
+        memory_references: tuple[str, ...] = (),
     ) -> Tuple[bool, ReplyGenerationResult]:
         def finalize(success_value: bool) -> Tuple[bool, ReplyGenerationResult]:
             result.monitor_detail = build_reply_monitor_detail(result)
@@ -1033,6 +1151,18 @@ class BaseMaisakaReplyGenerator:
         # )
 
         filtered_history = [message for message in chat_history if self._should_keep_replyer_history_message(message)]
+        # 信息密度对齐：目标长度取本群群友最近发言中位数，只在群聊启用。
+        density_target = 0
+        density_ceiling = 0
+        if self.chat_stream is not None and self.chat_stream.is_group_session:
+            peer_texts = [
+                message.processed_plain_text
+                for message in filtered_history[-40:]
+                if message.source == "user"
+            ]
+            density_target = target_length(peer_texts)
+            density_ceiling = length_ceiling(peer_texts)
+        density_retried = False
 
         try:
             reply_context = await self._build_reply_context(
@@ -1108,8 +1238,13 @@ class BaseMaisakaReplyGenerator:
             if not active_task_name:
                 active_task_name = default_task_name
             active_model_name = str(before_request_kwargs.get("model_name") or "").strip() or None
+            extra_prompt_text = str(before_request_kwargs.get("extra_prompt") or "")
+            if density_target:
+                extra_prompt_text = "\n".join(
+                    part for part in (extra_prompt_text.strip(), density_prompt_line(density_target)) if part
+                )
             active_reply_requirements = self._build_reply_requirements(
-                str(before_request_kwargs.get("extra_prompt") or ""),
+                extra_prompt_text,
                 retry_constraints,
             )
 
@@ -1123,6 +1258,7 @@ class BaseMaisakaReplyGenerator:
                     reply_requirements=active_reply_requirements,
                     stream_id=stream_id,
                     reply_tool_args=active_reply_tool_args,
+                    memory_references=memory_references,
                 )
             except Exception as exc:
                 import traceback
@@ -1162,6 +1298,7 @@ class BaseMaisakaReplyGenerator:
                     stream_id=stream_id,
                     enable_visual_message=self._resolve_enable_visual_message(model_info),
                     reply_tool_args=dict(reply_tool_args_for_attempt),
+                    memory_references=memory_references,
                 )
                 request_messages = await self._invoke_before_model_request_hook(
                     request_messages=built_request_messages,
@@ -1209,7 +1346,7 @@ class BaseMaisakaReplyGenerator:
                     logger.warning(
                         "Maisaka 回复器仅收到推理内容，将在本次上下文中续写一次: "
                         f"session={preview_chat_id} model={continuation_model_name or 'unknown'} "
-                        f"reasoning={self._normalize_content(continuation_reasoning, limit=300)!r}"
+                        f"reasoning_chars={len(continuation_reasoning)}"
                     )
                     generation_result, request_messages = await self._continue_reasoning_only_response(
                         active_model=active_model,
@@ -1318,6 +1455,17 @@ class BaseMaisakaReplyGenerator:
                 response_text = hook_modified_response
             generation_result.output_items = tuple(final_output_items)
             retry_requested = self._coerce_hook_bool(after_response_kwargs.get("retry"), default=False)
+            if not retry_requested and density_target and not density_retried and response_text:
+                violation = density_violation(response_text, density_target, density_ceiling)
+                if violation is not None:
+                    density_retried = True
+                    retry_requested = True
+                    after_response_kwargs["retry_reason"] = violation[1]
+                    after_response_kwargs["matched_regex"] = f"信息密度:{violation[0]}"
+                    logger.info(
+                        f"回复信息密度超标，删减要点后重生成: session={preview_chat_id} "
+                        f"目标={density_target}字 原因={violation[0]}"
+                    )
             matched_regex = str(after_response_kwargs.get("matched_regex") or "").strip()
             matched_regex_pattern = str(after_response_kwargs.get("matched_regex_pattern") or "").strip()
             matched_regex_description = str(after_response_kwargs.get("matched_regex_description") or "").strip()

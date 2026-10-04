@@ -102,6 +102,8 @@ def create_app(
     app = FastAPI(title="MaiBot WebUI")
 
     _setup_anti_crawler(app)
+    from src.webui.middleware.telegram_secrets import TelegramSecretsMiddleware
+    app.add_middleware(TelegramSecretsMiddleware)
     _setup_cors(app, port)
     _register_api_routes(app)
     _setup_robots_txt(app)
@@ -175,6 +177,8 @@ def _register_api_routes(app: FastAPI):
 
         for router in get_all_routers():
             app.include_router(router)
+        from src.webui.routers.service_control import router as service_router
+        app.include_router(service_router, prefix="/api/webui")
 
         logger.debug(t("startup.webui_api_routes_registered"))
     except Exception as e:

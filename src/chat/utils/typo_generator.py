@@ -13,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 from pypinyin import Style, pinyin
 
+from src.common.jieba_dict import ensure_user_dict_loaded
 from src.common.logger import get_logger
 
 logger = get_logger("typo_gen")
@@ -225,7 +226,11 @@ class ChineseTypoGenerator:
     def _segment_sentence(sentence):
         """
         使用jieba分词，返回词语列表
+
+        先加载技术群自定义词典，避免"家宽""落地站"等术语被切碎后
+        生成不合理的错别字（内部幂等）。
         """
+        ensure_user_dict_loaded()
         return list(jieba.cut(sentence))
 
     def _get_word_homophones(self, word):

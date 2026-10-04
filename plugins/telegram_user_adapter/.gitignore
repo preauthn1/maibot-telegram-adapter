@@ -1,0 +1,3 @@
+# 凭据/会话备份，绝不能提交到公开仓库
+config.toml.*
+config_back/

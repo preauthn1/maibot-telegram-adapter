@@ -1,0 +1,290 @@
+"""会话场景上下文。
+
+问题：模型不知道自己在哪、在跟谁说话。实测中它在**私聊**里回答
+"麦麦啊，群里的人" —— 私聊根本没有群，这是明显的破绽。
+
+原因：人设 prompt 只描述"你是谁"，不描述"你现在在什么平台、
+什么场合、对面是谁"。模型只能靠猜，猜错就穿帮。
+
+本模块从 ``chat_stream`` 生成一段**场景说明**：当前平台、私聊还是群聊、
+对方是谁 / 群名是什么。以及适配器写出的账号资料（用户名等）。
+
+这是**事实陈述**而非行为指令，因此放在身份铁律之前，
+避免冲淡铁律的优先级。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import json
+import time
+import logging
+import math
+
+logger = logging.getLogger(__name__)
+
+# 适配器把当前账号资料写到 data/plugins/<插件ID>/ 下的这个文件。
+_PROFILE_FILE_NAME = "account_profile.json"
+_CHAT_STYLE_FILE_NAME = "SKILL.md"
+_STYLE_CACHE_TTL_SECONDS = 30.0
+_style_cache: Dict[str, str] = {}
+_style_cache_at: float = 0.0
+_style_signature: tuple = ()
+
+_CACHE_TTL_SECONDS = 60.0
+_profile_cache: Dict[str, Any] = {}
+_profile_cache_at: float = 0.0
+
+# 平台标识 -> 展示名。用户看到的是"Telegram"而不是"telegram"。
+_PLATFORM_DISPLAY = {
+    "telegram": "Telegram",
+    "qq": "QQ",
+    "wechat": "微信",
+    "weixin": "微信",
+    "discord": "Discord",
+    "feishu": "飞书",
+    "lark": "飞书",
+}
+
+
+def _load_account_profile() -> Dict[str, Any]:
+    """读取适配器写出的账号资料。
+
+    Returns:
+        Dict[str, Any]: 账号资料；未找到或读取失败时返回空字典。
+    """
+
+    global _profile_cache, _profile_cache_at
+
+    now = time.monotonic()
+    if _profile_cache and (now - _profile_cache_at) < _CACHE_TTL_SECONDS:
+        return _profile_cache
+
+    plugin_root = Path("data") / "plugins"
+    if not plugin_root.is_dir():
+        _profile_cache_at = now
+        return {}
+
+    for candidate in sorted(plugin_root.glob(f"*/{_PROFILE_FILE_NAME}")):
+        try:
+            loaded = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(loaded, dict):
+            _profile_cache = loaded
+            _profile_cache_at = now
+            return loaded
+
+    _profile_cache_at = now
+    return {}
+
+
+
+def _parse_style_frontmatter(raw: str) -> Dict[str, str]:
+    """读取画像卡的基础键值字段；只采纳可验证的风格控制。"""
+
+    if not raw.startswith("---\n"):
+        return {}
+    values: Dict[str, str] = {}
+    for line in raw[4:].splitlines():
+        # 分隔符必须独占一行，避免把 ---正文误当作元数据边界。
+        if line.rstrip(" \t") == "---":
+            return values
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        key, separator, value = line.partition(":")
+        # 这是基础单行键值格式；损坏行不能静默跳过后继续启用画像。
+        if not separator or line.startswith("---"):
+            return {}
+        if separator:
+            key = key.strip()
+            # 重复键存在歧义，不能让后面的 true 覆盖人工 false。
+            if not key or key in values:
+                return {}
+            values[key] = value.strip()
+    return {}
+
+
+def _load_chat_style(chat_id: str) -> str:
+    """从任一适配器数据目录读取当前聊天流的画像字段。"""
+
+    global _style_cache, _style_cache_at, _style_signature
+
+    now = time.monotonic()
+    plugin_root = Path("data") / "plugins"
+    candidates = sorted(plugin_root.glob(f"*/chats/*/{_CHAT_STYLE_FILE_NAME}"))
+    signature = []
+    snapshots = {}
+    for candidate in candidates:
+        try:
+            stat = candidate.stat()
+            snapshots[candidate] = candidate.read_bytes()
+            signature.append((str(candidate.resolve()), stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, snapshots[candidate]))
+        except OSError:
+            signature.append((str(candidate), None))
+    signature = tuple(signature)
+    if _style_cache and signature == _style_signature and (now - _style_cache_at) < _STYLE_CACHE_TTL_SECONDS:
+        return _style_cache.get(chat_id, "")
+
+    loaded: Dict[str, str] = {}
+    plugin_root = Path("data") / "plugins"
+    if plugin_root.is_dir():
+        source_counts: Dict[str, int] = {}
+        for candidate in candidates:
+            source_counts[candidate.parent.name] = source_counts.get(candidate.parent.name, 0) + 1
+        ambiguous = {key for key, count in source_counts.items() if count > 1}
+        if ambiguous:
+            logger.warning("聊天画像存在重复来源：%d 个会话暂不加载，需明确来源归属", len(ambiguous))
+        for candidate in candidates:
+            if candidate.parent.name in ambiguous or candidate not in snapshots:
+                continue
+            try:
+                raw = snapshots[candidate].decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+                values = _parse_style_frontmatter(raw)
+            except (OSError, UnicodeError):
+                # 单张文件损坏仅影响该来源，不让其他会话的人设装配降级。
+                continue
+            if values.get("style_enabled") != "true":
+                continue
+            profile_chat_id = candidate.parent.name
+            max_chars = values.get("style_max_chars", "")
+            try:
+                max_chars_number = int(max_chars)
+                max_emoji = int(values.get("max_emoji", "1"))
+                risk_max_chars = int(values.get("max_chars", "0"))
+            except ValueError:
+                continue
+            try:
+                peer_samples = int(values.get("peer_style_samples", "0"))
+                peer_median_chars = float(values.get("peer_median_chars", "0"))
+                peer_question_rate = float(values.get("peer_question_rate", "0"))
+                if not 0.0 <= peer_question_rate <= 1.0:
+                    raise ValueError("peer_question_rate 必须在 0 到 1 之间")
+                if peer_samples < 0 or not math.isfinite(peer_median_chars) or peer_median_chars < 0:
+                    raise ValueError("无效同群统计")
+            except ValueError:
+                logger.warning("忽略无效同群统计；保留人工规则及独立发送限制")
+                peer_samples, peer_median_chars, peer_question_rate = 0, 0.0, 0.0
+            if max_chars_number <= 0 or max_emoji < 0:
+                continue
+            lines = ["【当前聊天流的表达边界】"]
+            if values.get("style_source") == "owner_inbound_v1":
+                source_description = "本账号入站记录（已按采样规则排除自动出站，但不证明真人作者身份）"
+            else:
+                source_description = "该账号历史出站（来源未核验，可能包含自动生成内容）"
+            lines.append(
+                f"{source_description}的长度 P90 为 {max_chars_number} 字符；"
+                "这只是描述统计，不是目标长度或真人表达标准。不要为了凑短句删除条件、否定或引用。"
+            )
+            if risk_max_chars > 0:
+                lines.append(f"本会话人工配置的发送硬上限为 {risk_max_chars} 字符；在此范围内保留完整意思。")
+            if peer_samples >= 80 and peer_median_chars > 0:
+                lines.append(
+                    f"本群已观察到 {peer_samples} 条其他成员消息，其中位长度约 {peer_median_chars} 字。"
+                    "这只是长度参照，不要复制任何人的口头禅、错别字或句式。"
+                )
+                if peer_question_rate >= 0.04:
+                    lines.append(
+                        "本群存在自然追问；信息不足时可以问一个会改变判断的具体条件，"
+                        "但不要为了显得互动而每条都反问。"
+                    )
+            if values.get("preserve_trailing_period") == "true":
+                lines.append("该聊天流中句尾句号是正常习惯，可以保留；不要为了统一口吻强行删掉。")
+            else:
+                lines.append("该聊天流中句尾通常不使用句号；不必为完整书面句而补句号。")
+            if max_emoji == 0:
+                lines.append("本聊天流不使用 emoji；保留文字内容的完整含义。")
+            elif values.get("allow_emoji_only") == "true":
+                lines.append(f"该聊天流可以偶尔用纯 emoji 作回应，单条最多 {max_emoji} 个；不要连续使用。")
+            else:
+                lines.append(f"该聊天流不使用纯 emoji 回复；含文字时最多 {max_emoji} 个 emoji。")
+            # 仅显式启用的人工卡片正文进入提示；自动统计不会获得指令权限。
+            if values.get("manual_style_enabled") == "true":
+                # 使用与头部解析相同的整行边界，仅移除分隔线自身换行。
+                # 人工示例的缩进、前导空行与尾随换行属于正文，不做 strip。
+                body_offset = 4
+                for header_line in raw[4:].splitlines(keepends=True):
+                    body_offset += len(header_line)
+                    if header_line.rstrip("\n").rstrip(" \t") == "---":
+                        break
+                body = raw[body_offset:]
+                if len(body) > 6000:
+                    logger.warning("跳过超长人工画像正文：超过 6000 字符，未截断；结构化约束仍保留，请修订源文件")
+                elif body:
+                    lines.append("【人工维护的本群表达规则；不覆盖事实与安全约束】\n" + body)
+            loaded[profile_chat_id] = "\n".join(lines)
+
+    _style_cache = loaded
+    _style_signature = signature
+    _style_cache_at = now
+    return loaded.get(chat_id, "")
+
+
+def build_chat_style_context_block(chat_stream: Optional[Any]) -> str:
+    """为 replyer 提供当前聊天流自身的只读表达边界。"""
+
+    if chat_stream is None or (chat_stream.platform or "").strip().lower() != "telegram":
+        return ""
+    chat_id = str(chat_stream.group_id or chat_stream.user_id or "").strip()
+    return _load_chat_style(chat_id) if chat_id else ""
+
+
+def build_scene_context_block(chat_stream: Optional[Any]) -> str:
+    """根据当前会话构建场景说明。
+
+    Args:
+        chat_stream: 当前 ``BotChatSession``；为 ``None`` 时返回空串。
+
+    Returns:
+        str: 可拼进 system prompt 的中文场景说明；信息不足时返回空串。
+    """
+
+    if chat_stream is None:
+        return ""
+
+    platform = (chat_stream.platform or "").strip().lower()
+    if not platform:
+        return ""
+
+    platform_name = _PLATFORM_DISPLAY.get(platform, platform)
+    profile = _load_account_profile()
+
+    lines = ["【当前场景 · 事实，不是设定】"]
+
+    # 自己的账号资料：让它知道别人看到的自己长什么样。
+    identity_bits = []
+    display_name = profile.get("display_name")
+    username = profile.get("username")
+    if display_name:
+        identity_bits.append(f"显示名是「{display_name}」")
+    if username:
+        identity_bits.append(f"用户名是 @{username}")
+
+    if identity_bits and profile.get("platform", platform) == platform:
+        lines.append(f"你正在用{platform_name}，你的账号{'，'.join(identity_bits)}。")
+    else:
+        lines.append(f"你正在用{platform_name}。")
+
+    group_id = chat_stream.group_id
+    if group_id:
+        group_name = chat_stream.group_name
+        where = f"群「{group_name}」" if group_name else "一个群"
+        lines.append(f"现在是**群聊**，你在{where}里。")
+        lines.append("群里有别人，不是每条消息都在跟你说话。")
+    else:
+        peer = chat_stream.user_nickname
+        who = f"「{peer}」" if peer else "对方"
+        lines.append(
+            f"现在是与{who}的**一对一私聊**，不是群聊。"
+            "这只说明会话类型，不能据此保证消息不会被记录、转发或由其他人访问。"
+        )
+        # 这条是实测中真实踩过的坑：私聊里自称"群里的人"。
+        lines.append('不要说"群里""大家""你们"，不要把这里当成群聊。')
+
+    lines.append(
+        "不确定对方是谁、你们怎么认识的时候，就含糊带过或者反问，不要编造你们的关系和共同经历。"
+    )
+
+    return "\n".join(lines)

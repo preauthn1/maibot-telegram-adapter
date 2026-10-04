@@ -1295,6 +1295,13 @@ function PluginConfigEditor({ plugin, onBack, initialTab }: PluginConfigEditorPr
         </div>
       </div>
 
+      {schema._note && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>{schema._note}</AlertDescription>
+        </Alert>
+      )}
+
       {/* 未保存提示 */}
       {hasChanges && (
         <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/20">
@@ -1480,6 +1487,8 @@ function PluginConfigEditor({ plugin, onBack, initialTab }: PluginConfigEditorPr
 }
 
 // 主页面组件 - 包装 RestartProvider
+import { TelegramOnboarding } from '../components/telegram-onboarding'
+
 export function PluginConfigPage() {
   return (
     <RestartProvider>
@@ -1523,6 +1532,8 @@ function PluginConfigPageContent() {
     installedCount,
     disabledCount,
     loadingCount,
+    notRunningCount,
+    unknownCount,
     circuitOpenCount,
     loadFailedCount,
     enabledCount,
@@ -1583,6 +1594,7 @@ function PluginConfigPageContent() {
     <>
       <ScrollArea className="h-full">
       <div className="space-y-4 p-4 sm:space-y-6 sm:p-6">
+        <TelegramOnboarding />
         {!adapterManagement && (
         <div className="flex flex-nowrap items-center gap-2 sm:gap-3">
           <div className="relative min-w-0 flex-1 basis-0 sm:basis-72">
@@ -1723,6 +1735,12 @@ function PluginConfigPageContent() {
               </div>
             </div>
           </div>
+        )}
+
+        {(notRunningCount > 0 || unknownCount > 0) && (
+          <p className="text-muted-foreground text-sm" role="status">
+            运行时未启动 {notRunningCount} 个，状态未知 {unknownCount} 个。启用仅代表配置开关，不代表已加载；独立 WebUI 不观测其他进程的插件运行状态。
+          </p>
         )}
 
         {/* 插件列表 */}

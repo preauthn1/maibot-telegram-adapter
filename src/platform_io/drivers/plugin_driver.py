@@ -184,6 +184,10 @@ class PluginPlatformDriver(PlatformIODriver):
                     metadata=result.get("metadata", {}) if isinstance(result.get("metadata"), dict) else {},
                 )
             external_message_id = str(result.get("external_message_id") or result.get("message_id") or "") or None
+            # 正文回执不影响真实投递状态。损坏容器显式透传为无效正文，
+            # 不能悄悄降级成旧驱动并把未发送的候选内容写进历史。
+            raw_metadata = result.get("metadata", {})
+            receipt_metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {"delivery_content": None}
             return DeliveryReceipt(
                 internal_message_id=internal_message_id,
                 route_key=route_key,
@@ -191,7 +195,7 @@ class PluginPlatformDriver(PlatformIODriver):
                 driver_id=self.driver_id,
                 driver_kind=self.descriptor.kind,
                 external_message_id=external_message_id,
-                metadata=result.get("metadata", {}) if isinstance(result.get("metadata"), dict) else {},
+                metadata=receipt_metadata,
             )
 
         if isinstance(result, str) and result.strip():
