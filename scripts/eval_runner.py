@@ -35,6 +35,7 @@ import statistics
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "plugins"))
 from telegram_user_adapter.anti_policing import is_group_policing  # noqa: E402
 from telegram_user_adapter.reply_prejudge import MUST_SILENCE, ReplyPrejudge  # noqa: E402
 
@@ -44,7 +45,7 @@ from src.maisaka.reply_necessity import (  # noqa: E402
     score_reply_necessity,
 )
 
-ROOT = Path(__file__).resolve().parents[1] / "data/replay"
+DATA_DIR = ROOT / "data/replay"
 _AT = re.compile(r"@user_[0-9a-f]{6}")
 _SERVICE = re.compile(r"(?:希望对你有帮助|如果你还有|随时告诉我|作为一个|总结一下|综上|首先.{0,20}其次|以下是|建议你|您好|亲)")
 _ANALYSIS = re.compile(r"(?:从.{1,8}角度|本质上|一方面.{0,30}另一方面|值得注意的是|客观来说)")
@@ -53,7 +54,7 @@ _COMMAND = re.compile(r"^\s*/[a-zA-Z]")
 
 
 def load(name: str) -> list:
-    path = ROOT / f"{name}.jsonl"
+    path = DATA_DIR / f"{name}.jsonl"
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
@@ -206,8 +207,8 @@ def run() -> dict:
 def main() -> None:
     if "--diff" in sys.argv:
         a, b = sys.argv[sys.argv.index("--diff") + 1 : sys.argv.index("--diff") + 3]
-        ma = json.loads((ROOT / f"eval_{a}.json").read_text(encoding="utf-8"))
-        mb = json.loads((ROOT / f"eval_{b}.json").read_text(encoding="utf-8"))
+        ma = json.loads((DATA_DIR / f"eval_{a}.json").read_text(encoding="utf-8"))
+        mb = json.loads((DATA_DIR / f"eval_{b}.json").read_text(encoding="utf-8"))
         for key in sorted(set(ma) | set(mb)):
             if ma.get(key) != mb.get(key):
                 print(f"{key}: {ma.get(key)} -> {mb.get(key)}")
@@ -221,7 +222,7 @@ def main() -> None:
         print(f"{key}: {value}")
     if "--save" in sys.argv:
         name = sys.argv[sys.argv.index("--save") + 1]
-        target = ROOT / f"eval_{name}.json"
+        target = DATA_DIR / f"eval_{name}.json"
         target.write_text(json.dumps(metrics, ensure_ascii=False, indent=1), encoding="utf-8")
         target.chmod(0o600)
         print("saved:", target)
