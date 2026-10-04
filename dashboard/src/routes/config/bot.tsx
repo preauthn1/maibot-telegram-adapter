@@ -176,6 +176,7 @@ export function BotConfigPage() {
 // 内部实现组件
 function BotConfigPageContent() {
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [autoSaving, setAutoSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -331,12 +332,14 @@ function BotConfigPageContent() {
   const loadConfig = useCallback(async (): Promise<boolean> => {
     try {
       setLoading(true)
+      setLoadError(null)
       // 用 allSettled：主配置为必需，schema 为可选，二者失败互不影响
       const [result, schemaResult] = await Promise.allSettled([
         getBotConfigCached(),
         getBotConfigSchema(),
       ])
       if (result.status !== 'fulfilled') {
+        setLoadError(result.reason instanceof Error ? result.reason.message : '加载配置失败')
         toast({
           title: '加载失败',
           description: result.reason instanceof Error ? result.reason.message : '加载配置失败',
@@ -361,6 +364,7 @@ function BotConfigPageContent() {
         description: '无法加载配置文件',
         variant: 'destructive',
       })
+      setLoadError(error instanceof Error ? error.message : '无法加载配置文件')
       return false
     } finally {
       setLoading(false)
@@ -410,14 +414,20 @@ function BotConfigPageContent() {
         fieldHooks.unregister(fieldPath)
       }
     }
-  })
+  }, [])
 
   const {
     triggerAutoSave,
     cancelPendingAutoSave,
     resetAutoSaveState,
     runWithAutoSaveBarrier,
-  } = useAutoSave(initialLoadRef.current, setAutoSaving, setHasUnsavedChanges)
+  } = useAutoSave(initialLoadRef.current, setAutoSaving, setHasUnsavedChanges, {
+    onSaveError: (error) => toast({
+      title: '自动保存失败',
+      description: `${error.message}；修改仍未保存，请点击保存重试。`,
+      variant: 'destructive',
+    }),
+  })
 
   const dismissFileModeNotice = useCallback(() => {
     localStorage.setItem(FILE_MODE_NOTICE_DISMISSED_KEY, 'true')
@@ -616,6 +626,16 @@ function BotConfigPageContent() {
           </div>
         </div>
       </ScrollArea>
+    )
+  }
+
+  if (loadError && initialLoadRef.current) {
+    return (
+      <div role="alert" className="space-y-4 p-4 sm:p-6">
+        <h1 className="text-xl font-bold">配置加载失败</h1>
+        <p className="break-words text-sm text-muted-foreground">{loadError}</p>
+        <Button onClick={() => void loadConfig()}>重新加载配置</Button>
+      </div>
     )
   }
 

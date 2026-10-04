@@ -19,6 +19,8 @@ def build_planner_prefix(
     *,
     timestamp: datetime,
     user_name: str,
+    sender_id: Optional[str] = None,
+    sender_platform: Optional[str] = None,
     group_card: str = "",
     message_id: Optional[str] = None,
     chat_id: Optional[str] = None,
@@ -63,6 +65,12 @@ def build_planner_prefix(
             f'user="{escape(user_name, quote=True)}"',
         ]
     )
+
+    # 昵称可重名或更改；保留平台内账号标识，不把账号等同现实人物。
+    if sender_id is not None and str(sender_id):
+        message_attrs.append(f'sender_id="{escape(str(sender_id), quote=True)}"')
+    if sender_platform is not None and str(sender_platform):
+        message_attrs.append(f'sender_platform="{escape(str(sender_platform), quote=True)}"')
 
     normalized_group_card = group_card.strip()
     if normalized_group_card:
@@ -130,6 +138,8 @@ def build_planner_user_prefix_from_session_message(
     return build_planner_prefix(
         timestamp=message.timestamp,
         user_name=user_name,
+        sender_id=user_info.user_id,
+        sender_platform=message.platform,
         group_card=user_info.user_cardname or "",
         message_id=message.message_id,
         chat_id=message.session_id,
@@ -185,6 +195,10 @@ def build_session_backed_text_message(
         is_self_message=is_self_message,
     )
     return SessionBackedMessage(
+        # 此工厂没有 original_message，必须在装配时保存可见前缀边界。
+        visible_text_prefix=format_speaker_content(
+            speaker_name, "", timestamp, message_id if include_message_id else None,
+        ),
         raw_message=MessageSequence([TextComponent(f"{planner_prefix}{text}")]),
         visible_text=format_speaker_content(
             speaker_name,

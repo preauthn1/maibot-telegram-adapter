@@ -35,6 +35,27 @@ afterEach(() => {
 })
 
 describe('useAutoSave', () => {
+  it('回调引用变化不会提前 flush 防抖保存，失败交给最新回调', async () => {
+    vi.useFakeTimers()
+    const oldError = vi.fn()
+    const newError = vi.fn()
+    const setSaving = vi.fn()
+    const setDirty = vi.fn()
+    updateBotConfigSectionMock.mockRejectedValue(new Error('写入失败'))
+    const { result, rerender } = renderHook(({ onSaveError }) =>
+      useAutoSave(false, setSaving, setDirty, { debounceMs: 100, onSaveError }),
+      { initialProps: { onSaveError: oldError } }
+    )
+    act(() => result.current.triggerAutoSave('bot', { nickname: '新名字' }))
+    rerender({ onSaveError: newError })
+    await advanceDebounce(50)
+    expect(updateBotConfigSectionMock).not.toHaveBeenCalled()
+    await advanceDebounce(50)
+    expect(updateBotConfigSectionMock).toHaveBeenCalledOnce()
+    expect(oldError).not.toHaveBeenCalled()
+    expect(newError).toHaveBeenCalledWith(expect.objectContaining({ message: '写入失败' }))
+    expect(setDirty).toHaveBeenLastCalledWith(true)
+  })
   it('切换页面时立即保存仍处于防抖期的配置', async () => {
     vi.useFakeTimers()
     updateBotConfigSectionMock.mockResolvedValue({} as never)

@@ -92,7 +92,9 @@ class ChatManager:
             await self.load_all_sessions_from_db()
             logger.debug(f"已加载 {len(self.sessions)} 个会话记录到内存中")
         except Exception as e:
-            logger.error(f"初始化聊天管理器出现错误: {e}")
+            # 恢复失败不是空会话：阻止启动链路把失忆状态误报为正常。
+            logger.error(f"初始化聊天管理器失败，异常类型: {type(e).__name__}")
+            raise
 
     async def get_or_create_session(
         self,
@@ -241,9 +243,10 @@ class ChatManager:
         try:
             await asyncio.to_thread(self._load_sessions_from_db)
         except Exception as e:
-            logger.error(f"从数据库加载会话记录时发生错误: {e}")
+            # 底层异常可能包含数据库路径或 SQL 参数，仅记录异常类型。
+            logger.error(f"从数据库加载会话记录失败，异常类型: {type(e).__name__}")
             self.sessions.clear()
-            raise e
+            raise
 
     async def regularly_save_sessions(self, interval_seconds: int = 300):
         """定期将会话记录保存到数据库中

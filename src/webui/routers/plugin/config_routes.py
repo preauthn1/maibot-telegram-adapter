@@ -14,6 +14,7 @@ from src.plugin_runtime.protocol.envelope import InspectPluginConfigResultPayloa
 from src.webui.utils.toml_utils import save_toml_with_format
 
 from .schemas import UpdatePluginConfigRequest, UpdatePluginRawConfigRequest
+from .static_metadata import read_static_plugin_schema
 from .support import (
     backup_file,
     deep_merge,
@@ -92,7 +93,8 @@ def _build_schema_from_current_config(plugin_id: str, current_config: Any) -> Di
         },
         "sections": {},
         "layout": {"type": "auto", "tabs": []},
-        "_note": "插件未加载，仅返回当前配置结构",
+        "_note": "无法静态解析插件配置元数据；仅展示当前结构，字段不可编辑，请使用原始配置",
+        "metadata_source": "unavailable",
     }
 
     for section_name, section_data in current_config.items():
@@ -135,13 +137,12 @@ def _build_schema_from_current_config(plugin_id: str, current_config: Any) -> Di
             section_fields[field_name] = {
                 "name": field_name,
                 "type": field_type,
-                "default": field_value,
                 "description": field_name,
                 "label": field_name,
                 "ui_type": ui_type,
                 "required": False,
                 "hidden": False,
-                "disabled": False,
+                "disabled": True,
                 "order": 0,
                 "item_type": item_type,
                 "item_fields": item_fields,
@@ -402,7 +403,8 @@ async def get_plugin_config_bundle(plugin_id: str, maibot_session: Optional[str]
         schema = (
             dict(runtime_snapshot.config_schema)
             if runtime_snapshot is not None and runtime_snapshot.config_schema
-            else _build_schema_from_current_config(plugin_id, current_config)
+            else read_static_plugin_schema(plugin_id, plugin_path)
+            or _build_schema_from_current_config(plugin_id, current_config)
         )
         message = "配置文件不存在，已返回默认配置" if runtime_snapshot is not None and not config_path.exists() else ""
 
@@ -455,7 +457,10 @@ async def get_plugin_config_schema(plugin_id: str, maibot_session: Optional[str]
             else _load_plugin_config_from_disk(plugin_path)
         )
 
-        return {"success": True, "schema": _build_schema_from_current_config(plugin_id, current_config)}
+        schema = read_static_plugin_schema(plugin_id, plugin_path)
+        if schema is None:
+            schema = _build_schema_from_current_config(plugin_id, current_config)
+        return {"success": True, "schema": schema}
     except HTTPException:
         raise
     except Exception as e:
@@ -641,6 +646,8 @@ async def update_plugin_config(
                 )
                 if runtime_snapshot is not None and runtime_snapshot.config_schema:
                     _coerce_config_by_plugin_schema(dict(runtime_snapshot.config_schema), config_data)
+                else:
+                    raise HTTPException(status_code=409, detail="插件运行时不可用，无法执行完整配置校验；当前结构化配置仅供查看，请勿将未校验内容保存")
 
         config_path = get_plugin_config_path(plugin_id, plugin_path)
         backup_path = backup_file(config_path, "backup")
@@ -733,11 +740,14 @@ async def toggle_plugin(plugin_id: str, maibot_session: Optional[str] = Cookie(N
             config["plugin"] = tomlkit.table()
 
         plugin_config = cast(Any, config["plugin"])
+        from .management import _read_plugin_enabled
         current_enabled = (
             bool(runtime_snapshot.enabled)
             if runtime_snapshot is not None
-            else bool(plugin_config.get("enabled", True))
+            else _read_plugin_enabled(plugin_id, plugin_path)
         )
+        if current_enabled is None:
+            raise HTTPException(409, '插件启用默认值未知，不能执行取反切换')
         new_enabled = not current_enabled
         plugin_config["enabled"] = new_enabled
         config_path.parent.mkdir(parents=True, exist_ok=True)

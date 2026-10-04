@@ -299,6 +299,15 @@ const pluginMirrorsRoute = createRoute({
   component: lazyRouteComponent(() => import('./routes/plugin-mirrors'), 'PluginMirrorsPage'),
 })
 
+const customFeaturesRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/custom-features',
+  beforeLoad: async () => {
+    if (!(await checkAuth())) throw redirect({ to: '/auth' })
+  },
+  component: lazyRouteComponent(() => import('./routes/custom-features'), 'CustomFeaturesPage'),
+})
+
 // 设置页路由
 const mcpSettingsRoute = createRoute({
   getParentRoute: () => protectedRoute,
@@ -390,6 +399,7 @@ const routeTree = rootRoute.addChildren([
     pluginConfigRoute,
     adapterManagementRoute,
     pluginMirrorsRoute,
+    customFeaturesRoute,
     mcpSettingsRoute,
     dataTransferRoute,
     logsRoute,

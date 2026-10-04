@@ -1315,7 +1315,8 @@ class PluginRunner:
 
     async def _deactivate_plugin(self, meta: PluginMeta) -> None:
         """撤销 bootstrap 期间为插件签发的能力令牌。"""
-        await self._bootstrap_plugin(meta, capabilities_required=[])
+        if not await self._bootstrap_plugin(meta, capabilities_required=[]):
+            raise RuntimeError(f"插件 {meta.plugin_id} 能力撤销未完成")
 
     async def _register_plugin(self, meta: PluginMeta) -> bool:
         """向 Host 注册单个插件。
@@ -1484,14 +1485,17 @@ class PluginRunner:
         """
         payload = UnregisterPluginPayload(plugin_id=plugin_id, reason=reason)
         try:
-            await self._rpc_client.send_request(
+            response = await self._rpc_client.send_request(
                 "plugin.unregister",
                 plugin_id=plugin_id,
                 payload=payload.model_dump(),
                 timeout_ms=10000,
             )
+            if response.error:
+                raise RuntimeError("Host 注销请求失败")
         except Exception as exc:
             logger.warning(f"插件 {plugin_id} 注销通知失败: {exc}")
+            raise RuntimeError(f"插件 {plugin_id} Host 注销未完成") from exc
 
     async def _invoke_plugin_on_load(self, meta: PluginMeta) -> bool:
         """执行插件的 ``on_load`` 生命周期。
@@ -1527,6 +1531,7 @@ class PluginRunner:
             await self._invoke_plugin_callable(instance.on_unload)
         except Exception as exc:
             logger.error(f"插件 {meta.plugin_id} on_unload 失败: {exc}", exc_info=True)
+            raise RuntimeError(f"插件 {meta.plugin_id} 资源清理未完成") from exc
 
     async def _activate_plugin(self, meta: PluginMeta) -> PluginActivationStatus:
         """完成插件注入、授权、生命周期和组件注册。
@@ -1557,16 +1562,15 @@ class PluginRunner:
             self._loader.purge_plugin_modules(meta.plugin_id, meta.plugin_dir)
             return PluginActivationStatus.FAILED
 
+        # 登记实例以便初始化后的清理失败仍有可重试的资源所有者。
+        self._loader.set_loaded_plugin(meta)
         if not await self._register_plugin(meta):
-            await self._invoke_plugin_on_unload(meta)
-            await self._deactivate_plugin(meta)
-            self._loader.purge_plugin_modules(meta.plugin_id, meta.plugin_dir)
+            await self._unload_plugin(meta, reason="register_failed")
             return PluginActivationStatus.FAILED
 
         if not await self._invoke_plugin_on_load(meta):
-            await self._unregister_plugin(meta.plugin_id, reason="on_load_failed")
-            await self._deactivate_plugin(meta)
-            self._loader.purge_plugin_modules(meta.plugin_id, meta.plugin_dir)
+            # on_load 可能已打开连接或启动任务，撤销能力前先运行有界卸载。
+            await self._unload_plugin(meta, reason="on_load_failed")
             return PluginActivationStatus.FAILED
 
         self._loader.set_loaded_plugin(meta)
@@ -1697,7 +1701,7 @@ class PluginRunner:
             if rollback_failure:
                 finalized_failures[failed_plugin_id] = f"{failure_reason}；且旧版本恢复失败: {rollback_failure}"
             else:
-                finalized_failures[failed_plugin_id] = f"{failure_reason}（已恢复旧版本）"
+                finalized_failures[failed_plugin_id] = failure_reason
 
         for failed_plugin_id, rollback_failure in rollback_failures.items():
             if failed_plugin_id not in finalized_failures:
@@ -1762,7 +1766,10 @@ class PluginRunner:
             except Exception as exc:
                 failed_plugins[plugin_id] = str(exc)
                 logger.error(f"卸载插件 {plugin_id} 失败: {exc}", exc_info=True)
-                continue
+                for pending_id in unload_order:
+                    if pending_id not in unloaded_plugins and pending_id != plugin_id:
+                        failed_plugins.setdefault(pending_id, "前序卸载失败，为保护依赖停止卸载")
+                break
             unloaded_plugins.append(plugin_id)
 
         return UnloadPluginsResultPayload(
@@ -1829,7 +1836,22 @@ class PluginRunner:
             if meta is None:
                 continue
             rollback_metas[unload_plugin_id] = meta
-            await self._unload_plugin(meta, reason=reason, purge_modules=False)
+            try:
+                await self._unload_plugin(meta, reason=reason, purge_modules=False)
+            except Exception as exc:
+                failed_plugins[unload_plugin_id] = f"卸载未完成: {exc}"
+                # 部分卸载的实例不等于可用依赖，禁止重新激活其依赖方。
+                rollback_failures: Dict[str, str] = {
+                    plugin_id: "卸载事务中止，未自动恢复" for plugin_id in unloaded_plugins
+                }
+                return ReloadPluginsResultPayload(
+                    success=False,
+                    requested_plugin_ids=normalized_plugin_ids,
+                    reloaded_plugins=[],
+                    unloaded_plugins=unloaded_plugins,
+                    inactive_plugins=[],
+                    failed_plugins=self._finalize_failed_reload_messages(failed_plugins, rollback_failures),
+                )
             self._loader.purge_plugin_modules(unload_plugin_id, meta.plugin_dir)
             unloaded_plugins.append(unload_plugin_id)
 
@@ -1905,7 +1927,19 @@ class PluginRunner:
                 failed_plugins[load_plugin_id] = "插件模块加载失败"
                 continue
 
-            activated = await self._activate_plugin(meta)
+            try:
+                activated = await self._activate_plugin(meta)
+            except Exception as exc:
+                failed_plugins[load_plugin_id] = f"初始化清理未完成: {exc}"
+                # 不在残留新实例之下换回旧依赖；保留当前资源供显式重试。
+                return ReloadPluginsResultPayload(
+                    success=False,
+                    requested_plugin_ids=normalized_plugin_ids,
+                    reloaded_plugins=reloaded_plugins,
+                    unloaded_plugins=unloaded_plugins,
+                    inactive_plugins=inactive_plugins,
+                    failed_plugins=failed_plugins,
+                )
             if activated == PluginActivationStatus.FAILED:
                 failed_plugins[load_plugin_id] = "插件初始化失败"
                 continue
@@ -1933,10 +1967,22 @@ class PluginRunner:
                     )
                 except Exception as exc:
                     rollback_failures[reloaded_plugin_id] = f"清理失败: {exc}"
-                finally:
-                    self._loader.purge_plugin_modules(reloaded_plugin_id, reloaded_meta.plugin_dir)
+                    # 后续节点可能为残留实例的依赖，不继续卸载或恢复。
+                    break
+                self._loader.purge_plugin_modules(reloaded_plugin_id, reloaded_meta.plugin_dir)
 
-            for rollback_plugin_id in reversed(unload_order):
+            if rollback_failures:
+                return ReloadPluginsResultPayload(
+                    success=False,
+                    requested_plugin_ids=normalized_plugin_ids,
+                    reloaded_plugins=[],
+                    unloaded_plugins=unloaded_plugins,
+                    inactive_plugins=[],
+                    failed_plugins=self._finalize_failed_reload_messages(failed_plugins, rollback_failures),
+                )
+            for rollback_plugin_id in reversed(unloaded_plugins):
+                if rollback_plugin_id in rollback_failures:
+                    continue
                 rollback_meta = rollback_metas.get(rollback_plugin_id)
                 if rollback_meta is None:
                     continue
@@ -1945,10 +1991,11 @@ class PluginRunner:
                     restored = await self._activate_plugin(rollback_meta)
                 except Exception as exc:
                     rollback_failures[rollback_plugin_id] = str(exc)
-                    continue
+                    break
 
                 if restored != PluginActivationStatus.LOADED:
                     rollback_failures[rollback_plugin_id] = "无法重新激活旧版本"
+                    break
 
             return ReloadPluginsResultPayload(
                 success=False,

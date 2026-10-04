@@ -7,8 +7,8 @@ import type { LucideIcon } from 'lucide-react'
 
 // 机器人状态接口
 export interface BotStatus {
-  running: boolean
-  uptime: number
+  running: boolean | null
+  uptime: number | null
   version: string
   start_time: string
 }

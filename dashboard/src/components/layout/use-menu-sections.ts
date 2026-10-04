@@ -1,9 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Activity } from 'lucide-react'
 
 import { BOT_CONFIG_UPDATED_EVENT, getBotConfigCached } from '@/lib/config-api'
 
 import { menuSections } from './constants'
-import type { MenuSection } from './types'
+import type { MenuItem, MenuSection } from './types'
+
+const customFeaturesItem: MenuItem = {
+  icon: Activity,
+  label: '自建功能 · 只读观察',
+  path: '/custom-features',
+}
 
 interface MenuFeatureFlags {
   behaviorLearning: boolean
@@ -32,7 +39,12 @@ function filterMenuSections(flags: MenuFeatureFlags | null): MenuSection[] {
   return menuSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => {
+      items: [
+        ...section.items,
+        ...(section.title === 'sidebar.groups.overview'
+          ? [customFeaturesItem]
+          : []),
+      ].filter((item) => {
         if (item.featureFlag === 'behaviorLearning') return flags?.behaviorLearning === true
         if (item.featureFlag === 'replyEffects') return flags?.replyEffects === true
         return true

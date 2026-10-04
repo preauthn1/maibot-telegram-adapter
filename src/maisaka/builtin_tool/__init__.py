@@ -5,10 +5,12 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional
 
+from src.common.logger import get_logger
 from src.config.config import global_config
 from src.core.tooling import ToolAvailabilityContext, ToolExecutionContext, ToolExecutionResult, ToolInvocation, ToolSpec
 from src.llm_models.payload_content.tool_option import ToolDefinitionInput
 
+from src.maisaka import tool_toggles
 from src.maisaka.focus import focus_mode_manager
 from .context import BuiltinToolRuntimeContext
 from .fetch_history import get_tool_spec as get_fetch_history_tool_spec
@@ -31,6 +33,10 @@ from .view_forward_message import get_tool_spec as get_view_forward_message_tool
 from .view_forward_message import handle_tool as handle_view_forward_message_tool
 from .wait import get_tool_spec as get_wait_tool_spec
 from .wait import handle_tool as handle_wait_tool
+from .web_search import get_tool_spec as get_web_search_tool_spec
+from .web_search import handle_tool as handle_web_search_tool
+
+logger = get_logger("maisaka_builtin_tool")
 
 BuiltinToolHandler = Callable[[ToolInvocation, Optional[ToolExecutionContext]], Awaitable[ToolExecutionResult]]
 BuiltinToolRawHandler = Callable[
@@ -103,7 +109,18 @@ BUILTIN_TOOL_ENTRIES: List[BuiltinToolEntry] = [
         stage="action",
     ),
     BuiltinToolEntry("switch_chat", get_switch_chat_tool_spec, handle_switch_chat_tool, stage="action"),
+    # 联网搜索：遇到不认识的新名词时查一下，避免硬编或答"不知道"——
+    # 这两种反应在群聊里都不像真人。
+    BuiltinToolEntry("web_search", get_web_search_tool_spec, handle_web_search_tool, stage="action"),
 ]
+
+# 全部内置工具名，供环境变量开关校验拼写。
+BUILTIN_TOOL_NAMES = frozenset(entry.name for entry in BUILTIN_TOOL_ENTRIES)
+
+# 进程启动时立刻解析一次环境变量：
+# 1. 拼错工具名在这里就炸，而不是等第一条消息进来才发现
+# 2. 开关状态进启动日志，事后能核对"当时到底禁了什么"
+logger.info(tool_toggles.describe(known=BUILTIN_TOOL_NAMES))
 
 
 def _get_builtin_tool_entries(
@@ -126,8 +143,12 @@ def _get_builtin_tool_entries(
 
 
 def _is_builtin_tool_enabled_by_config(entry: BuiltinToolEntry) -> bool:
-    """根据全局配置判断内置工具是否应暴露。"""
+    """根据全局配置与环境变量判断内置工具是否应暴露。"""
 
+    # 环境变量开关优先级最高：部署层面明确关掉的工具，不看其他条件。
+    # 2026-09-04 send_image 把别人的图原样重发一事见 tool_toggles 模块头。
+    if tool_toggles.is_tool_disabled(entry.name, known=BUILTIN_TOOL_NAMES):
+        return False
     if entry.name in {"send_emoji", "send_image"} and bool(global_config.experimental.enable_rich_reply):
         return False
     if entry.name in {"fetch_history", "switch_chat"}:
@@ -189,9 +210,14 @@ def get_builtin_tools(context: Optional[ToolAvailabilityContext] = None) -> List
 
 
 def build_builtin_tool_handlers(tool_ctx: BuiltinToolRuntimeContext) -> Dict[str, BuiltinToolHandler]:
-    """构建内置工具处理器映射。"""
+    """构建内置工具处理器映射。
+
+    被环境变量禁用的工具在这里也要剔除——只在声明层删掉不够：
+    模型"记得"工具名就能硬编调用，handler 还在就会真执行。
+    """
 
     return {
         entry.name: lambda invocation, context=None, entry=entry: entry.handle_tool(tool_ctx, invocation, context)
         for entry in BUILTIN_TOOL_ENTRIES
+        if not tool_toggles.is_tool_disabled(entry.name, known=BUILTIN_TOOL_NAMES)
     }

@@ -10,7 +10,7 @@ const dashboardTabBarClassName = (variant: DashboardTabBarVariant) =>
     'h-auto gap-1 px-1 py-1.5 transition-all duration-300 ease-out',
     variant === 'grid'
       ? 'grid w-full'
-      : 'flex w-max min-w-full flex-nowrap items-center justify-start sm:w-full'
+      : 'flex w-max min-w-full max-w-none flex-nowrap items-center justify-start'
   )
 
 const dashboardTabTriggerClassName = (className?: string) =>
@@ -48,7 +48,7 @@ function DashboardTabBar({
     <div
       data-dashboard-tab-scroll="true"
       className={cn(
-        '-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:overflow-x-visible sm:px-0 sm:pb-0',
+        '-mx-4 min-w-0 overflow-x-auto overscroll-x-contain px-4 pb-1 sm:mx-0 sm:px-0 sm:pb-0',
         wrapperClassName
       )}
     >

@@ -147,21 +147,29 @@ def _coerce_enabled_value(value: Any) -> bool:
     return bool(value)
 
 
-def _read_plugin_enabled(plugin_id: str, plugin_path: Path) -> bool:
+def _read_plugin_enabled(plugin_id: str, plugin_path: Path) -> Optional[bool]:
+    from .static_metadata import read_static_plugin_schema
+    schema = read_static_plugin_schema(plugin_id, plugin_path)
+    default = None
+    if schema is not None:
+        field = schema.get('sections', {}).get('plugin', {}).get('fields', {}).get('enabled', {})
+        value = field.get('default')
+        default = value if type(value) is bool else None
     try:
         config_path = get_plugin_config_path(plugin_id, plugin_path)
         if not config_path.exists():
-            return True
+            return default
         with open(config_path, "r", encoding="utf-8") as file_obj:
             config = tomlkit.load(file_obj).unwrap()
     except Exception as exc:
-        logger.warning(f"读取插件 {plugin_id} 启用状态失败，将按启用处理: {exc}")
-        return True
+        logger.warning(f"读取插件 {plugin_id} 启用状态失败: {type(exc).__name__}")
+        raise HTTPException(424, '插件配置无法读取，不能推断启用状态') from exc
 
     plugin_config = config.get("plugin") if isinstance(config, dict) else None
     if not isinstance(plugin_config, dict):
-        return True
-    return _coerce_enabled_value(plugin_config.get("enabled", True))
+        return default
+    value = plugin_config.get("enabled", default)
+    return None if value is None else _coerce_enabled_value(value)
 
 
 def _get_runtime_plugin_load_statuses() -> Dict[str, str]:
@@ -212,14 +220,34 @@ def _get_runtime_plugin_circuit_statuses() -> Dict[str, Dict[str, Any]]:
         return {}
 
 
-def _is_runtime_loading() -> bool:
+def _get_runtime_state() -> str:
+    """观察本进程插件运行时，不把独立 WebUI 存活当作机器人运行。"""
     try:
         from src.plugin_runtime.integration import get_plugin_runtime_manager
 
-        return bool(get_plugin_runtime_manager().is_loading)
+        manager = get_plugin_runtime_manager()
+        # start() 完成前 is_running 仍为 False，应优先保留加载中证据。
+        if manager.is_loading:
+            return "loading"
+        return "running" if manager.is_running else "unknown"
     except Exception as exc:
-        logger.warning(f"获取插件运行时加载中状态失败: {exc}")
-        return False
+        logger.warning(f"获取插件运行时状态失败: {exc}")
+        return "unknown"
+
+
+def _resolve_plugin_runtime_status(load_status: str, runtime_state: str, enabled: bool) -> str:
+    """仅显式 Runner 失败上报算失败；未加载、无观测和停止不等于失败。"""
+    if runtime_state == "not_running":
+        return "not_running"
+    if runtime_state == "unknown":
+        return "unknown"
+    if load_status == "failed":
+        return "failed"
+    if load_status == "success":
+        return "loaded"
+    if enabled and (load_status == "loading" or runtime_state == "loading"):
+        return "loading"
+    return "unknown"
 
 
 def _build_update_work_path(plugin_path: Path, plugin_id: str, directory_name: str) -> Path:
@@ -393,9 +421,13 @@ async def _release_plugin_runtime_before_delete(plugin_id: str, plugin_path: Pat
         from src.common.runtime_loop import run_on_main_loop
         from src.plugin_runtime.integration import get_plugin_runtime_manager
 
-        return await run_on_main_loop(get_plugin_runtime_manager().reload_plugins_globally([plugin_id], reason="uninstall"))
+        manager = get_plugin_runtime_manager()
+        if not manager.is_running and not manager.is_loading:
+            # 本地单例无法证明独立主服务已停，缺少清理 IPC 时拒绝删除。
+            return False
+        return await run_on_main_loop(manager.reload_plugins_globally([plugin_id], reason="uninstall"))
     except Exception as exc:
-        logger.warning(f"插件 {plugin_id} 删除前运行时卸载失败，将继续尝试删除文件: {exc}")
+        logger.warning(f"插件 {plugin_id} 删除前运行时卸载失败，禁止删除文件: {exc}")
         return False
 
 
@@ -579,7 +611,9 @@ async def uninstall_plugin(
             operation="uninstall",
             plugin_id=plugin_id,
         )
-        await _release_plugin_runtime_before_delete(runtime_plugin_id, plugin_path)
+        if not await _release_plugin_runtime_before_delete(runtime_plugin_id, plugin_path):
+            await update_progress(stage="error", progress=30, message="运行时卸载失败，已保留插件文件", operation="uninstall", plugin_id=plugin_id)
+            raise HTTPException(status_code=424, detail="插件运行时资源未确认释放，已中止删除；插件配置已禁用，请检查日志后重试")
         await update_progress(
             stage="loading",
             progress=45,
@@ -769,7 +803,7 @@ async def get_installed_plugins(maibot_session: Optional[str] = Cookie(None)) ->
         runtime_statuses = _get_runtime_plugin_load_statuses()
         runtime_failure_reasons = _get_runtime_plugin_load_failure_reasons()
         circuit_statuses = _get_runtime_plugin_circuit_statuses()
-        runtime_loading = _is_runtime_loading()
+        runtime_state = _get_runtime_state()
         for plugin_path in iter_plugin_directories():
             folder_name = plugin_path.name
             if folder_name.startswith(".") or folder_name.startswith("__"):
@@ -792,14 +826,24 @@ async def get_installed_plugins(maibot_session: Optional[str] = Cookie(None)) ->
                 if not plugin_id:
                     logger.warning(f"插件文件夹 {folder_name} 的 _manifest.json 缺少 id，跳过")
                     continue
-                enabled = _read_plugin_enabled(plugin_id, plugin_path)
+                config_error = ""
+                try:
+                    enabled = _read_plugin_enabled(plugin_id, plugin_path)
+                except HTTPException:
+                    enabled = None
+                    config_error = "配置无法读取，启用状态未知"
                 runtime_aliases = [plugin_id, str(manifest.get("id", ""))]
                 load_status = _lookup_runtime_plugin_value(runtime_statuses, runtime_aliases, "unknown")
-                if enabled and load_status == "unknown" and runtime_loading:
+                runtime_status = _resolve_plugin_runtime_status(load_status, runtime_state, enabled is True)
+                if runtime_status == "loading" and load_status == "unknown":
                     load_status = "loading"
+                elif runtime_state in {"not_running", "unknown"}:
+                    load_status = runtime_status
                 circuit_status = circuit_statuses.get(plugin_id)
+                if runtime_state in {"not_running", "unknown"}:
+                    circuit_status = None
                 load_error = _lookup_runtime_plugin_value(runtime_failure_reasons, runtime_aliases, "")
-                effective_load_status = load_status if enabled or load_status == "failed" else "disabled"
+                effective_load_status = 'unknown' if enabled is None else load_status if enabled or load_status == "failed" else "disabled"
                 changelog = read_plugin_changelog(plugin_path)
                 installed_plugins.append(
                     {
@@ -807,9 +851,11 @@ async def get_installed_plugins(maibot_session: Optional[str] = Cookie(None)) ->
                         "manifest": manifest,
                         "path": str(plugin_path.absolute()),
                         "enabled": enabled,
-                        "disabled": not enabled,
-                        "loaded": effective_load_status == "success",
+                        "disabled": enabled is False,
+                        "config_error": config_error,
+                        "loaded": runtime_status == "loaded",
                         "load_status": effective_load_status,
+                        "runtime_status": runtime_status,
                         "load_error": load_error if effective_load_status == "failed" else "",
                         "circuit_status": circuit_status,
                         "changelog": changelog,

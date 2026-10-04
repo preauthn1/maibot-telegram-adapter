@@ -60,6 +60,7 @@ from src.llm_models.payload_content.tool_option import (
     normalize_tool_options,
 )
 from src.llm_models.utils import compress_messages, llm_usage_recorder
+from src.llm_models.vision_preprocessing import prepare_vision_messages
 
 install(extra_lines=3)
 
@@ -232,18 +233,23 @@ class LLMOrchestrator:
         try:
             from src.maisaka.monitor.events import emit_llm_retry
 
-            asyncio.get_running_loop().create_task(
-                emit_llm_retry(
-                    session_id=session_id,
-                    task_name=self.task_name,
-                    request_type=self.request_type,
-                    model_name=model_name,
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                    reason=reason,
-                    retry_interval=retry_interval,
-                )
-            )
+            async def emit_guarded() -> None:
+                try:
+                    await emit_llm_retry(
+                        session_id=session_id,
+                        task_name=self.task_name,
+                        request_type=self.request_type,
+                        model_name=model_name,
+                        attempt=attempt,
+                        max_attempts=max_attempts,
+                        reason=reason,
+                        retry_interval=retry_interval,
+                    )
+                except Exception as event_error:
+                    # 重试通知同样需消费后台异常，避免事件循环回显敏感正文。
+                    logger.warning(f"模型重试事件广播失败，异常类型: {type(event_error).__name__}")
+
+            asyncio.get_running_loop().create_task(emit_guarded())
         except RuntimeError:
             return
 
@@ -262,15 +268,20 @@ class LLMOrchestrator:
         try:
             from src.maisaka.monitor.events import emit_llm_error
 
-            asyncio.get_running_loop().create_task(
-                emit_llm_error(
-                    session_id=session_id,
-                    task_name=self.task_name,
-                    request_type=self.request_type,
-                    model_name=model_name,
-                    message=message,
-                )
-            )
+            async def emit_guarded() -> None:
+                try:
+                    await emit_llm_error(
+                        session_id=session_id,
+                        task_name=self.task_name,
+                        request_type=self.request_type,
+                        model_name=model_name,
+                        message=message,
+                    )
+                except Exception as event_error:
+                    # 后台任务也需消费异常，避免事件循环回显通知正文或敏感异常。
+                    logger.warning(f"模型错误事件广播失败，异常类型: {type(event_error).__name__}")
+
+            asyncio.get_running_loop().create_task(emit_guarded())
         except RuntimeError:
             return
 
@@ -350,15 +361,19 @@ class LLMOrchestrator:
         time_cost = time.time() - start_time
         self._check_slow_request(time_cost, model_info.name)
         if usage := response.usage:
-            llm_usage_recorder.record_usage_to_database(
-                model_info=model_info,
-                model_usage=usage,
-                user_id="system",
-                request_type=self.request_type,
-                task_name=self.task_name,
-                session_id=self._resolve_effective_session_id(session_id),
-                time_cost=time_cost,
-            )
+            try:
+                llm_usage_recorder.record_usage_to_database(
+                    model_info=model_info,
+                    model_usage=usage,
+                    user_id="system",
+                    request_type=self.request_type,
+                    task_name=self.task_name,
+                    session_id=self._resolve_effective_session_id(session_id),
+                    time_cost=time_cost,
+                )
+            except Exception as usage_error:
+                # 统计失败不应丢弃成功响应；返回结果保留用量但不宣称已落盘。
+                logger.warning(f"用量统计写入失败，异常类型: {type(usage_error).__name__}")
         return self._build_generation_result(
             response,
             model_info.name,
@@ -438,18 +453,23 @@ class LLMOrchestrator:
         model_info = execution_result.model_info
 
         logger.debug(f"LLM请求总耗时: {time.time() - start_time}")
-        logger.debug(f"LLM生成内容: {response}")
+        # 响应对象可能含正文、推理与供应商原始数据，日志只记录结构计数。
+        logger.debug(f"LLM响应已返回，输出项数: {len(response.output_items)}")
 
         if usage := response.usage:
-            llm_usage_recorder.record_usage_to_database(
-                model_info=model_info,
-                model_usage=usage,
-                user_id="system",
-                request_type=self.request_type,
-                task_name=self.task_name,
-                session_id=self._resolve_effective_session_id(session_id),
-                time_cost=time.time() - start_time,
-            )
+            try:
+                llm_usage_recorder.record_usage_to_database(
+                    model_info=model_info,
+                    model_usage=usage,
+                    user_id="system",
+                    request_type=self.request_type,
+                    task_name=self.task_name,
+                    session_id=self._resolve_effective_session_id(session_id),
+                    time_cost=time.time() - start_time,
+                )
+            except Exception as usage_error:
+                # 记账失败不丢弃已生成答案，也不回显存储异常正文。
+                logger.warning(f"用量统计写入失败，异常类型: {type(usage_error).__name__}")
         return self._build_generation_result(
             response,
             model_info.name,
@@ -503,19 +523,24 @@ class LLMOrchestrator:
 
         time_cost = time.time() - start_time
         logger.debug(f"LLM请求总耗时: {time_cost}")
-        logger.debug(f"LLM生成内容: {response}")
+        # 响应对象可能含正文、推理与供应商原始数据，日志只记录结构计数。
+        logger.debug(f"LLM响应已返回，输出项数: {len(response.output_items)}")
 
         self._check_slow_request(time_cost, model_info.name)
         if usage := response.usage:
-            llm_usage_recorder.record_usage_to_database(
-                model_info=model_info,
-                model_usage=usage,
-                user_id="system",
-                request_type=self.request_type,
-                task_name=self.task_name,
-                session_id=self._resolve_effective_session_id(session_id),
-                time_cost=time_cost,
-            )
+            try:
+                llm_usage_recorder.record_usage_to_database(
+                    model_info=model_info,
+                    model_usage=usage,
+                    user_id="system",
+                    request_type=self.request_type,
+                    task_name=self.task_name,
+                    session_id=self._resolve_effective_session_id(session_id),
+                    time_cost=time_cost,
+                )
+            except Exception as usage_error:
+                # 统计失败不应丢弃成功响应；返回结果保留用量但不宣称已落盘。
+                logger.warning(f"用量统计写入失败，异常类型: {type(usage_error).__name__}")
         return self._build_generation_result(
             response,
             model_info.name,
@@ -541,15 +566,19 @@ class LLMOrchestrator:
         model_info = execution_result.model_info
         embedding = response.embedding
         if usage := response.usage:
-            llm_usage_recorder.record_usage_to_database(
-                model_info=model_info,
-                model_usage=usage,
-                user_id="system",
-                request_type=self.request_type,
-                task_name=self.task_name,
-                session_id=self._resolve_effective_session_id(session_id),
-                time_cost=time.time() - start_time,
-            )
+            try:
+                llm_usage_recorder.record_usage_to_database(
+                    model_info=model_info,
+                    model_usage=usage,
+                    user_id="system",
+                    request_type=self.request_type,
+                    task_name=self.task_name,
+                    session_id=self._resolve_effective_session_id(session_id),
+                    time_cost=time.time() - start_time,
+                )
+            except Exception as usage_error:
+                # 附属记账故障不能丢失向量，也不能覆盖后续空向量校验。
+                logger.warning(f"用量统计写入失败，异常类型: {type(usage_error).__name__}")
         if not embedding:
             raise RuntimeError("获取embedding失败")
         return LLMEmbeddingResult(
@@ -923,8 +952,16 @@ class LLMOrchestrator:
         retry_remain = max(1, retry_remain)
         max_attempts = retry_remain
         model_info = request.model_info
-        original_response_request = request if isinstance(request, ResponseRequest) else None
         active_request: ClientRequest = request
+        if isinstance(request, ResponseRequest):
+            # 在首次 Provider 调用前压缩，覆盖普通识图和上下文中的图片。
+            try:
+                prepared_items = prepare_vision_messages(request.context_items)
+            except ValueError as exc:
+                raise ModelAttemptFailed("视觉图片预处理失败", original_exception=exc) from exc
+            if prepared_items != request.context_items:
+                active_request = request.copy_with(context_items=prepared_items)
+        original_response_request = active_request if isinstance(active_request, ResponseRequest) else None
 
         def ensure_attempt_snapshot(error: Exception) -> None:
             """确保内置或插件 Provider 的每次失败都有统一快照记录。"""
@@ -955,12 +992,19 @@ class LLMOrchestrator:
                     response = await client.get_embedding(active_request)
                 else:
                     response = await client.get_audio_transcriptions(active_request)
-                self._record_success_generation_attempt(
-                    api_provider=api_provider,
-                    request=active_request,
-                    response=response,
-                )
-                mark_request_succeeded(active_request, response)
+                try:
+                    self._record_success_generation_attempt(
+                        api_provider=api_provider,
+                        request=active_request,
+                        response=response,
+                    )
+                except Exception as diagnostic_error:
+                    # 已有成功响应，诊断异常不应触发重发或覆盖结果。
+                    logger.warning(f"成功调用记录失败，异常类型: {type(diagnostic_error).__name__}")
+                try:
+                    mark_request_succeeded(active_request, response)
+                except Exception as diagnostic_error:
+                    logger.warning(f"成功状态标记失败，异常类型: {type(diagnostic_error).__name__}")
                 return response
             except EmptyResponseException as e:
                 ensure_attempt_snapshot(e)
@@ -1218,16 +1262,22 @@ class LLMOrchestrator:
             last_model_name = model_info.name
             trace_context.model_attempt = 0
             context_items: List[ContextItem] = []
-            if context_factory:
-                parameter_count = len(inspect.signature(context_factory).parameters)
-                if parameter_count >= 2:
-                    context_result = context_factory(client, model_info)
-                else:
-                    context_result = context_factory(client)
-                if inspect.isawaitable(context_result):
-                    context_items = await context_result
-                else:
-                    context_items = context_result
+            try:
+                if context_factory:
+                    parameter_count = len(inspect.signature(context_factory).parameters)
+                    if parameter_count >= 2:
+                        context_result = context_factory(client, model_info)
+                    else:
+                        context_result = context_factory(client)
+                    if inspect.isawaitable(context_result):
+                        context_items = await context_result
+                    else:
+                        context_items = context_result
+            except (Exception, asyncio.CancelledError):
+                # 尚未发出请求：只释放本次选模占用，不惩罚模型或重试本地装配错误。
+                total_tokens, penalty, usage_penalty = self.model_usage[model_info.name]
+                self.model_usage[model_info.name] = (total_tokens, penalty, usage_penalty - 1)
+                raise
             try:
                 request = self._build_client_request(
                     request_type=request_type,
@@ -1263,6 +1313,12 @@ class LLMOrchestrator:
                 self.model_usage[model_info.name] = (total_tokens, penalty, usage_penalty - 1)
                 return LLMExecutionResult(api_response=response, model_info=model_info)
 
+            except asyncio.CancelledError:
+                # 调用方取消不是模型故障；释放本次占用并保留取消语义，不切换模型。
+                total_tokens, penalty, usage_penalty = self.model_usage[model_info.name]
+                self.model_usage[model_info.name] = (total_tokens, penalty, usage_penalty - 1)
+                raise
+
             except ReqAbortException as e:
                 total_tokens, penalty, usage_penalty = self.model_usage[model_info.name]
                 self.model_usage[model_info.name] = (total_tokens, penalty, usage_penalty - 1)
@@ -1286,24 +1342,44 @@ class LLMOrchestrator:
                         trace_context=trace_context,
                     )
                     attach_request_snapshot(last_exception, snapshot_path)
-                logger.warning(f"模型 '{model_info.name}' 尝试失败，切换到下一个模型。原因: {e}")
+                # 上游异常可能回显请求内容；此处只记录类型，不展开异常正文。
+                logger.warning(f"模型 '{model_info.name}' 尝试失败，切换到下一个模型。异常类型: {type(last_exception).__name__}")
                 total_tokens, penalty, usage_penalty = self.model_usage[model_info.name]
                 self.model_usage[model_info.name] = (total_tokens, penalty + 1, usage_penalty - 1)
                 failed_models_this_request.add(model_info.name)
                 if model_index < max_attempts - 1:
-                    update_failed_request_attempt(last_exception, status="switching_model")
+                    try:
+                        update_failed_request_attempt(last_exception, status="switching_model")
+                    except Exception as diagnostic_error:
+                        # 诊断更新失败不应阻断备用模型，也不回显文件路径或请求内容。
+                        logger.warning(f"切换模型诊断更新失败，异常类型: {type(diagnostic_error).__name__}")
 
                 if isinstance(last_exception, RespNotOkException) and last_exception.status_code == 400:
                     logger.warning("收到客户端错误 (400)，跳过当前模型并继续尝试其他模型。")
                     continue
 
+            except Exception:
+                # 未包装的本地构建/执行异常不能进入模型重试，但仍须释放选模占用。
+                total_tokens, penalty, usage_penalty = self.model_usage[model_info.name]
+                self.model_usage[model_info.name] = (total_tokens, penalty, usage_penalty - 1)
+                raise
+
         logger.error(f"所有 {max_attempts} 个模型均尝试失败。")
         if last_exception:
-            mark_request_final_failure(last_exception)
-            self._schedule_llm_error_event(
-                model_name=last_model_name,
-                message=str(last_exception),
-            )
+            try:
+                mark_request_final_failure(last_exception)
+            except Exception as diagnostic_error:
+                # 最终诊断落盘失败不应替换原始模型异常或阻止错误事件。
+                logger.warning(f"最终失败诊断更新失败，异常类型: {type(diagnostic_error).__name__}")
+            try:
+                self._schedule_llm_error_event(
+                    model_name=last_model_name,
+                    # 错误事件可能传给插件或通知通道，不转发上游异常正文。
+                    message=f"模型请求失败，异常类型: {type(last_exception).__name__}",
+                )
+            except Exception as event_error:
+                # 通知初始化失败不能覆盖真正的模型异常。
+                logger.warning(f"模型错误事件调度失败，异常类型: {type(event_error).__name__}")
             raise last_exception
         self._schedule_llm_error_event(
             model_name=last_model_name,

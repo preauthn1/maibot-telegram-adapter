@@ -110,6 +110,15 @@ export function Layout({ children }: LayoutProps) {
     localStorage.setItem(TOPBAR_COLLAPSED_STORAGE_KEY, String(topbarCollapsed))
   }, [topbarCollapsed])
 
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const closeMobileMenu = () => {
+      if (desktop.matches) setMobileMenuOpen(false)
+    }
+    desktop.addEventListener('change', closeMobileMenu)
+    return () => desktop.removeEventListener('change', closeMobileMenu)
+  }, [])
+
   // 搜索快捷键监听（Cmd/Ctrl + K）
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -146,6 +155,7 @@ export function Layout({ children }: LayoutProps) {
     pathToLabel['/reasoning-process'] = t('sidebar.menu.reasoningProcess')
 
     return router.subscribe('onResolved', () => {
+      setMobileMenuOpen(false)
       const pageTitle = pathToLabel[router.state.location.pathname] ?? 'MaiBot Dashboard'
       const fullTitle =
         pageTitle === 'MaiBot Dashboard' ? 'MaiBot Dashboard' : `${pageTitle} — MaiBot Dashboard`
@@ -328,6 +338,7 @@ export function Layout({ children }: LayoutProps) {
           {isSettingsWorkspace && (
             <div className="lg:hidden">
               <Sidebar
+                mobile
                 sidebarOpen={sidebarOpen}
                 mobileMenuOpen={mobileMenuOpen}
                 onMobileMenuClose={() => setMobileMenuOpen(false)}
@@ -353,6 +364,7 @@ export function Layout({ children }: LayoutProps) {
           {/* Main content */}
           <motion.div
             layout={false}
+            inert={isSettingsWorkspace && mobileMenuOpen}
             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
           >
             {/* HTTP 安全警告横幅 */}

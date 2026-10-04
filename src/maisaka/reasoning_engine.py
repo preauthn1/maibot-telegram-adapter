@@ -199,9 +199,10 @@ class MaisakaReasoningEngine:
 
         interrupt_flag = asyncio.Event()
         interrupted = False
+        primary_error: BaseException | None = None
         self._runtime._bind_planner_interrupt_flag(interrupt_flag)
-        self._runtime._chat_loop_service.set_interrupt_flag(interrupt_flag)
         try:
+            self._runtime._chat_loop_service.set_interrupt_flag(interrupt_flag)
             return await self._runtime._chat_loop_service.chat_loop_step(
                 self._runtime._chat_history,
                 injected_user_messages=injected_user_messages,
@@ -210,15 +211,32 @@ class MaisakaReasoningEngine:
                 max_context_size=self._runtime._max_context_size,
                 logical_turn_id=self._active_logical_turn_id,
             )
-        except ReqAbortException:
-            interrupted = True
+        except BaseException as exc:
+            primary_error = exc
+            interrupted = isinstance(exc, ReqAbortException)
             raise
         finally:
-            self._runtime._unbind_planner_interrupt_flag(
-                interrupt_flag,
-                interrupted=interrupted,
-            )
-            self._runtime._chat_loop_service.set_interrupt_flag(None)
+            cleanup_error: Exception | None = None
+            try:
+                self._runtime._unbind_planner_interrupt_flag(
+                    interrupt_flag,
+                    interrupted=interrupted,
+                )
+            except Exception as exc:
+                cleanup_error = exc
+                logger.debug(f"Planner中断解绑失败: error_type={type(exc).__name__}")
+            finally:
+                try:
+                    chat_loop = self._runtime._chat_loop_service
+                    # An older request must not clear a newer request's binding.
+                    if getattr(chat_loop, "_interrupt_flag", interrupt_flag) is interrupt_flag:
+                        chat_loop.set_interrupt_flag(None)
+                except Exception as exc:
+                    if cleanup_error is None:
+                        cleanup_error = exc
+                    logger.debug(f"Planner中断重置失败: error_type={type(exc).__name__}")
+            if primary_error is None and cleanup_error is not None:
+                raise cleanup_error
 
     async def _run_behavior_scenario_analyzer_sub_agent(
         self,
@@ -508,7 +526,7 @@ class MaisakaReasoningEngine:
                     session_id=str(self._runtime.session_id or ""),
                 )
             except Exception as exc:
-                logger.debug(f"{self._runtime.log_prefix} 启发式记忆自然拉起失败，已跳过: {exc}")
+                logger.debug(f"启发式记忆自然拉起失败，已跳过: error_type={type(exc).__name__}")
                 return ""
 
         async def build_profile_messages() -> list[str]:
@@ -518,16 +536,27 @@ class MaisakaReasoningEngine:
                     pending_messages=source_messages,
                 )
             except Exception as exc:
-                logger.debug(f"{self._runtime.log_prefix} 人物画像自动注入失败，已跳过: {exc}")
+                logger.debug(f"人物画像自动注入失败，已跳过: error_type={type(exc).__name__}")
                 return []
 
-        heuristic_memory_message, profile_messages = await asyncio.gather(
-            build_heuristic_memory_message(),
-            build_profile_messages(),
-        )
-        if heuristic_memory_message:
+        injection_tasks = [
+            asyncio.create_task(build_heuristic_memory_message()),
+            asyncio.create_task(build_profile_messages()),
+        ]
+        try:
+            heuristic_memory_message, profile_messages = await asyncio.gather(*injection_tasks)
+        except BaseException:
+            for task in injection_tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*injection_tasks, return_exceptions=True)
+            raise
+        if isinstance(heuristic_memory_message, str) and heuristic_memory_message.strip():
             injected_messages.append(heuristic_memory_message)
-        injected_messages.extend(profile_messages)
+        if isinstance(profile_messages, list):
+            injected_messages.extend(
+                text for text in profile_messages if isinstance(text, str) and text.strip()
+            )
         return injected_messages
 
     def _refresh_jargon_reference_message(self) -> Optional[ReferenceMessage]:
@@ -693,6 +722,30 @@ class MaisakaReasoningEngine:
         state.tool_monitor_results = []
         return planner_no_tool_count, should_end_after_no_tool
 
+    def _evaluate_fast_path(self, source_messages: list[SessionMessage]) -> tuple[bool, str]:
+        """Phase 7 快速通道判定；任何异常都回到完整路径。"""
+
+        try:
+            from src.maisaka.state_model import get_state_store
+            from src.maisaka.state_model.fast_path import fast_path_eligible
+            from src.chat.utils.utils import is_bot_self
+
+            external = [
+                message
+                for message in source_messages
+                if not is_bot_self(message.platform, message.message_info.user_info.user_id)
+            ]
+            state = get_state_store().get(str(self._runtime.session_id or ""))
+            return fast_path_eligible(
+                texts=[(message.processed_plain_text or "") for message in external],
+                directed_at_us=bool(external) and all(message.is_at or message.is_mentioned for message in external),
+                flow=state.flow,
+                energy=state.energy,
+                is_group=self._runtime.chat_stream.is_group_session,
+            )
+        except Exception:  # noqa: BLE001
+            return False, "error"
+
     async def _run_planner_request(
         self,
         *,
@@ -713,11 +766,17 @@ class MaisakaReasoningEngine:
                 logger.debug(f"{self._runtime.log_prefix} 已刷新黑话参考消息")
         except Exception as exc:
             logger.debug(f"{self._runtime.log_prefix} 黑话参考消息刷新失败，已跳过: {exc}")
-        injected_user_messages = await self._build_planner_injected_user_messages(
-            profile_message=trigger_message,
-            source_messages=source_messages,
-            deferred_tools_reminder=deferred_tools_reminder,
-        )
+        fast_path, fast_reason = self._evaluate_fast_path(source_messages)
+        if fast_path:
+            # Phase 7：高心流纯文本轮次跳过重型记忆/画像注入，Planner 与全部出站闸门照常。
+            injected_user_messages = [deferred_tools_reminder] if deferred_tools_reminder else []
+            logger.info(f"{self._runtime.log_prefix} 高能对话快速通道: 跳过记忆/画像注入 原因={fast_reason}")
+        else:
+            injected_user_messages = await self._build_planner_injected_user_messages(
+                profile_message=trigger_message,
+                source_messages=source_messages,
+                deferred_tools_reminder=deferred_tools_reminder,
+            )
         if not resolve_enable_visual_planner():
             log_pending_image_recognition_before_text_planner(
                 self._runtime._chat_history,
@@ -1803,7 +1862,8 @@ class MaisakaReasoningEngine:
 
         if not history_content.strip():
             return "\n".join(media_lines).strip()
-        return f"{history_content.strip()}\n\n" + "\n".join(media_lines).strip()
+        # 媒体索引只是附加信息，不能改变工具正文已有的缩进及首尾空白。
+        return f"{history_content}\n\n" + "\n".join(media_lines).strip()
 
     @staticmethod
     def _decode_tool_result_base64_data(raw_data: str) -> bytes:

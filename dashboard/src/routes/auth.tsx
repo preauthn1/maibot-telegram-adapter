@@ -192,9 +192,7 @@ export function AuthPage() {
 
         if (data.valid) {
           // Token 验证成功，Cookie 已由后端设置
-          // 等待一小段时间确保 Cookie 已设置
-          await new Promise((resolve) => setTimeout(resolve, 100))
-
+          // fetch 完成时 Cookie 已处理，无须人为延迟。
           // 再次检查认证状态
           await checkAuthStatus()
 
@@ -268,7 +266,7 @@ export function AuthPage() {
     return (
       <div data-auth-page="true" className="relative isolate flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
         {showRetroGears && <AuthRetroGears />}
-        <div className="text-muted-foreground">{t('auth.checkingAuth')}</div>
+        <div role="status" aria-live="polite" className="text-muted-foreground">{t('auth.checkingAuth')}</div>
       </div>
     )
   }
@@ -361,12 +359,12 @@ export function AuthPage() {
             {/* 帮助文本 */}
             <Dialog>
               <DialogTrigger asChild>
-                <button className="w-full text-center text-sm text-primary hover:text-primary/80 transition-colors underline-offset-4 hover:underline flex items-center justify-center gap-1">
+                <button type="button" className="w-full text-center text-sm text-primary hover:text-primary/80 transition-colors underline-offset-4 hover:underline flex items-center justify-center gap-1">
                   <HelpCircle className="h-4 w-4" strokeWidth={2} fill="none" />
                   {t('auth.helpLink')}
                 </button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Lock className="h-5 w-5 text-primary" strokeWidth={2} fill="none" />
