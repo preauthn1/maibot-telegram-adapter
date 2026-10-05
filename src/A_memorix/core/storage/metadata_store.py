@@ -1700,6 +1700,79 @@ class MetadataStore(
             payload["metadata"] = {}
         return payload
 
+    def ingest_relation_metadata_atomic(
+        self, *, external_id: str, content: str, source: str,
+        source_type: str, relations: List[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]] = None,
+        knowledge_type: str = "mixed",
+        time_meta: Optional[Dict[str, Any]] = None,
+        external_metadata: Optional[Dict[str, Any]] = None,
+        queue_relation_vectors: bool = False,
+        queue_paragraph_vector: bool = False,
+    ) -> Dict[str, Any]:
+        """同步提交关系型记忆；不跨await，不写图/向量，不覆盖已有幂等映射。"""
+        from math import isfinite
+        if not isinstance(external_id, str) or not external_id.strip() or not normalize_text(content):
+            raise ValueError("invalid_atomic_memory_input")
+        prepared = []
+        seen_relations = {}
+        for row in relations:
+            if not isinstance(row, dict):
+                raise ValueError("invalid_atomic_relation")
+            triple = [str(row.get(k, "") or "").strip() for k in ("subject", "predicate", "object")]
+            if not all(triple):
+                raise ValueError("invalid_atomic_relation")
+            raw = row.get("confidence", 1.0)
+            try:
+                score = float(raw)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError("invalid_relation_confidence") from None
+            if isinstance(raw, bool) or not isfinite(score) or not 0 <= score <= 1:
+                raise ValueError("invalid_relation_confidence")
+            relation_hash = self.compute_relation_hash(*triple)
+            signature = (score, row.get("metadata"))
+            if relation_hash in seen_relations:
+                if seen_relations[relation_hash] != signature:
+                    raise ValueError("conflicting_atomic_relation")
+                continue
+            seen_relations[relation_hash] = signature
+            prepared.append((triple, score, row.get("metadata")))
+        if not prepared:
+            raise ValueError("empty_atomic_relations")
+        # 嵌套业务方法的commit由受管事务延迟；异常/取消同时撤回共享生命周期变化。
+        with self.transaction(immediate=True):
+            existing = self.get_external_memory_ref(external_id)
+            if existing:
+                return {"stored_ids": [], "skipped_ids": [existing["paragraph_hash"]], "reason": "exists"}
+            paragraph = self.add_paragraph(content=content, source=source, metadata=metadata,
+                                           knowledge_type=knowledge_type, time_meta=time_meta)
+            hashes = []
+            for triple, score, relation_meta in prepared:
+                hashes.append(self.add_relation(
+                    subject=triple[0], predicate=triple[1], obj=triple[2], confidence=score,
+                    source_paragraph=paragraph, metadata=relation_meta,
+                ))
+            if queue_paragraph_vector:
+                # 只登记缺失待办，避免重置共享段落正在执行或已经完成的任务。
+                now = datetime.now().timestamp()
+                self._conn.execute(
+                    "INSERT INTO paragraph_vector_backfill "
+                    "(paragraph_hash,status,retry_count,last_error,created_at,updated_at) "
+                    "VALUES (?,'pending',0,NULL,?,?) ON CONFLICT(paragraph_hash) DO NOTHING",
+                    (paragraph, now, now),
+                )
+            if queue_relation_vectors:
+                # 与主数据同事务登记待办；不降级已有ready，也不重置失败重试计数。
+                for relation_hash in set(hashes):
+                    self._conn.execute(
+                        "UPDATE relations SET vector_state='pending', vector_updated_at=? "
+                        "WHERE hash=? AND (vector_state IS NULL OR vector_state='none')",
+                        (datetime.now().timestamp(), relation_hash),
+                    )
+            self.upsert_external_memory_ref(external_id=external_id, paragraph_hash=paragraph,
+                                            source_type=source_type, metadata=external_metadata)
+        return {"stored_ids": [paragraph, *hashes], "skipped_ids": []}
+
     def upsert_external_memory_ref(
         self,
         *,

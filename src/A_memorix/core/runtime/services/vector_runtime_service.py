@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+import asyncio
 import numpy as np
 import time
 
@@ -86,8 +87,9 @@ class MemoryVectorRuntimeService(KernelServiceBase):
             }
 
         safe_limit = max(1, int(limit or self._paragraph_vector_backfill_batch_size()))
-        safe_retry = max(1, int(max_retry or self._paragraph_vector_backfill_max_retry()))
-        rows = self.metadata_store.fetch_paragraph_vector_backfill_batch(limit=safe_limit, max_retry=safe_retry)
+        # 零表示不重试失败任务，只有None才使用配置默认值。
+        safe_retry = max(0, int(self._paragraph_vector_backfill_max_retry() if max_retry is None else max_retry))
+        rows = self.metadata_store.claim_paragraph_vector_backfill_batch(limit=safe_limit, max_retry=safe_retry)
         if not rows:
             return {"success": True, "processed": 0, "done": 0, "failed": 0, "trigger": trigger}
 
@@ -96,37 +98,48 @@ class MemoryVectorRuntimeService(KernelServiceBase):
             for row in rows
             if str(row.get("paragraph_hash", "") or "").strip()
         ]
-        if pending_hashes:
-            self.metadata_store.mark_paragraph_vector_backfill_running(pending_hashes)
+        try:
+            done_hashes: List[str] = []
+            encode_items: List[tuple[str, str]] = []
+            paragraph_map = self.metadata_store.get_paragraphs_by_hashes(pending_hashes)
+            for paragraph_hash in pending_hashes:
+                if paragraph_hash in target_store:
+                    done_hashes.append(paragraph_hash)
+                    continue
+                paragraph = paragraph_map.get(paragraph_hash)
+                if paragraph is None or paragraph.get("is_deleted"):
+                    # 软删除正文不再参与回填；done仅表示此待办无需继续执行。
+                    done_hashes.append(paragraph_hash)
+                    continue
+                # 仅用strip判空；嵌入输入保留原文的换行、缩进及首尾空白。
+                content = str(paragraph.get("content", "") or "")
+                if not content.strip():
+                    done_hashes.append(paragraph_hash)
+                    continue
+                encode_items.append((paragraph_hash, content))
 
-        done_hashes: List[str] = []
-        encode_items: List[tuple[str, str]] = []
-        paragraph_map = self.metadata_store.get_paragraphs_by_hashes(pending_hashes)
-        for paragraph_hash in pending_hashes:
-            if paragraph_hash in target_store:
-                done_hashes.append(paragraph_hash)
-                continue
-            paragraph = paragraph_map.get(paragraph_hash)
-            if paragraph is None:
-                done_hashes.append(paragraph_hash)
-                continue
-            content = str(paragraph.get("content", "") or "").strip()
-            if not content:
-                done_hashes.append(paragraph_hash)
-                continue
-            encode_items.append((paragraph_hash, content))
-
-        (
-            done_count,
-            failed_count,
-            last_error,
-            encoded_done_hashes,
-            failed_hashes,
-        ) = await self._encode_and_add_rebuild_vectors(
-            items=encode_items,
-            batch_size=safe_limit,
-            vector_store=target_store,
-        )
+            (
+                done_count,
+                failed_count,
+                last_error,
+                encoded_done_hashes,
+                failed_hashes,
+            ) = await self._encode_and_add_rebuild_vectors(
+                items=encode_items,
+                batch_size=safe_limit,
+                vector_store=target_store,
+            )
+        except (Exception, asyncio.CancelledError) as exc:
+            # 读取、索引检查或编码中断均不能留下无人重试的running任务。
+            # 仅记录类型，避免将上游异常中的正文或凭据写入数据库。
+            for paragraph_hash in pending_hashes:
+                try:
+                    self.metadata_store.mark_paragraph_vector_backfill_failed(
+                        paragraph_hash, "backfill_interrupted:" + type(exc).__name__
+                    )
+                except Exception as recovery_exc:
+                    logger.warning("回填中断状态恢复失败: error_type=%s", type(recovery_exc).__name__)
+            raise
         del done_count
         done_hashes.extend(encoded_done_hashes)
         for paragraph_hash in failed_hashes:
@@ -135,8 +148,30 @@ class MemoryVectorRuntimeService(KernelServiceBase):
             self._set_embedding_degraded(active=True, reason=last_error[:500], checked_at=time.time())
 
         if done_hashes:
-            self.metadata_store.mark_paragraph_vector_backfill_done(done_hashes)
-            self._persist()
+            try:
+                # 先保存索引，再确认完成；保存失败不能留下不可重试的done。
+                self._persist()
+            except (Exception, asyncio.CancelledError) as exc:
+                for paragraph_hash in done_hashes:
+                    try:
+                        self.metadata_store.mark_paragraph_vector_backfill_failed(
+                            paragraph_hash, "backfill_persist_interrupted:" + type(exc).__name__
+                        )
+                    except Exception as recovery_exc:
+                        logger.warning("回填保存失败状态恢复异常: error_type=%s", type(recovery_exc).__name__)
+                raise
+            try:
+                self.metadata_store.mark_paragraph_vector_backfill_done(done_hashes)
+            except (Exception, asyncio.CancelledError) as exc:
+                # 索引已保存但确认失败：保留向量，恢复可重试状态，不重复生成。
+                for paragraph_hash in done_hashes:
+                    try:
+                        self.metadata_store.mark_paragraph_vector_backfill_failed(
+                            paragraph_hash, "backfill_ack_interrupted:" + type(exc).__name__
+                        )
+                    except Exception as recovery_exc:
+                        logger.warning("回填确认失败状态恢复异常: error_type=%s", type(recovery_exc).__name__)
+                raise
 
         return {
             "success": failed_count == 0,
@@ -374,7 +409,8 @@ class MemoryVectorRuntimeService(KernelServiceBase):
         batch_size: int,
         vector_store: Optional[VectorStore] = None,
     ) -> tuple[int, int, str, List[str], List[str]]:
-        target_store = vector_store or self.vector_store
+        # 空池也是明确指定的目标，不能因真假值判定写入另一个池。
+        target_store = self.vector_store if vector_store is None else vector_store
         if target_store is None or self.embedding_manager is None:
             failed_ids = [item_id for item_id, _ in items]
             return 0, len(items), "vector_runtime_components_missing", [], failed_ids
@@ -398,13 +434,20 @@ class MemoryVectorRuntimeService(KernelServiceBase):
                 embedding_array = np.asarray(embeddings, dtype=np.float32)
                 if embedding_array.ndim == 1:
                     embedding_array = embedding_array.reshape(1, -1)
+                # 在索引副作用之前拒绝非矩阵、空维度与非有限值。
+                if embedding_array.ndim != 2 or embedding_array.shape[1] == 0 or not np.isfinite(embedding_array).all():
+                    raise ValueError("invalid_embedding_values")
                 if embedding_array.shape[0] != len(ids):
                     raise ValueError(f"embedding 返回数量异常: expected={len(ids)}, got={embedding_array.shape[0]}")
                 target_store.add(vectors=embedding_array, ids=ids)
+                # add返回数量可能排除既有ID；以写后成员状态核对，避免静默部分写入假成功。
+                if any(item_id not in target_store for item_id in ids):
+                    raise RuntimeError("vector_rebuild_incomplete_write")
                 done += len(ids)
                 done_ids.extend(ids)
             except Exception as exc:
-                last_error = str(exc)[:500]
+                # 上游异常可能包含请求正文或凭据；持久化与日志仅保留类型。
+                last_error = "vector_rebuild_failed:" + type(exc).__name__
                 failed += len(ids)
                 failed_ids.extend(ids)
                 logger.warning(f"重建向量批次失败: start={start}, count={len(ids)}, error={last_error}")

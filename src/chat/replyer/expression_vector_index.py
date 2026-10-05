@@ -378,7 +378,13 @@ def resolve_project_path(raw_path: str) -> Path:
 def l2_normalize(matrix: np.ndarray) -> np.ndarray:
     """按行执行 L2 归一化。"""
 
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    # 非有限值会污染相似度与排序；范数溢出也应显式拒绝而非归一化为零。
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError("表达向量包含非有限数值")
+    with np.errstate(over="ignore", invalid="ignore"):
+        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    if not np.all(np.isfinite(norms)):
+        raise ValueError("表达向量范数非有限，无法归一化")
     if np.any(norms <= 0):
         raise ValueError("表达向量索引包含零向量，无法用于余弦检索")
     return matrix / norms

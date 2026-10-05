@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Set, Tuple, Type
+from typing import Any, Callable, Coroutine, Dict, List, Set, Tuple, Type, TypeVar
 
 import asyncio
 import dataclasses
@@ -432,6 +432,10 @@ class ClientProviderRegistration:
     """是否为主程序内置 Provider。"""
 
 
+# 注册装饰器原样返回子类，类型信息也必须保留，不能退化为 BaseClient。
+ClientT = TypeVar("ClientT", bound=BaseClient)
+
+
 class ClientRegistry:
     """客户端注册表。"""
 
@@ -445,17 +449,17 @@ class ClientRegistry:
         """插件 ID -> 该插件拥有的 client_type 集合。"""
         config_manager.register_reload_callback(self.clear_client_instance_cache)
 
-    def register_client_class(self, client_type: str) -> Callable[[Type[BaseClient]], Type[BaseClient]]:
+    def register_client_class(self, client_type: str) -> Callable[[Type[ClientT]], Type[ClientT]]:
         """注册主程序内置 API 客户端类。
 
         Args:
             client_type: 客户端类型标识。
 
         Returns:
-            Callable[[Type[BaseClient]], Type[BaseClient]]: 装饰器函数。
+            Callable[[Type[ClientT]], Type[ClientT]]: 装饰器函数。
         """
 
-        def decorator(cls: Type[BaseClient]) -> Type[BaseClient]:
+        def decorator(cls: Type[ClientT]) -> Type[ClientT]:
             """将内置客户端类注册到全局客户端注册表。
 
             Args:

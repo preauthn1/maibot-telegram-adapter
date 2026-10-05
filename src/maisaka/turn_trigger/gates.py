@@ -1,14 +1,21 @@
 """Maisaka 消息触发门控。"""
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import List, Literal, Optional, Sequence, Set, TYPE_CHECKING
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Optional, Sequence, Set, TYPE_CHECKING
+
+import json
+import os
+import threading
 import time
 
 from src.chat.message_receive.message import SessionMessage
 from src.chat.utils.utils import is_bot_self
+from src.common.logger import get_logger
+from src.maisaka.state_model import get_state_store
 
-from .dynamic_gate import DynamicReplyGate
+from .dynamic_gate import DynamicGateDecision, DynamicReplyGate
 from .reply_likelihood import (
     DEFAULT_SECONDS_SINCE_BOT_MESSAGE,
     ReplyLikelihoodInput,
@@ -20,9 +27,38 @@ if TYPE_CHECKING:
     from src.maisaka.runtime import MaisakaHeartFlowChatting
 
 
+logger = get_logger("maisaka_turn_gates")
+
 TurnGateDecision = Literal["trigger", "wait", "delay"]
 RECENT_PRESENCE_WINDOW_SECONDS = 300.0
 """统计近期消息量与麦麦发言占比的时间窗口。"""
+
+STATE_PROBABILITY_SCALE = 100.0
+"""状态模型分量原为 0~100 分制下的整数加性分量（合计 ±25），换算到概率空间时除以该值。"""
+
+# 门控决策结构化日志（影子观测，只记录不改变判定）。
+# 与适配器 funnel 同样的隐私约束：只存 message_id / chat_id / 分数 / 布尔判定，绝不存消息正文。
+_GATE_LOG_ROOT = Path(__file__).resolve().parents[3] / "data" / "gate_decisions"
+_GATE_LOG_TZ = timezone(timedelta(hours=8))  # Asia/Shanghai，无夏令时
+_GATE_LOG_LOCK = threading.Lock()
+_GATE_LOG_WARN_EVERY = 100
+_gate_log_failures = 0
+
+
+def _append_gate_decision(record: Dict[str, Any]) -> None:
+    """追加一行门控决策 JSONL；目录 700、文件 600。"""
+
+    now = datetime.now(_GATE_LOG_TZ)
+    row = {"ts": now.isoformat(timespec="seconds"), "unix": round(time.time(), 3), **record}
+    line = json.dumps(row, ensure_ascii=False) + "\n"
+    path = _GATE_LOG_ROOT / f"{now:%Y-%m-%d}.jsonl"
+    with _GATE_LOG_LOCK:
+        _GATE_LOG_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(_GATE_LOG_ROOT, 0o700)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(), 0o600)
+            handle.write(line)
 
 
 @dataclass(frozen=True)
@@ -91,13 +127,90 @@ class DynamicReplyTurnGate:
 
         probability = estimate_reply_probability(self._build_likelihood_input(external_messages, now))
         gate_decision = self._gate.evaluate(probability, frequency, now)
-        if gate_decision.should_trigger:
+        # 内在状态的有界加性分量（合计 ±25 分 → ±0.25 概率），只作用于本次放行判定；
+        # 预计回复数仍按原始概率累计，避免状态模型扭曲频率反馈。
+        state_parts = self._state_components(external_messages)
+        state_total = sum(state_parts.values())
+        final_probability = min(1.0, max(0.0, probability + state_total / STATE_PROBABILITY_SCALE))
+        should_trigger = final_probability >= gate_decision.threshold
+        if should_trigger:
             self._gate.close_round()
-        decision_label = "进入Planner" if gate_decision.should_trigger else "等待更多消息"
-        return TurnGateResult(
-            decision="trigger" if gate_decision.should_trigger else "wait",
-            detail=f"动态门控: {gate_decision.detail} 判定={decision_label}",
+        decision_label = "进入Planner" if should_trigger else "等待更多消息"
+        state_detail = ",".join(f"{key}={value:+d}" for key, value in state_parts.items() if value)
+        self._record_decision(
+            external_messages=external_messages,
+            frequency=frequency,
+            gate_decision=gate_decision,
+            state_parts=state_parts,
+            final_probability=final_probability,
+            triggered=should_trigger,
         )
+        return TurnGateResult(
+            decision="trigger" if should_trigger else "wait",
+            detail=(
+                f"动态门控: {gate_decision.detail} 状态={state_total:+d}({state_detail or '无'}) "
+                f"合计概率={final_probability:.2f} 判定={decision_label}"
+            ),
+        )
+
+    def _state_components(self, external_messages: Sequence[SessionMessage]) -> Dict[str, int]:
+        """读取聊天流状态分量；任何异常都退化为空，不影响原有判定。"""
+
+        try:
+            return get_state_store().speak_components(
+                self._runtime.session_id,
+                user_ids=[str(message.message_info.user_info.user_id) for message in external_messages],
+                directed_at_us=any(message.is_at or message.is_mentioned for message in external_messages),
+            )
+        except Exception:  # noqa: BLE001 - 状态模型是辅助信号，失败不能阻断主链路
+            return {}
+
+    def _record_decision(
+        self,
+        *,
+        external_messages: Sequence[SessionMessage],
+        frequency: float,
+        gate_decision: DynamicGateDecision,
+        state_parts: Dict[str, int],
+        final_probability: float,
+        triggered: bool,
+    ) -> None:
+        """把本次门控的各分项与判定写入结构化日志（影子观测）。
+
+        判定已在调用前算完，这里只做记录：写日志失败只降级为告警，不影响返回值。
+        """
+
+        global _gate_log_failures
+        try:
+            runtime = self._runtime
+            chat_stream = runtime.chat_stream
+            record: Dict[str, Any] = {
+                "gate": "dynamic",
+                "session_id": runtime.session_id,
+                "chat_id": str(chat_stream.group_id or chat_stream.user_id or ""),
+                "is_group": bool(chat_stream.is_group_session),
+                "message_ids": [str(message.message_id) for message in external_messages],
+                "last_message_id": str(external_messages[-1].message_id) if external_messages else None,
+                "pending_count": len(external_messages),
+                "has_at": any(message.is_at for message in external_messages),
+                "has_mention": any(message.is_mentioned for message in external_messages),
+                "effective_frequency": round(float(frequency), 4),
+                "probability": round(gate_decision.probability, 4),
+                "threshold": round(gate_decision.threshold, 4),
+                "keep_ratio": round(gate_decision.keep_ratio, 4),
+                "expected_replies": round(gate_decision.expected_replies, 3),
+                "target_replies": round(gate_decision.target_replies, 3),
+                "actual_replies": gate_decision.actual_replies,
+                "state": dict(state_parts),
+                "state_total": sum(state_parts.values()),
+                "final_probability": round(final_probability, 4),
+                "triggered": triggered,
+            }
+            _append_gate_decision(record)
+        except Exception as exc:  # noqa: BLE001 - 观测日志失败不能影响门控主链路
+            _gate_log_failures += 1
+            if _gate_log_failures == 1 or _gate_log_failures % _GATE_LOG_WARN_EVERY == 0:
+                logger.warning(f"门控决策日志写入失败（累计 {_gate_log_failures} 次）: {exc!r}")
 
     def _filter_external_messages(self, pending_messages: Sequence[SessionMessage]) -> List[SessionMessage]:
         return [
