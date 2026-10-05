@@ -253,15 +253,15 @@ describe('Header', () => {
       '/focus'
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'a11y.closeMenu' }))
+    fireEvent.click(screen.getByRole('button', { name: '打开菜单' }))
     const sidebarModeButton = screen.getByRole('button', {
       name: 'header.switchSidebarToHover',
     })
     expect(sidebarModeButton.querySelector('svg')).toHaveClass('lucide-chevron-left', 'h-5', 'w-5')
     fireEvent.click(sidebarModeButton)
     fireEvent.click(screen.getByRole('button', { name: 'header.collapseTopbar' }))
-    fireEvent.click(screen.getByRole('button', { name: 'header.searchPlaceholder' }))
-    fireEvent.click(screen.getByRole('button', { name: 'header.viewDocs' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'header.searchPlaceholder' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'header.viewDocs' })[0])
     fireEvent.click(screen.getAllByRole('button', { name: 'header.switchToLight' })[0])
     fireEvent.click(screen.getAllByRole('button', { name: 'English' })[0])
     fireEvent.click(screen.getByRole('button', { name: 'header.logout' }))
@@ -271,7 +271,7 @@ describe('Header', () => {
     expect(props.onSidebarToggle).toHaveBeenCalledOnce()
     expect(props.onTopbarToggle).toHaveBeenCalledOnce()
     expect(props.onSearchOpenChange).toHaveBeenCalledWith(true)
-    expect(window.open).toHaveBeenCalledWith('https://docs.mai-mai.org', '_blank')
+    expect(window.open).toHaveBeenCalledWith('https://docs.mai-mai.org', '_blank', 'noopener,noreferrer')
     expect(mocks.toggleTheme).toHaveBeenCalledWith('light', props.onThemeChange, expect.anything())
     expect(mocks.changeLanguage).toHaveBeenCalledWith('en')
     expect(mocks.logout).toHaveBeenCalledOnce()
@@ -306,7 +306,7 @@ describe('Header', () => {
 
     expect(container.querySelector('[data-dashboard-header-collapsed="true"]')).toBeInTheDocument()
     expect(screen.queryByTestId('background-header')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'header.searchPlaceholder' })).toHaveClass('hidden')
+    expect(screen.getAllByRole('button', { name: 'header.searchPlaceholder' })[0]).toHaveClass('hidden')
 
     expect(screen.queryByRole('button', { name: 'header.expandSidebar' })).not.toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('button', { name: 'header.expandTopbar' })[0])
@@ -407,7 +407,7 @@ describe('Header', () => {
     const props = makeProps({ workspaceMode: 'logs', sidebarOpen: true })
     render(<Header {...props} />)
 
-    expect(screen.getByRole('button', { name: 'a11y.closeMenu' })).toHaveClass('hidden')
+    expect(screen.getByRole('button', { name: '打开菜单' })).toHaveClass('hidden')
     expect(screen.getByRole('button', { name: 'header.switchSidebarToHover' })).toHaveClass(
       'lg:hidden'
     )
@@ -433,7 +433,7 @@ describe('Header', () => {
     const props = makeProps({ searchOpen: true })
     render(<Header {...props} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'header.searchPlaceholder' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'header.searchPlaceholder' })[0])
     expect(props.onSearchOpenChange).toHaveBeenCalledWith(false)
     expect(await screen.findByText('header.notConnected')).toBeInTheDocument()
   })
@@ -506,7 +506,7 @@ describe('Header', () => {
     render(<Header {...props} />)
 
     const chatLink = screen.getByRole('link', { name: 'workspace.chat' })
-    const searchButton = screen.getByRole('button', { name: 'header.searchPlaceholder' })
+    const searchButton = screen.getAllByRole('button', { name: 'header.searchPlaceholder' })[0]
 
     fireEvent.pointerEnter(chatLink)
     fireEvent.pointerEnter(searchButton)

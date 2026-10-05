@@ -68,7 +68,7 @@ const DialogContent = React.forwardRef<
         ref={ref}
         data-dashboard-dialog-content="true"
         className={cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] fixed top-[50%] left-[50%] z-50 flex max-h-[calc(100vh-2rem)] w-[min(calc(100vw-2rem),var(--dialog-width,32rem))] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-hidden border p-6 shadow-lg duration-200 sm:rounded-lg',
+          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] fixed top-[50%] left-[50%] z-50 flex max-h-[calc(100dvh-2rem)] w-[min(calc(100vw-2rem),var(--dialog-width,32rem))] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-hidden border p-4 sm:p-6 shadow-lg duration-200 sm:rounded-lg',
           className
         )}
         onPointerDownOutside={preventOutsideClose ? (e) => e.preventDefault() : undefined}
@@ -80,13 +80,15 @@ const DialogContent = React.forwardRef<
             event.defaultPrevented ||
             !matchesShortcut(event, ['enter']) ||
             event.nativeEvent.isComposing ||
-            isEditableTarget(event.target)
+            isEditableTarget(event.target) ||
+            (event.target instanceof Element &&
+              !!event.target.closest('button, a[href], [role="button"], [role="combobox"], [role="tab"], [role="checkbox"], [role="switch"], [role="menuitem"]'))
           ) {
             return
           }
 
           const confirmButton = event.currentTarget.querySelector<HTMLElement>(
-            '[data-dialog-action="confirm"]:not([disabled])'
+            '[data-dialog-action="confirm"]:not([disabled]):not([aria-disabled="true"]):not([aria-busy="true"])'
           )
           if (!confirmButton) {
             return
@@ -99,7 +101,7 @@ const DialogContent = React.forwardRef<
       >
         {children}
         {!hideCloseButton && (
-          <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none">
+          <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-2 right-2 flex h-9 w-9 items-center justify-center rounded-sm sm:top-3 sm:right-3 opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none">
             <X className="h-4 w-4" />
             <span className="sr-only">关闭</span>
           </DialogPrimitive.Close>
@@ -143,13 +145,13 @@ const DialogBody = React.forwardRef<HTMLDivElement, DialogBodyProps>(
 DialogBody.displayName = 'DialogBody'
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)} {...props} />
+  <div className={cn('flex shrink-0 min-w-0 flex-col space-y-1.5 pr-8 text-center sm:text-left', className)} {...props} />
 )
 DialogHeader.displayName = 'DialogHeader'
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2', className)}
+    className={cn('flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end', className)}
     {...props}
   />
 )
@@ -161,7 +163,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-lg leading-none font-semibold tracking-tight', className)}
+    className={cn('[overflow-wrap:anywhere] text-lg leading-snug font-semibold tracking-tight', className)}
     {...props}
   />
 ))
@@ -173,7 +175,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn('text-muted-foreground text-sm', className)}
+    className={cn('text-muted-foreground [overflow-wrap:anywhere] text-sm', className)}
     {...props}
   />
 ))

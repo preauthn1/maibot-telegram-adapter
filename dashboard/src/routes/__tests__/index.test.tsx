@@ -17,6 +17,8 @@ import { UPDATE_NOTICE_OPEN_EVENT, type UpdateNoticeTarget } from '@/lib/update-
 import { APP_VERSION } from '@/lib/version'
 
 const originalRandomUUID = globalThis.crypto.randomUUID
+// 主服务控制组件有独立的 QueryClient 集成测试，此处只验证首页领域数据与交互。
+vi.mock('@/components/service-controls', () => ({ ServiceControls: () => null }))
 
 // 模块级仪表盘/状态/缓存 TTL 跨用例存活；resetModules 后需复用同一批 mock。
 const mocks = vi.hoisted(() => ({
@@ -243,6 +245,10 @@ function stubBackendGet(options?: {
       const value = options?.bot ?? botStatus
       return typeof value === 'function' ? value() : Promise.resolve(value)
     }
+    if (path.includes('/system/service')) {
+      const running = (options?.bot as { running?: boolean } | undefined)?.running !== false
+      return Promise.resolve({ ActiveState: running ? 'active' : 'inactive', SubState: running ? 'running' : 'dead', MainPID: running ? '123' : '0' })
+    }
     if (path.includes('/config/bot')) {
       const value = options?.platform ?? { config: { bot: { qq_account: '123456' } } }
       return typeof value === 'function' ? value() : Promise.resolve(value)
@@ -326,6 +332,7 @@ const richLocalCacheStats = {
 beforeEach(() => {
   vi.mocked(backendApi.get).mockImplementation((path: string) => {
     if (path.includes('/system/status')) return Promise.resolve(botStatus) as never
+    if (path.includes('/system/service')) return Promise.resolve({ ActiveState: 'active', SubState: 'running', MainPID: '123' }) as never
     if (path.includes('/statistics/dashboard')) return Promise.resolve(dashboardData) as never
     if (path.includes('/config/bot')) {
       return Promise.resolve({ config: { bot: { qq_account: '123456' } } }) as never
@@ -419,9 +426,8 @@ describe('IndexPage 特征化', () => {
       'data-state',
       'running'
     )
-    const runtimeUptime = screen.getByText('home.botStatus.uptime')
-    expect(runtimeUptime).toHaveAttribute('data-maibot-runtime-uptime', 'true')
-    expect(runtimeUptime).toHaveClass('text-xs', 'text-left', 'tabular-nums', 'whitespace-nowrap')
+    expect(screen.queryByText('home.botStatus.uptime')).not.toBeInTheDocument()
+    expect(screen.getByText('依据 maibot.service 状态；主服务运行时长暂不可用。')).toBeInTheDocument()
     expect(runtimeLabel).toHaveClass('whitespace-nowrap')
     expect(runtimeLabel.parentElement).toHaveClass('flex-col', 'items-start')
     expect(screen.queryByText('home.botStatus.uptimeLabel')).not.toBeInTheDocument()
@@ -581,6 +587,9 @@ describe('IndexPage 特征化', () => {
         expect.objectContaining({ query: { hours: 168 } })
       )
     )
+    expect(vi.mocked(backendApi.get).mock.calls.filter(([path]) => path === '/api/webui/system/status')).toHaveLength(1)
+    expect(expressionApi.getReviewStats).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('v1.hitokoto.cn'))).toHaveLength(1)
   })
 
   it('统计卡片隐藏描述并分别显示全部与聊天缓存命中率', async () => {

@@ -89,6 +89,40 @@ describe('LogoArea 与 Sidebar', () => {
     vi.useRealTimers()
   })
 
+  it('移动抽屉隔离隐藏导航、循环焦点、Escape 关闭并恢复打开控件', () => {
+    const trigger = document.createElement('button')
+    document.body.appendChild(trigger)
+    trigger.focus()
+    const close = vi.fn()
+    const { rerender, container } = render(<Sidebar mobile sidebarOpen={false} mobileMenuOpen={false} onMobileMenuClose={close} onSidebarFix={vi.fn()} />)
+    expect(container.querySelector('aside')).toHaveAttribute('inert')
+    rerender(<Sidebar mobile sidebarOpen={false} mobileMenuOpen onMobileMenuClose={close} onSidebarFix={vi.fn()} />)
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    const first = screen.getByRole('button', { name: 'a11y.closeMenu' })
+    const last = screen.getByRole('button', { name: '表情包' })
+    expect(first).toHaveFocus()
+    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true })
+    expect(last).toHaveFocus()
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(first).toHaveFocus()
+    fireEvent.keyDown(first, { key: 'Escape' })
+    expect(close).toHaveBeenCalledOnce()
+    rerender(<Sidebar mobile sidebarOpen={false} mobileMenuOpen={false} onMobileMenuClose={close} onSidebarFix={vi.fn()} />)
+    expect(trigger).toHaveFocus()
+    trigger.remove()
+  })
+
+  it('键盘焦点展开悬浮侧栏并允许固定，离开侧栏后恢复折叠', () => {
+    render(<Sidebar sidebarOpen={false} mobileMenuOpen={false} onMobileMenuClose={vi.fn()} onSidebarFix={vi.fn()} />)
+    const item = screen.getByRole('button', { name: '记忆' })
+    act(() => item.focus())
+    expect(item).toHaveAttribute('data-sidebar-open', 'true')
+    expect(screen.getByRole('button', { name: 'header.switchSidebarToFixed' })).toBeInTheDocument()
+    fireEvent.blur(item, { relatedTarget: document.body })
+    expect(item).toHaveAttribute('data-sidebar-open', 'false')
+  })
+
   it('展开 Logo 时展示品牌标题和光谱彩条，折叠时展示光谱彩块', () => {
     const { rerender } = render(<LogoArea sidebarOpen />)
 

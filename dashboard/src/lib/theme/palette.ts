@@ -201,7 +201,7 @@ export const generatePalette = (accentHSL: string, isDark: boolean): ColorTokens
   const border = formatHSL(accent.h, clamp(accent.s * 0.2, 5, 25), isDark ? 17.5 : 91.4)
 
   const mutedForeground = setSaturation(
-    setLightness(muted, isDark ? 65.1 : 46.9),
+    setLightness(muted, isDark ? 72 : 40),
     clamp(accent.s * 0.2, 10, 30)
   )
 
