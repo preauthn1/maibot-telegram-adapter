@@ -1296,14 +1296,15 @@ class MetadataEpisodeMixin:
             )
             params.extend([like_person, like_person])
 
+        # 半开区间相交 [time_from, time_to)，与段落时序检索同一口径（审计 F06）。
         if time_from is not None and time_to is not None:
-            conditions.append(f"({effective_end} >= ? AND {effective_start} <= ?)")
-            params.extend([float(time_from), float(time_to)])
+            conditions.append(f"(({effective_end} > ? OR {effective_start} >= ?) AND {effective_start} < ?)")
+            params.extend([float(time_from), float(time_from), float(time_to)])
         elif time_from is not None:
-            conditions.append(f"({effective_end} >= ?)")
-            params.append(float(time_from))
+            conditions.append(f"({effective_end} > ? OR {effective_start} >= ?)")
+            params.extend([float(time_from), float(time_from)])
         elif time_to is not None:
-            conditions.append(f"({effective_start} <= ?)")
+            conditions.append(f"({effective_start} < ?)")
             params.append(float(time_to))
 
         return source_expr, effective_start, effective_end, conditions, params

@@ -10,7 +10,7 @@ from src.config.config import global_config
 from src.core.tooling import ToolExecutionContext, ToolExecutionResult, ToolInvocation, ToolSpec
 from src.maisaka.utils.tool_post_execution import with_memory_feedback_task
 from src.person_info.person_info import resolve_person_id_for_memory
-from src.services.memory_service import MemorySearchResult, memory_service
+from src.services.memory_service import MemorySearchResult, format_memory_time_label, memory_service
 
 from .context import BuiltinToolRuntimeContext
 
@@ -54,11 +54,11 @@ def get_tool_spec(*, enabled: bool = True) -> ToolSpec:
                 },
                 "time_start": {
                     "type": "string",
-                    "description": "起始时间，仅接受YYYY/MM/DD或YYYY/MM/DD HH:mm。",
+                    "description": "起始时间，按北京时间（UTC+8）解释；格式 YYYY-MM-DD、YYYY-MM-DD HH:mm 或 YYYY-MM-DD HH:mm:ss（也接受 / 分隔）；只写日期的结束时间包含当天全天；结束时间本身不含（带时分时）。",
                 },
                 "time_end": {
                     "type": "string",
-                    "description": "结束时间，仅接受YYYY/MM/DD或YYYY/MM/DD HH:mm。",
+                    "description": "结束时间，按北京时间（UTC+8）解释；格式 YYYY-MM-DD、YYYY-MM-DD HH:mm 或 YYYY-MM-DD HH:mm:ss（也接受 / 分隔）；只写日期的结束时间包含当天全天；结束时间本身不含（带时分时）。",
                 },
                 "respect_filter": {
                     "type": "boolean",
@@ -177,6 +177,10 @@ def _build_replyer_memory_reference(structured_content: Dict[str, Any]) -> str:
         label = f"（{' / '.join(label_parts)}）" if label_parts else ""
         # 记忆正文可能包含代码缩进、分段条件和否定，不能压平或strip。
         hit_lines.append(f"{index}. {label}{content}")
+        # 单独一行标注事件/入库时间（北京时间），区分事件发生与入库（审计 F11）。
+        time_label = format_memory_time_label(raw_hit.get("metadata"))
+        if time_label:
+            hit_lines.append(f"   时间：{time_label}")
 
     if not hit_lines:
         return ""
