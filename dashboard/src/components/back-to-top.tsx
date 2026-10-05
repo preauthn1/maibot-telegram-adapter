@@ -37,7 +37,12 @@ export function BackToTop() {
 
   useEffect(() => {
     const handleScroll = (e: Event) => {
-      const target = e.target as HTMLElement
+      const target = e.target === document ? document.scrollingElement : e.target
+      if (!(target instanceof HTMLElement)) return
+      // 侧栏、对话框和嵌套列表滚动不能劫持主内容的返回顶部操作。
+      const main = document.getElementById('main-content')
+      if (main && target !== main && target !== document.scrollingElement) return
+      if (!main && target.closest('[data-dashboard-sidebar], [role="dialog"]')) return
       
       // 简单的启发式：如果是主要滚动容器（通常高度较大）
       // 我们假设页面中主要的滚动区域是高度最大的那个，或者就是当前触发滚动的这个
@@ -86,7 +91,7 @@ export function BackToTop() {
   }, [dragOffsetY])
 
   const scrollToTop = () => {
-    scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    scrollerRef.current?.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
 
   const bindDrag = useDrag(
@@ -164,15 +169,18 @@ export function BackToTop() {
   return (
     <div 
       className={cn(
-        "fixed right-6 bottom-24 z-50 transition-[transform,opacity] ease-in-out",
+        "fixed right-6 bottom-24 z-50 transition-[transform,opacity] ease-in-out motion-reduce:transition-none",
         dragging ? "duration-75" : "duration-500",
         visible ? "opacity-100" : "pointer-events-none opacity-0"
       )}
       style={wrapperStyle}
+      aria-hidden={!visible}
     >
       <Button
         {...bindDrag()}
         ref={buttonRef}
+        tabIndex={visible ? 0 : -1}
+        aria-hidden={!visible}
         variant="outline"
         size="icon"
         data-dashboard-back-to-top="true"
@@ -180,10 +188,13 @@ export function BackToTop() {
           "relative h-10 w-10 rounded-full shadow-xl",
           "bg-background/80 backdrop-blur-md border-border/50",
           "hover:bg-accent hover:scale-105 hover:shadow-2xl hover:border-primary/50",
-          "touch-none transition-all duration-300",
+          "touch-none transition-all duration-300 motion-reduce:transition-none",
           dragging ? "cursor-grabbing" : "cursor-grab",
           "group"
         )}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') suppressClickRef.current = false
+        }}
         onClick={handleClick}
         aria-label="回到顶部"
       >
@@ -191,6 +202,7 @@ export function BackToTop() {
         <svg
           data-dashboard-back-to-top-progress="circle"
           className="absolute inset-0 h-full! w-full! -rotate-90 transform p-1"
+          aria-hidden="true"
           viewBox="0 0 44 44"
         >
           <circle

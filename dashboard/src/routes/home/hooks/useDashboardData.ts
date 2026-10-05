@@ -14,6 +14,23 @@ const DASHBOARD_DATA_CACHE_TTL = 5 * 60_000
 
 // 按 hours 维度的模块级缓存（跨组件实例存活，支持 stale-while-revalidate）。
 const dashboardDataCache = new Map<number, { timestamp: number; data: DashboardData }>()
+// 同一范围的并行调用共享请求，包括 StrictMode 的挂载重放；失败不缓存。
+const pendingDashboardRequests = new Map<number, Promise<DashboardData>>()
+
+function requestDashboardData(hours: number): Promise<DashboardData> {
+  const pending = pendingDashboardRequests.get(hours)
+  if (pending) return pending
+  const request = backendApi.get<DashboardData>('/api/webui/statistics/dashboard', {
+    query: { hours },
+  }).then((data) => {
+    dashboardDataCache.set(hours, { timestamp: Date.now(), data })
+    return data
+  }).finally(() => {
+    pendingDashboardRequests.delete(hours)
+  })
+  pendingDashboardRequests.set(hours, request)
+  return request
+}
 
 function getCachedDashboardData(hours: number): DashboardData | null {
   const cached = dashboardDataCache.get(hours)
@@ -87,9 +104,7 @@ export function useDashboardData() {
           setLoading(true)
         }
 
-        const data = await backendApi.get<DashboardData>('/api/webui/statistics/dashboard', {
-          query: { hours: requestedTimeRange },
-        })
+        const data = await requestDashboardData(requestedTimeRange)
         if (!isMountedRef.current || requestId !== latestRequestIdRef.current) {
           return
         }

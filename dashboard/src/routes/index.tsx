@@ -123,6 +123,7 @@ function BotStatusFlipCard({
   botRuntimeState,
   memoryEnabled,
   onlineData,
+  statusDetail,
   uptime,
   visualEnabled,
 }: {
@@ -130,6 +131,7 @@ function BotStatusFlipCard({
   botRuntimeState: BotRuntimeState
   memoryEnabled: boolean
   onlineData: TimeSeriesData[]
+  statusDetail: string
   uptime: string | null
   visualEnabled: boolean
 }) {
@@ -169,6 +171,7 @@ function BotStatusFlipCard({
         <motion.div
           data-maibot-status-face="front"
           aria-hidden={isFlipped}
+          inert={isFlipped}
           className={faceClassName}
           animate={{ opacity: prefersReducedMotion && isFlipped ? 0 : 1 }}
           transition={{ duration: prefersReducedMotion ? 0.12 : 0 }}
@@ -201,6 +204,9 @@ function BotStatusFlipCard({
                     >
                       {botRuntimeLabel}
                     </div>
+                    <p data-maibot-status-source="true" className="text-muted-foreground text-xs leading-relaxed break-words">
+                      {statusDetail}
+                    </p>
                     {uptime && (
                       <div
                         data-maibot-runtime-uptime="true"
@@ -236,6 +242,7 @@ function BotStatusFlipCard({
         <motion.div
           data-maibot-status-face="back"
           aria-hidden={!isFlipped}
+          inert={!isFlipped}
           className={faceClassName}
           style={{ transform: prefersReducedMotion ? 'none' : 'rotateY(180deg)' }}
           animate={{ opacity: prefersReducedMotion && !isFlipped ? 0 : 1 }}
@@ -395,10 +402,14 @@ function IndexPageContent() {
     onOpenReviewer: openReviewer,
   })
 
-  // 初始加载各数据源
+  // 统计范围变化只刷新统计，不重跑一言、运行状态和配置读取。
+  useEffect(() => {
+    void fetchDashboardData()
+  }, [fetchDashboardData])
+
+  // 初始加载其他数据源
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- 挂载时拉取仪表盘各数据源 */
-    fetchDashboardData()
     fetchHitokoto()
     fetchBotStatus(true)
     fetchFeatureStatus()
@@ -406,7 +417,6 @@ function IndexPageContent() {
     fetchReviewStats()
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [
-    fetchDashboardData,
     fetchHitokoto,
     fetchBotStatus,
     fetchFeatureStatus,
@@ -479,7 +489,7 @@ function IndexPageContent() {
       ? 'loading'
       : botStatus?.running === true
         ? 'running'
-        : botStatus
+        : botStatus?.running === false
           ? 'stopped'
           : 'unknown'
   const botRuntimeLabel = t(`home.botStatus.${botRuntimeState}`)
@@ -529,8 +539,13 @@ function IndexPageContent() {
           botRuntimeState={botRuntimeState}
           memoryEnabled={featureStatus.memoryEnabled}
           onlineData={dashboardData.hourly_data}
+          statusDetail={botStatus?.running === null || !botStatus
+            ? '主服务状态不可用；控制面板在线不代表麦麦在线。'
+            : '依据 maibot.service 状态；主服务运行时长暂不可用。'}
           uptime={
-            botStatus ? t('home.botStatus.uptime', { time: formatTime(botStatus.uptime) }) : null
+            botStatus?.running && botStatus.uptime !== null
+              ? t('home.botStatus.uptime', { time: formatTime(botStatus.uptime) })
+              : null
           }
           visualEnabled={featureStatus.visualEnabled}
         />
@@ -941,7 +956,7 @@ function IndexPageContent() {
         <div
           data-home-command-strip="true"
           className={cn(
-            'text-primary flex flex-wrap items-center gap-x-7 gap-y-2 font-sans font-black tracking-[0.12em] uppercase',
+            'text-foreground flex flex-wrap items-center gap-x-7 gap-y-2 font-sans font-black tracking-[0.12em] uppercase',
             versionsMismatch && 'text-amber-600 dark:text-amber-400'
           )}
         >

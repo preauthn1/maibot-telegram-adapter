@@ -382,6 +382,18 @@ async function enterDetailMode(
 }
 
 describe('BotConfigPage 特征化', () => {
+  it('加载失败不会显示空配置或已保存，重试后恢复真实配置', async () => {
+    vi.mocked(configApi.getBotConfigCached).mockRejectedValueOnce(new Error('配置服务不可用'))
+    const user = userEvent.setup()
+    render(<BotConfigPage />)
+    expect(await screen.findByText('配置加载失败')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('配置服务不可用')
+    expect(screen.queryByTestId('core-settings')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '已保存' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '重新加载配置' }))
+    expect(await screen.findByTestId('core-settings')).toBeInTheDocument()
+    expect(configApi.getBotConfigCached).toHaveBeenCalledTimes(2)
+  })
   it('初始加载调用 getBotConfigCached + getBotConfigSchema，核心设置展示分节数据', async () => {
     await renderBotPage()
     expect(configApi.getBotConfigCached).toHaveBeenCalledTimes(1)

@@ -6,7 +6,9 @@ const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-  <div data-dashboard-table-wrapper="true" className="relative w-full overflow-auto">
+  // 横向溢出的表格需要键盘滚动；这是滚动容器而非可点击控件。
+  // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+  <div data-dashboard-table-wrapper="true" tabIndex={0} className="relative min-w-0 w-full overflow-auto overscroll-x-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
     <table
       ref={ref}
       data-dashboard-table="true"
@@ -82,6 +84,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     data-dashboard-table-head="true"
+    scope="col"
     className={cn(
       "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className
@@ -99,7 +102,7 @@ const TableCell = React.forwardRef<
     ref={ref}
     data-dashboard-table-cell="true"
     className={cn(
-      "px-4 py-3 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "[overflow-wrap:anywhere] px-4 py-3 align-middle [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className
     )}
     {...props}

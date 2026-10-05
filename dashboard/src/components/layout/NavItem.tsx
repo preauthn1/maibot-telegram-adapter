@@ -26,6 +26,7 @@ export function NavItem({
     <>
       <div className={cn('flex min-w-0 items-center', sidebarOpen ? 'gap-3' : 'gap-3 lg:gap-0')}>
         <Icon
+          aria-hidden="true"
           data-dashboard-nav-icon="true"
           className={cn('h-5 w-5 flex-shrink-0', isActive && 'text-primary')}
           size={20}
@@ -48,7 +49,7 @@ export function NavItem({
 
   const linkClassName = cn(
     'relative flex h-[var(--layout-sidebar-nav-item-height)] items-center rounded-lg px-[var(--layout-sidebar-nav-item-padding-x)] py-0 transition-colors duration-150',
-    'hover:bg-accent hover:text-accent-foreground',
+    'hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none',
     isActive ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
     sidebarOpen &&
       'lg:pl-[calc(var(--layout-sidebar-nav-icon-left)-var(--layout-sidebar-nav-padding-collapsed))]',
@@ -56,6 +57,9 @@ export function NavItem({
       'lg:w-[var(--layout-sidebar-nav-item-collapsed-width)] lg:justify-center lg:px-0'
   )
   const commonLinkProps = {
+    'aria-label': label,
+    'aria-current': isActive ? 'page' : undefined,
+    'title': label,
     'data-tour': item.tourId,
     'data-dashboard-nav-item': 'true',
     'data-active': isActive ? 'true' : 'false',

@@ -55,6 +55,29 @@ afterEach(() => {
 })
 
 describe('useDashboardData', () => {
+  it('同一范围的并发请求去重，两个消费者都获得真实返回值', async () => {
+    const pending = createDeferred<DashboardData>()
+    backendGetMock.mockReturnValueOnce(pending.promise)
+    const first = renderHook(() => useDashboardData())
+    const second = renderHook(() => useDashboardData())
+    act(() => {
+      first.result.current.setTimeRange(404)
+      second.result.current.setTimeRange(404)
+    })
+    let requests: Promise<void>[] = []
+    act(() => {
+      requests = [first.result.current.fetchDashboardData(true), second.result.current.fetchDashboardData(true)]
+    })
+    expect(backendGetMock).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      pending.resolve(createDashboardData(404))
+      await Promise.all(requests)
+    })
+    expect(first.result.current.dashboardData?.summary.total_requests).toBe(404)
+    expect(second.result.current.dashboardData?.summary.total_requests).toBe(404)
+    first.unmount()
+    second.unmount()
+  })
   it('较早时间范围的响应不会覆盖当前范围', async () => {
     const olderRequest = createDeferred<DashboardData>()
     const currentRequest = createDeferred<DashboardData>()

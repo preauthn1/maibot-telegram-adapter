@@ -45,6 +45,10 @@ export function useAutoSave(
   options: UseAutoSaveOptions = {}
 ): UseAutoSaveReturn {
   const { debounceMs = 2000, onSaveSuccess, onSaveError } = options
+  const callbacksRef = useRef({ onSaveSuccess, onSaveError })
+  useEffect(() => {
+    callbacksRef.current = { onSaveSuccess, onSaveError }
+  }, [onSaveSuccess, onSaveError])
   const sectionStatesRef = useRef(new Map<string, SectionSaveState>())
   const activeSaveCountRef = useRef(0)
   const isMountedRef = useRef(true)
@@ -93,13 +97,13 @@ export function useAutoSave(
           sectionState.savedRevision = Math.max(sectionState.savedRevision, revision)
           if (isMountedRef.current) {
             updateUnsavedState()
-            onSaveSuccess?.()
+            callbacksRef.current.onSaveSuccess?.()
           }
         } catch (error) {
           console.error(`自动保存 ${sectionName} 失败:`, error)
           if (isMountedRef.current) {
             updateUnsavedState()
-            onSaveError?.(error instanceof Error ? error : new Error(String(error)))
+            callbacksRef.current.onSaveError?.(error instanceof Error ? error : new Error(String(error)))
           }
         } finally {
           activeSaveCountRef.current -= 1
@@ -112,7 +116,7 @@ export function useAutoSave(
       sectionState.saveChain = savePromise
       return savePromise
     },
-    [getSectionState, onSaveError, onSaveSuccess, setAutoSaving, updateUnsavedState]
+    [getSectionState, setAutoSaving, updateUnsavedState]
   )
 
   // 每个配置分区独立防抖，一个分区的编辑不会取消其他分区的保存。

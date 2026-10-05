@@ -2,6 +2,41 @@
 @source './**/*.{js,ts,jsx,tsx}';
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* 共享 UI 的输入与交互边界：不覆盖页面布局或主题配色。 */
+[data-dashboard-input='true'],
+[data-dashboard-textarea='true'] {
+  caret-color: hsl(var(--primary));
+}
+
+/* 主题的边框 shorthand 带 !important，错误状态必须在相同层级显式胜出。 */
+:root [data-dashboard-input='true'][aria-invalid='true'],
+:root [data-dashboard-textarea='true'][aria-invalid='true'],
+:root [data-dashboard-select-trigger='true'][aria-invalid='true'] {
+  border-color: hsl(var(--destructive)) !important;
+}
+
+@media (pointer: coarse) {
+  [data-dashboard-button='true'],
+  [data-dashboard-select-trigger='true'],
+  [data-dashboard-input='true'],
+  [data-dashboard-select-item='true'] {
+    min-height: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-dashboard-dialog-content='true'][data-state],
+  [data-dashboard-select-content='true'][data-state] {
+    animation: none;
+  }
+
+  [data-dashboard-tabs-trigger='true'],
+  [data-dashboard-button='true'] {
+    transition-duration: 0.01ms;
+  }
+}
+
+
 @theme inline {
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
