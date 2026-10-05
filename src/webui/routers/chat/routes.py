@@ -29,6 +29,7 @@ from src.common.database.database_model import (
     ToolRecord,
 )
 from src.common.logger import get_logger
+from src.common.utils.prompt_time import prompt_now
 from src.common.utils.utils_config import (
     BehaviorConfigUtils,
     ChatConfigUtils,
@@ -490,8 +491,9 @@ def _get_talk_rule_details(chat_session: ChatSession) -> Dict[str, Any]:
     reply_timing_config = global_config.chat.reply_timing
     base_value = float(reply_timing_config.talk_value if is_group_chat else reply_timing_config.private_talk_value)
     effective_value = float(ChatConfigUtils.get_talk_value(session_id, is_group_chat=is_group_chat))
-    local_time = datetime.now().strftime("%H:%M")
-    current_time = datetime.now().time()
+    # 与 ChatConfigUtils.get_talk_value 一致，按北京时间（UTC+8）判断时段
+    current_time = prompt_now()
+    local_time = current_time.strftime("%H:%M")
     now_min = current_time.hour * 60 + current_time.minute
     rules = [
         rule_detail

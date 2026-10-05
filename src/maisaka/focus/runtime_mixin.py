@@ -15,6 +15,7 @@ from src.chat.message_receive.message import SessionMessage
 from src.common.data_models.mai_message_data_model import MessageInfo
 from src.common.data_models.message_component_data_model import MessageSequence, TextComponent
 from src.common.logger import get_logger
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.config.config import global_config
 
 from src.maisaka.context.messages import (
@@ -524,7 +525,8 @@ class MaisakaFocusRuntimeMixin:
     def _format_focus_datetime(value: Optional[datetime]) -> str:
         if value is None:
             return "未阅读"
-        return value.isoformat(timespec="seconds")
+        # 写给模型看的时间统一换算为北京时间（UTC+8）
+        return format_prompt_datetime(value)
 
     @staticmethod
     def _format_focus_latest_messages(messages: Sequence[SessionMessage], max_length: int = 160) -> list[str]:
@@ -546,7 +548,7 @@ class MaisakaFocusRuntimeMixin:
         text = " ".join(text.split())
         if len(text) > max_length:
             text = f"{text[:max_length]}..."
-        return f"{message.timestamp.isoformat(timespec='seconds')} {speaker_name}: {text}"
+        return f"{format_prompt_datetime(message.timestamp)} {speaker_name}: {text}"
 
     def _get_focus_switch_new_messages(self, *, limit: int = FOCUS_SWITCH_NEW_MESSAGE_LIMIT) -> list[SessionMessage]:
         """Return pending new messages shown automatically after switch_chat."""
@@ -627,7 +629,8 @@ class MaisakaFocusRuntimeMixin:
             "messages": [
                 {
                     "message_id": message.message_id,
-                    "timestamp": message.timestamp.isoformat(timespec="seconds"),
+                    # 结构化字段保留带时区偏移的 ISO 时间，供机器解析
+                    "timestamp": message.timestamp.astimezone().isoformat(timespec="seconds"),
                     "user_id": message.message_info.user_info.user_id,
                     "user_name": (
                         message.message_info.user_info.user_cardname
