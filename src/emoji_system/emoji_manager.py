@@ -20,6 +20,7 @@ from src.common.database.database_model import Images, ImageType
 from src.common.logger import get_logger
 from src.common.utils.image_path import resolve_stored_image_path, serialize_stored_image_path
 from src.common.utils.utils_image import ImageUtils
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.config.config import config_manager, global_config
 from src.plugin_runtime.hook_schema_utils import build_object_schema
 from src.plugin_runtime.host.hook_spec_registry import HookSpec, HookSpecRegistry
@@ -900,7 +901,7 @@ class EmojiManager:
         )
         emoji_info_list: list[str] = []
         for i, emoji in enumerate(selected_emojis):
-            time_str = emoji.register_time.strftime("%Y-%m-%d %H:%M:%S") if emoji.register_time else "未知时间"
+            time_str = format_prompt_datetime(emoji.register_time) if emoji.register_time else "未知时间"
             emoji_info = (
                 f"编号: {i + 1}\n描述: {emoji.description}\n使用次数: {emoji.query_count}\n添加时间: {time_str}\n"
             )

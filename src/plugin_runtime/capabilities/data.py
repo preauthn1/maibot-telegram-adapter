@@ -1341,19 +1341,20 @@ class RuntimeDataCapabilityMixin:
         try:
             days = self._normalize_statistics_days(args)
             bucket = self._normalize_statistics_bucket(args)
-            rows = self._statistics_exec_mappings(
-                f"""
-                SELECT {self._statistics_bucket_sql("COALESCE(start_timestamp, timestamp)", bucket)} AS bucket_label,
-                       SUM(duration_minutes) / 60.0 AS online_hours
-                FROM online_time
-                WHERE COALESCE(start_timestamp, timestamp) >= ?
-                GROUP BY bucket_label
-                ORDER BY bucket_label ASC
-                """,
-                (self._statistics_start_time_text(days),),
-            )
-            timestamps = [str(row["bucket_label"]) for row in rows]
-            values = [float(row["online_hours"] or 0) for row in rows]
+            from src.services.statistics_service import get_hourly_online_seconds
+
+            # 按真实在线区间裁剪、合并后拆到小时桶，避免 SUM(duration_minutes) 把跨窗口/重叠区间重复计入
+            end_time = datetime.now()
+            hourly_seconds = await get_hourly_online_seconds(end_time - timedelta(days=days), end_time)
+            bucket_seconds: Dict[str, float] = {}
+            for hour_key, seconds in hourly_seconds.items():
+                hour_start = datetime.strptime(hour_key, "%Y-%m-%dT%H:00:00")
+                bucket_format = "%Y-%m-%d %H:00:00" if bucket == "hour" else "%Y-%m-%d 00:00:00"
+                bucket_label = hour_start.strftime(bucket_format)
+                bucket_seconds[bucket_label] = bucket_seconds.get(bucket_label, 0.0) + float(seconds)
+            rows = sorted(bucket_seconds.items())
+            timestamps = [bucket_label for bucket_label, _ in rows]
+            values = [seconds / 3600.0 for _, seconds in rows]
             return {
                 "success": True,
                 "series": {

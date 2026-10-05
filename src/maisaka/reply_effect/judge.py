@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import datetime
 from typing import Any, Dict, Tuple
 
 import json
 
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.config.config import global_config
 
 from .models import (
@@ -224,6 +226,21 @@ def parse_judge_result(
     return primary, list(dict.fromkeys(secondary)), strategy_confidence, parsed
 
 
+
+def _format_prompt_time(value: Any) -> str:
+    """把快照中的 ISO 时间换算为北京时间（UTC+8）展示；无时区的 ISO 视为服务器本地时间。"""
+
+    if isinstance(value, datetime):
+        return format_prompt_datetime(value)
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return format_prompt_datetime(datetime.fromisoformat(text))
+    except ValueError:
+        return text
+
+
 def _format_context(context_snapshot: list[dict[str, Any]], target_message_id: str, max_chars: int) -> str:
     # 评分只需要真实聊天内容，不传入工具结果、内部推理、记忆和黑话注入等运行时信息。
     conversation_items = [
@@ -248,7 +265,7 @@ def _format_context(context_snapshot: list[dict[str, Any]], target_message_id: s
         speaker = "Bot" if source == "guided_reply" else display_name
         target_mark = "（触发当前 Bot 回复）" if str(item.get("message_id") or "") == target_message_id else ""
         line = (
-            f"- [{item.get('timestamp', '')}] {speaker}{target_mark}: "
+            f"- [{_format_prompt_time(item.get('timestamp'))}] {speaker}{target_mark}: "
             f"{normalize_text_for_prompt(str(item.get('text') or ''), 300)}"
         )
         if used + len(line) + 1 > max_chars:
@@ -263,7 +280,7 @@ def _candidate_prefixes(
     candidate_aliases: dict[str, str],
 ) -> list[str]:
     return [
-        f"- candidate_id={candidate_aliases[item.effect_id]} time={item.created_at} Bot: "
+        f"- candidate_id={candidate_aliases[item.effect_id]} time={_format_prompt_time(item.created_at)} Bot: "
         for item in candidate_records
     ]
 
@@ -316,7 +333,7 @@ def _followup_prefixes(
             confirmed_candidates = [candidate_aliases[effect_id] for effect_id in confirmed_effect_ids]
             metadata.append(f"已确认关联={confirmed_candidates}")
         metadata_text = f" ({'，'.join(metadata)})"
-        line_prefixes.append(f"- [{item.timestamp}] message_id={item.message_id} {display_name}{metadata_text}: ")
+        line_prefixes.append(f"- [{_format_prompt_time(item.timestamp)}] message_id={item.message_id} {display_name}{metadata_text}: ")
     return line_prefixes
 
 

@@ -1,8 +1,7 @@
 from typing import Any, Iterator, Optional
 
-import time
-
 from src.common.logger import get_logger
+from src.common.utils.prompt_time import prompt_now
 from src.config.config import global_config
 
 logger = get_logger("config_utils")
@@ -609,8 +608,9 @@ class ChatConfigUtils:
         ) or 0.0
         if not global_config.chat.reply_timing.enable_talk_value_rules or not global_config.chat.reply_timing.talk_value_rules:
             return result
-        local_time = time.localtime()
-        now_min = local_time.tm_hour * 60 + local_time.tm_min
+        # 发言时段按北京时间（UTC+8）匹配，与面向用户的时间一致
+        local_time = prompt_now()
+        now_min = local_time.hour * 60 + local_time.minute
 
         matched_rules = []
         for rule in global_config.chat.reply_timing.talk_value_rules:
