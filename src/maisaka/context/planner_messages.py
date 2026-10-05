@@ -13,6 +13,7 @@ from src.common.data_models.message_component_data_model import (
 )
 
 from src.maisaka.context.message_adapter import format_speaker_content
+from src.maisaka.context.message_id_alias import to_display_message_id
 from .messages import SessionBackedMessage
 
 
@@ -47,7 +48,7 @@ def build_planner_prefix(
 
     message_attrs: list[str] = []
     if include_message_id:
-        message_attrs.append(f'msg_id="{escape(message_id or "", quote=True)}"')
+        message_attrs.append(f'msg_id="{escape(to_display_message_id(message_id), quote=True)}"')
 
     if include_chat_id:
         normalized_chat_id = str(chat_id or "").strip()
@@ -82,7 +83,7 @@ def _format_quote_ids(quote_ids: Optional[Sequence[str]]) -> str:
     normalized_ids: list[str] = []
     seen: set[str] = set()
     for raw_quote_id in quote_ids:
-        quote_id = str(raw_quote_id or "").strip()
+        quote_id = to_display_message_id(raw_quote_id)
         if not quote_id or quote_id in seen:
             continue
         seen.add(quote_id)
