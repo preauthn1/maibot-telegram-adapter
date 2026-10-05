@@ -40,7 +40,14 @@ from src.common.logger import get_logger
 from src.common.utils.utils_message import MessageUtils
 from src.config.config import global_config
 from src.platform_io import DeliveryBatch, DriverKind, get_platform_io_manager
-from src.platform_io.delivery_content import CONTENT_KEY, HISTORY_BLOCK_KEY, select_text_content
+from src.platform_io.delivery_content import (
+    CONTENT_KEY,
+    HISTORY_BLOCK_KEY,
+    PARTIAL_KEY,
+    materialize_confirmed_segments,
+    select_segment_content,
+    select_text_content,
+)
 from src.platform_io.route_key_factory import RouteKeyFactory
 from src.plugin_runtime.hook_payloads import deserialize_session_message, serialize_session_message
 from src.plugin_runtime.hook_schema_utils import build_object_schema
@@ -701,16 +708,18 @@ async def _apply_successful_delivery_receipt(message: SessionMessage, delivery_b
         return
 
     # 先完成正文校验和原子物化，再写库/通知/同步历史。无效正文不改变发送成功。
-    state, texts = select_text_content(
-        [{"metadata": receipt.metadata, "external_message_id": receipt.external_message_id}
-         for receipt in delivery_batch.sent_receipts],
-        text_only=len(delivery_batch.receipts) == 1 and bool(message.raw_message.components) and any(
-            isinstance(component, TextComponent) for component in message.raw_message.components
-        ) and all(isinstance(component, (TextComponent, ReplyComponent, AtComponent))
-                  for component in message.raw_message.components),
-    )
+    receipt_views = [
+        {"metadata": receipt.metadata, "external_message_id": receipt.external_message_id}
+        for receipt in delivery_batch.sent_receipts
+    ]
+    text_only = len(delivery_batch.receipts) == 1 and bool(message.raw_message.components) and any(
+        isinstance(component, TextComponent) for component in message.raw_message.components
+    ) and all(isinstance(component, (TextComponent, ReplyComponent, AtComponent))
+              for component in message.raw_message.components)
+    state, texts = select_text_content(receipt_views, text_only=text_only)
     config = dict(message.message_info.additional_config or {})
     config.pop(HISTORY_BLOCK_KEY, None)
+    config.pop(PARTIAL_KEY, None)
     if state == "confirmed" and texts is not None:
         confirmed_text = "\n".join(texts)
         components: List[StandardMessageComponents] = [
@@ -723,6 +732,21 @@ async def _apply_successful_delivery_receipt(message: SessionMessage, delivery_b
     elif state == "invalid":
         config[HISTORY_BLOCK_KEY] = True
         logger.warning("[SendService] 已发送，但正文回执无效；不写库或历史，不触发重发")
+    elif not text_only and len(delivery_batch.receipts) == 1:
+        # 媒体/混合批次：只把已确认送达的组件写入库与历史，未送达部分不能算作已发出。
+        segment_state, segment_result = select_segment_content(
+            receipt_views, component_count=len(message.raw_message.components)
+        )
+        if segment_state == "confirmed" and segment_result is not None:
+            confirmed_indices, complete = segment_result
+            if not complete:
+                message.raw_message = materialize_confirmed_segments(message.raw_message, confirmed_indices)
+                message.processed_plain_text = _build_processed_plain_text(message)
+                config[PARTIAL_KEY] = True
+            config[CONTENT_KEY] = deepcopy(delivery_batch.sent_receipts[0].metadata[CONTENT_KEY])
+        elif segment_state == "invalid":
+            config[HISTORY_BLOCK_KEY] = True
+            logger.warning("[SendService] 已发送，但分段回执无效；不写库或历史，不触发重发")
     message.message_info.additional_config = config
 
     original_message_id = str(message.message_id or "").strip()
@@ -973,6 +997,11 @@ async def _send_via_platform_io(
         sent = bool(delivery_batch.has_success)
         if sent:
             await _apply_successful_delivery_receipt(message, delivery_batch)
+            if delivery_report is not None and (message.message_info.additional_config or {}).get(PARTIAL_KEY) is True:
+                # 部分送达：调用方不得补发或重放已送达组件。
+                delivery_report.update(
+                    outcome="partial", partial_delivery=True, reason="仅部分组件已送达", retryable=False
+                )
             await _dispatch_adapter_callbacks(delivery_batch)
         await _invoke_send_hook(
             "send_service.after_send",

@@ -370,7 +370,11 @@ class TelegramUserOutboundCodec:
         # 旧行为（真人不会每行都点回复）。
         anchor_target = reply_to if self._last_reply_is_quote else None
 
-        payloads = raw_message if isinstance(raw_message, list) else []
+        # 给每段打上原始下标：命令合并/碎片压缩后仍能回报哪些原始组件确认送达。
+        payloads = [
+            dict(seg, _orig_indices=[index]) if isinstance(seg, dict) else seg
+            for index, seg in enumerate(raw_message)
+        ]
 
         # 合并被上游拆散的命令段。
         #
@@ -412,7 +416,8 @@ class TelegramUserOutboundCodec:
         if stickers_enabled() and len(visible) == 1 and visible[0].get("type") == "text":
             candidate = visible[0].get("data")
             if self.stickers.select(candidate) is not None:
-                payloads = [{"type": "sticker", "data": candidate}]
+                payloads = [{"type": "sticker", "data": candidate,
+                             "_orig_indices": list(visible[0].get("_orig_indices") or [])}]
         elif len(visible) > 1:
             payloads = [s for s in payloads if s.get("type") not in {"emoji", "sticker"}]
         if not payloads:
@@ -431,6 +436,8 @@ class TelegramUserOutboundCodec:
         last_sent: Any = None
         errors: List[str] = []
         sent_any = False
+        # 已确认送达的原始组件下标；混合批次据此只记录真正发出的组件。
+        confirmed_indices: set = set()
         # 调用局部收集器：并发发送之间不能共享候选或结果。
         text_observations: List[Dict[str, Any]] = []
 
@@ -478,7 +485,7 @@ class TelegramUserOutboundCodec:
                     sent = await self._send_segment(
                         entity,
                         chat_id,
-                        seg,
+                        {key: value for key, value in seg.items() if key != "_orig_indices"},
                         current_reply,
                         explicit_target_message_id=explicit_target_message_id if not sent_any else None,
                         observations=text_observations,
@@ -494,6 +501,7 @@ class TelegramUserOutboundCodec:
                     continue
                 sent_any = True
                 last_sent = sent
+                confirmed_indices.update(seg.get("_orig_indices") or [])
                 # 每个成功发出的段都计入全局预算——真人看到的是"几条消息"，
                 # 而不是"一次回复"，所以按段计数才反映真实刷屏程度。
                 if not getattr(sent, "_fidelity_budget_recorded", False):
@@ -535,6 +543,19 @@ class TelegramUserOutboundCodec:
                 "scope": "text_only",
                 "complete": bool(parts) and all(part is not None for part in parts),
                 "parts": parts,
+            }
+        else:
+            # 媒体/混合批次：逐段失败或预算截断时只承诺已确认的原始组件，
+            # 宿主据此只写入已送达部分，且绝不重发已送达段。
+            required = {
+                index for index, seg in enumerate(raw_message)
+                if isinstance(seg, dict) and not self._is_local_only_segment(seg)
+            }
+            metadata["delivery_content"] = {
+                "version": 1,
+                "scope": "segments",
+                "complete": required <= confirmed_indices,
+                "confirmed_indices": sorted(confirmed_indices),
             }
         return {"success": True, "external_message_id": external_id or None,
                 "text_observations": text_observations, "metadata": metadata}
