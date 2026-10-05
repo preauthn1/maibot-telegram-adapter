@@ -272,7 +272,7 @@ function strategyName(value: string | undefined) {
 }
 
 const LEGACY_CONTEXT_MESSAGE_PATTERN =
-  /^(?:\d{2}:\d{2}:\d{2})?(?:\[msg_id:[^\]]+\])?\[([^\]]+)\]([\s\S]*)$/
+  /^(?:(?:\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}:\d{2})?(?:\[msg_id:[^\]]+\])?\[([^\]]+)\]([\s\S]*)$/
 
 function getContextMessagePresentation(message: ContextMessage) {
   const legacyMatch = message.text.match(LEGACY_CONTEXT_MESSAGE_PATTERN)

@@ -7,6 +7,7 @@ import json
 
 from sqlmodel import select
 
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.chat.replyer.expression_vector_index import ExpressionVectorIndexUpsertItem, expression_vector_index
 from src.chat.utils.utils import is_bot_self
 from src.common.data_models.expression_data_model import MaiExpression
@@ -557,7 +558,7 @@ class ExpressionLearner:
                             f"[source_id:{index}]",
                             f"[speaker:{speaker_kind}]",
                             f"[name:{speaker_name}]",
-                            f"[time:{message.timestamp.strftime('%H:%M:%S')}]",
+                            f"[time:{format_prompt_datetime(message.timestamp)}]",
                             "[content]",
                             content,
                         ]
