@@ -14,6 +14,7 @@ class ConnectionTransaction:
         self.connection = connection
         self.immediate = immediate
         self._savepoint_name: Optional[str] = None
+        self._scope_depth: Optional[int] = None
 
     def __enter__(self) -> sqlite3.Connection:
         if self.connection.in_transaction:
@@ -21,6 +22,8 @@ class ConnectionTransaction:
             self.connection.execute(f"SAVEPOINT {self._savepoint_name}")
         else:
             self.connection.execute("BEGIN IMMEDIATE" if self.immediate else "BEGIN")
+        # 与连接管理器一致：推迟业务方法的commit/rollback，交由外层边界处理。
+        self._scope_depth = self.connection.begin_managed_scope()
         return self.connection
 
     def __exit__(
@@ -29,14 +32,24 @@ class ConnectionTransaction:
         exc_value: Optional[BaseException],
         traceback: object,
     ) -> bool:
+        assert self._scope_depth is not None
+        rollback_requested = self.connection.end_managed_scope(self._scope_depth)
+        self._scope_depth = None
+        should_rollback = exc_type is not None or rollback_requested
         if self._savepoint_name is not None:
-            if exc_type is None:
-                self.connection.execute(f"RELEASE SAVEPOINT {self._savepoint_name}")
-            else:
+            if should_rollback:
                 self.connection.execute(f"ROLLBACK TO SAVEPOINT {self._savepoint_name}")
-                self.connection.execute(f"RELEASE SAVEPOINT {self._savepoint_name}")
-        elif exc_type is None:
-            self.connection.commit()
+            self.connection.execute(f"RELEASE SAVEPOINT {self._savepoint_name}")
+            self._savepoint_name = None
+        elif should_rollback:
+            self.connection.force_rollback()
         else:
-            self.connection.rollback()
+            try:
+                self.connection.force_commit()
+            except BaseException:
+                # 提交失败同样需要回滚，而不仅是事务体内异常。
+                self.connection.force_rollback()
+                raise
+        if rollback_requested and exc_type is None:
+            raise RuntimeError("事务中的操作请求了回滚")
         return False

@@ -367,7 +367,7 @@ async def handle_tool(
     if target_message_id in terminal_targets or target_message_id in uncertain_targets or len(uncertain_targets) >= 256:
         details = uncertain_targets.get(target_message_id) or terminal_targets.get(target_message_id) or {
             "delivery_outcome": "delivery_unknown", "sent": False, "retryable": False,
-            "policy_reason": "不确定发送隔离已满，需要人工核对送达记录",
+            "policy_reason": "不确定发送隔离已满，需要人工核对送达记录", 
         }
         return tool_ctx.build_failure_result(
             invocation.tool_name, f"此目标的回复已终止，不重试：{details['policy_reason']}",

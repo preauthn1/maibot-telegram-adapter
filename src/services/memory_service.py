@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -42,12 +43,13 @@ class MemorySearchResult:
     success: bool = True
     error: str = ""
 
-    def to_text(self, limit: int = 5, *, truncate_content: bool = True, max_content_chars: int = 160) -> str:
+    def to_text(self, limit: int = 5, *, truncate_content: bool = True, max_content_chars: int = 160, preserve_whitespace: bool = False) -> str:
         if not self.hits:
             return ""
         lines = []
         for index, item in enumerate(self.hits[: max(1, int(limit))], start=1):
-            content = item.content.strip().replace("\n", " ")
+            # 工具正文需要原始段落/代码结构，默认预览仍维持既有单行行为。
+            content = item.content if preserve_whitespace else item.content.strip().replace("\n", " ")
             if truncate_content and len(content) > max_content_chars:
                 content = content[:max_content_chars] + "..."
             lines.append(f"{index}. {content}")
@@ -157,17 +159,30 @@ class MemoryService:
     def _coerce_search_result(payload: Any) -> MemorySearchResult:
         if not isinstance(payload, dict):
             return MemorySearchResult(success=False, error="invalid_payload")
+        # 显式状态只接受JSON布尔值；缺字段的旧后端仍由error判断。
+        if "success" in payload and type(payload["success"]) is not bool:
+            return MemorySearchResult(success=False, error="invalid_success_type")
+        # 过滤标志同样只接受布尔值，不能将字符串false解释为策略跳过。
+        if "filtered" in payload and type(payload["filtered"]) is not bool:
+            return MemorySearchResult(success=False, error="invalid_filtered_type")
+        raw_hits = payload.get("hits")
+        # 缺字段/null沿用旧后端空结果约定；损坏结构不能伪装成零命中。
+        if raw_hits is None:
+            raw_hits = []
+        if not isinstance(raw_hits, list) or any(not isinstance(item, dict) for item in raw_hits):
+            return MemorySearchResult(success=False, error="invalid_hits_shape")
         hits: List[MemoryHit] = []
-        for item in payload.get("hits", []) or []:
-            if not isinstance(item, dict):
-                continue
+        for item in raw_hits:
             metadata = item.get("metadata", {}) or {}
             if not isinstance(metadata, dict):
                 metadata = {}
+            metadata = dict(metadata)
             if "source_branches" in item and "source_branches" not in metadata:
                 metadata["source_branches"] = item.get("source_branches") or []
             if "rank" in item and "rank" not in metadata:
                 metadata["rank"] = item.get("rank")
+            # 嵌套来源字段也隔离，避免消费方修改反向污染后端payload或其他结果。
+            metadata = deepcopy(metadata)
             hits.append(
                 MemoryHit(
                     content=str(item.get("content", "") or ""),
@@ -182,7 +197,8 @@ class MemoryService:
             )
         success_raw = payload.get("success")
         error = str(payload.get("error", "") or "")
-        success = (not bool(error)) if success_raw is None else bool(success_raw)
+        # 非空error与success=true矛盾时按失败处理，不让残留命中进入对话。
+        success = not bool(error) and (success_raw is None or success_raw is True)
         return MemorySearchResult(
             summary=str(payload.get("summary", "") or ""),
             hits=hits,
@@ -236,10 +252,19 @@ class MemoryService:
                     "group_id": str(group_id or "").strip(),
                 },
             )
-            return self._coerce_search_result(payload)
+            result = self._coerce_search_result(payload)
+            if not result.success:
+                # 失败payload的摘要/命中也可能是诊断内容，不当作可信记忆向上传递。
+                logger.warning("长期记忆搜索返回失败结果")
+                return MemorySearchResult(success=False, error="长期记忆检索失败；暂不能确认是否存在相关记忆。")
+            if result.filtered:
+                # 策略跳过的响应不应携带可供回复器消费的残留摘要或命中。
+                return MemorySearchResult(success=True, filtered=True)
+            return result
         except Exception as exc:
-            logger.warning(f"长期记忆搜索失败: {exc}")
-            return MemorySearchResult(success=False, error=str(exc))
+            # 服务层异常原文可能含后端凭据；工具层拿到失败结果也不应再暴露它。
+            logger.warning(f"长期记忆搜索失败: {type(exc).__name__}")
+            return MemorySearchResult(success=False, error="长期记忆检索失败；暂不能确认是否存在相关记忆。")
 
     async def enqueue_feedback_task(
         self,
@@ -419,8 +444,9 @@ class MemoryService:
         try:
             return await self._invoke_admin("memory_profile_admin", action=action, **kwargs)
         except Exception as exc:
-            logger.warning(f"画像管理调用失败: {exc}")
-            return {"success": False, "error": str(exc)}
+            error = f"profile_admin_failed:{type(exc).__name__}"
+            logger.warning(f"画像管理调用失败: {error}")
+            return {"success": False, "error": error}
 
     async def feedback_admin(self, *, action: str, **kwargs) -> Dict[str, Any]:
         try:
