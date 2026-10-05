@@ -6,6 +6,7 @@ from math import ceil
 from typing import Any, Literal, Optional, Sequence
 import asyncio
 import json
+import re
 import time
 
 from src.chat.heart_flow.heartFC_utils import CycleDetail
@@ -62,6 +63,9 @@ from src.maisaka.idle_backoff import IdleBackoffController
 from src.maisaka.reply_effect import ReplyEffectTracker
 from src.maisaka.reply_effect.image_utils import extract_visual_attachments_from_sequence
 from src.maisaka.reply_effect.quote_utils import extract_quote_target_ids, message_id_from_context_message
+from src.maisaka.follow_up_buffer import follow_up_priority, merge_window_reached
+from src.maisaka.state_model import get_state_store
+from src.maisaka.state_model.correction_ledger import record_correction
 from src.maisaka.turn_scheduler import MessageTurnScheduler
 from src.mcp_module.provider import MCPToolProvider
 from src.mcp_module.service import get_mcp_service
@@ -91,6 +95,9 @@ EXTERNAL_MESSAGE_BURST_INTERVAL_SECONDS = 5.0
 IDLE_COMPENSATION_MIN_AVERAGE_INTERVAL_SECONDS = 30.0
 
 
+_REJECTION_PATTERN = re.compile(r"(?:闭嘴|别说话|别吵|别插嘴|没问你|不想理你|滚|别回了|安静点|少说两句)")
+
+
 class PlannerInterruptController:
     """维护当前可打断 Planner 请求与连续打断计数。"""
 
@@ -114,8 +121,9 @@ class PlannerInterruptController:
     def unbind(self, interrupt_flag: asyncio.Event, *, interrupted: bool) -> None:
         """解绑当前可打断请求的中断标记，并维护连续打断计数。"""
 
-        if self._flag is interrupt_flag:
-            self._flag = None
+        if self._flag is not interrupt_flag:
+            return
+        self._flag = None
         self._requested = False
         if not interrupted:
             self._consecutive_count = 0
@@ -177,11 +185,16 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         self._deferred_message_turn_task: Optional[asyncio.Task[None]] = None
         self._message_debounce_seconds = 1.0
         self._message_debounce_required = False
+        # Phase 2 follow_up_buffer：首条未处理追加消息的到达时间（monotonic）。
+        self._follow_up_first_pending_at = 0.0
+        # 我们上一条发言是不是问句（用于判定"回答我们的问题"可打断）。
+        self._last_self_reply_was_question = False
         self._last_message_received_at = 0.0
         self._last_external_message_received_at: Optional[float] = None
         self._talk_frequency_adjust = 1.0
         self._recent_external_message_intervals: deque[tuple[float, float]] = deque()
         self._wait_timeout_task: Optional[asyncio.Task[None]] = None
+        self._state_tick_task: Optional[asyncio.Task[None]] = None
         self._max_internal_rounds = MAX_INTERNAL_ROUNDS
         self._agent_state: Literal["running", "wait", "stop"] = self._STATE_STOP
         self._pending_wait_tool_call_id: Optional[str] = None
@@ -286,6 +299,10 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
     def _update_stage_status(self, stage: str, detail: str = "", *, round_text: str = "") -> None:
         """更新当前会话的阶段状态。"""
 
+        # 保留工作阶段，同时持续暴露恢复故障；不把缺历史伪装成正常空闲。
+        warning = "近期历史恢复失败；当前上下文不完整"
+        if getattr(self, '_context_restore_failed', False) and warning not in detail:
+            detail = f"{detail}；{warning}" if detail else warning
         update_stage_status(
             session_id=self.session_id,
             session_name=self.session_name,
@@ -310,7 +327,10 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             await self._reply_effect_tracker.start()
         self._ensure_background_tasks_running()
         self._schedule_message_turn()
-        self._update_stage_status("空闲", "等待消息触发")
+        if getattr(self, '_context_restore_failed', False):
+            self._update_stage_status("降级", "近期历史恢复失败；当前上下文不完整")
+        else:
+            self._update_stage_status("空闲", "等待消息触发")
         logger.info(f"{self.log_prefix} Maisaka 运行时已启动")
 
     async def _restore_recent_context_from_db(self) -> None:
@@ -327,14 +347,23 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
                 limit_mode="latest",
             )
         except Exception as exc:
-            logger.warning(f"{self.log_prefix} 恢复最近上下文失败: {exc}", exc_info=True)
+            self._context_restore_failed = True
+            # 数据库异常及 traceback 可能携带 SQL 参数或私有正文，日志仅记录类型。
+            logger.warning(f"{self.log_prefix} 恢复最近上下文失败，异常类型: {type(exc).__name__}")
             return
 
+        # 读取成功不代表构造完成；只有恢复提交成功后才清除失败标志。
+        self._context_restore_failed = True
         recent_messages = select_messages_after_latest_clear_marker(recent_messages)
         restored_user_messages: list[SessionMessage] = []
         restored_history: list[LLMContextMessage] = []
         for message in recent_messages:
             if message.is_notify:
+                continue
+            from src.plugin_runtime.capabilities.telegram_event_journal import suppress_live_message
+
+            suppress_live_message(message)
+            if message.message_info.additional_config.get("telegram_deleted"):
                 continue
 
             source_kind = self._resolve_restored_message_source_kind(message)
@@ -342,24 +371,30 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
                 message,
                 source_kind=source_kind,
             )
+            suppress_live_message(message)
+            if message.message_info.additional_config.get("telegram_deleted"):
+                continue
             if history_message is not None:
                 restored_history.append(history_message)
 
-            if source_kind == "user":
+            if source_kind == "user" and not message.message_info.additional_config.get("telegram_history_only"):
                 restored_user_messages.append(message)
 
         if not restored_history:
+            self._context_restore_failed = False
             return
 
-        self._chat_history.extend(restored_history)
         restore_reference_message = self._build_context_restore_reference_message(
             restored_history,
             now=datetime.now(),
         )
         if restore_reference_message is not None:
-            self._chat_history.append(restore_reference_message)
+            restored_history.append(restore_reference_message)
+        # 先完成可能失败的构造，再同步发布历史与缓存，避免半恢复阻止重试。
+        self._chat_history.extend(restored_history)
         self.message_cache = restored_user_messages[-MAX_RETAINED_MESSAGE_CACHE_SIZE:]
         self._last_processed_index = len(self.message_cache)
+        self._context_restore_failed = False
         logger.info(
             f"{self.log_prefix} 已恢复最近上下文: "
             f"历史消息={len(restored_history)} 用户消息缓存={len(self.message_cache)}"
@@ -462,6 +497,9 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         self._cancel_deferred_message_turn_task()
         self._cancel_focus_cooldown_timer_task()
         self._cancel_wait_timeout_task()
+        if self._state_tick_task is not None:
+            self._state_tick_task.cancel()
+            self._state_tick_task = None
         await self._cancel_trimmed_history_learning_task()
         while not self._internal_turn_queue.empty():
             _ = self._internal_turn_queue.get_nowait()
@@ -528,16 +566,32 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
                 source_kind=source_kind,
             )
             self._chat_history.append(history_message)
-            self._schedule_sent_image_recognition(message)
-            self._emit_monitor_message_sent(
-                message=message,
-                speaker_name=speaker_name,
-                source_kind=source_kind,
-            )
+            if source_kind == "guided_reply":
+                sent_text = (message.processed_plain_text or "").strip()
+                self._last_self_reply_was_question = sent_text.endswith(("?", "？", "吗", "呢"))
+                try:
+                    state_store = get_state_store()
+                    state_store.on_self_reply(self.session_id, text=sent_text)
+                    state_store.flush()
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug(f"{self.log_prefix} 聊天状态更新失败（发送）: {exc}")
+            # 历史已提交，附属任务失败不应把成功写入误报成失败。
+            try:
+                self._schedule_sent_image_recognition(message)
+            except Exception as exc:
+                logger.warning("历史已写入，识图调度失败: %s", type(exc).__name__)
+            try:
+                self._emit_monitor_message_sent(
+                    message=message,
+                    speaker_name=speaker_name,
+                    source_kind=source_kind,
+                )
+            except Exception as exc:
+                logger.warning("历史已写入，监控通知失败: %s", type(exc).__name__)
             return True
         except Exception as exc:
             logger.warning(
-                f"{self.log_prefix} 同步已发送消息到 Maisaka 历史失败: message_id={message.message_id} error={exc}"
+                "同步已发送消息到 Maisaka 历史失败: %s", type(exc).__name__
             )
             return False
 
@@ -842,11 +896,20 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
 
     async def register_message(self, message: SessionMessage) -> None:
         """缓存一条新消息并唤醒主循环。"""
+        from src.plugin_runtime.capabilities.telegram_event_journal import suppress_live_message
+
+        if suppress_live_message(message):
+            if not message.message_info.additional_config.get("telegram_deleted"):
+                from src.plugin_runtime.capabilities.telegram_event_journal import publish_pending_history
+
+                await publish_pending_history(message)
+            return
         if self._running:
             self._ensure_background_tasks_running()
         received_at = time.time()
         self._last_message_received_at = received_at
         self._record_external_message_interval(message, received_at)
+        self._update_chat_state_for_incoming(message)
         self._update_message_trigger_state(message)
         self.message_cache.append(message)
         self._emit_monitor_message_ingested(message)
@@ -886,10 +949,59 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         )
         return False
 
+    def _update_chat_state_for_incoming(self, message: SessionMessage) -> None:
+        """Phase 3/4/5：群友发言事件驱动状态更新（规则，不调模型）。"""
+
+        try:
+            user_id = str(message.message_info.user_info.user_id)
+            if is_bot_self(message.platform, user_id):
+                return
+            text = (message.processed_plain_text or "").strip()
+            directed = bool(message.is_at or message.is_mentioned)
+            state_store = get_state_store()
+            wait_event = state_store.on_external_message(
+                self.session_id,
+                user_id=user_id,
+                directed_at_us=directed,
+                is_question=text.endswith(("?", "？", "吗", "呢")),
+                text_len=len(text),
+            )
+            core = re.sub(r"^\[回复[^\]]*\]，说：", "", text)
+            if directed and _REJECTION_PATTERN.search(core):
+                state_store.on_rejection(self.session_id, user_id=user_id)
+                logger.info(f"{self.log_prefix} 状态事件: 被明确拒绝，进入冷却")
+            elif directed and follow_up_priority(text=core, is_at=False, is_mentioned=False) == "correction":
+                state_store.on_correction(self.session_id, user_id=user_id)
+                record_correction(self.session_id, user_id=user_id, text=core)
+            if wait_event:
+                logger.info(f"{self.log_prefix} 等待状态机: {wait_event}")
+            state_store.flush()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"{self.log_prefix} 聊天状态更新失败（入站）: {exc}")
+
     def _request_planner_interrupt_for_message(self, message: SessionMessage) -> None:
-        """在运行中的 Planner 可打断时，按连续打断限制发起一次中断。"""
+        """在运行中的 Planner 可打断时，按连续打断限制发起一次中断。
+
+        Phase 2：只有高优先级新信息（被 @/提及、纠正、改任务、回答我们的问题）
+        才打断；普通追加消息只进入缓冲，在下一工具边界按到达顺序合并。
+        """
 
         if self._agent_state != self._STATE_RUNNING:
+            return
+        if self._follow_up_first_pending_at <= 0:
+            self._follow_up_first_pending_at = time.monotonic()
+        if is_bot_self(message.platform, message.message_info.user_info.user_id):
+            return
+        priority = follow_up_priority(
+            text=message.processed_plain_text or "",
+            is_at=bool(message.is_at),
+            is_mentioned=bool(message.is_mentioned),
+            answers_our_question=self._last_self_reply_was_question,
+        )
+        if priority is None:
+            logger.debug(
+                f"{self.log_prefix} 运行中收到普通追加消息，进入缓冲不打断; 消息编号={message.message_id}"
+            )
             return
 
         planner_interrupt_max_count = self._planner_interrupt_max_consecutive_count
@@ -917,7 +1029,7 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             return
 
         logger.info(
-            f"{self.log_prefix} 收到新消息，发起规划器打断; "
+            f"{self.log_prefix} 收到新消息，发起规划器打断; 原因={priority} "
             f"消息编号={message.message_id} 缓存条数={len(self.message_cache)} "
             f"时间戳={time.time():.3f} "
             f"连续打断次数={consecutive_count}/"
@@ -1332,6 +1444,51 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
                 logger.debug(f"{self.log_prefix} 已启动 Maisaka 内部循环任务")
 
         self._ensure_expression_vector_history_backfill_running()
+        if self._state_tick_task is None or self._state_tick_task.done():
+            self._state_tick_task = asyncio.create_task(self._state_tick_loop())
+
+    async def _state_tick_loop(self) -> None:
+        """Phase 4/6：轻量定时器（不调模型）。
+
+        - 等待状态机：期待回复超时 → 默认 drop（只记状态，不追问）；
+          连续 3 次无人回应进入 30 分钟冷却。
+        - 主动发言（Phase 6）：默认关闭，开启后仅在冷场且状态允许时投递一次判断。
+        """
+
+        while self._running:
+            try:
+                await asyncio.sleep(20)
+                state_store = get_state_store()
+                wait_result = state_store.check_wait_timeout(self.session_id)
+                if wait_result:
+                    logger.info(f"{self.log_prefix} 等待状态机: {wait_result}（默认 drop，不追问）")
+                    state_store.flush()
+                await self._maybe_proactive_bubble()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(f"{self.log_prefix} 状态定时器异常: {exc}")
+
+    async def _maybe_proactive_bubble(self) -> None:
+        """Phase 6 主动发言：do_nothing / simple_bubble / throw_topic（默认关闭）。"""
+
+        from src.maisaka.state_model.proactive import decide_proactive, mark_proactive_sent
+
+        decision = decide_proactive(
+            self.session_id,
+            is_group=self.chat_stream.is_group_session,
+            agent_running=self._agent_state == self._STATE_RUNNING,
+        )
+        if decision.action == "do_nothing":
+            return
+        logger.info(f"{self.log_prefix} 主动发言判定: {decision.action} 原因={decision.reason}")
+        await self.enqueue_proactive_task(
+            plugin_id="maisaka_proactive",
+            intent=decision.prompt,
+            reason=decision.reason,
+            metadata={"action": decision.action},
+        )
+        mark_proactive_sent(self.session_id)
 
     @staticmethod
     def _should_run_expression_vector_history_backfill() -> bool:
@@ -1676,6 +1833,7 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             return []
 
         self._last_processed_index = len(self.message_cache)
+        self._follow_up_first_pending_at = 0.0
         if pending_messages:
             focus_mode_manager.mark_read(self.session_id)
         # logger.info(
@@ -1698,7 +1856,15 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             remaining = self._message_debounce_seconds - elapsed
             if remaining <= 0:
                 break
-            await asyncio.sleep(remaining)
+            # 连续刷屏时不无限等静默：满 3 条或 8 秒就合并。
+            pending_count = len(self.message_cache) - self._last_processed_index
+            if merge_window_reached(
+                pending_count=pending_count,
+                first_pending_at=self._follow_up_first_pending_at,
+                now=time.monotonic(),
+            ):
+                break
+            await asyncio.sleep(min(remaining, 0.5))
 
         self._clear_message_debounce_required()
 

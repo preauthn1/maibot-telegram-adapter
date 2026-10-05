@@ -26,6 +26,8 @@ import itertools
 import random
 import time
 
+from .unlimited_mode import frequency_scope, is_unlimited
+
 # 内部上下文只传递候选入队时刻，不读取入站消息时间或可伪造的消息字段。
 candidate_enqueued_at: ContextVar[Optional[float]] = ContextVar("candidate_enqueued_at", default=None)
 
@@ -212,7 +214,7 @@ class SendQueue:
             RuntimeError: 队列未启动。
         """
 
-        if self.in_quiet_hours():
+        if not is_unlimited(label) and self.in_quiet_hours():
             remaining = seconds_until_quiet_end(end_hour=self._quiet_end_hour)
             self._logger.info(
                 f"静默时段内丢弃发送请求 label={label}，距结束还有 {remaining / 60:.0f} 分钟"
@@ -264,7 +266,7 @@ class SendQueue:
                     continue
 
                 # 静默时段可能在排队期间到来，出队时重新检查。
-                if self.in_quiet_hours():
+                if not is_unlimited(item.label) and self.in_quiet_hours():
                     if not item.future.done():
                         item.future.set_exception(QuietHoursError("当前处于静默时段，不发送消息"))
                     continue
@@ -272,7 +274,7 @@ class SendQueue:
                 # 两条消息之间保持自然间隔，避免连珠炮。
                 gap = random.uniform(self._min_gap, self._max_gap)
                 elapsed = loop.time() - self._last_sent_at
-                if self._last_sent_at > 0 and elapsed < gap:
+                if not is_unlimited(item.label) and self._last_sent_at > 0 and elapsed < gap:
                     try:
                         await asyncio.sleep(gap - elapsed)
                     except asyncio.CancelledError:
@@ -282,7 +284,8 @@ class SendQueue:
 
                 token = candidate_enqueued_at.set(item.enqueued_at)
                 try:
-                    result = await item.action()
+                    with frequency_scope(item.label):
+                        result = await item.action()
                 except asyncio.CancelledError:
                     if not item.future.done():
                         item.future.cancel()

@@ -41,6 +41,8 @@ from src.llm_models.payload_content.context_item import (
 )
 from src.llm_models.payload_content.tool_option import ToolCall
 
+from src.maisaka.context.telegram_evidence import telegram_context_evidence
+
 FORWARD_PREVIEW_LIMIT = 4
 FOCUS_COOLDOWN_WAKEUP_SOURCE = "focus_cooldown_wakeup"
 FOCUS_AT_WAKEUP_SOURCE = "focus_at_wakeup"
@@ -499,6 +501,8 @@ class SessionBackedMessage(LLMContextMessage):
     timestamp: datetime
     message_id: Optional[str] = None
     original_message: Optional[SessionMessage] = None
+    visible_text_prefix: Optional[str] = field(default=None, kw_only=True)
+    telegram_evidence: str = field(default="", kw_only=True)
     source_kind: str = "user"
     context_item_id: str = field(default_factory=lambda: uuid.uuid4().hex)
 
@@ -533,7 +537,25 @@ class SessionBackedMessage(LLMContextMessage):
         source_kind: str = "user",
     ) -> "SessionBackedMessage":
         """从真实 SessionMessage 构造上下文消息。"""
+        from src.maisaka.context.message_adapter import format_speaker_content
+
+        user = session_message.message_info.user_info
+        prefix = format_speaker_content(
+            user.user_cardname or user.user_nickname or user.user_id,
+            "", session_message.timestamp,
+            None if session_message.is_notify else session_message.message_id,
+        )
+        evidence = telegram_context_evidence(session_message)
+        if evidence:
+            # New sequence only: raw observed/policy-visible source is untouched.
+            raw_message = MessageSequence([*raw_message.components, TextComponent(evidence)])
+            if source_kind != "guided_reply":
+                visible_text += evidence
+        # 前缀与可见文本同时快照，后续昵称更新不应改变历史正文边界。
         return cls(
+            # 空字符串表示已检查且没有前缀；None 仅用于未记录该信息的旧对象。
+            telegram_evidence=evidence,
+            visible_text_prefix=prefix if visible_text.startswith(prefix) else "",
             raw_message=raw_message,
             visible_text=visible_text,
             timestamp=session_message.timestamp,
@@ -586,7 +608,8 @@ class ComplexSessionMessage(SessionBackedMessage):
             message_id=session_message.message_id,
             original_message=session_message,
             source_kind=source_kind,
-            prompt_text=f"{planner_prefix}{prompt_text}",
+            telegram_evidence=telegram_context_evidence(session_message),
+            prompt_text=f"{planner_prefix}{prompt_text}{telegram_context_evidence(session_message)}",
         )
 
 

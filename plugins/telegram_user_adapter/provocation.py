@@ -22,6 +22,8 @@ import random
 import re
 import time
 
+from .unlimited_mode import is_unlimited
+
 # 针对性辱骂词。只收真正的攻击性表达，不收\"垃圾/废物\"这类
 # 日常也会出现的词（\"这游戏真垃圾\" 不该触发）。
 _INSULT_WORDS: Tuple[str, ...] = (
@@ -130,7 +132,7 @@ class ProvocationResponder:
         key = (chat_id, user_id)
 
         last = self._last_reply.get(key)
-        if last is not None and (now - last) < self._cooldown:
+        if not is_unlimited(chat_id) and last is not None and (now - last) < self._cooldown:
             # 冷却期内不接茬。对方要的就是即时对喷，不给这个节奏。
             return None
 

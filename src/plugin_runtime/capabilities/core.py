@@ -1,4 +1,5 @@
-﻿from datetime import datetime
+# Modified 2026-10-06: Telegram event port (GPL-3.0), see EVENTS_PORT_NOTICE.md.
+from datetime import datetime
 from typing import Any, Dict, List
 
 import base64
@@ -177,6 +178,16 @@ class RuntimeCoreCapabilityMixin:
         stream_id = str(args.get("stream_id") or args.get("chat_id") or "").strip()
         if not stream_id:
             return {"success": False, "error": "缺少必要参数 stream_id 或 chat_id"}
+
+        if "telegram_event" in args:
+            from src.plugin_runtime.capabilities.telegram_events import apply_telegram_event
+
+            return await apply_telegram_event(plugin_id, stream_id, args["telegram_event"])
+
+        if "history_only_message" in args:
+            from src.plugin_runtime.capabilities.manual_history import append_manual_history
+
+            return await append_manual_history(plugin_id, stream_id, args["history_only_message"])
 
         segments = _normalize_context_segments(args.get("segments"))
         if not segments:

@@ -351,6 +351,47 @@ async def handle_tool(
             "普通 reply 不能以机器人自身历史消息为目标，请选择用户消息。",
         )
 
+    # 策略停止只覆盖当前逻辑轮；不确定发送单独隔离，绝不自动重放。
+    turn_id = getattr(tool_ctx.engine, "_active_logical_turn_id", "")
+    if getattr(tool_ctx.runtime, "_reply_terminal_turn", None) != turn_id:
+        tool_ctx.runtime._reply_terminal_turn = turn_id
+        tool_ctx.runtime._reply_terminal_targets = {}
+    terminal_targets = getattr(tool_ctx.runtime, "_reply_terminal_targets", None)
+    if terminal_targets is None:
+        terminal_targets = {}
+        tool_ctx.runtime._reply_terminal_targets = terminal_targets
+    uncertain_targets = getattr(tool_ctx.runtime, "_reply_uncertain_targets", None)
+    if uncertain_targets is None:
+        uncertain_targets = {}
+        tool_ctx.runtime._reply_uncertain_targets = uncertain_targets
+    if target_message_id in terminal_targets or target_message_id in uncertain_targets or len(uncertain_targets) >= 256:
+        details = uncertain_targets.get(target_message_id) or terminal_targets.get(target_message_id) or {
+            "delivery_outcome": "delivery_unknown", "sent": False, "retryable": False,
+            "policy_reason": "不确定发送隔离已满，需要人工核对送达记录",
+        }
+        return tool_ctx.build_failure_result(
+            invocation.tool_name, f"此目标的回复已终止，不重试：{details['policy_reason']}",
+            structured_content=details, metadata={**details, "pause_execution": True},
+        )
+    if len(terminal_targets) >= 256:
+        terminal_targets.pop(next(iter(terminal_targets)))
+
+    if tool_ctx.runtime.chat_stream.platform != CLI_PLATFORM_NAME:
+        policy = await send_service.preflight_reply_policy(tool_ctx.runtime.session_id, target_message)
+        if policy.get("allowed") is not True:
+            reason = str(policy.get("reason") or "策略预检未放行")
+            outcome = str(policy.get("outcome") or "preflight_unavailable")
+            metadata = {"delivery_outcome": outcome, "policy_reason": reason,
+                        "policy_silence": outcome == "policy_dropped", "sent": False,
+                        "retryable": False, "pause_execution": True,
+                        "outcome": "blocked_by_policy" if outcome == "policy_dropped" else outcome}
+            terminal_targets[target_message_id] = metadata
+            label = "策略跳过" if outcome == "policy_dropped" else "预检不可用"
+            return tool_ctx.build_failure_result(
+                invocation.tool_name, f"{label}：回复生成前已停止，未生成、未发送：{reason}。请勿补发。",
+                structured_content={"msg_id": target_message_id, **metadata}, metadata=metadata,
+            )
+
     try:
         replyer = replyer_manager.get_replyer(
             chat_stream=tool_ctx.runtime.chat_stream,
@@ -373,6 +414,27 @@ async def handle_tool(
         )
 
     replyer_chat_history = list(tool_ctx.runtime._chat_history)
+    from src.maisaka.context.messages import ToolResultMessage
+
+    current_turn_id = getattr(tool_ctx.engine, "_active_logical_turn_id", "")
+    search_evidence = [
+        message.content
+        for message in replyer_chat_history
+        if isinstance(message, ToolResultMessage)
+        and message.tool_name == "web_search"
+        and message.logical_turn_id == current_turn_id
+        and current_turn_id
+    ]
+    if search_evidence:
+        # Replyer 的普通历史会过滤工具消息；通过显式参考传递同轮搜索，避免只看 Planner 猜测。
+        original_reference = str(reply_tool_args.get("reply_reference") or "")
+        reply_tool_args["reply_reference"] = (
+            original_reference + "\n本轮搜索依据（不得添加来源之外的猜测）：\n" + "\n".join(search_evidence)
+        )
+    from src.maisaka.context.reply_memory import collect_reply_memory_references
+    memory_references = tuple(collect_reply_memory_references(
+        replyer_chat_history, getattr(tool_ctx.engine, '_active_logical_turn_id', '')
+    ))
     previous_target_reply = _find_recent_reply_to_target(replyer_chat_history, target_message_id)
     if previous_target_reply:
         reply_tool_args = _with_duplicate_target_reply_reminder(reply_tool_args, previous_target_reply)
@@ -383,6 +445,7 @@ async def handle_tool(
             stream_id=tool_ctx.runtime.session_id,
             reply_message=target_message,
             chat_history=replyer_chat_history,
+            memory_references=memory_references,
             reply_tool_args=reply_tool_args,
             sub_agent_runner=lambda system_prompt: _run_expression_selector(
                 tool_ctx,
@@ -468,7 +531,11 @@ async def handle_tool(
     reply_result.monitor_detail = build_reply_monitor_detail(reply_result)
     reply_metadata = _build_monitor_metadata(reply_result)
     sent_message_ids: list[str] = []
+    delivered_segments: list[str] = []
+    delivery_body_unknown = False
     send_results: list[dict[str, Any]] = []
+    first_failure_outcome = ""
+    first_failure_reason = ""
     try:
         sent = False
         if tool_ctx.runtime.chat_stream.platform == CLI_PLATFORM_NAME:
@@ -495,6 +562,7 @@ async def handle_tool(
                     target_message=target_message,
                     previous_sent_message=previous_sent_message,
                 )
+                segment_delivery_report: dict[str, Any] = {}
                 sent_message = await send_service._send_to_target_with_message(
                     message_sequence=reply_sequence,
                     stream_id=tool_ctx.runtime.session_id,
@@ -505,18 +573,28 @@ async def handle_tool(
                     typing=index > 0,
                     sync_to_maisaka_history=True,
                     maisaka_source_kind="guided_reply",
+                    delivery_report=segment_delivery_report,
                 )
                 sent = sent_message is not None
                 if not sent:
+                    first_failure_outcome = str(segment_delivery_report.get("outcome") or "delivery_unknown")
+                    first_failure_reason = str(segment_delivery_report.get("reason") or "发送结果未确认")
                     send_results.append(
                         _build_send_result(
                             index=index,
-                            segment=segment,
+                            segment="",  # 未送达正文不进入工具历史。
                             set_quote=segment_set_quote,
                             success=False,
                         )
                     )
                     break
+                from src.platform_io.delivery_content import HISTORY_BLOCK_KEY
+                if (sent_message.message_info.additional_config or {}).get(HISTORY_BLOCK_KEY) is True:
+                    delivery_body_unknown = True
+                    segment = ""
+                else:
+                    segment = sent_message.processed_plain_text
+                delivered_segments.append(segment)
                 sent_message_id = str(getattr(sent_message, "message_id", "") or "").strip()
                 if sent_message_id:
                     sent_message_ids.append(sent_message_id)
@@ -532,26 +610,40 @@ async def handle_tool(
                 previous_sent_message = sent_message
     except Exception:
         logger.exception(f"{tool_ctx.runtime.log_prefix} 发送文字消息时发生异常，目标消息编号={target_message_id}")
-        return tool_ctx.build_failure_result(
-            invocation.tool_name,
-            "发送可见回复时发生异常。",
-            metadata=reply_metadata,
-        )
+        sent = False
+        first_failure_outcome = "delivery_unknown"
+        first_failure_reason = "发送或发送后处理异常，无法确认最终状态"
 
     if not sent:
+        # 部分成功也不能声称整条回复成功，更不能重放已送达的前缀。
+        partial = any(item.get("success") is True for item in send_results)
+        reason = first_failure_reason or "发送失败"
+        outcome = first_failure_outcome or "delivery_failed"
+        result_details = {
+            "msg_id": target_message_id, "sent": partial, "partial_delivery": partial,
+            "sent_message_ids": sent_message_ids, "send_results": send_results,
+            "delivery_outcome": outcome, "policy_reason": reason,
+            "outcome": "blocked_by_policy" if outcome == "policy_dropped" else outcome,
+            "policy_silence": outcome == "policy_dropped", "retryable": False,
+        }
+        # 失败工具历史只保留送达证据，不能携带含生成正文的 monitor_detail。
+        failure_metadata = {**result_details, "pause_execution": True}
+        terminal_targets[target_message_id] = result_details
+        # 部分已送达也隔离整个目标，下一逻辑轮不能重放已确认的前缀。
+        if outcome == "delivery_unknown" or partial:
+            uncertain_targets[target_message_id] = result_details
+        label = "策略跳过" if outcome == "policy_dropped" else "发送未完成"
         return tool_ctx.build_failure_result(
             invocation.tool_name,
-            "可见回复生成成功，但发送失败。",
-            structured_content={
-                "msg_id": target_message_id,
-                "set_quote": set_quote,
-                "effective_set_quote": effective_set_quote,
-                "reply_segments": reply_segments,
-                "send_results": send_results,
-            },
-            metadata=reply_metadata,
+            f"{label}：回复{'部分已发送，剩余停止' if partial else '未确认发送成功'}（{outcome}）：{reason}。"
+            "请勿补发或重放；超时不代表未送达。",
+            structured_content=result_details, metadata=failure_metadata,
         )
 
+    if tool_ctx.runtime.chat_stream.platform != CLI_PLATFORM_NAME:
+        reply_segments = delivered_segments
+        combined_reply_text = "".join(delivered_segments)
+    reply_metadata["delivery_body_unknown"] = delivery_body_unknown
     target_user_info = target_message.message_info.user_info
     target_user_name = target_user_info.user_cardname or target_user_info.user_nickname or target_user_info.user_id
     bot_name = config_module.global_config.bot.nickname.strip() or "MaiSaka"
@@ -561,27 +653,31 @@ async def handle_tool(
     reply_metadata["sent_message_ids"] = sent_message_ids
     reply_metadata["send_results"] = send_results
     track_reply_effect = getattr(tool_ctx.runtime, "track_reply_effect", None)
-    if track_reply_effect is not None:
-        await track_reply_effect(
-            tool_call_id=invocation.call_id,
-            target_message=target_message,
-            set_quote=effective_set_quote,
-            reply_text=combined_reply_text,
-            reply_segments=reply_segments,
-            planner_reasoning=latest_thought,
-            tool_context={
-                "tool_name": invocation.tool_name,
-                "call_id": invocation.call_id,
-                "arguments": dict(invocation.arguments or {}),
-                "reasoning": latest_thought,
-            },
-            send_results=send_results,
-            reply_metadata=reply_metadata,
-            replyer_context_messages=replyer_chat_history,
-        )
+    if track_reply_effect is not None and not delivery_body_unknown:
+        try:
+            await track_reply_effect(
+                tool_call_id=invocation.call_id,
+                target_message=target_message,
+                set_quote=effective_set_quote,
+                reply_text=combined_reply_text,
+                reply_segments=reply_segments,
+                planner_reasoning=latest_thought,
+                tool_context={
+                    "tool_name": invocation.tool_name,
+                    "call_id": invocation.call_id,
+                    "arguments": dict(invocation.arguments or {}),
+                    "reasoning": latest_thought,
+                },
+                send_results=send_results,
+                reply_metadata=reply_metadata,
+                replyer_context_messages=replyer_chat_history,
+            )
+        except Exception as exc:
+            logger.warning("回复已发送，效果追踪失败: %s", type(exc).__name__)
     return tool_ctx.build_success_result(
         invocation.tool_name,
-        f'"{bot_name}"已生成并向"{target_user_name}"发送了回复"{combined_reply_text}"',
+        (f'"{bot_name}"已向"{target_user_name}"发送回复，但正文回执不可用。请勿补发。'
+         if delivery_body_unknown else f'"{bot_name}"已向"{target_user_name}"发送了回复"{combined_reply_text}"'),
         structured_content={
             "msg_id": target_message_id,
             "set_quote": set_quote,
