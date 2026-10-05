@@ -479,14 +479,14 @@ class TalkRulesItem(ConfigBase):
         default="",
         json_schema_extra={
             "label": {
-                "zh_CN": "时间段",
+                "zh_CN": "时间段（北京时间 UTC+8）",
                 "en_US": "Time range",
                 "ja_JP": "時間帯",
             },
             "x-widget": "talk-time",
         },
     )
-    """规则生效时间；留空为兜底，* 为全天，也可填 23:00-02:00。"""
+    """规则生效时间（北京时间 UTC+8）；留空为兜底，* 为全天，也可填 23:00-02:00。"""
 
     value: float = Field(
         default=0.5,
@@ -709,7 +709,7 @@ class ChatReplyTimingConfig(ConfigBase):
         },
     )
     """
-    _wrap_动态发言频率规则；可让麦麦在某些群、私聊或时段更活跃或更安静。
+    _wrap_动态发言频率规则；可让麦麦在某些群、私聊或时段更活跃或更安静（时段按北京时间 UTC+8）。
     """
 
 
