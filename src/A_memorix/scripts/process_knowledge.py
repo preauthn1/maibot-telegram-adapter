@@ -10,7 +10,6 @@
 5. 更新 manifest
 """
 
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 import argparse
@@ -69,6 +68,7 @@ try:
     import A_memorix.core as core_module
     import A_memorix.core.storage as storage_module
     from src.common.logger import get_logger
+    from src.common.utils.prompt_time import prompt_now
     from src.services import llm_service as llm_api
     from src.config.config import global_config
 
@@ -84,6 +84,7 @@ try:
     resolve_stored_knowledge_type = storage_module.resolve_stored_knowledge_type
     select_import_strategy = storage_module.select_import_strategy
 
+    from A_memorix.core.utils.time_parser import parse_reference_datetime
     from A_memorix.core.utils.import_payloads import (
         ImportPayloadValidationError,
         is_probable_hash_token,
@@ -153,7 +154,7 @@ class AutoImporter:
         self.chat_log = chat_log
         parsed_target_type = parse_import_strategy(target_type, default=ImportStrategy.AUTO)
         self.target_type = ImportStrategy.NARRATIVE.value if chat_log else parsed_target_type.value
-        self.chat_reference_dt = self._parse_reference_time(chat_reference_time)
+        self.chat_reference_now_text = self._build_reference_now_text(chat_reference_time)
         if self.chat_log and parsed_target_type not in {ImportStrategy.AUTO, ImportStrategy.NARRATIVE}:
             logger.warning(f"chat_log 模式已启用，target_type={target_type} 将被覆盖为 narrative")
         self.concurrency_limit = concurrency
@@ -269,26 +270,16 @@ class AutoImporter:
     def get_file_hash(self, content: str) -> str:
         return hashlib.md5(content.encode("utf-8")).hexdigest()
 
-    def _parse_reference_time(self, value: Optional[str]) -> datetime:
-        """解析 chat_log 模式的参考时间（用于相对时间语义解析）。"""
-        if not value:
-            return datetime.now()
-        formats = [
-            "%Y/%m/%d %H:%M:%S",
-            "%Y/%m/%d %H:%M",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d %H:%M",
-            "%Y/%m/%d",
-            "%Y-%m-%d",
-        ]
-        text = str(value).strip()
-        for fmt in formats:
-            try:
-                return datetime.strptime(text, fmt)
-            except ValueError:
-                continue
-        logger.warning(f"无法解析 chat_reference_time={value}，将回退为当前本地时间")
-        return datetime.now()
+    def _build_reference_now_text(self, value: Optional[str]) -> str:
+        """生成 chat_log 时间抽取提示词中的 reference_now（北京时间 UTC+8，审计 F08）。
+
+        - 格式错误：parse_reference_datetime 抛出 ValueError，直接报错，不再静默替换为当前时间。
+        - 未提供：使用当前北京时间，但明确标注为导入时刻、来源日期未知。
+        """
+        ref_dt = parse_reference_datetime(value)
+        if ref_dt is None:
+            return f"{prompt_now().strftime('%Y/%m/%d %H:%M')}（导入时刻（来源日期未知），时区 UTC+8）"
+        return f"{ref_dt.strftime('%Y/%m/%d %H:%M')}（来源参考时间，时区 UTC+8）"
 
     async def _extract_chat_time_meta_with_llm(
         self,
@@ -303,20 +294,20 @@ class AutoImporter:
         if not text.strip():
             return None
 
-        reference_now = self.chat_reference_dt.strftime("%Y/%m/%d %H:%M")
+        reference_now = self.chat_reference_now_text
         prompt = f"""You are a time extraction engine for chat logs.
 Extract temporal information from the following chat paragraph.
 
 Rules:
 1. Use semantic understanding, not regex matching.
-2. Convert relative expressions (e.g., yesterday evening, last Friday morning) to absolute local datetime using reference_now.
+2. Convert relative expressions (e.g., yesterday evening, last Friday morning) to absolute datetime in UTC+8 (Beijing time) using reference_now.
 3. If a time span exists, return event_time_start/event_time_end.
 4. If only one point in time exists, return event_time.
 5. If no reliable time can be inferred, return all time fields as null.
 6. Output ONLY valid JSON. No markdown, no explanation.
 
 reference_now: {reference_now}
-timezone: local system timezone
+timezone: UTC+8
 
 Allowed output formats for time values:
 - "YYYY/MM/DD"

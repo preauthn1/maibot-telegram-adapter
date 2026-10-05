@@ -14,10 +14,10 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.common.logger import get_logger
+from src.common.utils.prompt_time import format_prompt_timestamp
 from src.config.config import global_config
 
 from .episode_segmentation_service import EpisodeSegmentationService
@@ -420,7 +420,8 @@ class EpisodeService:
         keywords = self._derive_keywords(paragraphs, limit=10)
 
         if time_start is not None:
-            day_text = datetime.fromtimestamp(time_start).strftime("%Y-%m-%d")
+            # 标题日期按北京时间（UTC+8），不依赖服务器时区（审计 F08）。
+            day_text = format_prompt_timestamp(time_start, "%Y-%m-%d")
             title = f"{source or 'unknown'} {day_text} 情景片段"
         else:
             title = f"{source or 'unknown'} 情景片段"

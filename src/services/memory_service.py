@@ -6,9 +6,55 @@ from typing import Any, Dict, List, Optional
 
 from src.A_memorix.host_service import a_memorix_host_service
 from src.common.logger import get_logger
+from src.common.utils.prompt_time import format_prompt_timestamp
 
 
 logger = get_logger("memory_service")
+
+
+def _format_memory_epoch(value: Any) -> str:
+    """将记忆时间戳格式化为北京时间（UTC+8）分钟级文本；无效值返回空串。"""
+
+    if value is None or isinstance(value, bool):
+        return ""
+    try:
+        return format_prompt_timestamp(float(value), "%Y-%m-%d %H:%M")
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+
+
+def format_memory_time_label(metadata: Any) -> str:
+    """根据命中 metadata.time_meta 生成模型可见的时间标注（审计 F11）。
+
+    区分事件发生时间与入库时间；仅按入库时间回退匹配时明确告知事件时间未知，
+    避免模型把入库日期当成事件日期。
+    """
+
+    if not isinstance(metadata, dict):
+        return ""
+    time_meta = metadata.get("time_meta")
+    if not isinstance(time_meta, dict):
+        return ""
+    parts: List[str] = []
+    event_start = _format_memory_epoch(time_meta.get("event_time_start"))
+    event_end = _format_memory_epoch(time_meta.get("event_time_end"))
+    event_point = _format_memory_epoch(time_meta.get("event_time"))
+    if event_start or event_end:
+        parts.append(f"事件时间 {event_start or '?'} 至 {event_end or '?'}")
+    elif event_point:
+        parts.append(f"事件时间 {event_point}")
+    ingest_text = _format_memory_epoch(time_meta.get("ingest_time"))
+    if ingest_text:
+        parts.append(f"入库 {ingest_text}")
+    match_basis = str(time_meta.get("match_basis") or "").strip()
+    if match_basis == "created_at_fallback":
+        parts.append("仅按入库时间匹配，事件发生时间未知")
+    elif match_basis in {"event_time", "event_time_range"}:
+        parts.append("匹配依据：事件时间")
+    if not parts:
+        return ""
+    parts.append("北京时间")
+    return f"（{'，'.join(parts)}）"
 
 
 @dataclass
@@ -52,7 +98,8 @@ class MemorySearchResult:
             content = item.content if preserve_whitespace else item.content.strip().replace("\n", " ")
             if truncate_content and len(content) > max_content_chars:
                 content = content[:max_content_chars] + "..."
-            lines.append(f"{index}. {content}")
+            # 附带事件/入库时间标注，避免模型混淆两者（审计 F11）。
+            lines.append(f"{index}. {content}{format_memory_time_label(item.metadata)}")
         return "\n".join(lines)
 
     def to_dict(self) -> Dict[str, Any]:
