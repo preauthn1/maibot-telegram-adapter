@@ -210,6 +210,9 @@ def merge_split_commands(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]
             # 而 "cd /opt" + "&& ls" 直接拼会变成 "cd /opt&& ls"（仍可执行但难看）
             joiner = "" if next_text.startswith(" ") else " "
             prev["data"] = prev_text.rstrip() + joiner + next_text.lstrip()
+            # 合并段覆盖两段的原始下标，用于投递回执。
+            if "_orig_indices" in prev or "_orig_indices" in seg:
+                prev["_orig_indices"] = list(prev.get("_orig_indices") or []) + list(seg.get("_orig_indices") or [])
         else:
             merged.append(dict(seg))
 
