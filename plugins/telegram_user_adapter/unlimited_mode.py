@@ -1,40 +1,71 @@
-"""极端实验模式：一次性解除全部**频率类**限制。
+"""私有名单限定的频率实验；不影响身份、来源、内容与权限防护。
 
-为什么用环境变量而不是删代码：
-删掉的代码要靠 git revert 才能回来，而这是个观察性实验——
-随时可能需要立刻收手。开关放在环境变量里，回滚只需去掉
-systemd 的 Environment 行并重启，不碰任何逻辑。
-
-⚠️ 本开关只解除频率类限制（发多少、多久发一次）。
-身份类防护（22 条泄漏模式、污染检测、发言前自检）**不受影响**，
-因为上次真正导致封号的是举报 + 人工审核链路：
-群里有人看出不是真人 → 举报 → moderator 确认。
-那条路径与发言频率无关，删掉身份防护会让实验直接失去意义
-（分不清是"话太多"还是"说了不该说的"导致的后果）。
-
-用法：
-    UNLIMITED_MODE=1   解除频率限制
-    不设或设为 0        正常模式
+名单位于 data/frequency_test_targets.json，格式为 {"targets": ["会话键"]}。
+只精确匹配，不展开群/话题别名。旧的全局环境开关不再授权插件豁免。
 """
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
+from inspect import signature
+from pathlib import Path
+from typing import Iterator, Optional
 
-import os
+import json
 
-_ENV_KEY = "TG_UNLIMITED_MODE"
+_TARGET_FILE = Path(__file__).resolve().parents[2] / "data" / "frequency_test_targets.json"
+_current_chat: ContextVar[Optional[str]] = ContextVar("frequency_test_chat", default=None)
 
 
-def is_unlimited() -> bool:
-    """是否处于极端实验模式。
+def targets() -> frozenset[str]:
+    """热读私有名单；文件缺失或损坏时收紧为正常模式。"""
+    try:
+        data = json.loads(_TARGET_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return frozenset()
+    if not isinstance(data, dict) or not isinstance(data.get("targets"), list):
+        return frozenset()
+    values = data["targets"]
+    if not all(isinstance(value, str) and value and value == value.strip() for value in values):
+        return frozenset()
+    return frozenset(values)
 
-    Returns:
-        True 表示解除频率类限制。
-    """
 
-    return os.environ.get(_ENV_KEY, "").strip() in {"1", "true", "yes", "on"}
+def is_unlimited(chat_id: Optional[str] = None) -> bool:
+    """显式目标优先，缺省只读取本协程上下文；永不全局放行。"""
+    key = str(chat_id) if chat_id is not None else _current_chat.get()
+    return bool(key and key in targets())
+
+
+@contextmanager
+def frequency_scope(chat_id: str) -> Iterator[None]:
+    """跨 await 隔离会话，异常/取消后也复位。共享 worker 必须重新绑定。"""
+    token = _current_chat.set(str(chat_id))
+    try:
+        yield
+    finally:
+        _current_chat.reset(token)
+
+
+def scoped_frequency(parameter: str):
+    """为异步入口绑定真实参数，保留 SDK 所需签名与装饰器元数据。"""
+    def decorate(function):
+        sig = signature(function)
+        @wraps(function)
+        async def wrapped(*args, **kwargs):
+            bound = sig.bind(*args, **kwargs)
+            value = bound.arguments[parameter]
+            if parameter == "event":
+                key = str(value.chat_id)
+            elif parameter == "message":
+                key = bound.arguments["self"]._resolve_outbound_chat_id(value)
+            else:
+                key = str(value)
+            with frequency_scope(key):
+                return await function(*args, **kwargs)
+        return wrapped
+    return decorate
 
 
 def describe() -> str:
-    """给日志用的一行状态描述。"""
-
-    if is_unlimited():
-        return "⚠️ 极端实验模式：频率类限制已全部解除（身份防护仍生效）"
-    return "正常模式：频率限制生效"
+    """日志不输出私有名单。"""
+    return f"目标频率实验：{len(targets())} 个精确会话；其他会话与安全防护保持正常"

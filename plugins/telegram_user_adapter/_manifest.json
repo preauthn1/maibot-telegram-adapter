@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "version": "0.3.0",
   "name": "Telegram 真人账号适配器",
-  "description": "使用 MTProto (Telethon) 以真人 Telegram 账号身份收发消息，让麦麦看起来就是一个普通用户而不是 Bot",
+  "description": "使用 MTProto (Telethon) 以个人 Telegram 账号收发消息的自动账号适配器；被认真问到身份时如实说明，不伪装为人工操作者",
   "author": {
     "name": "preauthn1",
     "url": "https://github.com/preauthn1"
@@ -31,11 +31,25 @@
       "type": "python_package",
       "name": "python-socks",
       "version_spec": ">=2.0.0"
+    },
+    {
+      "type": "python_package",
+      "name": "markdown-it-py",
+      "version_spec": ">=4.0.0,<5"
+    },
+    {
+      "type": "python_package",
+      "name": "aiohttp",
+      "version_spec": ">=3.12.14,<4"
     }
   ],
   "capabilities": [
     "maisaka.context.append",
-    "frequency.set_adjust"
+    "chat.get_stream_by_group_id",
+    "chat.get_stream_by_user_id",
+    "frequency.set_adjust",
+    "send.text",
+    "send.custom"
   ],
   "i18n": {
     "default_locale": "zh-CN",

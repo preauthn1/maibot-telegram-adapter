@@ -11,7 +11,7 @@ import tomlkit
 from src.webui.routers.telegram_onboarding import ALLOWED_ORIGINS, MASK, PLUGIN_ID
 
 # 仅授权凭据与个人标识：这些字段只能由已验证的登录向导写入。
-LOCKED_KEYS = {'api_hash', 'session_string', 'phone'}
+LOCKED_KEYS = {'api_hash', 'session_string', 'phone', 'bot_token'}
 
 
 def redact_proxy(value):
@@ -52,7 +52,7 @@ def locked_writes(config):
             sources.append({field: value})
     for source in sources:
         for key, value in source.items():
-            if key in LOCKED_KEYS and isinstance(value, str) and value and value != MASK:
+            if key in LOCKED_KEYS and value != MASK:
                 attempts.add(key)
     return attempts
 

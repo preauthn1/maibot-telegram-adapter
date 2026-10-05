@@ -27,6 +27,16 @@ parse_mode，聊天里的 ``*`` ``_`` ``` 会被当成格式标记吃掉或
 from typing import Any, Dict, List, Optional, Tuple
 
 import re
+import json
+
+
+def _is_json_container(text: str) -> bool:
+    if not text.lstrip().startswith(('{', '[')):
+        return False
+    try:
+        return isinstance(json.loads(text), (dict, list))
+    except (ValueError, RecursionError):
+        return False
 
 # 命令特征：可执行程序名、管道、URL、脚本后缀。
 #
@@ -98,17 +108,20 @@ def strip_tool_markup(text: str) -> str:
             调用方应据此丢弃整条消息。
     """
 
-    if not text:
+    if not text or _is_json_container(text):
         return text
     if "<" not in text and "[" not in text:
         return text
 
-    cleaned = _TOOL_MARKUP.sub("", text)
-    if cleaned == text:
-        return text
-
-    # 剥离后可能留下多余空白
-    return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+    # 显式代码中的标签属于示例内容；只在代码外清理模型控制标记。
+    spans = re.split(r"(```[\s\S]*?```|`[^`\n]+`)", text)
+    changed = False
+    for index in range(0, len(spans), 2):
+        cleaned = _TOOL_MARKUP.sub("", spans[index])
+        if cleaned != spans[index]:
+            changed = True
+            spans[index] = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return "".join(spans).strip() if changed else text
 
 
 def has_command(text: str) -> bool:
@@ -213,7 +226,7 @@ def protect_commands(text: str) -> str:
         str: 命令与中文之间补齐分隔后的文本。
     """
 
-    if not text or not has_command(text):
+    if not text or _is_json_container(text) or not has_command(text):
         return text
     if _ALREADY_FENCED.search(text):
         return text
@@ -236,7 +249,7 @@ def format_command_segments(text: str) -> Tuple[str, Optional[str]]:
             parse_mode 为 ``None`` 时应以纯文本发送。
     """
 
-    if not text or not has_command(text):
+    if not text or _is_json_container(text) or not has_command(text):
         return text, None
 
     if _ALREADY_FENCED.search(text):

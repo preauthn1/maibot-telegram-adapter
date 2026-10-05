@@ -15,6 +15,7 @@ from src.common.utils.math_utils import translate_timestamp_to_human_readable
 from src.common.utils.utils_action import ActionUtils
 from src.config.config import global_config
 from src.services.context_merge import merge_consecutive_messages
+from src.maisaka.context.telegram_evidence import telegram_context_evidence
 
 
 def _build_readable_line(
@@ -38,7 +39,7 @@ def _build_readable_line(
     if show_message_id_prefix:
         prefix.append(f"[消息ID: {message.message_id}]")
     prefix.append(f"{user_name}说：")
-    return " ".join(prefix) + plain_text
+    return " ".join(prefix) + plain_text + telegram_context_evidence(message)
 
 
 # 机器人消息的正文特征。入群验证、封禁通知这类消息对对话毫无价值，

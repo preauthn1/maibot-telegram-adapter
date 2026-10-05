@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import asyncio
 import json
 import re
+from .scoped_experience_export import export_scoped_experience
 
 _CN_TZ = timezone(timedelta(hours=8))
 
@@ -371,7 +372,8 @@ class SelfImprovementStore:
                         "ts": datetime.now(_CN_TZ).isoformat(),
                         "chat_id": outcome.chat_id,
                         "kind": outcome.violation_kind,
-                        "our_text": outcome.text[:200],
+                        # 保留当前反馈完整语义，提示预算由会话读取端控制。
+                        "our_text": outcome.text,
                         "hits": ",".join(outcome.violation_hits[:5]),
                     }
                 )
@@ -419,6 +421,10 @@ class SelfImprovementStore:
             self._save_state()
             self._rewrite_skill_file()
             self._write_prompt_experience()
+            try:
+                export_scoped_experience(self._base_dir, self._state, outcome.chat_id)
+            except (OSError, ValueError):
+                self._logger.warning("会话经验导出失败；未回退到全局经验")
 
     def _write_prompt_experience(self) -> None:
         """把经验导出为主程序可读的 prompt 片段。

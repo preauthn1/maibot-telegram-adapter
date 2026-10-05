@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import List, Tuple
 
 import re
+import json
 
 # 明确的污染标记。命中任意一条即判定为污染。
 #
@@ -36,7 +37,8 @@ _POLLUTION_PATTERNS: Tuple[Tuple[str, str], ...] = (
     (r"\{\{.*?\}\}", "模板占位符"),
     (r"\b__\w+__\b", "内部变量名"),
     # 思维链标记
-    (r"^\s*(?:思考|分析|推理|Thought|Reasoning)\s*[:：]", "思维链泄漏"),
+    (r"^\s*(?:思考|推理|Thought|Reasoning)\s*[:：]", "思维链泄漏"),
+    (r"^\s*分析\s*[:：]\s*(?:用户|对方|他|她|这条|这句|我应该|我需要|应该回复|需要回复)", "思维链泄漏"),
 )
 _COMPILED = tuple((re.compile(p, re.I), label) for p, label in _POLLUTION_PATTERNS)
 
@@ -55,8 +57,17 @@ def detect_pollution(text: str) -> Tuple[bool, List[str]]:
     if not normalized:
         return False, []
 
+    # JSON 是合法回答格式，形状本身不构成泄漏；其余信号仍独立检查。
+    valid_json = False
+    if normalized.startswith(('{', '[')):
+        try:
+            valid_json = isinstance(json.loads(normalized), (dict, list))
+        except (ValueError, RecursionError):
+            pass
     reasons: List[str] = []
     for pattern, label in _COMPILED:
+        if valid_json and label in ('JSON 片段', '疑似 JSON 对象'):
+            continue
         if pattern.search(normalized):
             reasons.append(label)
 

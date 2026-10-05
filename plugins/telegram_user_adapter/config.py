@@ -7,6 +7,8 @@ from typing import Any, ClassVar, Iterable, List, Literal
 from maibot_sdk import Field, PluginConfigBase
 from pydantic import field_validator
 
+from .account_modes import validate_mode
+
 from .constants import (
     DEFAULT_CHAT_LIST_TYPE,
     DEFAULT_MAX_TYPING_DELAY,
@@ -44,6 +46,15 @@ class TelegramAccountConfig(PluginConfigBase):
 
     __ui_label__: ClassVar[str] = "Telegram 账号"
     __ui_order__: ClassVar[int] = 1
+
+    account_type: Literal["user", "bot"] = Field(
+        default="user", description="账号模式；Bot 使用独立会话，不能复用用户授权。",
+        json_schema_extra={"label": "账号模式"},
+    )
+    bot_token: str = Field(
+        default="", description="仅 Bot 模式使用；不得写入日志。",
+        json_schema_extra={"label": "Bot Token", "input_type": "password"},
+    )
 
     api_id: int = Field(
         default=0,
@@ -556,9 +567,26 @@ class TelegramUserChatConfig(PluginConfigBase):
         return result
 
 
+class TelegramNativeToolsConfig(PluginConfigBase):
+    """工具安全开关：默认不发布，不开放原始 API。"""
+    raw_read_enabled: bool = Field(default=False, description="只读 MTProto 查询；不支持任意方法")
+    public_publish_enabled: bool = Field(default=False, description="允许管理员逐内容批准的公开 Telegraph 发布")
+
+
+class TelegramCatchupConfig(PluginConfigBase):
+    """仅补取明确配置且 Host 已注册的精确聊天/话题，不枚举 dialogs。"""
+    targets: List[str] = Field(default_factory=list, max_length=32,
+        description="补历史目标：规范带符号 chat_id，可带 ::tg-topic::mt=话题ID；空列表关闭")
+    per_stream_limit: int = Field(default=50, ge=1, le=100)
+    total_limit: int = Field(default=200, ge=1, le=500)
+    time_budget_seconds: float = Field(default=20.0, ge=1.0, le=60.0)
+
+
 class TelegramUserPluginSettings(PluginConfigBase):
     """Telegram 真人账号适配器完整配置。"""
 
+    catchup: TelegramCatchupConfig = Field(default_factory=TelegramCatchupConfig)
+    native_tools: TelegramNativeToolsConfig = Field(default_factory=TelegramNativeToolsConfig)
     plugin: TelegramUserPluginOptions = Field(default_factory=TelegramUserPluginOptions)
     telegram_account: TelegramAccountConfig = Field(default_factory=TelegramAccountConfig)
     behavior: TelegramUserBehaviorConfig = Field(default_factory=TelegramUserBehaviorConfig)
@@ -587,7 +615,12 @@ class TelegramUserPluginSettings(PluginConfigBase):
         if account.api_id <= 0 or not account.api_hash:
             logger.warning("Telegram 真人账号适配器已启用，但 api_id / api_hash 未配置")
             return False
-        if not account.session_string and not account.phone:
+        try:
+            validate_mode(account.account_type, account.session_string, account.bot_token)
+        except ValueError as exc:
+            logger.warning("Telegram 账号配置无效：%s", str(exc))
+            return False
+        if account.account_type == "user" and not account.session_string and not account.phone:
             logger.warning(
                 "Telegram 真人账号适配器缺少登录凭据：请填写 session_string，"
                 "或先用 scripts/telegram_user_login.py 生成会话文件"

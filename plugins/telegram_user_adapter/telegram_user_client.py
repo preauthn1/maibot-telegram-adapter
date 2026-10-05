@@ -1,3 +1,4 @@
+# Telegram fidelity modifications 2026-10-06 (+08), GPLv3; see PORT_NOTICES.md.
 """Telethon 真人账号客户端封装。
 
 把 Telethon 的连接、登录、拟人化动作（已读、正在输入）与媒体下载封装成
@@ -9,7 +10,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from .outgoing_ownership import OutgoingOwnership, ownership_client_class
+from .account_modes import validate_mode, session_for_mode, validate_identity
+from .fidelity.native import NativeReferences
+
 import asyncio
+import os
 
 
 def is_available() -> bool:
@@ -82,6 +88,8 @@ class TelegramUserClient:
         system_version: str,
         app_version: str,
         logger: Any,
+        account_type: str = "user",
+        bot_token: str = "",
     ) -> None:
         """初始化客户端参数。
 
@@ -100,7 +108,9 @@ class TelegramUserClient:
         self._api_id = api_id
         self._api_hash = api_hash
         self._session_string = session_string
-        self._session_path = session_path
+        self._account_type = validate_mode(account_type, session_string, bot_token)
+        self._bot_token = bot_token
+        self._session_path = session_for_mode(session_path, account_type)
         self._proxy_url = proxy_url
         self._device_model = device_model
         self._system_version = system_version
@@ -108,6 +118,7 @@ class TelegramUserClient:
         self._logger = logger
         self._client: Any = None
         self._me: Any = None
+        self.native_refs = NativeReferences()
 
     @property
     def client(self) -> Any:
@@ -147,7 +158,7 @@ class TelegramUserClient:
             self._session_path.parent.mkdir(parents=True, exist_ok=True)
             session = str(self._session_path)
 
-        self._client = TelegramClient(
+        self._client = ownership_client_class(TelegramClient)(
             session,
             self._api_id,
             self._api_hash,
@@ -158,6 +169,12 @@ class TelegramUserClient:
         )
 
         await self._client.connect()
+        if self._account_type == "bot" and not await self._client.is_user_authorized():
+            try:
+                await self._client.sign_in(bot_token=self._bot_token)
+            except Exception:
+                await self.close()
+                raise RuntimeError("Bot 授权失败，请核对凭据") from None
         if not await self._client.is_user_authorized():
             self._logger.error(
                 "Telegram 账号尚未授权。请先运行 scripts/telegram_user_login.py 完成登录，"
@@ -167,6 +184,14 @@ class TelegramUserClient:
             return False
 
         self._me = await self._client.get_me()
+        try:
+            validate_identity(self._me, self._account_type, self._bot_token)
+        except ValueError:
+            await self.close()
+            raise
+        self._client.outgoing_ownership = OutgoingOwnership(
+            self._session_path.parent / "outgoing_ownership.sqlite3", str(self._me.id)
+        )
         return True
 
     async def close(self) -> None:
@@ -179,8 +204,10 @@ class TelegramUserClient:
             return
         try:
             await client.disconnect()
-        except Exception as exc:  # noqa: BLE001 - 关闭链路失败只记录
-            self._logger.warning(f"断开 Telegram 连接时出错: {exc}")
+        except Exception as exc:  # noqa: BLE001 - 关闭失败须保留引用供重试
+            self._client = client
+            self._logger.warning(f"断开 Telegram 连接时出错: {type(exc).__name__}")
+            raise
 
     def add_message_handler(self, handler: Callable[[Any], Any], *, incoming_only: bool) -> None:
         """注册新消息事件处理器。
@@ -247,7 +274,49 @@ class TelegramUserClient:
 
         if self._client is None:
             raise RuntimeError("Telegram 客户端尚未连接")
-        await self._client.run_until_disconnected()
+        # 单个已授权客户端同时负责消息与资料更新，不另建 Session。
+        clock = None
+        if self._account_type == "user" and os.environ.get("MAIBOT_TGTIME_ENABLED") == "1":
+            clock = asyncio.create_task(self._profile_clock(self._client), name="maibot-profile-clock")
+        try:
+            await self._client.run_until_disconnected()
+        finally:
+            for task in (clock,):
+                if task is not None:
+                    task.cancel()
+            await asyncio.gather(*(task for task in (clock,) if task is not None), return_exceptions=True)
+
+    async def _profile_clock(self, client: Any) -> None:
+        """复用监听客户端更新姓氏；断线随监听任务清理，不创建连接。"""
+        from datetime import datetime, timedelta, timezone
+        from telethon import errors
+        from telethon.tl.functions.account import UpdateProfileRequest
+
+        zone = timezone(timedelta(hours=8))
+        while True:
+            delay = 300
+            try:
+                if not client.is_connected():
+                    await asyncio.sleep(30)
+                    continue
+                desired = datetime.now(zone).strftime("%H:%M UTC+8")
+                await asyncio.wait_for(client(UpdateProfileRequest(last_name=desired)), timeout=45)
+                me = await asyncio.wait_for(client.get_me(), timeout=45)
+                if me.last_name != desired:
+                    raise RuntimeError("Telegram surname readback mismatch")
+                self._logger.info(f"[tgtime-shared] 已更新且回读一致: {desired}")
+            except errors.FloodWaitError as exc:
+                delay = exc.seconds + 5
+                self._logger.warning(f"[tgtime-shared] FloodWait 等待 {exc.seconds}s")
+            except (errors.AuthKeyDuplicatedError, errors.AuthKeyUnregisteredError,
+                    errors.SessionRevokedError, errors.SessionExpiredError):
+                self._logger.error("[tgtime-shared] 授权失效，停止更新时间任务")
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._logger.warning(f"[tgtime-shared] 更新失败: {type(exc).__name__}; 300s 后重试")
+            await asyncio.sleep(delay)
 
     async def mark_read(self, entity: Any, message_id: Optional[int] = None) -> None:
         """把会话标记为已读。
@@ -367,6 +436,9 @@ class TelegramUserClient:
         *,
         reply_to: Optional[int] = None,
         parse_mode: Optional[str] = None,
+        formatting_entities: Optional[list] = None,
+        link_preview: bool = False,
+        buttons: Any = None,
     ) -> Any:
         """发送文本消息。
 
@@ -385,9 +457,55 @@ class TelegramUserClient:
 
         if self._client is None:
             raise RuntimeError("Telegram 客户端尚未连接")
+        native_buttons = None
+        if buttons is not None:
+            if not bool(getattr(self._me, "bot", False)):
+                raise ValueError("按钮仅支持 Bot 账号")
+            from .button_tools import telethon_buttons
+            native_buttons = telethon_buttons(buttons)
         return await self._client.send_message(
-            entity, text, reply_to=reply_to, parse_mode=parse_mode
+            entity, text, reply_to=reply_to, parse_mode=parse_mode,
+            formatting_entities=formatting_entities, link_preview=link_preview, buttons=native_buttons,
         )
+
+    async def send_native_image(self, entity: Any, token: str, *, reply_to: Optional[int] = None) -> Any:
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+        from telethon.utils import get_peer_id
+        # 实际目的地二次核对，不能把源群引用发到其他会话。
+        peer = get_peer_id(await self._client.get_input_entity(entity))
+        ref = self.native_refs._resolve(token, peer)
+        if ref.kind != "photo":
+            raise ValueError("原生图片路径只支持照片；贴纸/GIF 遵循既有策略")
+        return await self.native_refs.send(self._client, entity, token, peer, reply_to=reply_to)
+
+    def add_callback_handler(self, handler: Any) -> None:
+        if self._client is None or not bool(getattr(self._me, "bot", False)):
+            return
+        from telethon import events
+        self._client.add_event_handler(handler, events.CallbackQuery())
+
+    async def refresh_official_stickers(self, catalog: Any) -> None:
+        """仅查询目录；不安装、不下载、不发送。"""
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+        await catalog.refresh(self._client)
+
+    async def send_observed_sticker(self, entity: Any, data: Any, *, reply_to: Optional[int] = None) -> Any:
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+        return await self.observed_stickers.send(self._client, entity, data["scope"], data["sticker_ref"], reply_to=reply_to)
+
+    async def send_native_sticker(self, entity: Any, data: Any, catalog: Any, *, reply_to: Optional[int] = None) -> Any:
+        """发送边界再次解析白名单，绝不接受调用者提供的 Document/文件。"""
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+        await catalog.refresh(self._client)
+        selected = catalog.select(data)
+        if selected is None:
+            raise ValueError("贴纸不是当前批准套装的精确映射")
+        _, document = selected
+        return await self._client.send_file(entity, document, reply_to=reply_to)
 
     async def send_file(
         self,
@@ -448,7 +566,19 @@ class TelegramUserClient:
             return None
 
         try:
-            return await self._client.download_media(message, file=bytes)
+            # 既检查声明大小，也限额流式下载未知大小媒体。
+            cap = min(max_bytes, 8 * 1024 * 1024) if max_bytes > 0 else 8 * 1024 * 1024
+            buffer = bytearray()
+            async with asyncio.timeout(30):
+                stream = self._client.iter_download(message.media, request_size=65536)
+                try:
+                    async for chunk in stream:
+                        if len(buffer) + len(chunk) > cap:
+                            return None
+                        buffer.extend(chunk)
+                finally:
+                    await stream.close()
+            return bytes(buffer)
         except Exception as exc:  # noqa: BLE001 - 下载失败降级为文本占位
             self._logger.warning(f"下载 Telegram 媒体失败: {exc}")
             return None

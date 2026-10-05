@@ -161,6 +161,36 @@ def is_doubt_aimed_at_us(
     return replied_to_us or recently_spoke
 
 
+_DIRECT_IDENTITY_Q_RE = re.compile(
+    r"(你|麦麦|您)\s*(是|是不是|到底是|该不会是|难道是)\s*(个|一个)?\s*"
+    r"(ai|AI|Ai|人工智能|机器人|bot|Bot|人机|自动回复|真人|人类|活人)"
+    r"|(你|麦麦)\s*(是人|是真人|是活人)\s*(吗|嘛|么|\?|？)"
+)
+
+
+_SHORT_IDENTITY_Q_RE = re.compile(
+    r"(?:是不是|是|像|该不会是)\s*(?:个|一个)?\s*"
+    r"(?:ai|AI|Ai|人工智能|机器人|bot|Bot|人机|自动回复|真人|人类|活人)"
+)
+
+
+def is_direct_identity_question(text: str, *, replied_to_us: bool = False) -> bool:
+    """被直接、认真地问到身份时返回 True。
+
+    旁敲（"搁这训练大模型来了"）可以触发静默；但对方直接问
+    "你是 AI 吗"，保留一次正常回复的机会（按否认口径）。
+    """
+    if not text or not text.strip():
+        return False
+    # 回复我们的消息时，省略主语的"是不是机器人？"同样是直接身份提问。
+    if replied_to_us and _SHORT_IDENTITY_Q_RE.search(text) and re.search(r"[?？吗嘛么]", text):
+        return True
+    if not _DIRECT_IDENTITY_Q_RE.search(text):
+        return False
+    # 必须是冲我们来的：回复我们，或明确称呼"你/麦麦"并带疑问。
+    return replied_to_us or bool(re.search(r"[?？吗嘛么]", text))
+
+
 def should_react_to_doubt(reacted_today: Sequence[str]) -> bool:
     """判断此刻是否该对质疑做表情回应。
 

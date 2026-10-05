@@ -95,7 +95,7 @@ class SendBudget:
         last_minute = sum(1 for stamp in self._sends if stamp >= minute_cutoff)
         return len(self._sends), last_minute
 
-    def check(self, *, now: Optional[float] = None) -> Tuple[bool, str]:
+    def check(self, chat_id: Optional[str] = None, *, now: Optional[float] = None) -> Tuple[bool, str]:
         """判断此刻是否还允许发送。
 
         Args:
@@ -110,7 +110,7 @@ class SendBudget:
 
         # 极端实验模式：仍照常记账（record 不受影响），只是不再拒绝，
         # 这样事后能统计"如果有限制会被挡掉多少"。
-        if is_unlimited():
+        if is_unlimited(chat_id):
             return True, ""
 
         if last_minute >= self.minute_limit:

@@ -629,6 +629,15 @@ class PluginRunnerSupervisor:
             timeout_ms=timeout_ms,
         )
 
+    async def query_outbound_policy(
+        self, plugin_id: str, component_name: str, args: Dict[str, Any], timeout_ms: int = 5000,
+    ) -> Envelope:
+        """使用专用 RPC 查询策略；旧 Runner 不认识此方法也不会发送。"""
+        return await self.invoke_plugin(
+            method="plugin.query_outbound_policy", plugin_id=plugin_id,
+            component_name=component_name, args=args, timeout_ms=timeout_ms,
+        )
+
     async def invoke_llm_provider(
         self,
         plugin_id: str,

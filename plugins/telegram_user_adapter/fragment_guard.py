@@ -38,9 +38,9 @@ from typing import Any, Dict, List, Sequence
 
 # 一次发言的最大段数。
 #
-# 取 3：真人回一个话题通常 1-3 条（侦察显示真人连发中位 4 条，
-# 但那包含了多个话题的连续参与）。超过 3 条就明显是"一个意思拆多条"。
-MAX_SEGMENTS = 3
+# 取 1：用户明确投诉过"一下发好几条"。一次逻辑回复只发一条完整消息；
+# 超出的文本段并入同一条（_join 保留标点与空格）。
+MAX_SEGMENTS = 1
 
 # 短语气词长度阈值。
 #
@@ -54,10 +54,119 @@ _INTERJECTION_MAX_LEN = 4
 # codex 审计指出：若豁免无上限，上游把长句拆成一堆 ≤4 字片段
 # （"反代就" "是帮你" "修条路" "过去了"）就能完全绕过 3 段限制。
 # 真人连发语气词也就三五条，超过就是异常。
-_INTERJECTION_MAX_COUNT = 5
+_INTERJECTION_MAX_COUNT = 2
+
+# 只有这些真正的独立反应词才享受"不合并"豁免；任意两个短片段
+# （如"看这个""挺好玩"）仍合并成一条，避免绕过单条上限。
+_INTERJECTION_TOKENS = frozenset({
+    "哈", "哈哈", "哈哈哈", "哈哈哈哈", "笑死", "绷", "绷不住", "确实", "好", "好的",
+    "行", "嗯", "嗯嗯", "哦", "哦哦", "6", "66", "666", "牛", "草", "啊", "对", "？", "?",
+})
 
 # 句末标点，合并时避免出现"。。"这类重复。
 _TRAILING_PUNCT = "。！？；，、.!?;,"
+
+# 续句连接词：以这些词开头的消息段，几乎可以断定是上一句被逗号/句号
+# 切开后的后半句，而不是一条独立发言。真人极少用「而且」「因此」「或」
+# 这类词单独起一条消息。
+#
+# ## 事故背景（脱敏）
+#
+# 一条需要锚定目标的安抚类回复被上游标点切分成两条发出：
+#
+#     消息A：「…有没有已经想好怎么做」
+#     消息B：「或正在伤害自己…」      ← 以「或」起头，是 A 的后半句
+#
+# B 以「或」起头却被当成独立消息发出，不仅读起来断裂，还在期间插入
+# 其他消息后丢失了对原目标的锚定。这类「一句话被切成两条」正是本模块
+# 要消除的碎片化，只是发生在 3 段以内、原有段数上限拦不住的情形。
+_CONTINUATION_PREFIXES = (
+    "而且", "并且", "因此", "否则", "以及", "况且", "何况", "甚至",
+    "或者", "或", "而", "并",
+)
+
+# 单字连接词的排除项：以其开头但语义独立的常见词不算续句。
+# 例如「或许」（也许）是独立副词，不是列举式的「或」。
+_CONTINUATION_PREFIX_EXCLUDE = ("或许",)
+
+
+def _is_continuation(text: str) -> bool:
+    """判断一段文本是否是上一句的续写（以续句连接词起头）。
+
+    Args:
+        text: 待判断的文本。
+
+    Returns:
+        bool: 判定为续句片段返回 ``True``。
+    """
+
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if stripped.startswith(_CONTINUATION_PREFIX_EXCLUDE):
+        return False
+    return stripped.startswith(_CONTINUATION_PREFIXES)
+
+
+def _merge_continuations(parts: Sequence[str]) -> List[str]:
+    """把以续句连接词起头的片段并回紧邻的前一段（纯文本版）。
+
+    只处理相邻片段，不跨越空段；合并用 :func:`_join` 补空格断句，
+    不额外改写内容。段数上限之外单独生效，修复「一句话被切成两条」。
+
+    Args:
+        parts: 原始文本段列表。
+
+    Returns:
+        List[str]: 续句已并回前一段的列表。
+    """
+
+    result: List[str] = []
+    for part in parts:
+        if not part or not part.strip():
+            continue
+        if result and _is_continuation(part):
+            result[-1] = _join([result[-1], part])
+            continue
+        result.append(part)
+    return result
+
+
+def _merge_message_continuations(
+    segments: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """把以续句连接词起头的文本段并回紧邻的前一个文本段（消息段版）。
+
+    仅在两段都是**相邻的纯文本段**且都不携带额外元数据（entities、
+    reply_to 等，合并后 offset 会错位）时合并。中间隔着媒体段的两段
+    属于不同语境，不合并。
+
+    Args:
+        segments: 上游给出的消息段列表。
+
+    Returns:
+        List[Dict[str, Any]]: 续句已并回前一段的消息段列表。
+    """
+
+    result: List[Dict[str, Any]] = []
+    for seg in segments:
+        is_text = str(seg.get("type") or "") == "text"
+        cur_text = str(seg.get("data") or "")
+        if (
+            is_text
+            and cur_text.strip()
+            and result
+            and str(result[-1].get("type") or "") == "text"
+            and not _has_metadata(result[-1])
+            and not _has_metadata(seg)
+            and _is_continuation(cur_text)
+        ):
+            prev = dict(result[-1])
+            prev["data"] = _join([str(prev.get("data") or ""), cur_text])
+            result[-1] = prev
+            continue
+        result.append(seg)
+    return result
 
 
 def _needs_space(left: str, right: str) -> bool:
@@ -137,7 +246,7 @@ def _all_interjections(parts: Sequence[str]) -> bool:
     stripped = [p.strip() for p in parts if p.strip()]
     if len(stripped) > _INTERJECTION_MAX_COUNT:
         return False
-    return all(len(p) <= _INTERJECTION_MAX_LEN for p in stripped)
+    return all(len(p) <= _INTERJECTION_MAX_LEN and p in _INTERJECTION_TOKENS for p in stripped)
 
 
 def limit_fragments(segments: Sequence[str]) -> List[str]:
@@ -156,6 +265,8 @@ def limit_fragments(segments: Sequence[str]) -> List[str]:
     """
 
     cleaned = [s for s in segments if s and s.strip()]
+    # 先并回被标点切散的续句，再按段数上限处理。
+    cleaned = _merge_continuations(cleaned)
     if len(cleaned) <= MAX_SEGMENTS:
         return cleaned
     if _all_interjections(cleaned):
@@ -206,6 +317,9 @@ def limit_message_segments(
 
     if not segments:
         return []
+
+    # 先并回被标点切散的续句（如以「或」起头的后半句），再按文本段数上限处理。
+    segments = _merge_message_continuations(segments)
 
     text_idx = [
         i
