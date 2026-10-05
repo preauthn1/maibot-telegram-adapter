@@ -31,6 +31,7 @@ export function TelegramOnboarding() {
   const [info, setInfo] = useState('')
   const [remaining, setRemaining] = useState(0)
   const attempt = useRef('')
+  const requestInFlight = useRef(false)
   const deadline = useRef(0)
   const clearSecrets = () => { setHash(''); setPhone(''); setSession(''); setValue('') }
   // 请求层（backendApi）负责 Cookie、HTML 回退诊断与 ApiError 文案，组件不再手写 response.json()
@@ -71,6 +72,9 @@ export function TelegramOnboarding() {
   }
 
   async function submit() {
+    // 同步锁拦住 React 状态提交前的双击/重复回车，避免重复创建授权尝试。
+    if (requestInFlight.current) return
+    requestInFlight.current = true
     setBusy(true); setError('')
     try {
       const path = step === 'credentials' ? '/start' : `/${attempt.current}/${step}`
@@ -100,6 +104,7 @@ export function TelegramOnboarding() {
       }
       setError(describe(cause, '请求失败，请稍后重试'))
     } finally {
+      requestInFlight.current = false
       setBusy(false); setValue('')
     }
   }
@@ -125,7 +130,7 @@ export function TelegramOnboarding() {
   }
 
   return <section className="space-y-3 rounded-xl border p-4" aria-label="Telegram 真人账号登录">
-    <div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">Telegram 真人账号</h2><p className="text-muted-foreground text-sm">手机验证码、两步验证或 StringSession 导入；不会启动机器人。</p></div>
+    <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center"><div><h2 className="font-semibold">Telegram 真人账号</h2><p className="text-muted-foreground text-sm">手机验证码、两步验证或 StringSession 导入；不会启动机器人。</p></div>
       {!open && <Button onClick={() => void show()}>添加 / 更换 Telegram 账号</Button>}</div>
     {open && <form className="max-w-xl space-y-3" autoComplete="off" onSubmit={e => { e.preventDefault(); void submit() }}>
       <p className="text-muted-foreground text-sm">{info}</p>
@@ -134,11 +139,11 @@ export function TelegramOnboarding() {
         <label className="block text-sm">登录方式<select aria-label="登录方式" value={mode} onChange={e => setMode(e.target.value as 'phone' | 'import')} className="bg-background ml-3 rounded border p-2" disabled={busy}><option value="phone">手机验证码</option><option value="import">导入 StringSession</option></select></label>
         {savedCreds ? <p data-testid="saved-telegram-credentials" className="text-sm">API ID：{apiId}；API Hash：{'********'}（服务器已保存，自动复用，不下发明文）</p> : <>
           <p role="status">服务器 API 凭据缺失或无效，请先配置，或同时填写以下两项。</p>
-          <label className="block text-sm">API ID<Input aria-label="API ID" type="number" min="1" required value={apiId} onChange={e => setApiId(e.target.value)} disabled={busy} /></label>
-          <label className="block text-sm">API Hash<Input aria-label="API Hash" type="password" autoComplete="new-password" required minLength={32} maxLength={32} value={hash} onChange={e => setHash(e.target.value)} disabled={busy} /></label>
+          <label htmlFor="telegram-api-id" className="block text-sm">API ID<Input id="telegram-api-id" aria-label="API ID" type="number" min="1" required value={apiId} onChange={e => setApiId(e.target.value)} disabled={busy} /></label>
+          <label htmlFor="telegram-api-hash" className="block text-sm">API Hash<Input id="telegram-api-hash" aria-label="API Hash" type="password" autoComplete="new-password" required minLength={32} maxLength={32} value={hash} onChange={e => setHash(e.target.value)} disabled={busy} /></label>
         </>}
-        {mode === 'phone' ? <label className="block text-sm">手机号（含国际区号）<Input aria-label="手机号" type="tel" placeholder="+861****0000" pattern="\+[1-9][0-9]{6,14}" required value={phone} onChange={e => setPhone(e.target.value)} disabled={busy} /></label>
-          : <label className="block text-sm">StringSession<Input aria-label="StringSession" type="password" autoComplete="new-password" required value={session} onChange={e => setSession(e.target.value)} disabled={busy} /></label>}
+        {mode === 'phone' ? <label htmlFor="telegram-phone" className="block text-sm">手机号（含国际区号）<Input id="telegram-phone" aria-label="手机号" type="tel" placeholder="+861****0000" pattern="\+[1-9][0-9]{6,14}" required value={phone} onChange={e => setPhone(e.target.value)} disabled={busy} /></label>
+          : <label htmlFor="telegram-session" className="block text-sm">StringSession<Input id="telegram-session" aria-label="StringSession" type="password" autoComplete="new-password" required value={session} onChange={e => setSession(e.target.value)} disabled={busy} /></label>}
       </>}
       {(step === 'code' || step === 'password') && <>
         <p className="text-sm">剩余 {remaining} 秒。{step === 'code' ? '请查看 Telegram 客户端或短信中的验证码。' : '账号启用了两步验证，请输入 Telegram 密码。'}</p>

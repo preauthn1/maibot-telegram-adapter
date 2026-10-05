@@ -380,8 +380,8 @@ describe('usePluginList', () => {
       await result.current.performTogglePlugin(plugin)
     })
     expect(toastMock).toHaveBeenCalledWith({
-      title: '插件已启动',
-      description: 'Emoji Plugin 状态已更新',
+      title: '插件配置已启用',
+      description: 'Emoji Plugin 配置已更新',
     })
     expect(result.current.actingPluginId).toBeNull()
 
@@ -394,7 +394,7 @@ describe('usePluginList', () => {
       await result.current.performTogglePlugin(plugin)
     })
     expect(toastMock).toHaveBeenCalledWith({
-      title: '插件已关闭',
+      title: '插件配置已禁用',
       description: '自定义关闭说明',
     })
 
@@ -549,6 +549,31 @@ describe('usePluginList', () => {
     expect(fetchPluginList).toHaveBeenCalledTimes(1)
   })
 
+  it('运行时停止和未知不推断失败，显式状态优先于旧 loaded 标志', async () => {
+    const stopped = makePlugin('p.stopped', {
+      runtime_status: 'not_running', load_status: 'failed', loaded: true,
+      load_error: '停止前的失败缓存',
+    })
+    const unknown = makePlugin('p.unknown', {
+      runtime_status: 'unknown', load_status: 'failed', loaded: true,
+    })
+    const inactive = makePlugin('p.inactive', { load_status: 'inactive', loaded: false })
+    const explicitFailure = makePlugin('p.failed', {
+      runtime_status: 'failed', load_status: 'failed', loaded: false,
+    })
+    vi.mocked(getInstalledPlugins).mockResolvedValue([stopped, unknown, inactive, explicitFailure])
+    const { result } = await renderPluginList()
+    expect(result.current.loadFailedCount).toBe(1)
+    expect(result.current.loadSuccessCount).toBe(0)
+    expect(result.current.notRunningCount).toBe(1)
+    expect(result.current.unknownCount).toBe(2)
+    expect(result.current.isPluginLoadFailed(stopped)).toBe(false)
+    expect(result.current.isPluginLoadFailed(inactive)).toBe(false)
+    expect(result.current.getPluginStatusMeta(stopped).label).toBe('运行时未启动')
+    expect(result.current.getPluginStatusMeta(unknown).label).toBe('状态未知')
+    expect(result.current.getPluginStatusBarClassName(unknown)).toBe('bg-muted-foreground/45')
+  })
+
   it('派生状态条、标签、分组和熔断统计', async () => {
     const disabled = makePlugin('p.disabled', {
       enabled: false,
@@ -689,6 +714,7 @@ describe('usePluginList', () => {
       'success',
       'loading',
       'offline',
+      'unknown',
       'failed',
       'disabled',
     ])

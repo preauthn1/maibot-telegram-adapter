@@ -53,7 +53,9 @@ export interface InstalledPlugin {
   enabled?: boolean
   disabled?: boolean
   loaded?: boolean
-  load_status?: 'success' | 'failed' | 'inactive' | 'disabled' | 'offline' | 'unknown' | 'loading'
+  load_status?: 'success' | 'failed' | 'inactive' | 'disabled' | 'offline' | 'unknown' | 'loading' | 'not_running'
+  /** 本进程运行时观测；enabled/disabled 独立表示持久化配置。 */
+  runtime_status?: 'loaded' | 'loading' | 'not_running' | 'failed' | 'unknown'
   load_error?: string
   circuit_status?: {
     state: 'open' | 'half_open'
@@ -199,6 +201,8 @@ export interface ConfigLayoutSchema {
  * 插件配置 Schema
  */
 export interface PluginConfigSchema {
+  _note?: string
+  metadata_source?: 'static' | 'unavailable'
   plugin_id: string
   plugin_info: {
     name: string
@@ -209,7 +213,6 @@ export interface PluginConfigSchema {
   }
   sections: Record<string, ConfigSectionSchema>
   layout: ConfigLayoutSchema
-  _note?: string
 }
 
 /**

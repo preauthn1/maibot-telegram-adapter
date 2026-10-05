@@ -33,7 +33,7 @@ TTL = 600
 TIMEOUT = 75  # 覆盖连接 + PhoneMigrate 切换数据中心 + 重试的总时长
 MASK = '********'
 PLUGIN_ID = 'preauthn1.telegram-user-adapter'
-ALLOWED_ORIGINS = {'https://maibot.080933.xyz', 'http://127.0.0.1:8001', 'http://localhost:8001'}
+ALLOWED_ORIGINS = {'https://maibot.080933.xyz', 'http://127.0.0.1:8001', 'http://localhost:8001', 'http://127.0.0.1:7999', 'http://localhost:7999'}
 
 async def guard(request: Request, response: Response, owner: str = Depends(require_auth)) -> str:
     response.headers['Cache-Control'] = 'no-store'

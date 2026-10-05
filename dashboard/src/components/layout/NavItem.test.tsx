@@ -99,6 +99,7 @@ describe('NavItem', () => {
     renderNavItem()
 
     const link = screen.getByRole('link')
+    expect(link).toHaveAttribute('aria-current', 'page')
     expect(link).toHaveAttribute('data-active', 'true')
     expect(link).toHaveClass('bg-accent')
     expect(screen.getByTestId('nav-icon')).toHaveClass('text-primary')

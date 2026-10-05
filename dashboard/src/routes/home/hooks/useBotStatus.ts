@@ -56,13 +56,32 @@ export function useBotStatus() {
     setIsBotStatusLoading(true)
     const request = (async () => {
       try {
-        const data = await backendApi.get<BotStatus>('/api/webui/system/status')
+        const [runtimeResult, serviceResult] = await Promise.allSettled([
+          backendApi.get<BotStatus>('/api/webui/system/status'),
+          backendApi.get<{ ActiveState: string; SubState: string; MainPID: string }>(
+            '/api/webui/system/service'
+          ),
+        ])
+        if (runtimeResult.status === 'rejected') throw runtimeResult.reason
+        // /system/status 返回的是 WebUI 进程运行时长，并固定 running=true。
+        // 只用真实主服务状态判断在线；服务接口不可用时不能假定机器人在线。
+        const service = serviceResult.status === 'fulfilled' ? serviceResult.value : null
+        const hasServiceState = typeof service?.ActiveState === 'string'
+        const data: BotStatus = {
+          ...runtimeResult.value,
+          running: hasServiceState
+            ? service.ActiveState === 'active' && service.SubState === 'running' && Number(service.MainPID) > 0
+            : null,
+          // 现有 service 契约不含主服务 uptime，禁止用 WebUI uptime 代替。
+          uptime: null,
+        }
         if (!isMountedRef.current) return
         botStatusCache = { timestamp: Date.now(), data }
         setBotStatus(data)
       } catch (error) {
         console.error('获取机器人状态失败:', error)
-        if (isMountedRef.current && !botStatusCache) {
+        if (isMountedRef.current) {
+          botStatusCache = null
           setBotStatus(null)
         }
       } finally {

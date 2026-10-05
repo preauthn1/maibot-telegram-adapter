@@ -1635,9 +1635,10 @@ export function MaisakaMonitor() {
     <div className="flex min-w-0 flex-col gap-4 lg:h-[calc(100vh-116px)] lg:flex-row">
       <Card className="lg:hidden">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">MaiSaka 更新同步</CardTitle>
+          <CardTitle className="text-base">MaiSaka 已实现功能说明</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
+          <p className="mb-3 text-xs leading-relaxed text-muted-foreground">以下为功能说明，不代表已启用或正在运行；实际状态请查看自建功能管理与主服务状态。</p>
           <ul className="text-muted-foreground space-y-1.5 text-xs">
             {implementationUpdates.map((update) => (
               <li key={update} className="before:text-primary before:mr-1 before:content-['✓']">
@@ -1650,9 +1651,10 @@ export function MaisakaMonitor() {
       <aside className="hidden w-72 shrink-0 lg:block">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">MaiSaka 更新同步</CardTitle>
+            <CardTitle className="text-base">MaiSaka 已实现功能说明</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
+            <p className="mb-3 text-xs leading-relaxed text-muted-foreground">以下为功能说明，不代表已启用或正在运行；实际状态请查看自建功能管理与主服务状态。</p>
             <ul className="text-muted-foreground space-y-2 text-xs">
               {implementationUpdates.map((update) => (
                 <li key={update} className="before:text-primary before:mr-1 before:content-['✓']">
