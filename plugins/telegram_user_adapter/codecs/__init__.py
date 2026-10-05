@@ -1,3 +1,4 @@
+# Telegram fidelity modifications 2026-10-06 (+08), GPLv3; see PORT_NOTICES.md.
 """Telegram 真人账号入站消息编解码。
 
 把 Telethon 的 ``NewMessage.Event`` 转换为主程序可消费的标准 MessageDict。
@@ -13,6 +14,12 @@ import re
 import time
 
 from ..constants import PLATFORM_NAME
+from ..fidelity.formatting import inbound_entities, inbound_markdown
+from dataclasses import asdict
+from ..fidelity.provenance import provenance
+from ..fidelity.preview import existing_preview
+from ..fidelity.animation import bounded_gif
+from ..media_budget import MediaBudget
 from ..telegram_user_client import TelegramUserClient
 from ..utils import build_topic_group_id, pick_username
 
@@ -34,6 +41,7 @@ class TelegramUserInboundCodec:
         self._self_username: Optional[str] = None
         self._download_media: bool = True
         self._max_media_bytes: int = 8 * 1024 * 1024
+        self._media_budget = MediaBudget()
 
     def set_self(self, self_id: int, username: Optional[str]) -> None:
         """记录当前登录账号的身份。
@@ -75,7 +83,7 @@ class TelegramUserInboundCodec:
 
         sender = await self._safe_get_sender(event)
         user_nickname = pick_username(
-            getattr(sender, "first_name", None),
+            getattr(sender, "first_name", None) or getattr(sender, "title", None),
             getattr(sender, "last_name", None),
             getattr(sender, "username", None),
         )
@@ -142,7 +150,10 @@ class TelegramUserInboundCodec:
         """
 
         segments: List[Dict[str, Any]] = []
-        additional: Dict[str, Any] = {}
+        additional: Dict[str, Any] = {"telegram_provenance": provenance(message)}
+        preview = existing_preview(message)
+        if preview:
+            additional["telegram_preview"] = preview
         is_at = False
 
         thread_id = self._resolve_topic_thread_id(message)
@@ -161,6 +172,9 @@ class TelegramUserInboundCodec:
                 getattr(reply_sender, "username", None),
             )
             reply_uid = getattr(replied_message, "sender_id", None)
+            # 供旁观判定：回复的是谁（不是我们 → 别人之间的对话）。
+            if reply_uid is not None:
+                additional["reply_target_user_id"] = str(reply_uid)
             segments.append({"type": "text", "data": f"[回复<{reply_name}:{reply_uid}>："})
             reply_text = getattr(replied_message, "message", "") or ""
             if reply_text:
@@ -169,11 +183,33 @@ class TelegramUserInboundCodec:
 
         text = getattr(message, "message", "") or ""
         if text:
+            # 不修改策略使用的字面正文；显式保真版本保存在元数据。
+            additional["telegram_markdown"] = inbound_markdown(text, getattr(message, "entities", None))
+            additional["telegram_entities"] = [asdict(e) for e in inbound_entities(text, getattr(message, "entities", None))]
             segments.append({"type": "text", "data": text})
 
-        media_segment = await self._build_media_segment(message)
+        # Phase 9：未指名我们的媒体按会话预算识别，超额只给文本占位（不下载、不调 VLM）。
+        directed = self._is_mentioning_self(message, replied_message)
+        chat_key = str(getattr(message, "chat_id", "") or "")
+        if getattr(message, "media", None) is not None and not self._media_budget.should_analyze(
+            chat_key, directed_at_us=directed
+        ):
+            media_segment = self._media_placeholder(message)
+        else:
+            media_segment = await self._build_media_segment(message)
         if media_segment is not None:
             segments.append(media_segment)
+
+        # 供旁观判定：这条消息 @ 了别人（实体级 mention，或文本 @handle）。
+        other_mentions = False
+        for entity in getattr(message, "entities", None) or []:
+            target = getattr(entity, "user_id", None)
+            if target is not None and target != self._self_id:
+                other_mentions = True
+            elif type(entity).__name__ == "MessageEntityMention":
+                other_mentions = True
+        if other_mentions:
+            additional["mentions_other_user"] = True
 
         if self._is_mentioning_self(message, replied_message):
             self_id = str(self._self_id) if self._self_id is not None else ""
@@ -183,6 +219,22 @@ class TelegramUserInboundCodec:
             is_at = True
 
         return segments or None, additional, is_at
+
+    @staticmethod
+    def _media_placeholder(message: Any) -> Optional[Dict[str, Any]]:
+        """超出识别预算时的文本占位（与下载失败时的占位一致）。"""
+
+        if getattr(message, "sticker", None) is not None:
+            return None
+        if getattr(message, "photo", None) is not None:
+            return {"type": "text", "data": "[图片]"}
+        if getattr(message, "gif", None) is not None:
+            return {"type": "text", "data": "[动图]"}
+        if getattr(message, "voice", None) is not None:
+            return {"type": "text", "data": "[语音]"}
+        if getattr(message, "video", None) is not None:
+            return {"type": "text", "data": "[视频]"}
+        return {"type": "text", "data": "[媒体]"}
 
     async def _build_media_segment(self, message: Any) -> Optional[Dict[str, Any]]:
         """根据消息媒体类型构造消息段。
@@ -195,6 +247,8 @@ class TelegramUserInboundCodec:
         """
 
         if getattr(message, "media", None) is None:
+            return None
+        if getattr(getattr(message, "media", None), "webpage", None) is not None:
             return None
 
         # 贴纸一概不读：贴纸的"语义"高度依赖图案本身，模型只能拿到
@@ -236,7 +290,16 @@ class TelegramUserInboundCodec:
         if not raw_bytes:
             return {"type": "text", "data": fallback_text}
 
+        if getattr(message, "gif", None) is not None:
+            try:
+                raw_bytes = await bounded_gif(raw_bytes)
+            except (OSError, TimeoutError):
+                raw_bytes = None
+            if not raw_bytes:
+                return {"type": "text", "data": fallback_text}
+        token = self._tg.native_refs.remember(message)
         return {
+            "native_ref": token,
             "type": seg_type,
             "data": "",
             "hash": hashlib.sha256(raw_bytes).hexdigest(),

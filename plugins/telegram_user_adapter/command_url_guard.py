@@ -99,8 +99,12 @@ def extract_command_urls(text: str) -> List[str]:
 def _hostname_of(url: str) -> str:
     """从 URL 或裸域名里取主机名。"""
 
-    stripped = re.sub(r"^https?://", "", url, flags=re.IGNORECASE)
-    return stripped.split("/", 1)[0].split(":", 1)[0]
+    from urllib.parse import urlsplit
+    try:
+        parsed = urlsplit(url if '://' in url else '//' + url)
+        return parsed.hostname or ''
+    except ValueError:
+        return ''
 
 
 def verify_urls_resolvable(
@@ -111,37 +115,37 @@ def verify_urls_resolvable(
     """验证 URL 的主机名能否解析。
 
     只做 DNS 解析，不发 HTTP 请求：
-    DNS 失败是确定性证据（域名压根不存在），而 HTTP 状态码会受
-    墙、限流、临时故障影响，用它判断会产生大量误拦。
+    仅对本机明确名称未找到或格式错误作阻断；其他解析故障保持不确定。
+    此函数使用系统同步解析器，不保证解析截止时间，不修改全局 socket 设置。
 
     Args:
         urls: 待验证的 URL 列表。
-        timeout: 单次解析超时秒数。
+        timeout: 兼容旧调用的参数，当前不构成系统 DNS 的硬超时。
 
     Returns:
-        Tuple[bool, List[str]]: ``(是否全部可解析, 解析失败的主机名)``。
+        Tuple[bool, List[str]]: ``(是否允许继续, 明确失败的主机名或无效地址标记)``。
     """
 
     if not urls:
         return True, []
 
-    original = socket.getdefaulttimeout()
-    socket.setdefaulttimeout(timeout)
+    # 保留参数兼容调用方；socket 默认超时不控制系统解析器。
+    del timeout
     bad: List[str] = []
-    try:
-        for url in urls:
-            host = _hostname_of(url)
-            if not host:
-                continue
-            try:
-                socket.getaddrinfo(host, None)
-            except socket.gaierror:
-                # 解析不出来 = 域名不存在，这是确定性证据
+    for url in urls:
+        host = _hostname_of(url)
+        if not host:
+            # 不回显原 URL，其中可能包含认证信息或敏感查询参数。
+            bad.append('<invalid-url>')
+            continue
+        try:
+            socket.getaddrinfo(host, None)
+        except socket.gaierror as exc:
+            # 临时/解析器故障没有名称不存在的证据；仅按本机明确负答拦截。
+            if exc.errno == socket.EAI_NONAME:
                 bad.append(host)
-            except (socket.timeout, OSError):
-                # 自身网络问题，保守放行——不能因为本机网络抖动就哑火
-                continue
-    finally:
-        socket.setdefaulttimeout(original)
+        except (socket.timeout, OSError):
+            # 自身网络问题，保守放行——不能因为本机网络抖动就哑火
+            continue
 
     return (not bad), bad

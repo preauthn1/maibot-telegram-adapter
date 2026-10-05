@@ -38,6 +38,7 @@ from typing import Any, Optional
 import asyncio
 
 from .presence_schedule import PresenceSchedule
+from .unlimited_mode import is_unlimited
 
 
 class PresenceManager:
@@ -95,7 +96,7 @@ class PresenceManager:
             bool: 允许发已读返回 ``True``。
         """
 
-        return self._schedule.allows_read_receipt()
+        return is_unlimited() or self._schedule.allows_read_receipt()
 
     async def _set_status(self, *, offline: bool) -> bool:
         """向 Telegram 上报在线状态。
@@ -130,7 +131,7 @@ class PresenceManager:
         避免代理抖动时拖住其他状态调用。
         """
 
-        if not self._schedule.allows_online():
+        if not is_unlimited() and not self._schedule.allows_online():
             # 作息表说现在该睡觉：不上线，也不取消已有的下线任务。
             self._logger.debug("作息表禁止此刻上线，跳过")
             return

@@ -263,3 +263,20 @@ class DeliveryBatch:
         """返回当前批量投递是否至少命中一条成功回执。"""
 
         return bool(self.sent_receipts)
+
+    @property
+    def dropped_receipts(self) -> List[DeliveryReceipt]:
+        """返回被适配器策略主动静默（非传输故障）的回执。"""
+
+        return [receipt for receipt in self.receipts if receipt.status == DeliveryStatus.DROPPED]
+
+    @property
+    def is_policy_dropped(self) -> bool:
+        """无任何成功、且失败项全部是策略静默时返回 True。"""
+
+        if self.has_success:
+            return False
+        non_sent = self.failed_receipts
+        return bool(non_sent) and all(
+            r.status == DeliveryStatus.DROPPED and r.metadata.get("policy_drop") is True for r in non_sent
+        )

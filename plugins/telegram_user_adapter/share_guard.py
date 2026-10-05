@@ -203,7 +203,7 @@ class ShareGuard:
             return None
         return len(self._outbound) / total
 
-    def allows_send(self, moment: Optional[datetime] = None) -> bool:
+    def allows_send(self, moment: Optional[datetime] = None, *, frequency_override: bool = False) -> bool:
         """判断此刻是否允许发言。
 
         Args:
@@ -221,6 +221,9 @@ class ShareGuard:
             self._silent_until = None
 
         share = self.current_share(now)
+        if frequency_override:
+            # 投诉静默仍在前面检查，只解除话量门限。
+            return True
         if share is None:
             # 样本不足：冷群保护，不判定
             return True

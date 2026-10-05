@@ -104,7 +104,7 @@ class AttentionFocus:
         # 极端实验模式：不再限制并发会话数。
         # 注意单群场景下这一层本就不会触发（只有 1 个会话），
         # 解除它主要是为了让实验条件干净——不留任何频率类拦截。
-        if is_unlimited():
+        if is_unlimited(chat_id):
             return True, ""
 
         if len(self._last_active) >= self.max_concurrent_chats:

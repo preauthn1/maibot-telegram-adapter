@@ -159,7 +159,7 @@ class TriggerManager:
         # 45s 群聊冷却是"真人正常对话时我们却停了"的直接原因：
         # 对方连说几句，我们答完第一句后要等 45s，中间的话全被跳过。
         # 冷却记账（record_response）不受影响，切回正常模式立即恢复。
-        if is_unlimited():
+        if is_unlimited(session_key):
             return TriggerDecision(True, TriggerLevel.CASUAL, "实验模式：冷却已解除")
 
         if is_private:

@@ -93,8 +93,9 @@ class PresenceWindow:
 # 采样显示我们此前在凌晨 2 点发了 58 条，而全群同小时只有 106 条——
 # **群里每 2 条消息就有 1 条是我们的**。在线状态只是"看起来不对"，
 # 这种发言分布是"行为上明确异常"，往上翻聊天记录就能看出来。
+# 当前按用户明确指定：北京时间 03:00–09:00 休息；上方为历史采样依据。
 _DEFAULT_WINDOWS: Sequence[PresenceWindow] = (
-    PresenceWindow(start_hour=0, end_hour=8, online=False),
+    PresenceWindow(start_hour=3, end_hour=9, online=False),
 )
 
 # 会话驻留时长范围（秒）。

@@ -218,9 +218,12 @@ class MessageUtils:
         with _DB_WRITE_THREAD_LOCK:
             with get_db_session() as session:
                 MessageUtils.fill_reply_frequency_if_available(message)
-                MessageUtils._persist_image_components(message.raw_message.components, session)
-                db_message = message.to_db_instance()
-                session.add(db_message)
+                from src.plugin_runtime.capabilities.telegram_event_journal import store_telegram_message
+
+                if not store_telegram_message(session, message):
+                    MessageUtils._persist_image_components(message.raw_message.components, session)
+                    db_message = message.to_db_instance()
+                    session.add(db_message)
 
     @staticmethod
     async def store_message_to_db_async(message: "SessionMessage") -> None:

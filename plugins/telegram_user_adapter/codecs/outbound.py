@@ -1,3 +1,4 @@
+# Telegram fidelity modifications 2026-10-06 (+08), GPLv3; see PORT_NOTICES.md.
 """Telegram 真人账号出站消息编解码。
 
 把主程序的出站 MessageDict 转换为 Telethon 发送动作，并在发送前插入
@@ -5,6 +6,8 @@
 """
 
 from __future__ import annotations
+
+from ..fidelity.formatting import prepare_outbound, split_text
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -14,6 +17,7 @@ import base64
 import random
 import time
 
+from ..acknowledgement_context import acknowledgement_word
 from ..attention_focus import AttentionFocus
 from ..command_guard import (
     format_command_segments,
@@ -25,6 +29,7 @@ from ..command_url_guard import (
     extract_command_urls,
     verify_urls_resolvable,
 )
+from ..anti_policing import is_group_policing
 from ..content_safety import detect_nsfw
 from ..fragment_guard import limit_message_segments
 from ..high_risk_chats import get_chat_profile, should_block as high_risk_should_block
@@ -32,10 +37,12 @@ from ..humanize import humanize_chat_text, is_emoji_only
 from ..low_information import LowInformationGuard, LowInformationTargetReservation, is_low_information
 from ..send_queue import candidate_enqueued_at
 from ..output_sanity import detect_pollution
+from ..official_stickers import OfficialDuckStickers, PACK_SHORT_NAME, enabled as stickers_enabled
 from ..outbound_noise import is_noise_text
 from ..persona_guard import check_persona_consistency
 from ..pre_send_review import LessonStore, review_draft
 from ..reply_reuse_guard import ReplyReuseGuard
+from ..unlimited_mode import frequency_scope, is_unlimited, scoped_frequency
 from ..send_budget import SendBudget
 from ..telegram_user_client import TelegramUserClient
 from ..utils import estimate_typing_seconds, parse_topic_group_id
@@ -75,6 +82,7 @@ class TelegramUserOutboundCodec:
         """
 
         self._tg = tg_client
+        self.stickers = OfficialDuckStickers()
         self._logger = logger
         # 全局发送预算，跨群统计单位时间总量（见 send_budget 模块注释）
         self._send_budget = SendBudget()
@@ -88,6 +96,7 @@ class TelegramUserOutboundCodec:
             window_size=low_information_window, limit=low_information_limit
         )
         self._low_information_targets = LowInformationTargetReservation()
+        self._acknowledgement_pending: set[tuple[str, str]] = set()
         if low_information_budget_seconds < 0:
             raise ValueError("低信息回复预算不能为负")
         self._low_information_budget_seconds = low_information_budget_seconds
@@ -172,12 +181,9 @@ class TelegramUserOutboundCodec:
         profile = get_chat_profile(chat_id)
         if profile is None or not profile.style_enabled:
             return ChatStylePolicy(max_emoji=self._max_emoji)
-        inferred_max_chars = int(profile.style_max_chars)
-        existing_max_chars = int(profile.max_chars)
-        if inferred_max_chars and existing_max_chars:
-            max_chars = min(inferred_max_chars, existing_max_chars)
-        else:
-            max_chars = inferred_max_chars or existing_max_chars
+        # 历史 P90 是描述统计，不是发送上限。用自动出站反推硬限制
+        # 会使下一轮语料越来越短；这里只执行人工明确配置的限制。
+        max_chars = int(profile.max_chars)
         return ChatStylePolicy(
             allow_emoji_only=profile.allow_emoji_only,
             max_emoji=profile.max_emoji if profile.max_emoji is not None else self._max_emoji,
@@ -254,6 +260,14 @@ class TelegramUserOutboundCodec:
 
         message_info = message.get("message_info", {})
         raw_message = message.get("raw_message", [])
+        # Host send.custom uses a DictComponent envelope; unwrap only this type.
+        raw_message = [
+            dict(seg["data"]) if (isinstance(seg, dict) and seg.get("type") == "dict"
+                and isinstance(seg.get("data"), dict)
+                and seg["data"].get("type") in {"telegram_buttons", "telegram_observed_sticker"}
+                and set(seg["data"]) == {"type", "data"}) else seg
+            for seg in raw_message
+        ] if isinstance(raw_message, list) else []
         group_info = message_info.get("group_info")
         user_info = message_info.get("user_info")
         additional_config = message_info.get("additional_config", {}) or {}
@@ -276,12 +290,20 @@ class TelegramUserOutboundCodec:
         if not chat_id:
             return {"success": False, "error": "无法确定目标 chat_id"}
 
+        from ..utils import build_topic_group_id
+        resolved_scope = build_topic_group_id(chat_id, parsed_thread_id)
+        for segment in raw_message:
+            if segment.get("type") == "telegram_observed_sticker":
+                data = segment.get("data")
+                if not isinstance(data, dict) or set(data) != {"scope", "sticker_ref"} or data["scope"] != resolved_scope:
+                    return {"success": False, "error": "贴纸目标作用域不一致", "retryable": False}
+
         # 全局发送预算：不看是哪个群，只管单位时间总量。
         #
         # 2026-08-31 账号被 Telegram 反垃圾系统限制，事后复盘发现
         # 15 时单小时出站 107 条。此前每个群的间隔与参与率都合规，
         # 但十几个群并发时没有任何一处在看全局总量。
-        allowed, budget_reason = self._send_budget.check()
+        allowed, budget_reason = self._send_budget.check(chat_id)
         if not allowed:
             self._logger.warning(f"发送预算拦截: {budget_reason} chat={chat_id}")
             return {"success": False, "error": f"发送预算拦截: {budget_reason}"}
@@ -308,11 +330,29 @@ class TelegramUserOutboundCodec:
         # Telegram reply_to，但不能抹掉这个结构化目标，用于压制同一对象的
         # 并发泛化回复。没有明确对象时不猜测，也不按 topic 根消息去重。
         explicit_target_message_id = reply_to
+        acknowledgement = acknowledgement_word(
+            raw_message, explicit_target_message_id, additional_config.get("reply_message_id")
+        )
 
-        # 引用降频：真人不会每句都引用，条条带引用是机器人最明显的特征之一。
-        # 注意必须放在 topic 兜底之前——话题群的 reply_to 是路由所需，不能被丢掉。
-        if reply_to is not None and not self._should_quote():
-            reply_to = None
+        # 按真实消息间隔决定是否显示引用，不用消息ID差估算条数。
+        if reply_to is not None:
+            newer_messages = await self._tg.client.get_messages(
+                entity, min_id=reply_to, limit=4
+            )
+            # 原规则保留：新消息超过 3 条时目标已被刷上去，不引用就看不出
+            # 在回谁，必须带引用。
+            keep_quote = len(newer_messages) > 3
+            # 补充：真实屏幕上的媒体（图片/视频/贴纸/GIF/文件/语音）占的
+            # 纵向高度远大于一行文字，几条就能把目标顶出可视区（屏幕滚走，
+            # 与上下文 token 窗口无关）。此时即便新消息不足 4 条也要保留
+            # 引用，否则对方得往上翻才知道在回哪条——需要锚定目标的回复
+            # （如危机安抚）尤其不能丢引用。
+            if not keep_quote and any(
+                self._has_screen_media(m) for m in newer_messages
+            ):
+                keep_quote = True
+            if not keep_quote:
+                reply_to = None
 
         if reply_to is None and parsed_thread_id is not None:
             # 话题群必须带上 topic 根消息 ID，否则消息会落到 General。
@@ -322,6 +362,13 @@ class TelegramUserOutboundCodec:
         # 区分\"引用型\"和\"topic 路由型\"：后者是路由必需，不算真正的引用。
         self._last_reply_to = reply_to
         self._last_reply_is_quote = reply_to is not None and reply_to != parsed_thread_id
+
+        # 目标已滚离可视区（新消息多或含屏幕媒体）才会保留真正的引用。
+        # 这种情况下，一条多段回复若只有首段锚定目标、后续段飘着，会在
+        # 期间插入的消息把后半句（如"或正在伤害自己…"）挤到错误上下文旁。
+        # 因此目标滚走时让每一段都锚回同一目标；目标还在可视区内则沿用
+        # 旧行为（真人不会每行都点回复）。
+        anchor_target = reply_to if self._last_reply_is_quote else None
 
         payloads = raw_message if isinstance(raw_message, list) else []
 
@@ -353,12 +400,21 @@ class TelegramUserOutboundCodec:
             #
             # 放在命令合并之后：先保证 `curl ... | bash` 不被拆断，
             # 再压缩段数。非文本段（图片/表情）不计入上限。
+            # 段数合并不是频率限制：频率实验名单只放宽节奏，不允许一次回复拆成多条刷屏。
             limited = limit_message_segments(payloads)
             if len(limited) != len(payloads):
                 self._logger.info(
                     f"限制发言碎片: {len(payloads)} -> {len(limited)} 段"
                 )
                 payloads = limited
+        # 只替换独立情绪回复，不给正文附加重复贴纸。混合批次拒绝贴纸段。
+        visible = [s for s in payloads if not self._is_local_only_segment(s)]
+        if stickers_enabled() and len(visible) == 1 and visible[0].get("type") == "text":
+            candidate = visible[0].get("data")
+            if self.stickers.select(candidate) is not None:
+                payloads = [{"type": "sticker", "data": candidate}]
+        elif len(visible) > 1:
+            payloads = [s for s in payloads if s.get("type") not in {"emoji", "sticker"}]
         if not payloads:
             return {"success": False, "error": "消息段为空"}
 
@@ -369,11 +425,14 @@ class TelegramUserOutboundCodec:
 
         # 只在真正要发言时上线（需求 10）。
         if self._presence is not None:
-            await self._presence.go_online()
+            with frequency_scope(chat_id):
+                await self._presence.go_online()
 
         last_sent: Any = None
         errors: List[str] = []
         sent_any = False
+        # 调用局部收集器：并发发送之间不能共享候选或结果。
+        text_observations: List[Dict[str, Any]] = []
 
         try:
             for seg in payloads:
@@ -391,7 +450,7 @@ class TelegramUserOutboundCodec:
                 # minute_limit=5 时记到 10。封禁当天 15:18 单分钟 8 条、
                 # 5 个分钟超过 5 条/分，正是这么来的。
                 if sent_any:
-                    seg_allowed, seg_reason = self._send_budget.check()
+                    seg_allowed, seg_reason = self._send_budget.check(chat_id)
                     if not seg_allowed:
                         self._logger.warning(
                             f"发送预算拦截后续分段: {seg_reason} chat={chat_id}"
@@ -406,6 +465,11 @@ class TelegramUserOutboundCodec:
                 # 上下文断裂，在人工审核视角极为扎眼。
                 if not sent_any:
                     current_reply = reply_to
+                elif anchor_target is not None:
+                    # 目标已滚离可视区：这是一条需要锚定的回复，后续段也挂回
+                    # 同一目标，避免后半句飘着或锚到期间插入的错误上下文。
+                    # 在话题群里引用话题内的目标同样满足路由要求。
+                    current_reply = anchor_target
                 else:
                     # 后续段不再引用具体消息，但必须留在同一话题里
                     current_reply = parsed_thread_id
@@ -417,6 +481,8 @@ class TelegramUserOutboundCodec:
                         seg,
                         current_reply,
                         explicit_target_message_id=explicit_target_message_id if not sent_any else None,
+                        observations=text_observations,
+                        acknowledgement=acknowledgement,
                     )
                 except LowInformationTargetReservedError:
                     errors.append("low_information_target_repeat")
@@ -430,8 +496,9 @@ class TelegramUserOutboundCodec:
                 last_sent = sent
                 # 每个成功发出的段都计入全局预算——真人看到的是"几条消息"，
                 # 而不是"一次回复"，所以按段计数才反映真实刷屏程度。
-                self._send_budget.record()
-                if str(seg.get("type") or "").strip() != "text":
+                if not getattr(sent, "_fidelity_budget_recorded", False):
+                    self._send_budget.record()
+                if str(seg.get("type") or "").strip() not in {"text", "emoji", "sticker", "telegram_observed_sticker"}:
                     self._low_information_guard.record("")
                 # 同步刷新注意力焦点：这个群成为（或保持）当前关注对象。
                 self._attention.record(chat_id)
@@ -447,11 +514,50 @@ class TelegramUserOutboundCodec:
                     "error": "同一目标已有低信息回复在发送",
                     "error_code": "low_information_target_repeat",
                 }
-            return {"success": False, "error": "; ".join(errors) or "所有消息段发送失败"}
+            if not errors:
+                # 没有任何段抛平台异常：全部被本地出站闸门（管人话术、污染、
+                # 复用、长度等）拦下，不是平台失败，不能进入权限状态机。
+                return {"success": False, "error": "所有消息段被出站闸门拦截", "error_code": "local_guard_blocked"}
+            return {"success": False, "error": "; ".join(errors)}
 
         external_id = str(getattr(last_sent, "id", "") or "")
-        return {"success": True, "external_message_id": external_id or None}
+        # v1 仅为纯文本批次承诺完整正文；失败/拦截段不在成功观测中。
+        # 媒体与混合段不声明支持，避免一条文本覆盖整个原始消息。
+        metadata: Dict[str, Any] = {}
+        if (any(isinstance(seg, dict) and seg.get("type") in ("text", "telegram_buttons") for seg in raw_message)
+                and all(isinstance(seg, dict) and seg.get("type") in ("text", "telegram_buttons", "reply", "at")
+                        for seg in raw_message)):
+            parts = [observation["confirmed_content"] for observation in text_observations]
+            if any(o.get("native_sticker") for o in text_observations):
+                parts = [None]
+            metadata["delivery_content"] = {
+                "version": 1,
+                "scope": "text_only",
+                "complete": bool(parts) and all(part is not None for part in parts),
+                "parts": parts,
+            }
+        return {"success": True, "external_message_id": external_id or None,
+                "text_observations": text_observations, "metadata": metadata}
 
+    @staticmethod
+    def _confirmed_text_content(sent: Any, transport: str, parse_mode: Optional[str]) -> Optional[Dict[str, str]]:
+        """Telethon Message.message 为实体应用后的正文；.text 会反向渲染 Markdown。
+
+        不在成功发送后猜测未知解析模式，也不让可选回执读取异常导致重发。
+        实体负责显示样式，正文保留换行/代码内容，不保留 Markdown 包装符。
+        """
+        try:
+            mid = str(getattr(sent, "id", "") or "")
+            body = getattr(sent, "message", None)
+            if isinstance(body, str) and body and mid:
+                return {"message_id": mid, "text": body, "source": "telegram_message"}
+            if parse_mode is None and mid:
+                return {"message_id": mid, "text": transport, "source": "unparsed_transport"}
+        except Exception:
+            return None
+        return None
+
+    @scoped_frequency("chat_id")
     async def _send_segment(
         self,
         entity: Any,
@@ -460,6 +566,8 @@ class TelegramUserOutboundCodec:
         reply_to: Optional[int],
         *,
         explicit_target_message_id: Optional[int] = None,
+        observations: Optional[List[Dict[str, Any]]] = None,
+        acknowledgement: Optional[str] = None,
     ) -> Any:
         """发送单个消息段。
 
@@ -480,11 +588,19 @@ class TelegramUserOutboundCodec:
         seg_data = seg.get("data", "")
         binary_b64 = seg.get("binary_data_base64", "")
 
+        button_rows = None
+        if seg_type == "telegram_buttons":
+            if not isinstance(seg_data, dict) or set(seg_data) != {"text", "buttons"}:
+                raise ValueError("按钮消息格式错误")
+            button_rows = seg_data["buttons"]
+            seg_data = seg_data["text"]
+            seg_type = "text"
         if seg_type == "text":
             text = seg_data if isinstance(seg_data, str) else str(seg_data)
             if not text.strip():
                 return None
 
+            original_candidate = text
             self._last_original_text = text
 
             # NSFW 兜底：入站已经拦过一道，这里防的是模型自己生成露骨内容
@@ -539,10 +655,14 @@ class TelegramUserOutboundCodec:
                     )
                 text = humanized.text
 
-                if style_policy.max_chars and len(text) > style_policy.max_chars:
+                # max_chars 来自群内 P95 长度，只是风格参考（已注入提示词）。
+                # 以它为硬线会整条丢弃略长但有用的回复（链接、就医提醒等），
+                # 生成后被吞掉反而显得冷淡；硬拦截只防明显的长篇说教。
+                hard_ceiling = max(style_policy.max_chars * 3, 80) if style_policy.max_chars else 0
+                if hard_ceiling and len(text) > hard_ceiling:
                     self._logger.info(
                         f"聊天流风格长度上限拦截: chat={chat_id} "
-                        f"长度={len(text)} 上限={style_policy.max_chars}"
+                        f"长度={len(text)} 上限={hard_ceiling} 风格P95={style_policy.max_chars}"
                     )
                     return None
 
@@ -559,6 +679,12 @@ class TelegramUserOutboundCodec:
             # 8-30 曾在某休闲小群发出 "假false"——中英混杂的布尔值，
             # 9 秒前刚有人问过 "ai？"，这条基本坐实了怀疑。
             # 这类文本一次泄漏就足以暴露，宁可少说一句也不能发出去。
+            # 群聊（负数 chat_id）里不当风纪委员：劝撤回/提举报/喊管理一律不发。
+            # 见 anti_policing.py 的 2026-10-03 被踢事故说明。
+            if str(chat_id).startswith("-") and is_group_policing(text):
+                self._logger.info(f"群聊管人话术拦截，不发送: chat={chat_id} text={text!r}")
+                return None
+
             polluted, reasons = detect_pollution(text)
             if polluted:
                 self._logger.error(
@@ -618,10 +744,12 @@ class TelegramUserOutboundCodec:
             # 同一句短泛化回应如果刚在另一个聊天流发过，会成为跨群可见的
             # 自动化指纹。此处拒绝发送，不用同义词改写制造新的模板。
             now = time.monotonic()
-            if self._reply_reuse_guard.is_recent_repeat(chat_id, text, now=now):
+            # 原始完整 payload 与最终输出都必须满足契约。
+            is_acknowledgement = acknowledgement is not None and text == acknowledgement
+            if not is_unlimited(chat_id) and not is_acknowledgement and self._reply_reuse_guard.is_recent_repeat(chat_id, text, now=now):
                 self._logger.info(f"同聊天流短回复复读，跳过发送: chat={chat_id} text={text!r}")
                 return None
-            if self._reply_reuse_guard.is_recent_cross_chat_duplicate(chat_id, text, now=now):
+            if not is_unlimited(chat_id) and not is_acknowledgement and self._reply_reuse_guard.is_recent_cross_chat_duplicate(chat_id, text, now=now):
                 self._logger.info(f"跨聊天流短回复重复，跳过发送: chat={chat_id} text={text!r}")
                 return None
 
@@ -636,15 +764,9 @@ class TelegramUserOutboundCodec:
             # 文本里的 * _ ` 会被当成格式标记吃掉或直接触发 400。
             text = protect_commands(text)
 
-            # 安装命令的 URL 必须真实存在。
-            #
-            # 同一条消息里的 media.isvaluexyz 实测 DNS 解析不出来，
-            # 是模型编的（对照：同场景的 yabs.sh 返回 200）。
-            # 技术群里真的有人复制执行，跑不通回头追究时，
-            # 一条编造的安装命令就是白纸黑字的证据。
-            #
-            # 只查 DNS 不发 HTTP：DNS 失败是确定性证据，
-            # HTTP 状态码会受墙和限流影响，用它判断会大量误拦。
+            # 仅检查命令 URL 的格式及本机 DNS 明确负答，不验证脚本存在性或可信性。
+            # 临时解析故障保持不确定；DNS 成功也不证明命令有效。
+            # 在线程中运行同步解析，避免阻塞事件循环；系统解析器仍无硬截止时间。
             cmd_urls = extract_command_urls(text)
             if cmd_urls:
                 resolvable, bad_hosts = await asyncio.to_thread(
@@ -652,21 +774,24 @@ class TelegramUserOutboundCodec:
                 )
                 if not resolvable:
                     self._logger.error(
-                        f"安装命令含无法解析的域名，已拦截: chat={chat_id} "
-                        f"域名={bad_hosts} text={text!r}"
+                        "命令 URL 检查未通过，已拦截；失败项数=%d", len(bad_hosts)
                     )
                     return None
 
             formatted, parse_mode = format_command_segments(text)
 
-            if not self._low_information_guard.allows(text):
+            if not is_unlimited(chat_id) and not is_acknowledgement and not self._low_information_guard.allows(text):
                 self._logger.info("低信息动作族限频，跳过发送")
                 return None
-            if is_low_information(text) and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
+            short_lived = is_acknowledgement or is_low_information(text)
+            if not is_unlimited(chat_id) and short_lived and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
                 self._logger.info("低信息候选已过期，跳过发送")
                 return None
             target_reserved = False
-            if is_low_information(text) and explicit_target_message_id is not None:
+            target_key = (chat_id, str(explicit_target_message_id))
+            if target_key in self._acknowledgement_pending:
+                raise LowInformationTargetReservedError()
+            if not is_unlimited(chat_id) and short_lived and explicit_target_message_id is not None:
                 target_reserved = self._low_information_targets.reserve(
                     chat_id, str(explicit_target_message_id), now=time.monotonic()
                 )
@@ -676,29 +801,90 @@ class TelegramUserOutboundCodec:
                         f"chat={chat_id} target={explicit_target_message_id}"
                     )
                     raise LowInformationTargetReservedError()
+            if is_acknowledgement:
+                self._acknowledgement_pending.add(target_key)
             try:
                 await self._humanize_before_send(entity, len(text))
                 # 等待/输入期间也会过期，必须在真实发送边界再检查。
-                if is_low_information(text) and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
+                if not is_unlimited(chat_id) and short_lived and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
                     self._logger.info("低信息候选等待后过期，跳过发送")
                     if target_reserved:
                         self._low_information_targets.release(chat_id, str(explicit_target_message_id))
                     return None
-                sent = await self._tg.send_text(
-                    entity, formatted, reply_to=reply_to, parse_mode=parse_mode
+                # 等待期间其他成功发送也会消耗预算；契约不获得额外配额。
+                allowed, reason = self._send_budget.check(chat_id)
+                if not allowed:
+                    if target_reserved:
+                        self._low_information_targets.release(*target_key)
+                    self._logger.info(f"发送前预算拦截: {reason}")
+                    return None
+                # 最终策略变换之后解析/分段；普通聊天默认仍是纯文本。
+                wire_text, wire_entities = prepare_outbound(
+                    formatted, parse_mode, markdown=seg.get("telegram_format") == "markdown"
                 )
+                chunks = split_text(wire_text, wire_entities)
+                sent = None
+                for index, (chunk, entities) in enumerate(chunks):
+                    if index:
+                        allowed, reason = self._send_budget.check(chat_id)
+                        if not allowed:
+                            if observations is not None:
+                                observations.append({"message_id": "", "original_text": original_candidate, "text": "", "parse_mode": None, "reply_is_quote": reply_to is not None, "confirmed_content": None})
+                            break
+                    try:
+                        current = await self._tg.send_text(
+                            entity, chunk, reply_to=reply_to, parse_mode=None,
+                            formatting_entities=entities, link_preview=False,
+                            buttons=button_rows if index == 0 else None,
+                        )
+                    except Exception:
+                        if sent is None:
+                            raise
+                        # 前段已成功：不可重发/抹去回执。明确标记不完整。
+                        if observations is not None:
+                            observations.append({"message_id": "", "original_text": original_candidate, "text": "", "parse_mode": None, "reply_is_quote": reply_to is not None, "confirmed_content": None})
+                        self._logger.warning("Telegram 后续分段失败，保留已确认正文")
+                        break
+                    if current is None:
+                        if observations is not None:
+                            observations.append({"message_id": "", "original_text": original_candidate, "text": "", "parse_mode": None, "reply_is_quote": reply_to is not None, "confirmed_content": None})
+                        break
+                    sent = current
+                    self._send_budget.record()
+                    sent._fidelity_budget_recorded = True
+                    if observations is not None:
+                        observations.append({
+                            "message_id": str(getattr(sent, "id", "") or ""),
+                            "original_text": original_candidate,
+                            "text": chunk, "parse_mode": None,
+                            "confirmed_content": self._confirmed_text_content(sent, chunk, None),
+                            "reply_is_quote": reply_to is not None,
+                        })
             except BaseException:
                 if target_reserved:
                     self._low_information_targets.release(chat_id, str(explicit_target_message_id))
                 raise
+            finally:
+                if is_acknowledgement:
+                    self._acknowledgement_pending.discard(target_key)
             if sent is None and target_reserved:
                 self._low_information_targets.release(chat_id, str(explicit_target_message_id))
             if sent is not None:
-                self._low_information_guard.record(text)
-                self._reply_reuse_guard.record(chat_id, text, now=time.monotonic())
+                if is_acknowledgement and target_reserved:
+                    # 成功窗口从发送完成开始；进行中由 pending 独立保护。
+                    self._low_information_targets.release(*target_key)
+                    self._low_information_targets.reserve(*target_key, now=time.monotonic())
+                # 每段确认正文已在真实发送边界收集。
+                # 契约不污染泛化计数，也不以 False 挤掉已有低信息记录。
+                if not is_acknowledgement:
+                    self._low_information_guard.record(text)
+                    self._reply_reuse_guard.record(chat_id, text, now=time.monotonic())
             return sent
 
         if seg_type == "image":
+            if isinstance(seg.get("native_ref"), str):
+                await self._humanize_before_send(entity, 0)
+                return await self._tg.send_native_image(entity, seg["native_ref"], reply_to=reply_to)
             if binary_b64:
                 await self._humanize_before_send(entity, 0)
                 return await self._tg.send_file(
@@ -712,11 +898,59 @@ class TelegramUserOutboundCodec:
                 return await self._tg.send_text(entity, seg_data, reply_to=reply_to)
             return None
 
-        if seg_type in ("emoji", "sticker"):
-            # 一律不发贴纸/表情包：单独发一张贴纸等同于"只回一个 emoji"，
-            # 是没有信息量的敷衍回复。emoji 只应作为文字的辅助出现在句子里。
-            self._logger.info(f"跳过贴纸/表情包发送: seg_type={seg_type}")
-            return None
+        if seg_type in ("emoji", "sticker", "telegram_observed_sticker"):
+            if not stickers_enabled() or binary_b64:
+                return None
+            observed = seg_type == "telegram_observed_sticker"
+            if observed:
+                item = self._tg.observed_stickers.resolve(seg_data["scope"], seg_data["sticker_ref"])
+                selected = (item.emoji, item.document)
+            else:
+                selected = self.stickers.select(seg_data)
+            if selected is None or not self.stickers.reserve(chat_id):
+                return None
+            success = False
+            target_reserved = False
+            try:
+                if not is_unlimited(chat_id) and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
+                    return None
+                emoji, document = selected
+                if not is_unlimited(chat_id) and not self._low_information_guard.allows("哈哈"):
+                    return None
+                if not is_unlimited(chat_id) and explicit_target_message_id is not None:
+                    target_reserved = self._low_information_targets.reserve(
+                        chat_id, str(explicit_target_message_id), now=time.monotonic()
+                    )
+                    if not target_reserved:
+                        raise LowInformationTargetReservedError()
+                allowed, _ = self._send_budget.check(chat_id)
+                if not allowed:
+                    return None
+                # 无额外 sleep；原有发送队列负责静默时段和间隔。
+                if observed:
+                    sent = await self._tg.send_observed_sticker(entity, seg_data, reply_to=reply_to)
+                else:
+                    sent = await self._tg.send_native_sticker(
+                        entity, {"pack": PACK_SHORT_NAME, "emoji": emoji, "document_id": document.id},
+                        self.stickers, reply_to=reply_to,
+                    )
+                success = sent is not None
+                if success:
+                    self._low_information_guard.record("哈哈")
+                    if observations is not None:
+                        observations.append({
+                            "message_id": str(sent.id), "original_text": emoji,
+                            "text": "" if observed else f"[原生贴纸 {PACK_SHORT_NAME} {emoji}]",
+                            "parse_mode": None, "confirmed_content": None,
+                            "reply_is_quote": reply_to is not None,
+                            "native_sticker": {"pack": "observed" if observed else PACK_SHORT_NAME, "set_id": None if observed else self.stickers._set_id,
+                                               "document_id": document.id, "emoji": emoji},
+                        })
+                return sent
+            finally:
+                self.stickers.finish(chat_id, success=success)
+                if target_reserved and not success:
+                    self._low_information_targets.release(chat_id, str(explicit_target_message_id))
 
         if seg_type == "voice":
             if not binary_b64:
@@ -745,6 +979,8 @@ class TelegramUserOutboundCodec:
             text_length: 待发送文本长度；非文本传 0。
         """
 
+        if is_unlimited():
+            return
         delay = estimate_typing_seconds(
             text_length,
             self._typing_cps,
@@ -780,6 +1016,29 @@ class TelegramUserOutboundCodec:
         except Exception as exc:  # noqa: BLE001 - 解析失败回退到裸 ID
             self._logger.debug(f"get_entity({chat_id}) 失败，回退裸 ID: {exc}")
             return numeric_id if numeric_id is not None else chat_id
+
+    @staticmethod
+    def _has_screen_media(message: Any) -> bool:
+        """判断一条消息是否带占据屏幕高度的媒体。
+
+        图片/视频/贴纸/GIF/文件/语音在聊天界面里占的纵向空间远大于一行
+        文字，几条就能把被引用的目标顶出可视区（屏幕滚走，与上下文
+        token 窗口无关）。用于在新消息不足 4 条时仍决定保留引用。
+
+        Args:
+            message: Telethon 消息对象。
+
+        Returns:
+            bool: 带屏幕媒体返回 ``True``。
+        """
+
+        if message is None:
+            return False
+        # Telethon 对常见媒体提供便捷属性，任一命中即视为占屏媒体。
+        for attr in ("photo", "video", "sticker", "gif", "document", "voice", "video_note"):
+            if getattr(message, attr, None):
+                return True
+        return False
 
     @staticmethod
     def _is_local_only_segment(seg: Dict[str, Any]) -> bool:

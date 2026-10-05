@@ -3,10 +3,12 @@
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, List, Optional, Sequence
 
 import asyncio
 import time
+import uuid
 
 from rich.console import RenderableType
 
@@ -22,6 +24,11 @@ from src.llm_models.payload_content.context_item import (
     CONTEXT_ITEM_SCHEMA_VERSION,
     ContextItem,
     ContextItemBuilder,
+    ModelOutputItem,
+    AssistantMessageItem,
+    ReasoningItem,
+    FunctionCallItem,
+    ProviderOpaqueItem,
     FunctionCallOutputItem,
     ProviderActivityItem,
     RoleType,
@@ -60,6 +67,8 @@ from src.maisaka.memory.mid_term import is_mid_term_memory_message
 from src.maisaka.focus import focus_mode_manager
 from src.maisaka.visual.message_limiter import limit_latest_images_in_messages
 from src.maisaka.visual.mode_utils import resolve_enable_visual_planner
+from src.self_evolution.monitor import EvolutionMonitor, MetricEvent
+from src.self_evolution.policy import RuntimePolicyLoader
 
 # Planner prompt 中"当前时间"使用的时区。
 #
@@ -636,6 +645,7 @@ class MaisakaChatLoopService:
         self._custom_chat_system_prompt = chat_system_prompt
         self._prompt_load_lock = asyncio.Lock()
         self._llm_chat_clients: dict[str, LLMServiceClient] = {}
+        self._evolution_policy = RuntimePolicyLoader(Path("data/self-evolution")).snapshot()
 
     @property
     def behavior_style_prompt(self) -> str:
@@ -710,9 +720,15 @@ class MaisakaChatLoopService:
             int: 转换后的整数结果。
         """
 
+        # Accept primitive hook values only; never invoke arbitrary __int__ methods.
+        if type(value) not in (int, str, float):
+            return default
         try:
-            return int(value)
-        except (TypeError, ValueError):
+            converted = int(value)
+            if converted < 0 or (isinstance(value, float) and value != converted):
+                return default
+            return converted
+        except (TypeError, ValueError, OverflowError):
             return default
 
     @staticmethod
@@ -824,6 +840,11 @@ class MaisakaChatLoopService:
             if private_chat_prompt := str(global_config.chat.reply_style.private_chat_prompts or "").strip():
                 prompt_lines.append(f"通用注意事项：\n{private_chat_prompt}")
 
+        from src.common.utils.utils_config import ChatConfigUtils
+
+        if chat_prompt := ChatConfigUtils.get_chat_prompt_for_chat(self._session_id, self._is_group_chat).strip():
+            prompt_lines.append(f"本聊天专用注意事项：\n{chat_prompt}")
+
         if not prompt_lines:
             return ""
 
@@ -931,6 +952,7 @@ class MaisakaChatLoopService:
             resolved_system_prompt = self._custom_chat_system_prompt
         else:
             resolved_system_prompt = self._build_chat_system_prompt()
+        resolved_system_prompt = RuntimePolicyLoader.apply(resolved_system_prompt, self._evolution_policy)
         system_item.add_text_content(resolved_system_prompt)
         items.append(system_item.build())
 
@@ -1019,6 +1041,7 @@ class MaisakaChatLoopService:
             ChatResponse: 本轮规划器返回结果。
         """
 
+        request_interrupt_flag = self._interrupt_flag
         enable_visual_message = self._resolve_enable_visual_message(request_kind)
         selected_history, selection_reason = self.select_llm_context_messages(
             chat_history,
@@ -1098,7 +1121,7 @@ class MaisakaChatLoopService:
                     original_items=built_messages,
                 )
             except Exception as exc:
-                logger.warning(f"Hook maisaka.planner.before_request 返回的 items 无法反序列化，已忽略: {exc}")
+                logger.warning(f"Hook maisaka.planner.before_request items解码失败，已忽略: error_type={type(exc).__name__}")
         if enable_visual_message:
             built_messages = limit_latest_images_in_messages(
                 built_messages,
@@ -1118,14 +1141,12 @@ class MaisakaChatLoopService:
             options=LLMGenerationOptions(
                 tool_options=all_tools if all_tools else None,
                 response_format=response_format,
-                interrupt_flag=self._interrupt_flag,
+                interrupt_flag=request_interrupt_flag,
             ),
         )
+        request_output_items = generation_result.output_items
         if logical_turn_id:
-            generation_result.output_items = bind_output_items_to_turn(
-                generation_result.output_items,
-                logical_turn_id,
-            )
+            request_output_items = bind_output_items_to_turn(request_output_items, logical_turn_id)
         llm_duration_ms = round((time.perf_counter() - llm_started_at) * 1000, 2)
         self._log_prompt_cache_usage(
             request_kind=request_kind,
@@ -1135,7 +1156,7 @@ class MaisakaChatLoopService:
         )
 
         # Provider 原生推理与 Planner 显式正文语义不同，必须分别保留。
-        serialized_output_items = serialize_prompt_items(generation_result.output_items)
+        serialized_output_items = serialize_prompt_items(request_output_items)
         after_response_result = await self._get_runtime_manager().invoke_hook(
             "maisaka.planner.after_response",
             output_items=deepcopy(serialized_output_items),
@@ -1149,20 +1170,27 @@ class MaisakaChatLoopService:
             total_tokens=generation_result.total_tokens,
         )
         after_response_kwargs = after_response_result.kwargs
-        final_output_items = generation_result.output_items
+        final_output_items = request_output_items
         raw_output_items = after_response_kwargs.get("output_items")
         if isinstance(raw_output_items, list) and raw_output_items != serialized_output_items:
             try:
-                final_output_items = tuple(
-                    deserialize_prompt_items(
-                        raw_output_items,
-                        item_schema_version=after_response_kwargs.get("item_schema_version"),
-                        mode=ContextProtocolMode.MODEL_OUTPUT,
-                        original_items=generation_result.output_items,
-                    )
+                decoded_items = deserialize_prompt_items(
+                    raw_output_items,
+                    item_schema_version=after_response_kwargs.get("item_schema_version"),
+                    mode=ContextProtocolMode.MODEL_OUTPUT,
+                    original_items=request_output_items,
                 )
+                validated_output: list[ModelOutputItem] = []
+                for item in decoded_items:
+                    if not isinstance(item, (ReasoningItem, AssistantMessageItem, FunctionCallItem,
+                                             ProviderActivityItem, ProviderOpaqueItem)):
+                        raise ValueError("invalid_hook_model_output_item")
+                    validated_output.append(item)
+                final_output_items = tuple(validated_output)
             except Exception as exc:
-                logger.warning(f"Hook maisaka.planner.after_response 返回的 output_items 无法反序列化，已忽略: {exc}")
+                logger.warning(f"Hook maisaka.planner.after_response output_items解码失败，已忽略: error_type={type(exc).__name__}")
+        if logical_turn_id:
+            final_output_items = bind_output_items_to_turn(final_output_items, logical_turn_id)
         prompt_tokens = self._coerce_int(after_response_kwargs.get("prompt_tokens"), generation_result.prompt_tokens)
         completion_tokens = self._coerce_int(
             after_response_kwargs.get("completion_tokens"),
@@ -1181,20 +1209,38 @@ class MaisakaChatLoopService:
             "total_tokens": total_tokens,
         }
 
-        prompt_section_result = PromptCLIVisualizer.build_prompt_section_result(
-            built_messages,
-            category=self._resolve_prompt_preview_category(request_kind),
-            chat_id=self._session_id,
-            request_kind=request_kind,
-            selection_reason=prompt_selection_reason,
-            tool_definitions=list(all_tools),
-            output_items=final_output_items,
-            metadata=prompt_metadata,
-            generation_attempts=generation_result.generation_attempts,
-        )
-        prompt_html_uri = prompt_section_result.preview_access.preview_web_uri
-        if global_config.debug.show_maisaka_thinking:
-            prompt_section = prompt_section_result.panel
+        try:
+            prompt_section_result = PromptCLIVisualizer.build_prompt_section_result(
+                built_messages,
+                category=self._resolve_prompt_preview_category(request_kind),
+                chat_id=self._session_id,
+                request_kind=request_kind,
+                selection_reason=prompt_selection_reason,
+                tool_definitions=list(all_tools),
+                output_items=final_output_items,
+                metadata=prompt_metadata,
+                generation_attempts=generation_result.generation_attempts,
+            )
+            prompt_html_uri = prompt_section_result.preview_access.preview_web_uri
+            if global_config.debug.show_maisaka_thinking:
+                prompt_section = prompt_section_result.panel
+        except Exception as exc:
+            prompt_section = None
+            prompt_html_uri = None
+            logger.warning(f"Planner预览构建失败: error_type={type(exc).__name__}")
+
+        if request_kind == "planner":
+            try:
+                EvolutionMonitor(Path("data/self-evolution/monitor")).record(
+                    MetricEvent(
+                        target="maisaka.planner",
+                        outcome="unscored",
+                        score=None,
+                        event_id=f"planner:{uuid.uuid4().hex}",
+                    )
+                )
+            except (OSError, ValueError):
+                logger.debug("自演化监测记录失败，忽略本轮监测", exc_info=True)
 
         return ChatResponse(
             output_items=tuple(final_output_items),
