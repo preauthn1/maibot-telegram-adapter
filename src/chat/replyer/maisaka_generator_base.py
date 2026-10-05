@@ -192,6 +192,14 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
     def _extract_guided_bot_reply(self, message: SessionBackedMessage) -> str:
         # 只能根据结构化来源字段判断是否为 bot 自身写回的历史消息，
         # 不能依赖昵称/群名片等可控文本，避免误判和提示注入。
+        if message.source_kind == "send_image":
+            # send_image 只有图片：由 bot 自己发出时按自身发言呈现，不能当成用户发来的图。
+            original_sender = message.original_message
+            if original_sender is not None and is_bot_self(
+                original_sender.platform, original_sender.message_info.user_info.user_id
+            ):
+                return "[我发了一张图片]"
+            return ""
         if message.source_kind != "guided_reply":
             return ""
 

@@ -163,6 +163,9 @@ def _merge_message_continuations(
         ):
             prev = dict(result[-1])
             prev["data"] = _join([str(prev.get("data") or ""), cur_text])
+            # 合并段覆盖两段的原始下标，用于投递回执。
+            if "_orig_indices" in prev or "_orig_indices" in seg:
+                prev["_orig_indices"] = list(prev.get("_orig_indices") or []) + list(seg.get("_orig_indices") or [])
             result[-1] = prev
             continue
         result.append(seg)
@@ -293,7 +296,8 @@ def _has_metadata(seg: Dict[str, Any]) -> bool:
         bool: 携带额外字段返回 ``True``。
     """
 
-    return any(k not in ("type", "data") for k in seg)
+    # _orig_indices 是发送链路内部的原始下标标记，不是平台元数据。
+    return any(k not in ("type", "data", "_orig_indices") for k in seg)
 
 
 def limit_message_segments(
@@ -355,6 +359,11 @@ def limit_message_segments(
         elif i == merge_from:
             new_seg = dict(seg)
             new_seg["data"] = merged_text
+            # 合并段覆盖全部被并入段的原始下标，用于投递回执。
+            if any("_orig_indices" in segments[j] for j in tail_idx):
+                new_seg["_orig_indices"] = [
+                    index for j in tail_idx for index in (segments[j].get("_orig_indices") or [])
+                ]
             result.append(new_seg)
         # 其余文本段已并入 merge_from，丢弃
     return result
