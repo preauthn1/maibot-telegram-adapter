@@ -244,27 +244,31 @@ class LLMServiceClient:
     ) -> None:
         """记录当前调用的 prompt cache 统计。"""
 
-        effective_prompt_text = prompt_text
-        if result.request_wire_payload is not None:
-            effective_prompt_text = json.dumps(
-                {
-                    "wire_protocol": result.wire_protocol,
-                    "request": self._sanitize_wire_value_for_cache_stats(result.request_wire_payload),
-                },
-                ensure_ascii=False,
-                sort_keys=True,
+        try:
+            # 序列化也是统计的附属步骤，失败时不能影响已完成的生成。
+            effective_prompt_text = prompt_text
+            if result.request_wire_payload is not None:
+                effective_prompt_text = json.dumps(
+                    {
+                        "wire_protocol": result.wire_protocol,
+                        "request": self._sanitize_wire_value_for_cache_stats(result.request_wire_payload),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            record_llm_cache_usage(
+                task_name=self.task_name,
+                request_type=self.request_type,
+                model_name=result.model_name,
+                session_id=self._resolve_effective_session_id(session_id),
+                prompt_tokens=result.prompt_tokens,
+                prompt_cache_hit_tokens=result.prompt_cache_hit_tokens,
+                prompt_cache_miss_tokens=result.prompt_cache_miss_tokens,
+                prompt_text=effective_prompt_text,
             )
-
-        record_llm_cache_usage(
-            task_name=self.task_name,
-            request_type=self.request_type,
-            model_name=result.model_name,
-            session_id=self._resolve_effective_session_id(session_id),
-            prompt_tokens=result.prompt_tokens,
-            prompt_cache_hit_tokens=result.prompt_cache_hit_tokens,
-            prompt_cache_miss_tokens=result.prompt_cache_miss_tokens,
-            prompt_text=effective_prompt_text,
-        )
+        except Exception as cache_error:
+            # 缓存统计是附属操作，失败不能丢弃成功响应或回显请求正文。
+            logger.warning(f"缓存统计写入失败，异常类型: {type(cache_error).__name__}")
 
     async def generate_response(
         self,

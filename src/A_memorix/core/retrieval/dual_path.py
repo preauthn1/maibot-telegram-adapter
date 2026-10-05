@@ -3138,16 +3138,16 @@ class DualPathRetriever:
         if not temporal:
             return results
 
-        missing_hashes = [result.hash_value for result in results if result.metadata.get("time_meta") is None]
-        batch_time_meta = self._best_supporting_time_meta_batch(missing_hashes, temporal)
+        # time_meta可能来自此前窗口，不能作为当前时间/人物/来源筛选已通过的凭据。
+        relation_hashes = list(dict.fromkeys(result.hash_value for result in results))
+        batch_time_meta = self._best_supporting_time_meta_batch(relation_hashes, temporal)
         filtered: List[RetrievalResult] = []
         for result in results:
-            meta = result.metadata.get("time_meta")
+            meta = batch_time_meta.get(result.hash_value)
             if meta is None:
-                meta = batch_time_meta.get(result.hash_value)
-                if meta is None:
-                    continue
-                result.metadata["time_meta"] = meta
+                result.metadata.pop("time_meta", None)
+                continue
+            result.metadata["time_meta"] = meta
             filtered.append(result)
 
         return self._sort_results_with_temporal(filtered, temporal)

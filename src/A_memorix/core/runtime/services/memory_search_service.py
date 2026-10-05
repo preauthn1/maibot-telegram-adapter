@@ -177,12 +177,17 @@ class MemorySearchService(KernelServiceBase):
         request: KernelSearchRequest,
         scope: Optional[RetrievalScope] = None,
     ) -> Dict[str, Any]:
+        # 聚合的关键词分支也必须受显式时间约束，避免混入窗口外记忆。
+        window = self._normalize_search_time_window(request.time_start, request.time_end)
+        has_time_window = window.query_start is not None or window.query_end is not None
         result = await self._search_execution_for_chat_scope(
             caller="sdk_memory_kernel.aggregate",
-            query_type="search",
+            query_type="hybrid" if has_time_window else "search",
             query=query,
             top_k=limit,
             request=request,
+            time_from=window.query_start,
+            time_to=window.query_end,
             plugin_config=self._build_runtime_config(),
             enforce_chat_filter=False,
             scope=scope,

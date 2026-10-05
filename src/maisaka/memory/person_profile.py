@@ -13,6 +13,7 @@ from src.config.config import global_config
 from src.person_info.person_info import resolve_person_id_for_memory
 from src.services.bot_account_service import is_bot_self
 from src.services.memory_service import memory_service
+from src.maisaka.memory.profile_scope import check_profile_scope
 
 logger = get_logger("maisaka_person_profile_injector")
 
@@ -185,7 +186,12 @@ def collect_person_profile_candidates(
 def _extract_profile_text(payload: object) -> str:
     if not isinstance(payload, dict):
         return ""
-    return _clean_text(payload.get("profile_text") or payload.get("summary"))
+    text = payload.get("profile_text")
+    if text is None or (isinstance(text, str) and text == ""):
+        text = payload.get("summary")
+    if not isinstance(text, str):
+        return ""
+    return _clean_text(text)
 
 
 def _profile_display_name(candidate: PersonProfileCandidate, payload: object) -> str:
@@ -245,23 +251,35 @@ async def build_person_profile_injection_messages(
     blocks: list[str] = []
     for candidate in candidates:
         try:
+            # 请求带证据的快照；普通 query 只返回 vector_evidence 等内部字段，
+            # 不能拿来做群聊 scope 审计。
             payload = await memory_service.profile_admin(
-                action="query",
+                action="evidence",
                 person_id=candidate.person_id,
                 limit=PROFILE_QUERY_LIMIT,
             )
         except Exception as exc:
-            logger.debug(f"查询人物画像注入内容失败: person_id={candidate.person_id!r} err={exc}")
+            logger.debug(f"查询人物画像注入内容失败: error_type={type(exc).__name__}")
             continue
 
-        if not isinstance(payload, dict) or not bool(payload.get("success")):
-            error = payload.get("error") if isinstance(payload, dict) else "invalid_payload"
-            logger.debug(f"人物画像注入跳过: person_id={candidate.person_id!r} error={error}")
+        if not isinstance(payload, dict) or payload.get("success") is not True:
+            logger.debug("人物画像注入跳过: invalid_profile_receipt")
+            continue
+
+        if "person_id" in payload and payload["person_id"] != candidate.person_id:
+            logger.debug("人物画像注入跳过: profile_owner_mismatch")
+            continue
+
+        # Phase 8.1：记忆 scope 审计。群聊里只注入证据全部来自"当前群"或
+        # "与该人的私聊"的画像；证据来自其他群时整段拒绝注入（不静默拼接越界内容）。
+        scope_ok, scope_reason = check_profile_scope(payload, str(getattr(anchor_message, "session_id", "") or ""))
+        if not scope_ok:
+            logger.info(f"人物画像注入跳过: scope_violation reason={scope_reason}")
             continue
 
         profile_text = build_profile_injection_text(_extract_profile_text(payload))
         if not profile_text:
-            logger.debug(f"人物画像注入跳过空画像: person_id={candidate.person_id!r}")
+            logger.debug("人物画像注入跳过: empty_profile_text")
             continue
 
         display_name = _profile_display_name(candidate, payload)
@@ -269,3 +287,64 @@ async def build_person_profile_injection_messages(
 
     reference_block = _format_profile_reference_block(blocks)
     return [reference_block] if reference_block else []
+
+
+def _profile_scope_allowed(
+    payload: dict,
+    anchor_message: SessionMessage,
+    candidate: PersonProfileCandidate,
+) -> tuple[bool, str]:
+    """判定画像证据是否都在当前会话可见范围内。
+
+    - 私聊：只允许与当前用户的私聊或任何群中**该用户本人**的证据——私聊对象是本人，
+      不会泄露第三方群语境；但仍拒绝证据里显式标注为其他群群聊摘要的内容。
+    - 群聊：证据的 chat_id 必须是当前会话，或是该用户私聊（无 group 语境）。
+    - 证据无 chat_id 时视为未知来源，保守放行但计数（旧数据兼容）。
+    """
+
+    current_session = str(getattr(anchor_message, "session_id", "") or "")
+    is_group = anchor_message.message_info.group_info is not None
+    evidence = payload.get("evidence")
+    # 证据缺失时拒绝注入；未知来源不能按“兼容旧数据”放行。
+    if not isinstance(evidence, list) or not evidence:
+        return False, "missing_or_empty_evidence"
+    foreign = 0
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        metadata = item.get("metadata") or {}
+        chat_ids = set()
+        for key in ("chat_id", "session_id"):
+            value = metadata.get(key)
+            if value:
+                chat_ids.add(str(value))
+        for value in metadata.get("chat_ids") or []:
+            chat_ids.add(str(value))
+        if not chat_ids:
+            continue
+        if current_session in chat_ids:
+            continue
+        source = str(item.get("source", "") or metadata.get("source_type", "") or "")
+        if is_group:
+            # 群聊里只接受该人私聊里的个人事实；其他群的任何内容都算越界。
+            if source.startswith("person_fact") and all(_is_private_session(cid) for cid in chat_ids):
+                continue
+            foreign += 1
+        else:
+            if source.startswith("chat_summary"):
+                foreign += 1
+    if foreign:
+        return False, f"foreign_evidence={foreign}/{len(evidence)} person={candidate.person_id[:8]}"
+    return True, ""
+
+
+def _is_private_session(session_id: str) -> bool:
+    """证据来源会话是否为私聊；无法解析时按非私聊处理（保守）。"""
+
+    try:
+        from src.chat.message_receive.chat_manager import chat_manager
+
+        session = chat_manager.get_existing_session_by_session_id(session_id)
+    except Exception:  # noqa: BLE001
+        return False
+    return session is not None and not bool(getattr(session, "is_group_session", True))

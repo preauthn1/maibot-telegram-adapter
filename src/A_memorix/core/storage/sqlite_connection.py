@@ -107,7 +107,12 @@ class SQLiteConnectionManager:
             if savepoint_name is not None:
                 connection.execute(f"RELEASE SAVEPOINT {savepoint_name}")
             else:
-                connection.force_commit()
+                try:
+                    connection.force_commit()
+                except BaseException:
+                    # 延迟约束可能在提交阶段才失败；不能把悬挂事务交给下一次调用。
+                    connection.force_rollback()
+                    raise
 
     @staticmethod
     def _rollback_scope(

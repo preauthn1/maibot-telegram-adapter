@@ -5,6 +5,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 import asyncio
 import time
 
+import numpy as np
+
 from src.common.logger import get_logger
 
 from ...storage import VectorStore
@@ -25,6 +27,21 @@ from .base import KernelServiceBase
 logger = get_logger("A_Memorix.SDKMemoryKernel")
 
 _TRUSTED_FACT_ORIGINS = {"manual_confirmed", "server_verified", "trusted_import"}
+
+
+def _person_fact_confidence(claim_spec: Dict[str, Any], trusted: bool) -> float:
+    default_confidence = 1.0 if trusted else 0.5
+    raw_confidence = claim_spec.get("confidence")
+    from math import isfinite
+    try:
+        confidence = float(default_confidence if raw_confidence is None else raw_confidence)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("invalid_person_fact_confidence") from None
+    if isinstance(raw_confidence, bool) or not isfinite(confidence) or not 0 <= confidence <= 1:
+        raise ValueError("invalid_person_fact_confidence")
+    if not trusted:
+        confidence = min(0.5, confidence)
+    return confidence
 
 
 class MemoryIngestService(KernelServiceBase):
@@ -62,57 +79,55 @@ class MemoryIngestService(KernelServiceBase):
             "server_verified": "direct_user",
             "trusted_import": "imported",
         }.get(trust, "summary_derived")
+        confidence = _person_fact_confidence(claim_spec, trusted)
         claim_ids: List[str] = []
-        for person_id in person_ids:
-            person_token = str(person_id or "").strip()
-            if not person_token:
-                continue
-            result = self.metadata_store.upsert_fact_claim(
-                scope_type="person",
-                scope_id=person_token,
-                fact_key=(
-                    str(claim_spec.get("fact_key", "") or f"statement:{paragraph_token}")
-                    if trusted
-                    else f"statement:{paragraph_token}"
-                ),
-                value_text=statement,
-                polarity=str(claim_spec.get("polarity", "positive") or "positive") if trusted else "positive",
-                cardinality=str(claim_spec.get("cardinality", "set") or "set") if trusted else "set",
-                stability=str(claim_spec.get("stability", "stable") or "stable") if trusted else "uncertain",
-                profile_section=(
-                    str(claim_spec.get("profile_section", "stable_facts") or "stable_facts")
-                    if trusted
-                    else "uncertain_notes"
-                ),
-                authority=(
-                    str(claim_spec.get("authority", default_authority) or default_authority)
-                    if trusted
-                    else "summary_derived"
-                ),
-                confidence=(
-                    float(claim_spec.get("confidence", 1.0) or 1.0)
-                    if trusted
-                    else min(0.5, float(claim_spec.get("confidence", 0.5) or 0.5))
-                ),
-                valid_from=claim_spec.get("valid_from") if trusted else None,
-                valid_to=claim_spec.get("valid_to") if trusted else None,
-                evidence_type="paragraph",
-                evidence_id=paragraph_token,
-                evidence_stance="support",
-                evidence_weight=1.0,
-                evidence_metadata={
-                    "source_type": "person_fact",
-                    "evidence_message_ids": metadata.get("evidence_message_ids", []),
-                    "evidence_source": evidence_source,
-                    "trust": trust,
-                },
-                supersedes_claim_ids=claim_spec.get("supersedes_claim_ids")
-                if trusted and isinstance(claim_spec.get("supersedes_claim_ids"), list)
-                else [],
-                reason=str(claim_spec.get("reason", "") or "person_fact_ingest"),
-                observed_at=timestamp,
-            )
-            claim_ids.append(str(result["claim_id"]))
+        with self.metadata_store.transaction(immediate=True):
+            for person_id in person_ids:
+                person_token = str(person_id or "").strip()
+                if not person_token:
+                    continue
+                result = self.metadata_store.upsert_fact_claim(
+                    scope_type="person",
+                    scope_id=person_token,
+                    fact_key=(
+                        str(claim_spec.get("fact_key", "") or f"statement:{paragraph_token}")
+                        if trusted
+                        else f"statement:{paragraph_token}"
+                    ),
+                    value_text=statement,
+                    polarity=str(claim_spec.get("polarity", "positive") or "positive") if trusted else "positive",
+                    cardinality=str(claim_spec.get("cardinality", "set") or "set") if trusted else "set",
+                    stability=str(claim_spec.get("stability", "stable") or "stable") if trusted else "uncertain",
+                    profile_section=(
+                        str(claim_spec.get("profile_section", "stable_facts") or "stable_facts")
+                        if trusted
+                        else "uncertain_notes"
+                    ),
+                    authority=(
+                        str(claim_spec.get("authority", default_authority) or default_authority)
+                        if trusted
+                        else "summary_derived"
+                    ),
+                    confidence=confidence,
+                    valid_from=claim_spec.get("valid_from") if trusted else None,
+                    valid_to=claim_spec.get("valid_to") if trusted else None,
+                    evidence_type="paragraph",
+                    evidence_id=paragraph_token,
+                    evidence_stance="support",
+                    evidence_weight=1.0,
+                    evidence_metadata={
+                        "source_type": "person_fact",
+                        "evidence_message_ids": metadata.get("evidence_message_ids", []),
+                        "evidence_source": evidence_source,
+                        "trust": trust,
+                    },
+                    supersedes_claim_ids=claim_spec.get("supersedes_claim_ids")
+                    if trusted and isinstance(claim_spec.get("supersedes_claim_ids"), list)
+                    else [],
+                    reason=str(claim_spec.get("reason", "") or "person_fact_ingest"),
+                    observed_at=timestamp,
+                )
+                claim_ids.append(str(result["claim_id"]))
         return claim_ids
 
     async def _write_paragraph_vector_or_enqueue(
@@ -128,8 +143,9 @@ class MemoryIngestService(KernelServiceBase):
         ``vector_written`` 和 ``queued`` 判断当前向量状态。
         """
         token = str(paragraph_hash or "").strip()
-        text = str(content or "").strip()
-        if not token or not text:
+        # 与回填一致：strip仅用于判空，不改变编码输入正文。
+        text = str(content or "")
+        if not token or not text.strip():
             return {
                 "success": False,
                 "vector_written": False,
@@ -175,7 +191,7 @@ class MemoryIngestService(KernelServiceBase):
                     "detail": "vector_restored",
                 }
         except Exception as exc:
-            error_text = str(exc)
+            error_text = "paragraph_vector_restore_failed:" + type(exc).__name__
             if not allow_metadata_only:
                 raise
             self._enqueue_paragraph_vector_backfill(token, error=error_text)
@@ -213,8 +229,16 @@ class MemoryIngestService(KernelServiceBase):
 
         try:
             embedding = await self.embedding_manager.encode(text)
-            if getattr(embedding, "ndim", 1) == 1:
+            embedding = np.asarray(embedding, dtype=np.float32)
+            if embedding.ndim == 1:
                 embedding = embedding.reshape(1, -1)
+            if (
+                embedding.ndim != 2
+                or embedding.shape[0] != 1
+                or embedding.shape[1] == 0
+                or not np.isfinite(embedding).all()
+            ):
+                raise ValueError("invalid_paragraph_embedding")
             target_store.add(vectors=embedding, ids=[token])
             if token not in target_store:
                 raise RuntimeError("段落向量写入后成员校验失败")
@@ -226,7 +250,7 @@ class MemoryIngestService(KernelServiceBase):
                 "detail": "",
             }
         except Exception as exc:
-            error_text = str(exc)
+            error_text = "paragraph_vector_write_failed:" + type(exc).__name__
             if self._embedding_fallback_enabled():
                 self._set_embedding_degraded(active=True, reason=error_text[:500], checked_at=time.time())
             if not allow_metadata_only:
@@ -363,12 +387,53 @@ class MemoryIngestService(KernelServiceBase):
                 "reason": "exists",
             }
 
+        # 整批先校验，避免后续坏评分在段落/前序关系已提交后才抛错。
+        # 保持None缺省为1及数字字符串的既有兼容，合法零分不提升。
+        from math import isfinite
+        from copy import deepcopy
+        prepared_relations = []
+        seen_relations = {}
+        for item in relations or []:
+            if not isinstance(item, dict):
+                continue
+            row = deepcopy(item)
+            if not all(str(row.get(key, "") or "").strip() for key in ("subject", "predicate", "object")):
+                continue
+            raw_score = row.get("confidence", 1.0)
+            try:
+                score = float(1.0 if raw_score is None else raw_score)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError("invalid_relation_confidence") from None
+            if isinstance(raw_score, bool) or not isfinite(score) or not 0.0 <= score <= 1.0:
+                raise ValueError("invalid_relation_confidence")
+            row["confidence"] = score
+            relation_hash = self.metadata_store.compute_relation_hash(
+                *(str(row.get(key, "") or "").strip() for key in ("subject", "predicate", "object"))
+            )
+            effective_metadata = (
+                row["metadata"] if isinstance(row.get("metadata"), dict)
+                else {"external_id": external_token, "source_type": source_type}
+            )
+            # 与存储层JSON编码规则一致，避免第二条坏metadata造成部分提交。
+            import json
+            try:
+                json.dumps(effective_metadata, ensure_ascii=False, sort_keys=True)
+            except (TypeError, ValueError, RecursionError):
+                raise ValueError("invalid_relation_metadata") from None
+            signature = (score, effective_metadata)
+            if relation_hash in seen_relations:
+                if seen_relations[relation_hash] != signature:
+                    raise ValueError("conflicting_ingest_relation")
+                continue
+            seen_relations[relation_hash] = signature
+            prepared_relations.append(row)
+
         person_tokens = tokens(person_ids)
         person_token_set = set(person_tokens)
         participant_tokens = [token for token in tokens(participants) if token not in person_token_set]
         entity_tokens = merge_tokens(entities, participant_tokens)
         source = build_source(source_type, chat_id, person_tokens)
-        paragraph_meta = coerce_metadata_dict(metadata)
+        paragraph_meta = deepcopy(coerce_metadata_dict(metadata))
         paragraph_meta.update(
             {
                 "external_id": external_token,
@@ -379,6 +444,11 @@ class MemoryIngestService(KernelServiceBase):
                 "tags": tokens(tags),
             }
         )
+        if str(source_type or "").strip() == "person_fact":
+            claim_spec = paragraph_meta.get("fact_claim")
+            claim_spec = claim_spec if isinstance(claim_spec, dict) else {}
+            trusted = str(claim_spec.get("trust", "") or "").strip().casefold() in _TRUSTED_FACT_ORIGINS
+            _person_fact_confidence(claim_spec, trusted)
         warnings: List[str] = []
 
         paragraph_hash = self.metadata_store.add_paragraph(
@@ -402,7 +472,7 @@ class MemoryIngestService(KernelServiceBase):
             await self._ensure_entity_vector({"hash": entity_hash, "name": name})
 
         stored_relations: List[str] = []
-        for row in [dict(item) for item in (relations or []) if isinstance(item, dict)]:
+        for row in prepared_relations:
             confidence_value = row.get("confidence", 1.0)
             subject = str(row.get("subject", "") or "").strip()
             predicate = str(row.get("predicate", "") or "").strip()
@@ -423,28 +493,30 @@ class MemoryIngestService(KernelServiceBase):
             self.metadata_store.link_paragraph_relation(paragraph_hash, result.hash_value)
             stored_relations.append(result.hash_value)
 
-        fact_claim_ids: List[str] = []
-        if str(source_type or "").strip() == "person_fact":
-            fact_claim_ids = self._write_person_fact_claims(
-                paragraph_hash=paragraph_hash,
-                content=content,
-                person_ids=person_tokens,
-                metadata=paragraph_meta,
-                timestamp=timestamp,
-            )
-            if fact_claim_ids:
-                self.metadata_store.update_paragraph_metadata(
-                    paragraph_hash,
-                    {"fact_claim_ids": fact_claim_ids},
-                    merge=True,
+        # 同步发布事实、段落关联和幂等映射；不跨await或包含索引操作。
+        with self.metadata_store.transaction(immediate=True):
+            fact_claim_ids: List[str] = []
+            if str(source_type or "").strip() == "person_fact":
+                fact_claim_ids = self._write_person_fact_claims(
+                    paragraph_hash=paragraph_hash,
+                    content=content,
+                    person_ids=person_tokens,
+                    metadata=paragraph_meta,
+                    timestamp=timestamp,
                 )
+                if fact_claim_ids:
+                    self.metadata_store.update_paragraph_metadata(
+                        paragraph_hash,
+                        {"fact_claim_ids": fact_claim_ids},
+                        merge=True,
+                    )
 
-        self.metadata_store.upsert_external_memory_ref(
-            external_id=external_token,
-            paragraph_hash=paragraph_hash,
-            source_type=source_type,
-            metadata={"chat_id": chat_id, "person_ids": person_tokens},
-        )
+            self.metadata_store.upsert_external_memory_ref(
+                external_id=external_token,
+                paragraph_hash=paragraph_hash,
+                source_type=source_type,
+                metadata={"chat_id": chat_id, "person_ids": person_tokens},
+            )
         self._persist()
         for person_id in person_tokens:
             self._mark_person_active(person_id)

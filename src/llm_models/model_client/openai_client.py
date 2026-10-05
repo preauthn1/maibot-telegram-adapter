@@ -1,4 +1,5 @@
 import asyncio
+import httpx
 import base64
 import binascii
 import io
@@ -1064,7 +1065,8 @@ class _OpenAIStreamAccumulator:
         if getattr(event, "model", None) and not self.model_name:
             self.model_name = event.model
         if getattr(event, "choices", None):
-            finish_reason = getattr(event.choices[0], "finish_reason", None)
+            primary = next((c for c in event.choices if getattr(c, "index", 0) == 0), None)
+            finish_reason = getattr(primary, "finish_reason", None)
             if finish_reason:
                 self.finish_reason = finish_reason
 
@@ -1088,7 +1090,7 @@ class _OpenAIStreamAccumulator:
             self._using_native_reasoning = True
             if self.reasoning_parse_mode != ReasoningParseMode.NONE:
                 self.reasoning_buffer.write(native_reasoning)
-            return
+            # 同一增量可能同时包含正文；读取推理后仍须独立处理 content。
 
         content_chunk = getattr(delta, "content", None)
         if not isinstance(content_chunk, str) or content_chunk == "":
@@ -1222,7 +1224,31 @@ async def _default_stream_response_handler(
     usage_record: UsageTuple | None = None
 
     try:
-        async for event in resp_stream:
+        iterator = resp_stream.__aiter__()
+        while True:
+            if interrupt_flag is not None and interrupt_flag.is_set():
+                raise ReqAbortException("请求被外部信号中断")
+            # 等待下一片期间也响应停止，避免上游静默时中断标志失效。
+            try:
+                if interrupt_flag is None:
+                    event = await anext(iterator)
+                else:
+                    async def read_next() -> ChatCompletionChunk:
+                        return await anext(iterator)
+                    next_task = asyncio.create_task(read_next())
+                    stop_task = asyncio.create_task(interrupt_flag.wait())
+                    try:
+                        await asyncio.wait((next_task, stop_task), return_when=asyncio.FIRST_COMPLETED)
+                        if interrupt_flag.is_set():
+                            raise ReqAbortException("请求被外部信号中断")
+                        event = await next_task
+                    finally:
+                        for pending in (next_task, stop_task):
+                            if not pending.done():
+                                pending.cancel()
+                        await asyncio.gather(next_task, stop_task, return_exceptions=True)
+            except StopAsyncIteration:
+                break
             if interrupt_flag and interrupt_flag.is_set():
                 raise ReqAbortException("请求被外部信号中断")
 
@@ -1234,7 +1260,10 @@ async def _default_stream_response_handler(
             if not getattr(event, "choices", None):
                 continue
 
-            accumulator.process_delta(event.choices[0].delta)
+            # 其他候选可能先到或独立到达，不能串入主答案及工具参数。
+            for choice in event.choices:
+                if getattr(choice, "index", 0) == 0:
+                    accumulator.process_delta(choice.delta)
 
         response = accumulator.build_response()
         model_name = None
@@ -1244,6 +1273,12 @@ async def _default_stream_response_handler(
         return response, usage_record
     finally:
         accumulator.close()
+        # 主动中断发生在消费循环内部，SDK 迭代器未必走到自身清理路径。
+        # 关闭属于附属清理；普通清理失败不能覆盖成功正文、原始失败或取消。
+        try:
+            await resp_stream.close()
+        except Exception as exc:
+            logger.warning(f"OpenAI stream close failed: {type(exc).__name__}")
 
 
 def _default_normal_response_parser(
@@ -1272,7 +1307,10 @@ def _default_normal_response_parser(
     if not choices:
         raise EmptyResponseException(resp, "响应解析失败，choices 为空或缺失")
 
-    message_part = choices[0].message
+    primary = next((choice for choice in choices if getattr(choice, "index", 0) == 0), None)
+    if primary is None:
+        raise EmptyResponseException(resp, "响应解析失败，主候选 index=0 缺失")
+    message_part = primary.message
     native_reasoning = _extract_reasoning_content(message_part, reasoning_key)
     raw_message_content = message_part.content
     message_content = raw_message_content if isinstance(raw_message_content, str) else None
@@ -1317,7 +1355,7 @@ def _default_normal_response_parser(
 
     usage_record = _extract_usage_record(getattr(resp, "usage", None))
 
-    finish_reason = getattr(resp.choices[0], "finish_reason", None)
+    finish_reason = getattr(primary, "finish_reason", None)
     _log_length_truncation(finish_reason, getattr(resp, "model", None))
     content, reasoning_content, resolved_tool_calls = _apply_xml_tool_call_fallback(
         content,
@@ -1594,7 +1632,8 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
             )
             attach_request_snapshot(exc, snapshot_path)
             raise
-        except APIConnectionError as exc:
+        except (APIConnectionError, httpx.TransportError) as exc:
+            # SDK 流迭代阶段可能直接暴露 httpx 传输错误，统一进入上层网络重试。
             snapshot_path = save_failed_request_snapshot(
                 api_provider=self.api_provider,
                 client_type="openai",
