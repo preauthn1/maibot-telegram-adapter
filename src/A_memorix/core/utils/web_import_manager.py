@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 import asyncio
@@ -24,6 +23,7 @@ import uuid
 import numpy as np
 
 from src.common.logger import get_logger
+from src.common.utils.prompt_time import prompt_now
 from src.services import llm_service as llm_api
 
 from ...paths import default_data_dir, repo_root, resolve_repo_path, scripts_root
@@ -59,7 +59,7 @@ from ..utils.model_routing import (
 )
 from ..utils.relation_write_service import RelationWriteService
 from ..utils.runtime_self_check import ensure_runtime_self_check
-from ..utils.time_parser import normalize_time_meta
+from ..utils.time_parser import normalize_time_meta, parse_reference_datetime
 
 logger = get_logger("A_Memorix.WebImportManager")
 
@@ -1136,6 +1136,8 @@ class ImportTaskManager:
 
         chat_log = _coerce_bool(payload.get("chat_log"), False)
         chat_reference_time = str(payload.get("chat_reference_time") or "").strip() or None
+        # 创建任务时即校验参考时间，格式错误直接报错，不再静默替换为当前时间（审计 F08）。
+        parse_reference_datetime(chat_reference_time)
         chat_id = str(payload.get("chat_id") or "").strip()
         raw_scope_type = str(payload.get("scope_type") or "").strip().lower()
         scope_type = raw_scope_type or ("chat" if chat_id else "global")
@@ -4051,24 +4053,16 @@ class ImportTaskManager:
                 await asyncio.sleep(max(0.0, float(delay)))
         raise RuntimeError(f"LLM 抽取失败: {last_error}")
 
-    def _parse_reference_time(self, value: Optional[str]) -> datetime:
-        if not value:
-            return datetime.now()
-        text = str(value).strip()
-        formats = [
-            "%Y/%m/%d %H:%M:%S",
-            "%Y/%m/%d %H:%M",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d %H:%M",
-            "%Y/%m/%d",
-            "%Y-%m-%d",
-        ]
-        for fmt in formats:
-            try:
-                return datetime.strptime(text, fmt)
-            except ValueError:
-                continue
-        return datetime.now()
+    def _build_reference_now_text(self, value: Optional[str]) -> str:
+        """生成抽取提示词中的 reference_now（北京时间 UTC+8，审计 F08）。
+
+        - 格式错误：parse_reference_datetime 抛出 ValueError，由导入任务报错，不吞掉。
+        - 未提供：使用当前北京时间，但明确标注为导入时刻、来源日期未知。
+        """
+        ref_dt = parse_reference_datetime(value)
+        if ref_dt is None:
+            return f"{prompt_now().strftime('%Y/%m/%d %H:%M')}（导入时刻（来源日期未知），时区 UTC+8）"
+        return f"{ref_dt.strftime('%Y/%m/%d %H:%M')}（来源参考时间，时区 UTC+8）"
 
     async def _extract_chat_time_meta_with_llm(
         self,
@@ -4079,20 +4073,20 @@ class ImportTaskManager:
     ) -> Optional[Dict[str, Any]]:
         if not str(text or "").strip():
             return None
-        ref_dt = self._parse_reference_time(reference_time)
-        reference_now = ref_dt.strftime("%Y/%m/%d %H:%M")
+        reference_now = self._build_reference_now_text(reference_time)
         prompt = f"""You are a time extraction engine for chat logs.
 Extract temporal information from the following chat paragraph.
 
 Rules:
 1. Use semantic understanding, not regex matching.
-2. Convert relative expressions to absolute local datetime using reference_now.
+2. Convert relative expressions to absolute datetime in UTC+8 (Beijing time) using reference_now.
 3. If a time span exists, return event_time_start/event_time_end.
 4. If only one point in time exists, return event_time.
 5. If no reliable time info exists, keep all event_time fields null.
 6. Return JSON only.
 
 reference_now: {reference_now}
+timezone: UTC+8
 text:
 {text}
 
