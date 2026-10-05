@@ -9,6 +9,7 @@ import random
 import re
 import time
 
+from src.common.utils.prompt_time import format_prompt_timestamp
 from src.chat.message_receive.chat_manager import chat_manager as _chat_manager
 from src.chat.message_receive.message import SessionMessage
 from src.common.data_models.message_component_data_model import AtComponent
@@ -856,9 +857,9 @@ def translate_timestamp_to_human_readable(timestamp: float, mode: str = "normal"
         str: 格式化后的时间字符串
     """
     if mode == "normal":
-        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
+        return format_prompt_timestamp(timestamp)
     elif mode == "normal_no_YMD":
-        return time.strftime("%H:%M:%S", time.localtime(timestamp))
+        return format_prompt_timestamp(timestamp, "%H:%M:%S")
     elif mode == "relative":
         now = time.time()
         diff = now - timestamp
@@ -874,10 +875,10 @@ def translate_timestamp_to_human_readable(timestamp: float, mode: str = "normal"
         elif diff < 86400 * 2:
             return f"{int(diff / 86400)}天前"
         else:
-            return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp)) + ":"
+            return format_prompt_timestamp(timestamp) + ":"
     else:  # mode = "lite" or unknown
         # 只返回时分秒格式
-        return time.strftime("%H:%M:%S", time.localtime(timestamp))
+        return format_prompt_timestamp(timestamp, "%H:%M:%S")
 
 
 def get_chat_type_and_target_info(chat_id: str) -> Tuple[bool, Optional["ChatTargetInfo"]]:

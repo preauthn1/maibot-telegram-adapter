@@ -8,6 +8,7 @@ import asyncio
 import json
 import re
 
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.chat.utils.utils import is_bot_self
 from src.common.data_models.llm_service_data_models import LLMGenerationOptions, LLMResponseResult
 from src.common.logger import get_logger
@@ -1218,7 +1219,7 @@ class BehaviorLearner:
                     [
                         f"[source_id:{index}]",
                         f"[speaker:{speaker_kind}]",
-                        f"[time:{message.timestamp.strftime('%H:%M:%S')}]",
+                        f"[time:{format_prompt_datetime(message.timestamp)}]",
                         "[content]",
                         content,
                     ]
@@ -1261,7 +1262,7 @@ class BehaviorLearner:
                             f"[source_id:{index}]",
                             f"[speaker:{speaker_kind}]",
                             f"[name:{speaker_name}]",
-                            f"[time:{message.timestamp.strftime('%H:%M:%S')}]",
+                            f"[time:{format_prompt_datetime(message.timestamp)}]",
                             "[content]",
                             content,
                         ]
@@ -1315,7 +1316,7 @@ class BehaviorLearner:
                             f"[source_id:{index}]",
                             f"[speaker:{speaker_kind}]",
                             f"[name:{speaker_name}]",
-                            f"[time:{message.timestamp.strftime('%H:%M:%S')}]",
+                            f"[time:{format_prompt_datetime(message.timestamp)}]",
                             "[content]",
                             content,
                         ]

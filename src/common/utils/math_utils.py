@@ -3,6 +3,8 @@ from enum import Enum
 import hashlib
 import time
 
+from .prompt_time import format_prompt_timestamp
+
 
 class TimestampMode(Enum):
     NORMAL = "%Y-%m-%d %H:%M:%S"
@@ -62,7 +64,7 @@ def translate_timestamp_to_human_readable(timestamp: float, mode: TimestampMode 
         else:
             raise ValueError(f"不支持的时间戳转换模式: {mode}")
     if mode in [TimestampMode.NORMAL, TimestampMode.NORMAL_NO_YMD]:
-        return time.strftime(mode.value, time.localtime(timestamp))
+        return format_prompt_timestamp(timestamp, mode.value)
     elif mode == TimestampMode.RELATIVE:
         time_diff = time.time() - timestamp
 
@@ -77,7 +79,7 @@ def translate_timestamp_to_human_readable(timestamp: float, mode: TimestampMode 
         elif time_diff < 2592000:
             return f"{int(time_diff // 86400)}天前"
         else:
-            return time.strftime(TimestampMode.NORMAL.value, time.localtime(timestamp))
+            return format_prompt_timestamp(timestamp, TimestampMode.NORMAL.value)
     else:
         raise ValueError(f"不支持的时间戳转换模式: {mode}")
 

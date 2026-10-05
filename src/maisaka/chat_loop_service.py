@@ -12,6 +12,7 @@ import uuid
 
 from rich.console import RenderableType
 
+from src.common.utils.prompt_time import format_prompt_datetime, prompt_now, to_prompt_tz
 from src.common.data_models.llm_service_data_models import LLMGenerationOptions
 from src.common.i18n import get_locale
 from src.common.logger import get_logger
@@ -799,7 +800,7 @@ class MaisakaChatLoopService:
     def _build_time_user_message(timestamp: datetime) -> str:
         """构建统一格式的时间提示消息。"""
 
-        return f"时间：{timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+        return f"时间：{format_prompt_datetime(timestamp)}"
 
     @staticmethod
     def _build_current_time_user_message() -> str:
@@ -814,7 +815,7 @@ class MaisakaChatLoopService:
         """
 
         return MaisakaChatLoopService._build_time_user_message(
-            datetime.now(_CN_TZ)
+            prompt_now()
         )
 
     @staticmethod
@@ -976,7 +977,8 @@ class MaisakaChatLoopService:
             if (
                 include_day_boundary_time_messages
                 and previous_context_timestamp is not None
-                and previous_context_timestamp.date() != msg.timestamp.date()
+                # 按 UTC+8 的日历日判断跨日，与提示词显示的日期一致。
+                and to_prompt_tz(previous_context_timestamp).date() != to_prompt_tz(msg.timestamp).date()
             ):
                 if is_tool_result_entry:
                     deferred_boundary_timestamps.append(msg.timestamp)
