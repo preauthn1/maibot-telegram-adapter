@@ -305,11 +305,17 @@ class RuntimeCoreCapabilityMixin:
     def _build_send_result(args: Dict[str, Any], sent_message: Any = None, error: str = "") -> Dict[str, Any]:
         """按调用方选择返回兼容布尔结果或包含平台消息 ID 的详细结果。"""
 
+        from src.platform_io.delivery_content import PARTIAL_KEY
+
         sent = sent_message is not None
         result: Dict[str, Any] = {"success": sent}
+        # 混合消息只部分送达：仍是已发送（不得重发），但必须向调用方暴露。
+        partial = sent and (sent_message.message_info.additional_config or {}).get(PARTIAL_KEY) is True
+        if partial:
+            result["partial"] = True
         if bool(args.get("return_details", False)):
             message_id = str(sent_message.platform_message_id or "").strip() if sent else ""
-            result.update({"sent": sent, "message_id": message_id or None})
+            result.update({"sent": sent, "message_id": message_id or None, "partial": partial})
         if error:
             result["error"] = error
         return result
