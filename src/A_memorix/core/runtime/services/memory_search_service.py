@@ -84,8 +84,9 @@ class MemorySearchService(KernelServiceBase):
                 top_k=limit,
                 mix=True,
                 mix_top_k=limit,
-                time_from=time_window.query_start,
-                time_to=time_window.query_end,
+                # 聚合入口只用它判断是否有时间窗；各分支统一使用下方数值边界。
+                time_from=time_window.numeric_start,
+                time_to=time_window.numeric_end,
                 search_runner=lambda: self._aggregate_search(query, limit, request, scope),
                 time_runner=lambda: self._aggregate_time(query, limit, request, time_window, scope),
                 episode_runner=lambda: self._aggregate_episode(query, limit, request, time_window, scope),
@@ -114,8 +115,9 @@ class MemorySearchService(KernelServiceBase):
             query=query,
             top_k=limit,
             request=request,
-            time_from=time_window.query_start,
-            time_to=time_window.query_end,
+            # 传规范化数值边界；显示用文本只到分钟，往返会错移秒级窗口（审计 F05）。
+            time_from=time_window.numeric_start,
+            time_to=time_window.numeric_end,
             plugin_config=runtime_config,
             scope=scope,
             enforce_chat_filter=bool(request.respect_filter),
@@ -179,15 +181,15 @@ class MemorySearchService(KernelServiceBase):
     ) -> Dict[str, Any]:
         # 聚合的关键词分支也必须受显式时间约束，避免混入窗口外记忆。
         window = self._normalize_search_time_window(request.time_start, request.time_end)
-        has_time_window = window.query_start is not None or window.query_end is not None
+        has_time_window = window.numeric_start is not None or window.numeric_end is not None
         result = await self._search_execution_for_chat_scope(
             caller="sdk_memory_kernel.aggregate",
             query_type="hybrid" if has_time_window else "search",
             query=query,
             top_k=limit,
             request=request,
-            time_from=window.query_start,
-            time_to=window.query_end,
+            time_from=window.numeric_start,
+            time_to=window.numeric_end,
             plugin_config=self._build_runtime_config(),
             enforce_chat_filter=False,
             scope=scope,
@@ -217,8 +219,8 @@ class MemorySearchService(KernelServiceBase):
             query=query,
             top_k=limit,
             request=request,
-            time_from=time_window.query_start,
-            time_to=time_window.query_end,
+            time_from=time_window.numeric_start,
+            time_to=time_window.numeric_end,
             plugin_config=self._build_runtime_config(),
             enforce_chat_filter=False,
             scope=scope,
@@ -265,8 +267,8 @@ class MemorySearchService(KernelServiceBase):
         request: KernelSearchRequest,
         plugin_config: dict,
         source: Optional[str],
-        time_from: Optional[str] = None,
-        time_to: Optional[str] = None,
+        time_from: Optional[float] = None,
+        time_to: Optional[float] = None,
         enforce_chat_filter: bool,
         scope: Optional[RetrievalScope] = None,
     ) -> SearchExecutionResult:
@@ -308,8 +310,8 @@ class MemorySearchService(KernelServiceBase):
         top_k: int,
         request: KernelSearchRequest,
         plugin_config: dict,
-        time_from: Optional[str] = None,
-        time_to: Optional[str] = None,
+        time_from: Optional[float] = None,
+        time_to: Optional[float] = None,
         enforce_chat_filter: bool,
         scope: Optional[RetrievalScope] = None,
     ) -> SearchExecutionResult:

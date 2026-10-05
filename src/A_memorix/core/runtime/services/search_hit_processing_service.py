@@ -131,10 +131,11 @@ class MemorySearchHitProcessingService(KernelServiceBase):
                 elif item_type == "relation":
                     stored = relation_map.get(hash_value)
                 if stored is not None:
-                    metadata = coerce_metadata_dict(stored.get("metadata"))
+                    # 存储元数据是有效期的权威来源，但检索阶段派生的字段（如 time_meta 的
+                    # event_time/ingest_time/match_basis）只存在于命中结果里，不能被整体覆盖丢弃。
+                    metadata = {**metadata, **coerce_metadata_dict(stored.get("metadata"))}
             memory_change = metadata.get("memory_change") if isinstance(metadata.get("memory_change"), dict) else {}
-            valid_to = optional_float(memory_change.get("valid_to"))
-            if valid_to is not None and valid_to <= now:
+            if not self._is_memory_change_effective(memory_change, now):
                 continue
             next_item = dict(item)
             next_item["metadata"] = metadata
@@ -162,14 +163,28 @@ class MemorySearchHitProcessingService(KernelServiceBase):
         cache["needed"] = needed
         return needed
 
+    @staticmethod
+    def _is_memory_change_effective(memory_change: Dict[str, Any], now: float) -> bool:
+        """当前有效区间统一为 ``valid_from <= now < valid_to``，缺失边界视为不限。
+
+        旧实现只检查 valid_to，未来才生效（valid_from > now）的改写会提前出现在
+        “当前有效记忆”里（审计 F09）；事实库 metadata_fact 已同时检查两端，这里保持一致。
+        """
+        valid_from = optional_float(memory_change.get("valid_from"))
+        if valid_from is not None and valid_from > now:
+            return False
+        valid_to = optional_float(memory_change.get("valid_to"))
+        if valid_to is not None and valid_to <= now:
+            return False
+        return True
+
     def _filter_hits_by_memory_change_metadata(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         now = time.time()
         filtered: List[Dict[str, Any]] = []
         for item in hits:
             metadata = coerce_metadata_dict(item.get("metadata"))
             memory_change = metadata.get("memory_change") if isinstance(metadata.get("memory_change"), dict) else {}
-            valid_to = optional_float(memory_change.get("valid_to"))
-            if valid_to is not None and valid_to <= now:
+            if not self._is_memory_change_effective(memory_change, now):
                 continue
             next_item = dict(item)
             next_item["metadata"] = metadata
@@ -747,8 +762,9 @@ class MemorySearchHitProcessingService(KernelServiceBase):
     def _normalize_search_time_window(cls, time_start: Any, time_end: Any) -> _NormalizedSearchTimeWindow:
         numeric_start, query_start = cls._normalize_search_time_bound(time_start, is_end=False)
         numeric_end, query_end = cls._normalize_search_time_bound(time_end, is_end=True)
-        if numeric_start is not None and numeric_end is not None and numeric_start > numeric_end:
-            raise ValueError("时间参数错误: time_start 不能晚于 time_end")
+        # 与 time_parser 的半开区间 [start, end) 一致：起点必须早于终点。
+        if numeric_start is not None and numeric_end is not None and numeric_start >= numeric_end:
+            raise ValueError("时间参数错误: time_start 必须早于 time_end（结束时间不含）")
         return _NormalizedSearchTimeWindow(
             numeric_start=numeric_start,
             numeric_end=numeric_end,
@@ -808,7 +824,9 @@ class MemorySearchHitProcessingService(KernelServiceBase):
                 continue
             if person_id and person_id in str(item.get("content", "") or ""):
                 filtered.append(item)
-        return filtered or hits
+        # 未命中目标人物时返回空结果，不能悄悄退回未过滤的其它人物结果（审计 F02）；
+        # query_memory 会据此显式降级为关键词检索并标注 person_filter_miss。
+        return filtered
 
     def _filter_active_relation_hits(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if self.metadata_store is None:

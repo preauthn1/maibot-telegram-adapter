@@ -10,7 +10,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.common.logger import get_logger
 
@@ -53,8 +53,9 @@ class SearchExecutionRequest:
     query: str = ""
     top_k: Optional[int] = None
     candidate_top_k: Optional[int] = None
-    time_from: Optional[str] = None
-    time_to: Optional[str] = None
+    # 时间边界：数值为已规范化的 Unix 时间戳（推荐，保留秒级精度）；字符串按 UTC+8 日历解析。
+    time_from: Optional[Union[str, float]] = None
+    time_to: Optional[Union[str, float]] = None
     person: Optional[str] = None
     source: Optional[str] = None
     use_threshold: bool = True
@@ -69,8 +70,8 @@ class SearchExecutionResult:
     query_type: str = "search"
     query: str = ""
     top_k: int = 10
-    time_from: Optional[str] = None
-    time_to: Optional[str] = None
+    time_from: Optional[Union[str, float]] = None
+    time_to: Optional[Union[str, float]] = None
     person: Optional[str] = None
     source: Optional[str] = None
     temporal: Optional[TemporalQueryOptions] = None
@@ -160,8 +161,8 @@ class SearchExecutionService:
     def _build_temporal(
         plugin_config: Optional[dict],
         query_type: str,
-        time_from_raw: Optional[str],
-        time_to_raw: Optional[str],
+        time_from_raw: Optional[Union[str, float]],
+        time_to_raw: Optional[Union[str, float]],
         person: Optional[str],
         source: Optional[str],
     ) -> Tuple[bool, Optional[TemporalQueryOptions], str]:
@@ -172,14 +173,12 @@ class SearchExecutionService:
         if not temporal_enabled:
             return False, None, "时序检索已禁用（retrieval.temporal.enabled=false）"
 
-        if not time_from_raw and not time_to_raw:
+        if time_from_raw in (None, "") and time_to_raw in (None, ""):
             return False, None, "time/hybrid 模式至少需要 time_from 或 time_to"
 
         try:
-            ts_from, ts_to = parse_query_time_range(
-                str(time_from_raw) if time_from_raw is not None else None,
-                str(time_to_raw) if time_to_raw is not None else None,
-            )
+            # 数值边界原样传入保留精度，字符串边界按 UTC+8 解析（审计 F05）。
+            ts_from, ts_to = parse_query_time_range(time_from_raw, time_to_raw)
         except ValueError as e:
             return False, None, f"时间参数错误: {e}"
 
