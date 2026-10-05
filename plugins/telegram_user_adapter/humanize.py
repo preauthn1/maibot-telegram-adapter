@@ -239,7 +239,9 @@ def is_emoji_only(text: str) -> bool:
         return False
 
     residue = _EMOJI_PATTERN.sub("", text)
-    # 颜文字与纯标点回复（如 "..."、"？？"）同样属于无信息量的敷衍。
+    if residue.strip() == text.strip():
+        # 没有任何 emoji：纯标点/颜文字（如 "？？"、"…"）是正常语气，不算纯 emoji 回复。
+        return False
     residue = re.sub(r"[\s\W_]+", "", residue, flags=re.UNICODE)
     return not residue
 
@@ -250,10 +252,12 @@ def humanize_chat_text(
     drop_trailing_period: bool = True,
     max_emoji: int = 1,
     strip_markdown: bool = True,
+    preserve_semantics: bool = True,
 ) -> HumanizeResult:
-    """把一条 LLM 回复改写成更像真人打字的中文群聊文本。
+    """默认保留模型文本，避免无上下文的正则改写损坏语义。
 
-    只做删减与替换，不新增任何内容。
+    自然口吻应在生成阶段控制；“只删除”也会丢失条件、引用和共情。
+    旧参数仅在显式关闭 preserve_semantics 的兼容模式生效。
 
     Args:
         text: LLM 原始回复。
@@ -267,7 +271,7 @@ def humanize_chat_text(
     """
 
     original = text or ""
-    if not original.strip():
+    if not original.strip() or preserve_semantics:
         return HumanizeResult(text=original)
 
     current = original

@@ -19,6 +19,8 @@ from typing import Any, Dict, Optional
 
 import asyncio
 import json
+import os
+import stat
 import re
 
 _CN_TZ = timezone(timedelta(hours=8))
@@ -46,7 +48,7 @@ class ChatTranscriptLogger:
 
         if self._enabled:
             try:
-                self._log_dir.mkdir(parents=True, exist_ok=True)
+                self._log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
             except OSError as exc:
                 self._logger.warning(f"无法创建聊天日志目录 {self._log_dir}: {exc}")
                 self._enabled = False
@@ -91,8 +93,20 @@ class ChatTranscriptLogger:
         async with self._lock:
             try:
                 path = self._resolve_path(chat_id)
-                with path.open("a", encoding="utf-8") as handle:
-                    handle.write(line + "\n")
+                # 原文及候选文本只允许服务账号读取；追加前收紧旧文件权限。
+                # 拒绝符号链接与特殊文件，避免日志路径被替换后写入其他目标。
+                fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+                try:
+                    if not stat.S_ISREG(os.fstat(fd).st_mode):
+                        raise OSError("Transcript target is not a regular file")
+                    os.fchmod(fd, 0o600)
+                    handle = os.fdopen(fd, "a", encoding="utf-8")
+                    fd = -1  # fdopen 成功后由文件对象负责关闭。
+                    with handle:
+                        handle.write(line + "\n")
+                finally:
+                    if fd != -1:
+                        os.close(fd)
             except OSError as exc:
                 self._logger.warning(f"写入聊天日志失败 chat_id={chat_id}: {exc}")
 
@@ -153,6 +167,10 @@ class ChatTranscriptLogger:
         humanize_rules: Optional[list[str]] = None,
         identity_guard_triggered: bool = False,
         reply_is_quote: bool = False,
+        original_captured: bool = False,
+        timing_source: str = "unspecified",
+        latency_anchor: str = "unspecified",
+        native_sticker: Optional[Dict[str, Any]] = None,
     ) -> None:
         """记录一条已发出的消息及其拟人化决策。
 
@@ -173,11 +191,18 @@ class ChatTranscriptLogger:
             chat_id,
             {
                 "direction": "out",
+                "native_sticker": native_sticker,
+                "content_kind": "telegram_native_sticker" if native_sticker else "text",
                 "chat_id": chat_id,
                 "message_id": message_id,
                 "text": text,
-                "rewritten": text != original_text,
-                "original_text": original_text if text != original_text else None,
+                # 相同文本也保存捕获结果；缺失则明确标未知，不能用已发送文本补造。
+                "candidate_stage": "adapter_pre_humanize",
+                "original_captured": original_captured,
+                "rewritten": text != original_text if original_captured else None,
+                "original_text": original_text if original_captured else None,
+                "timing_source": timing_source,
+                "latency_anchor": latency_anchor,
                 "queue_wait_seconds": round(queue_wait_seconds, 2),
                 "typing_seconds": round(typing_seconds, 2),
                 "reply_latency_seconds": (

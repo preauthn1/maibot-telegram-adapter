@@ -47,8 +47,8 @@ RATIO_WINDOW_SECONDS = 1800.0
 #
 # 必须加锚定：原实现全是无锚定子串匹配，技术群里说「镜像下了」
 # 「他睡了没」「明天见客户」都会命中，让账号误入 40-120 分钟静默。
-# 而静默检查在 is_directed 之前，静默期内被 @ 也不回——
-# 正是"被点名还在潜水"的行为异常。
+# 旧实现静默检查在 is_directed 之前，静默期内被 @ 也不回——
+# 正是"被点名还在潜水"的行为异常；现在被点名跳过道别静默，但仍受最小间隔约束。
 #
 # 锚定策略：
 # - 要求出现在句尾（允许尾随标点/波浪号）
@@ -250,20 +250,17 @@ class SmallChatModerator:
 
         # 极端实验模式：解除参与率上限与最小间隔。
         # _prune 已执行，状态仍在维护，切回正常模式立即恢复约束。
-        if is_unlimited():
+        if is_unlimited(chat_id):
             return False, ""
 
         ratio_limit = ratio_override if ratio_override is not None else self._ratio_limit
         min_gap = min_gap_override if min_gap_override is not None else self._min_gap
 
-        # 道别静默期：即使被 @ 也保持沉默，否则"我睡了"就成了谎话。
-        if current < state.silent_until:
+        # 道别静默期：只约束普通闲聊；被直接点名（可能是求助）不能被吞掉。
+        if not is_directed and current < state.silent_until:
             remaining = state.silent_until - current
             return True, f"道别后静默期，剩余 {remaining / 60:.0f} 分钟"
 
-        # 被直接问到时正常回应——装死同样不像真人。
-        if is_directed:
-            return False, ""
 
         # 连续接话太快：真人打字加思考做不到 1 秒接话。
         if state.last_reply_at > 0 and (current - state.last_reply_at) < min_gap:

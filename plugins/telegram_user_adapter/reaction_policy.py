@@ -248,7 +248,8 @@ class ReactionPolicy:
         candidates = [e for e in self._emoji_pool if _usable(e)]
         if not candidates:
             return None
-        return random.choice(candidates)
+        # 无明确语境不随机添加立场或情绪，避免机械点赞/问号反应。
+        return None
 
 
 def resolve_allowed_reactions(available: Any) -> Optional[set[str]]:

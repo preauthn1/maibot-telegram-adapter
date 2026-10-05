@@ -808,6 +808,11 @@ class ComponentQueryService:
 
         payload = dict(invocation.arguments)
         context_payload = ComponentQueryService._build_tool_context_payload(context)
+        # Telegram scoped tools must never trust model-supplied context.
+        if entry.plugin_id == "preauthn1.telegram-user-adapter":
+            for key in ("stream_id", "chat_id", "group_id", "user_id", "platform", "session_id"):
+                payload.pop(key, None)
+            payload.update(context_payload)
         if entry.invoke_method == "plugin.invoke_action":
             stream_id = str(
                 context_payload.get("stream_id")

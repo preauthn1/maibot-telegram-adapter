@@ -40,6 +40,7 @@ from src.common.logger import get_logger
 from src.common.utils.utils_message import MessageUtils
 from src.config.config import global_config
 from src.platform_io import DeliveryBatch, DriverKind, get_platform_io_manager
+from src.platform_io.delivery_content import CONTENT_KEY, HISTORY_BLOCK_KEY, select_text_content
 from src.platform_io.route_key_factory import RouteKeyFactory
 from src.plugin_runtime.hook_payloads import deserialize_session_message, serialize_session_message
 from src.plugin_runtime.hook_schema_utils import build_object_schema
@@ -699,6 +700,31 @@ async def _apply_successful_delivery_receipt(message: SessionMessage, delivery_b
     if not delivery_batch.sent_receipts:
         return
 
+    # 先完成正文校验和原子物化，再写库/通知/同步历史。无效正文不改变发送成功。
+    state, texts = select_text_content(
+        [{"metadata": receipt.metadata, "external_message_id": receipt.external_message_id}
+         for receipt in delivery_batch.sent_receipts],
+        text_only=len(delivery_batch.receipts) == 1 and bool(message.raw_message.components) and any(
+            isinstance(component, TextComponent) for component in message.raw_message.components
+        ) and all(isinstance(component, (TextComponent, ReplyComponent, AtComponent))
+                  for component in message.raw_message.components),
+    )
+    config = dict(message.message_info.additional_config or {})
+    config.pop(HISTORY_BLOCK_KEY, None)
+    if state == "confirmed" and texts is not None:
+        confirmed_text = "\n".join(texts)
+        components: List[StandardMessageComponents] = [
+            component for component in message.raw_message.components if isinstance(component, ReplyComponent)
+        ]
+        components.append(TextComponent(text=confirmed_text))
+        message.raw_message = MessageSequence(components=components)
+        message.processed_plain_text = confirmed_text
+        config[CONTENT_KEY] = deepcopy(delivery_batch.sent_receipts[0].metadata[CONTENT_KEY])
+    elif state == "invalid":
+        config[HISTORY_BLOCK_KEY] = True
+        logger.warning("[SendService] 已发送，但正文回执无效；不写库或历史，不触发重发")
+    message.message_info.additional_config = config
+
     original_message_id = str(message.message_id or "").strip()
     external_message_id = str(delivery_batch.sent_receipts[0].external_message_id or "").strip()
     if not external_message_id:
@@ -795,14 +821,20 @@ def _sync_sent_message_to_maisaka_history(
         return
 
     try:
+        # 发送已经成功；回执检查也属于附属历史阶段，异常不得冒泡诱发重发。
+        if (message.message_info.additional_config or {}).get(HISTORY_BLOCK_KEY) is True:
+            return
         from src.chat.heart_flow.heartflow_manager import heartflow_manager
 
         runtime = heartflow_manager.heartflow_chat_list.get(session_id)
         if runtime is None:
             return
-        runtime.append_sent_message_to_chat_history(message, source_kind=source_kind)
+        synced = runtime.append_sent_message_to_chat_history(message, source_kind=source_kind)
+        if synced is False:
+            # 消息已经发出：单独报告记忆失败，不让调用方误判并重发。
+            logger.warning("[SendService] 消息已发送，但 Maisaka 历史同步未成功")
     except Exception as exc:
-        logger.warning(f"[SendService] 同步消息到 Maisaka 历史失败: session_id={session_id} error={exc}")
+        logger.warning("[SendService] 消息已发送，但 Maisaka 历史同步异常: %s", type(exc).__name__)
 
 
 def _log_platform_io_failures(delivery_batch: DeliveryBatch) -> None:
@@ -821,6 +853,32 @@ def _log_platform_io_failures(delivery_batch: DeliveryBatch) -> None:
     logger.warning(f"[SendService] Platform IO 发送失败: platform={delivery_batch.route_key.platform} {failed_details}")
 
 
+async def preflight_reply_policy(stream_id: str, reply_message: MaiMessage) -> Dict[str, Any]:
+    """生成前查询已路由驱动；空消息仅用于目标解析，绝不进入发送链路。"""
+    from src.platform_io.drivers.plugin_driver import PluginPlatformDriver
+
+    try:
+        message = _build_outbound_session_message(
+            message_sequence=MessageSequence(components=[]), stream_id=stream_id,
+            processed_plain_text="", reply_message=reply_message,
+        )
+        if message is None:
+            raise ValueError("无法解析回复目标")
+        manager = get_platform_io_manager()
+        await manager.ensure_send_pipeline_ready()
+        drivers = manager.resolve_drivers(manager.build_route_key_from_message(message))
+        if not drivers:
+            raise ValueError("无出站路由")
+        for driver in drivers:
+            if isinstance(driver, PluginPlatformDriver):
+                result = await driver.preflight_policy(message)
+                if result.get("allowed") is not True:
+                    return result
+        return {"allowed": True, "outcome": "allowed"}
+    except Exception as exc:
+        return {"allowed": False, "outcome": "preflight_unavailable", "reason": str(exc), "retryable": False}
+
+
 async def _send_via_platform_io(
     message: SessionMessage,
     *,
@@ -830,6 +888,7 @@ async def _send_via_platform_io(
     reply_message: Optional[MaiMessage] = None,
     storage_message: bool,
     show_log: bool,
+    delivery_report: Optional[dict] = None,
 ) -> Optional[SessionMessage]:
     """通过 Platform IO 发送消息。
 
@@ -844,6 +903,8 @@ async def _send_via_platform_io(
     Returns:
         bool: 发送成功时返回 ``True``。
     """
+    if delivery_report is not None:
+        delivery_report.update(outcome="delivery_failed", reason="发送前检查未通过", retryable=False)
     before_send_result, message = await _invoke_send_hook(
         "send_service.before_send",
         message,
@@ -887,6 +948,8 @@ async def _send_via_platform_io(
             reply_message_id=reply_message_id,
             reply_message=reply_message,
         )
+        if delivery_report is not None:
+            delivery_report.update(outcome="delivery_unknown", reason="发送结果尚未确认", retryable=False)
         delivery_batch = await platform_io_manager.send_message(
             message,
             route_key,
@@ -897,37 +960,61 @@ async def _send_via_platform_io(
         logger.debug(traceback.format_exc())
         return None
 
-    sent = bool(delivery_batch.has_success)
-    if sent:
-        await _apply_successful_delivery_receipt(message, delivery_batch)
-        await _dispatch_adapter_callbacks(delivery_batch)
-    await _invoke_send_hook(
-        "send_service.after_send",
-        message,
-        sent=sent,
-        typing=typing,
-        set_reply=set_reply,
-        reply_message_id=reply_message_id,
-        storage_message=storage_message,
-        show_log=show_log,
-    )
-
-    if delivery_batch.has_success:
-        _record_sent_emoji_usage(message)
-        if storage_message:
-            await _store_sent_message(message)
-        await _notify_memory_automation_on_message_sent(message)
-        should_log_delivery = show_log and any(
-            receipt.driver_kind != DriverKind.LOCAL
-            for receipt in delivery_batch.sent_receipts
+    if delivery_report is not None:
+        delivery_report.update(
+            outcome=("sent" if delivery_batch.has_success else
+                     "policy_dropped" if delivery_batch.is_policy_dropped else
+                     "delivery_unknown" if any(r.metadata.get("delivery_unknown") for r in delivery_batch.receipts)
+                     else "delivery_failed"),
+            reason="; ".join(str(r.metadata.get("policy_reason") or r.error or "") for r in delivery_batch.failed_receipts),
+            retryable=False,
         )
-        if should_log_delivery:
-            successful_driver_ids = [receipt.driver_id or "unknown" for receipt in delivery_batch.sent_receipts]
-            logger.info(
-                f"已通过 Platform IO 将消息发往平台 '{route_key.platform}' "
-                f"(drivers: {', '.join(successful_driver_ids)}) "
-                f"message={_build_outbound_log_preview(message)}"
+    try:
+        sent = bool(delivery_batch.has_success)
+        if sent:
+            await _apply_successful_delivery_receipt(message, delivery_batch)
+            await _dispatch_adapter_callbacks(delivery_batch)
+        await _invoke_send_hook(
+            "send_service.after_send",
+            message,
+            sent=sent,
+            typing=typing,
+            set_reply=set_reply,
+            reply_message_id=reply_message_id,
+            storage_message=storage_message,
+            show_log=show_log,
+        )
+
+        if delivery_batch.has_success:
+            history_safe = (message.message_info.additional_config or {}).get(HISTORY_BLOCK_KEY) is not True
+            if history_safe:
+                _record_sent_emoji_usage(message)
+                if storage_message:
+                    await _store_sent_message(message)
+                await _notify_memory_automation_on_message_sent(message)
+            should_log_delivery = show_log and any(
+                receipt.driver_kind != DriverKind.LOCAL
+                for receipt in delivery_batch.sent_receipts
             )
+            if should_log_delivery:
+                successful_driver_ids = [receipt.driver_id or "unknown" for receipt in delivery_batch.sent_receipts]
+                logger.info(
+                    f"已通过 Platform IO 将消息发往平台 '{route_key.platform}' "
+                    f"(drivers: {', '.join(successful_driver_ids)}) "
+                    f"message={_build_outbound_log_preview(message)}"
+                )
+            return message
+
+    except Exception as exc:
+        if not delivery_batch.has_success:
+            raise
+        # 平台已经确认成功；附属历史/回调故障不能变成发送失败。
+        logger.warning("[SendService] 已发送，后处理失败: %s", type(exc).__name__)
+        config = dict(message.message_info.additional_config or {})
+        config[HISTORY_BLOCK_KEY] = True
+        message.message_info.additional_config = config
+        if delivery_report is not None:
+            delivery_report.update(outcome="sent", reason="已发送，后处理失败", retryable=False)
         return message
 
     _log_platform_io_failures(delivery_batch)
@@ -945,6 +1032,7 @@ async def send_session_message_with_message(
     show_log: bool = True,
     sync_to_maisaka_history: bool = False,
     maisaka_source_kind: str = "outbound_send",
+    delivery_report: Optional[dict] = None,
 ) -> Optional[SessionMessage]:
     """统一发送一条内部消息，并返回最终发送成功的消息对象。"""
     if not message.message_id:
@@ -959,12 +1047,16 @@ async def send_session_message_with_message(
         reply_message=reply_message,
         storage_message=storage_message,
         show_log=show_log,
+        delivery_report=delivery_report,
     )
     if sent_message is not None and sync_to_maisaka_history:
-        _sync_sent_message_to_maisaka_history(
-            sent_message,
-            source_kind=str(maisaka_source_kind or "outbound_send"),
-        )
+        try:
+            _sync_sent_message_to_maisaka_history(
+                sent_message,
+                source_kind=str(maisaka_source_kind or "outbound_send"),
+            )
+        except Exception as exc:
+            logger.warning("[SendService] 已发送，历史同步失败: %s", type(exc).__name__)
     return sent_message
 
 
@@ -1063,6 +1155,7 @@ async def _send_to_target_with_message(
     selected_expressions: Optional[List[int]] = None,
     sync_to_maisaka_history: bool = False,
     maisaka_source_kind: str = "outbound_send",
+    delivery_report: Optional[dict] = None,
 ) -> Optional[SessionMessage]:
     """向指定目标构建并发送消息。
 
@@ -1128,6 +1221,7 @@ async def _send_to_target_with_message(
             show_log=show_log,
             sync_to_maisaka_history=sync_to_maisaka_history,
             maisaka_source_kind=maisaka_source_kind,
+            delivery_report=delivery_report,
         )
         if sent_message is not None:
             logger.debug(f"[SendService] 成功发送消息到 {stream_id}")
