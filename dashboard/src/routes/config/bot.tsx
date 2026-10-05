@@ -1,17 +1,18 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { Fragment, lazy, type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import {
   Check,
-  ChevronLeft,
+  ChevronDown,
   ChevronRight,
   Code2,
-  ExternalLink,
   Info,
+  MoreHorizontal,
   RefreshCw,
   Save,
+  Settings,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
+  UsersRound,
   X,
 } from 'lucide-react'
 import { parse as parseToml } from 'smol-toml'
@@ -26,9 +27,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DashboardTabBar, DashboardTabTrigger } from '@/components/ui/dashboard-tabs'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ThinkingIllustration } from '@/components/ui/thinking-illustration'
 import { CodeEditor } from '@/components/CodeEditor'
@@ -44,12 +54,10 @@ import {
   updateBotConfigRaw,
 } from '@/lib/config-api'
 import { fieldHooks } from '@/lib/field-hooks'
-import {
-  getConfigSearchField,
-  scrollToConfigSearchField,
-} from '@/lib/config-search-navigation'
+import { getConfigSearchField, scrollToConfigSearchField } from '@/lib/config-search-navigation'
 import { RestartProvider, useRestart } from '@/lib/restart-context'
 import { cn } from '@/lib/utils'
+import { SharedGroupsSettings } from '@/routes/chat-management'
 
 import type { ConfigSchema } from '@/types/config-schema'
 import {
@@ -60,7 +68,6 @@ import {
   BehaviorGroupsHook,
   BehaviorFocusGroupsHook,
   BehaviorLearningListHook,
-  BotPlatformAccountsHook,
   ChatPromptsHook,
   ChatTalkValueRulesHook,
   ExpressionGroupsHook,
@@ -76,10 +83,16 @@ import {
   RegexRulesHook,
   useAutoSave,
 } from './bot/hooks'
-import { CoreSettings } from './bot/CoreSettings'
 import { CommandPermissions } from './bot/CommandPermissions'
+import { GlobalLearningSettings } from './bot/GlobalLearningSettings'
+import { MemorySwitchGuard, MemorySwitchProvider } from './bot/MemorySwitchGuard'
+
+const WebUISettings = lazy(() =>
+  import('@/routes/settings').then((module) => ({ default: module.SettingsPage }))
+)
 
 type ConfigSectionData = Record<string, unknown>
+type BotSettingsMode = 'groups' | 'detail' | 'commands' | 'source' | 'webui'
 // ==================== 常量定义 ====================
 /** Toast 显示前的延迟时间 (毫秒) */
 const TOAST_DISPLAY_DELAY = 500
@@ -91,7 +104,6 @@ const EXPERIMENTAL_FEATURES_NOTICE_DISMISSED_KEY =
 interface TabGroup {
   id: string
   label: string
-  advanced: boolean
   order: number
   sections: string[]
 }
@@ -136,7 +148,6 @@ function buildTabGroupsFromSchema(schema: ConfigSchema): TabGroup[] {
       hosts.set(fieldName, {
         id: fieldName,
         label: fieldSchema.uiLabel,
-        advanced: Boolean(fieldSchema.uiAdvanced),
         order: fieldSchema.uiOrder ?? Number.POSITIVE_INFINITY,
         sections: [fieldName],
       })
@@ -175,12 +186,15 @@ export function BotConfigPage() {
 
 // 内部实现组件
 function BotConfigPageContent() {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [autoSaving, setAutoSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [editMode, setEditMode] = useState<'core' | 'detail' | 'commands' | 'source'>('core')
+  const [editMode, setEditMode] = useState<BotSettingsMode>('detail')
+  const [advancedVisible, setAdvancedVisible] = useState(false)
+  const [activeConfigTab, setActiveConfigTab] = useState('bot')
   const [sourceCode, setSourceCode] = useState<string>('')
   const [hasTomlError, setHasTomlError] = useState(false)
   const [tomlErrorMessage, setTomlErrorMessage] = useState<string>('')
@@ -191,6 +205,20 @@ function BotConfigPageContent() {
   const { triggerRestart, isRestarting } = useRestart()
   const routeSearch = useRouterState({ select: (state) => state.location.searchStr })
   const searchFieldPath = useMemo(() => getConfigSearchField(routeSearch), [routeSearch])
+  const lastRouteSearchRef = useRef<string | null>(null)
+
+  // 同页链接可定位共享组或 WebUI 设置；未保存的配置完成后再切换。
+  useEffect(() => {
+    if (lastRouteSearchRef.current === routeSearch) return
+    const mode = new URLSearchParams(routeSearch).get('mode')
+    if (hasUnsavedChanges) return
+    lastRouteSearchRef.current = routeSearch
+    if (mode === 'groups' || mode === 'webui' || mode === 'commands') {
+      setEditMode(mode)
+    } else {
+      setEditMode('detail')
+    }
+  }, [hasUnsavedChanges, routeSearch])
 
   const [sectionValues, setSectionValues] = useState<Record<string, ConfigSectionData | null>>({})
 
@@ -224,7 +252,7 @@ function BotConfigPageContent() {
         'TOML 文档错误：无法识别的转义序列（提示：在双引号字符串中使用 \\\\ 转义反斜杠，或使用单引号字符串）',
       ],
       [
-        /Invalid TOML document: only letter, numbers, dashes and underscores are allowed in keys/,
+        /Invalid TOML document: (?:only letter, numbers, dashes and underscores are allowed in keys|illegal character in key)/,
         'TOML 文档错误：键名只能包含字母、数字、短横线和下划线',
       ],
       [/Invalid TOML document: (.+)/, 'TOML 文档错误：$1'],
@@ -377,7 +405,7 @@ function BotConfigPageContent() {
 
   useEffect(() => {
     const hookEntries = [
-      ['bot.platform', BotPlatformAccountsHook, 'replace'],
+      ['bot.platform', HiddenFieldHook, 'hidden'],
       ['bot.alias_names', AliasNamesHook],
       ['bot.qq_account', HiddenFieldHook, 'hidden'],
       ['bot.platforms', HiddenFieldHook, 'hidden'],
@@ -393,6 +421,10 @@ function BotConfigPageContent() {
       ['jargon.jargon_groups', JargonGroupsHook],
       ['jargon.learning_list', JargonLearningListHook],
       ['a_memorix.global_memory_sharing_enabled', HiddenFieldHook, 'hidden'],
+      ['a_memorix.plugin.enabled', MemorySwitchGuard, 'wrapper'],
+      ['a_memorix.person_profile.enabled', MemorySwitchGuard, 'wrapper'],
+      ['a_memorix.integration.heuristic_memory_recall_enabled', MemorySwitchGuard, 'wrapper'],
+      ['a_memorix.image_memory.enabled', MemorySwitchGuard, 'wrapper'],
       ['a_memorix.shared_memory_groups', AMemorixSharedMemoryGroupsHook],
       ['a_memorix.filter.chats', AMemorixRetrievalChatsHook],
       ['a_memorix.filter.retrieval', AMemorixRetrievalFilterGroupHook, 'wrapper'],
@@ -493,7 +525,7 @@ function BotConfigPageContent() {
   }
 
   // 处理模式切换
-  const handleModeChange = async (mode: 'core' | 'detail' | 'commands' | 'source') => {
+  const handleModeChange = async (mode: BotSettingsMode) => {
     if (hasUnsavedChanges) {
       toast({
         variant: 'destructive',
@@ -504,6 +536,18 @@ function BotConfigPageContent() {
     }
 
     setEditMode(mode)
+    const params = new URLSearchParams(routeSearch)
+    params.delete('field')
+    params.delete('tab')
+    if (mode === 'detail' || mode === 'source') {
+      params.delete('mode')
+    } else {
+      params.set('mode', mode)
+    }
+    const nextSearch = params.size ? `?${params.toString()}` : ''
+    lastRouteSearchRef.current = nextSearch
+    await navigate({ href: `/config/bot${nextSearch}`, replace: true })
+    if (mode === 'webui') return
     if (mode === 'source') {
       await loadSourceCode()
     } else {
@@ -609,13 +653,16 @@ function BotConfigPageContent() {
     return () => window.cancelAnimationFrame(frameId)
   }, [searchFieldPath])
 
-  const setSectionValue = useCallback((sectionName: string, value: ConfigSectionData) => {
-    setSectionValues((current) => ({
-      ...current,
-      [sectionName]: value,
-    }))
-    triggerAutoSave(sectionName, value)
-  }, [triggerAutoSave])
+  const setSectionValue = useCallback(
+    (sectionName: string, value: ConfigSectionData) => {
+      setSectionValues((current) => ({
+        ...current,
+        [sectionName]: value,
+      }))
+      triggerAutoSave(sectionName, value)
+    },
+    [triggerAutoSave]
+  )
 
   if (loading) {
     return (
@@ -645,21 +692,49 @@ function BotConfigPageContent() {
         {/* 页面标题 */}
         <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               <h1 className="text-xl font-bold sm:text-2xl md:text-3xl">麦麦设置</h1>
+              {editMode === 'detail' && tabGroups.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="gap-2 text-base font-semibold ![background-image:none]" aria-label="选择设置页面">
+                      {tabGroups.find((tab) => tab.id === activeConfigTab)?.label ?? tabGroups[0].label}
+                      <ChevronDown className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="flex max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-40 flex-col gap-2 overflow-y-auto p-2 ![background-image:none]">
+                    {tabGroups.map((tab) => (
+                      <DropdownMenuItem
+                        key={tab.id}
+                        data-dashboard-button="true"
+                        onSelect={() => setActiveConfigTab(tab.id)}
+                        className={cn(
+                          buttonVariants({ variant: 'outline' }),
+                          'w-full shrink-0 justify-start text-base font-semibold ![background-image:none]'
+                        )}
+                      >
+                        {tab.label}
+                        {activeConfigTab === tab.id && <Check className="ml-auto h-4 w-4" aria-hidden="true" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
             {/* 按钮组 - 桌面端靠右 */}
             <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">
+              {editMode === 'detail' && activeConfigTab !== 'bot' && (
+                <label htmlFor="advanced-settings" className="flex h-9 shrink-0 cursor-pointer items-center gap-2 self-center px-2 text-sm font-semibold">
+                  <Switch id="advanced-settings" checked={advancedVisible} onCheckedChange={setAdvancedVisible} aria-label="高级设置" />
+                  高级设置
+                </label>
+              )}
               <Tabs
                 value={editMode}
-                onValueChange={(v) => handleModeChange(v as 'core' | 'detail' | 'commands' | 'source')}
-                className="w-full min-w-0 sm:w-[30rem]"
+                onValueChange={(v) => handleModeChange(v as BotSettingsMode)}
+                className="w-full min-w-0 sm:w-96"
               >
-                <TabsList data-config-bot-mode-tabs="true" className="grid h-9 w-full grid-cols-4">
-                  <TabsTrigger value="core" className="px-2 text-sm">
-                    <Sparkles className="mr-1 h-4 w-4" />
-                    核心设置
-                  </TabsTrigger>
+                <TabsList data-config-bot-mode-tabs="true" className="grid h-9 w-full grid-cols-3">
                   <TabsTrigger value="detail" className="px-2 text-sm">
                     <SlidersHorizontal className="mr-1 h-4 w-4" />
                     详细设置
@@ -668,61 +743,79 @@ function BotConfigPageContent() {
                     <ShieldCheck className="mr-1 h-4 w-4" />
                     命令管理
                   </TabsTrigger>
-                  <TabsTrigger value="source" className="px-2 text-sm">
-                    <Code2 className="mr-1 h-4 w-4" />
-                    源文件
+                  <TabsTrigger value="webui" className="px-2 text-sm">
+                    <Settings className="mr-1 h-4 w-4" />
+                    WebUI 设置
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
-              <Button
-                onClick={handleReloadFromFile}
-                disabled={saving || autoSaving || isRestarting}
-                size="sm"
-                variant="outline"
-                className="h-9 w-9 flex-none px-0"
-                aria-label="刷新"
-                title="刷新"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button
-                onClick={editMode === 'source' ? saveSourceCode : saveConfig}
-                disabled={saving || autoSaving || !hasUnsavedChanges || isRestarting}
-                size="sm"
-                variant="outline"
-                className="h-9 w-9 flex-none px-0"
-                aria-label={
-                  saving
-                    ? '保存中'
-                    : autoSaving
-                      ? '自动保存中'
-                      : hasUnsavedChanges
-                        ? '保存'
-                        : '已保存'
-                }
-                title={
-                  saving
-                    ? '保存中'
-                    : autoSaving
-                      ? '自动保存中'
-                      : hasUnsavedChanges
-                        ? '保存'
-                        : '已保存'
-                }
-              >
-                <span className="relative inline-flex h-4 w-4 items-center justify-center">
-                  <Save className="h-4 w-4" strokeWidth={2} fill="none" />
-                  {!saving && !autoSaving && !hasUnsavedChanges && (
-                    <Check
-                      className="pointer-events-none absolute -right-2 -bottom-2 !h-3 !w-3"
-                      strokeWidth={3.4}
-                    />
-                  )}
-                </span>
-              </Button>
+              {editMode !== 'webui' && (
+                <>
+                  <Button
+                    onClick={handleReloadFromFile}
+                    disabled={saving || autoSaving || isRestarting}
+                    size="sm"
+                    variant="outline"
+                    className="h-9 w-9 flex-none px-0"
+                    aria-label="刷新"
+                    title="刷新"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 w-9 flex-none px-0"
+                        aria-label="更多设置"
+                        title="更多设置"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem
+                        disabled={saving || autoSaving || !hasUnsavedChanges || isRestarting}
+                        onSelect={() => void (editMode === 'source' ? saveSourceCode() : saveConfig())}
+                      >
+                        <Save className="mr-2 h-4 w-4" />
+                        手动保存
+                        <span className="text-muted-foreground ml-auto text-xs">
+                          {saving
+                            ? '保存中'
+                            : autoSaving
+                              ? '自动保存中'
+                              : !hasUnsavedChanges
+                                ? '已保存'
+                                : ''}
+                        </span>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={() => void handleModeChange('groups')}>
+                        <UsersRound className="mr-2 h-4 w-4" />
+                        共享组设置
+                        {editMode === 'groups' && <Check className="ml-auto h-4 w-4" />}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => void handleModeChange('source')}>
+                        <Code2 className="mr-2 h-4 w-4" />
+                        源文件编辑
+                        {editMode === 'source' && <Check className="ml-auto h-4 w-4" />}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
             </div>
           </div>
         </div>
+
+        {editMode === 'webui' && (
+          <Suspense fallback={<ThinkingIllustration size="lg" />}>
+            <WebUISettings />
+          </Suspense>
+        )}
 
         {/* 源代码模式 */}
         {editMode === 'source' && (
@@ -781,14 +874,11 @@ function BotConfigPageContent() {
           </div>
         )}
 
-        {/* 核心设置模式 */}
-        {editMode === 'core' && (
-          <CoreSettings
-            botSection={sectionValues.bot ?? null}
-            personalitySection={sectionValues.personality ?? null}
-            onPersonalitySectionChange={(value) => {
-              setSectionValue('personality', value)
-              setHasUnsavedChanges(true)
+        {editMode === 'groups' && (
+          <SharedGroupsSettings
+            onSectionSaved={(sectionName, value) => {
+              configRef.current = { ...configRef.current, [sectionName]: value }
+              setSectionValues((current) => ({ ...current, [sectionName]: value }))
             }}
           />
         )}
@@ -796,6 +886,10 @@ function BotConfigPageContent() {
         {/* 详细设置模式（原可视化模式） */}
         {editMode === 'detail' && (
           <DynamicConfigTabs
+            activeTab={activeConfigTab}
+            setActiveTab={setActiveConfigTab}
+            advancedVisible={advancedVisible}
+            setAdvancedVisible={setAdvancedVisible}
             configSchema={configSchema}
             tabGroups={tabGroups}
             sectionValues={sectionValues}
@@ -854,6 +948,10 @@ function updateNestedValue(
 }
 
 interface DynamicConfigTabsProps {
+  activeTab: string
+  setActiveTab: (tab: string) => void
+  advancedVisible: boolean
+  setAdvancedVisible: (visible: boolean) => void
   configSchema: ConfigSchema | null
   tabGroups: TabGroup[]
   sectionValues: Record<string, ConfigSectionData | null>
@@ -862,8 +960,31 @@ interface DynamicConfigTabsProps {
   searchFieldPath: string
 }
 
+function ConfigTabsExpandButton({ expanded, onClick }: { expanded: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center self-center border-0 bg-transparent p-0 text-foreground transition-colors hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      aria-label={expanded ? '收起设置栏目' : '展开更多设置栏目'}
+      aria-expanded={expanded}
+      title={expanded ? '收起设置栏目' : '展开更多设置栏目'}
+      onClick={onClick}
+    >
+      <ChevronRight
+        aria-hidden="true"
+        strokeWidth={3.5}
+        className={cn('h-6 w-6 motion-safe:transition-transform motion-safe:duration-300', expanded && 'rotate-180')}
+      />
+    </button>
+  )
+}
+
 function DynamicConfigTabs(props: DynamicConfigTabsProps) {
   const {
+    activeTab,
+    setActiveTab,
+    advancedVisible,
+    setAdvancedVisible,
     configSchema,
     searchFieldPath,
     sectionValues,
@@ -872,14 +993,8 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
     tabGroups,
   } = props
   const initialActiveTab = tabGroups[0]?.id ?? ''
-  const [expanded, setExpanded] = useState(false)
-  const [activeTab, setActiveTab] = useState(initialActiveTab)
   const [expandedSubtabGroups, setExpandedSubtabGroups] = useState<Record<string, boolean>>({})
   const [activeSubtabByGroup, setActiveSubtabByGroup] = useState<Record<string, string>>({})
-  const [advancedVisible, setAdvancedVisible] = useState(false)
-  const [tabGuideVisible, setTabGuideVisible] = useState(
-    () => localStorage.getItem('bot-config-tabs-guide-dismissed') !== 'true'
-  )
   const [experimentalNoticeOpen, setExperimentalNoticeOpen] = useState(
     () =>
       initialActiveTab === 'experimental' &&
@@ -887,12 +1002,17 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
   )
   const scrolledSearchFieldRef = useRef('')
 
-  if (!tabGroups.some((tab) => tab.id === activeTab)) {
-    const fallbackTab = tabGroups[0]?.id ?? ''
-    if (activeTab !== fallbackTab) {
-      setActiveTab(fallbackTab)
+  useEffect(() => {
+    if (!tabGroups.some((tab) => tab.id === activeTab)) {
+      setActiveTab(tabGroups[0]?.id ?? '')
     }
-  }
+    if (
+      activeTab === 'experimental' &&
+      localStorage.getItem(EXPERIMENTAL_FEATURES_NOTICE_DISMISSED_KEY) !== 'true'
+    ) {
+      setExperimentalNoticeOpen(true)
+    }
+  }, [activeTab, tabGroups, setActiveTab])
 
   useEffect(() => {
     if (!searchFieldPath) {
@@ -908,9 +1028,6 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
     const frameId = window.requestAnimationFrame(() => {
       setActiveTab(targetTab.id)
       setAdvancedVisible(true)
-      if (targetTab.advanced) {
-        setExpanded(true)
-      }
 
       if (subcategoryName) {
         const subtabId = `${sectionName}.${subcategoryName}`
@@ -926,7 +1043,7 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
     })
 
     return () => window.cancelAnimationFrame(frameId)
-  }, [searchFieldPath, tabGroups])
+  }, [searchFieldPath, tabGroups, setAdvancedVisible, setActiveTab])
 
   useEffect(() => {
     if (!searchFieldPath || scrolledSearchFieldRef.current === searchFieldPath) {
@@ -948,46 +1065,15 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
         window.cancelAnimationFrame(nestedFrameId)
       }
     }
-  }, [activeSubtabByGroup, activeTab, advancedVisible, expanded, searchFieldPath])
+  }, [activeSubtabByGroup, activeTab, advancedVisible, searchFieldPath])
 
   if (tabGroups.length === 0 || !configSchema?.nested) {
     return null
   }
 
-  const defaultTabGroups = tabGroups.filter((tab) => !tab.advanced)
-  const expandedTabGroups = tabGroups.filter((tab) => tab.advanced)
-  const visibleTabGroups = expanded ? [...defaultTabGroups, ...expandedTabGroups] : defaultTabGroups
-  const hasCollapsibleTabs = tabGroups.some((tab) => tab.advanced)
-  const firstExpandedTabId = visibleTabGroups.find((tab) => tab.advanced)?.id
-
-  const toggleExpanded = () => {
-    setExpanded((current) => {
-      if (current && tabGroups.find((tab) => tab.id === activeTab)?.advanced) {
-        const firstDefaultTab = tabGroups.find((tab) => !tab.advanced)
-        setActiveTab(firstDefaultTab?.id ?? tabGroups[0]?.id ?? '')
-      }
-      return !current
-    })
-  }
-
-  const dismissTabGuide = () => {
-    localStorage.setItem('bot-config-tabs-guide-dismissed', 'true')
-    setTabGuideVisible(false)
-  }
-
   const dismissExperimentalNotice = () => {
     localStorage.setItem(EXPERIMENTAL_FEATURES_NOTICE_DISMISSED_KEY, 'true')
     setExperimentalNoticeOpen(false)
-  }
-
-  const handleTabChange = (value: string) => {
-    setActiveTab(value)
-    if (
-      value === 'experimental' &&
-      localStorage.getItem(EXPERIMENTAL_FEATURES_NOTICE_DISMISSED_KEY) !== 'true'
-    ) {
-      setExperimentalNoticeOpen(true)
-    }
   }
 
   const updateSectionValueByPath = (sectionName: string, restPath: string[], value: unknown) => {
@@ -1001,6 +1087,128 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
     setHasUnsavedChanges(true)
   }
 
+  const identityFieldNames = new Set(['nickname', 'alias_names'])
+  const basicChatPromptFieldNames = new Set(['group_chat_prompt', 'private_chat_prompts'])
+  const basicChatContextFieldNames = new Set(['max_context_size', 'max_private_context_size'])
+  const basicChatTimingFieldNames = new Set([
+    'talk_value', 'private_talk_value', 'mentioned_bot_reply', 'inevitable_at_reply', 'reply_trigger_mode',
+  ])
+  const botSchema = configSchema.nested.bot
+  const chatSchema = configSchema.nested.chat
+  const replyTimingSchema = chatSchema?.nested?.reply_timing
+  const basicChatContextSchema: ConfigSchema | null = chatSchema ? {
+    ...chatSchema,
+    fields: chatSchema.fields
+      .filter((field) => basicChatContextFieldNames.has(field.name))
+      .map((field) => ({ ...field, advanced: false })),
+    nested: {},
+  } : null
+  const basicChatTimingSchema: ConfigSchema | null = replyTimingSchema ? {
+    ...replyTimingSchema,
+    fields: replyTimingSchema.fields
+      .filter((field) => basicChatTimingFieldNames.has(field.name))
+      .map((field) => ({ ...field, advanced: false })),
+    nested: {},
+  } : null
+  const replyStyleSchema = configSchema.nested.chat?.nested?.reply_style
+  const hasPersonalitySchema = Boolean(configSchema.nested.personality)
+  const identitySchema: ConfigSchema | null = botSchema ? {
+    ...botSchema,
+    fields: botSchema.fields
+      .filter((field) => identityFieldNames.has(field.name))
+      .map((field) => ({ ...field, advanced: false, 'x-row': 'bot-identity' })),
+    nested: {},
+  } : null
+  const basicChatPromptSchema: ConfigSchema | null = replyStyleSchema ? {
+    ...replyStyleSchema,
+    fields: replyStyleSchema.fields
+      .filter((field) => basicChatPromptFieldNames.has(field.name))
+      .map((field) => ({ ...field, advanced: false })),
+    nested: {},
+  } : null
+  // 基础页提供常用记忆开关，仍通过记忆配置的原始路径读写。
+  const basicMemoryFields = [
+    { section: 'plugin', name: 'enabled', label: '启用记忆系统' },
+    { section: 'person_profile', name: 'enabled', label: '启用人物画像' },
+    { section: 'integration', name: 'heuristic_memory_recall_enabled', label: '启用启发式记忆' },
+    { section: 'image_memory', name: 'enabled', label: '启用图片记忆' },
+  ].flatMap(({ section, name, label }) => {
+    const schema = configSchema.nested?.a_memorix?.nested?.[section]
+    const field = schema?.fields.find((item) => item.name === name)
+    if (!schema || !field) {
+      return []
+    }
+    return [{
+      section,
+      schema: { ...schema, fields: [{ ...field, label, advanced: false }], nested: {} },
+    }]
+  })
+  const sectionLeadingContent = identitySchema ? {
+    personality: (
+      <div className="space-y-3">
+        {identitySchema && (
+          <DynamicConfigForm
+            schema={identitySchema}
+            values={sectionValues.bot ?? {}}
+            onChange={(field, value) => updateSectionValueByPath('bot', [field], value)}
+            basePath="bot"
+            hooks={fieldHooks}
+            advancedVisible={advancedVisible}
+          />
+        )}
+      </div>
+    ),
+  } : undefined
+  const sectionTrailingContent = {
+    personality: (
+      <GlobalLearningSettings
+        values={sectionValues}
+        sections={(['expression', 'jargon'] as const).filter((section) => configSchema.nested?.[section])}
+        onChange={(section, rules) => updateSectionValueByPath(section, ['learning_list'], rules)}
+      />
+    ),
+  }
+  const fieldTrailingContent = basicChatPromptSchema ? {
+    'personality.reply_style': (
+      <DynamicConfigForm
+        schema={basicChatPromptSchema}
+        values={(sectionValues.chat?.reply_style as ConfigSectionData) ?? {}}
+        onChange={(field, value) => updateSectionValueByPath('chat', ['reply_style', field], value)}
+        basePath="chat.reply_style"
+        hooks={fieldHooks}
+        advancedVisible={advancedVisible}
+      />
+    ),
+  } : undefined
+
+  // 仅调整展示归属，身份信息与聊天提示词仍通过原配置路径读写。
+  const getDisplaySectionSchema = (sectionName: string, schema: ConfigSchema): ConfigSchema => {
+    if (sectionName === 'bot' && configSchema.nested?.personality) {
+      return { ...schema, fields: schema.fields.filter((field) => !identityFieldNames.has(field.name)) }
+    }
+    if (sectionName === 'personality') {
+      return { ...schema, uiLabel: '身份与人格' }
+    }
+    if (sectionName === 'chat' && replyStyleSchema) {
+      return {
+        ...schema,
+        nested: {
+          ...schema.nested,
+          reply_style: {
+            ...replyStyleSchema,
+            uiLabel: '聊天流prompt',
+            uiSubLabel: '聊天流prompt',
+            uiAdvanced: true,
+            fields: hasPersonalitySchema
+              ? replyStyleSchema.fields.filter((field) => !basicChatPromptFieldNames.has(field.name))
+              : replyStyleSchema.fields,
+          },
+        },
+      }
+    }
+    return schema
+  }
+
   const getSubtabLabel = (schema: ConfigSchema, fallback: string) => {
     return schema.uiSubLabel || schema.uiLabel || schema.classDoc || fallback
   }
@@ -1012,11 +1220,13 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
     })
   }
 
-  const renderSubtabbedContent = (tabId: string, tabNestedEntries: readonly (readonly [string, ConfigSchema])[]) => {
+  const renderSubtabbedContent = (
+    tabId: string,
+    tabNestedEntries: readonly (readonly [string, ConfigSchema])[]
+  ) => {
     const subtabPanes: SubtabPane[] = []
-    const chatManagementHintPaneIds = new Set(['chat.reply_timing', 'chat.reply_style'])
     const entryMap = new Map<string, ConfigSchema>(
-      tabNestedEntries.map(([sectionName, schema]) => [sectionName, schema]),
+      tabNestedEntries.map(([sectionName, schema]) => [sectionName, schema])
     )
     const childSectionsByParent = new Map<string, Array<readonly [string, ConfigSchema]>>()
 
@@ -1031,7 +1241,9 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
       childSectionsByParent.set(parentName, childSections)
     }
 
-    const collectDescendantEntries = (parentName: string): Array<readonly [string, ConfigSchema]> => {
+    const collectDescendantEntries = (
+      parentName: string
+    ): Array<readonly [string, ConfigSchema]> => {
       const directChildEntries = childSectionsByParent.get(parentName) ?? []
 
       return directChildEntries.flatMap(([childName, childSchema]) => {
@@ -1065,6 +1277,9 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
           hooks={fieldHooks}
           advancedVisible={advancedVisible}
           sectionColumns={2}
+          sectionLeadingContent={sectionLeadingContent}
+          sectionTrailingContent={sectionTrailingContent}
+          fieldTrailingContent={fieldTrailingContent}
         />
       )
     }
@@ -1075,9 +1290,13 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
       }
 
       const sectionValue = (sectionValues[sectionName] ?? {}) as ConfigSectionData
-      const allSubcategoryEntries = sectionSchema.uiUseSubTabs ? getObjectSubcategoryEntries(sectionSchema) : []
+      const allSubcategoryEntries = sectionSchema.uiUseSubTabs
+        ? getObjectSubcategoryEntries(sectionSchema)
+        : []
       const subcategoryEntries = allSubcategoryEntries
-      const subcategoryNames = new Set(allSubcategoryEntries.map(([subcategoryName]) => subcategoryName))
+      const subcategoryNames = new Set(
+        allSubcategoryEntries.map(([subcategoryName]) => subcategoryName)
+      )
       const rootFields = sectionSchema.fields.filter((field) => !subcategoryNames.has(field.name))
       const rootSchema: ConfigSchema = {
         ...sectionSchema,
@@ -1095,7 +1314,9 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
             <DynamicConfigForm
               schema={rootSchema}
               values={sectionValue}
-              onChange={(fieldPath, value) => updateSectionValueByPath(sectionName, fieldPath.split('.'), value)}
+              onChange={(fieldPath, value) =>
+                updateSectionValueByPath(sectionName, fieldPath.split('.'), value)
+              }
               basePath={sectionName}
               hooks={fieldHooks}
               advancedVisible={advancedVisible}
@@ -1115,7 +1336,11 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
               schema={subcategorySchema}
               values={(sectionValue[subcategoryName] as Record<string, unknown>) || {}}
               onChange={(fieldPath, value) =>
-                updateSectionValueByPath(sectionName, [subcategoryName, ...fieldPath.split('.')], value)
+                updateSectionValueByPath(
+                  sectionName,
+                  [subcategoryName, ...fieldPath.split('.')],
+                  value
+                )
               }
               basePath={`${sectionName}.${subcategoryName}`}
               hooks={fieldHooks}
@@ -1127,7 +1352,10 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
       }
 
       for (const [childName, childSchema] of childSectionsByParent.get(sectionName) ?? []) {
-        const sectionGroupEntries = [[childName, childSchema] as const, ...collectDescendantEntries(childName)]
+        const sectionGroupEntries = [
+          [childName, childSchema] as const,
+          ...collectDescendantEntries(childName),
+        ]
         subtabPanes.push({
           advanced: Boolean(childSchema.uiAdvanced),
           id: childName,
@@ -1144,17 +1372,21 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
     const subtabExpanded = Boolean(expandedSubtabGroups[tabId])
     const defaultSubtabPanes = subtabPanes.filter((pane) => !pane.advanced)
     const expandedSubtabPanes = subtabPanes.filter((pane) => pane.advanced)
-    const visibleSubtabPanes = subtabExpanded ? [...defaultSubtabPanes, ...expandedSubtabPanes] : defaultSubtabPanes
+    const visibleSubtabPanes = subtabExpanded
+      ? [...defaultSubtabPanes, ...expandedSubtabPanes]
+      : defaultSubtabPanes
     const hasCollapsibleSubtabs = subtabPanes.some((pane) => pane.advanced)
-    const firstExpandedSubtabId = visibleSubtabPanes.find((pane) => pane.advanced)?.id
     const visibleSubtabIds = new Set(visibleSubtabPanes.map((pane) => pane.id))
     const activeSubtab = activeSubtabByGroup[tabId]
     const resolvedActiveSubtab = visibleSubtabIds.has(activeSubtab)
       ? activeSubtab
-      : visibleSubtabPanes[0]?.id ?? subtabPanes[0].id
+      : (visibleSubtabPanes[0]?.id ?? subtabPanes[0].id)
 
     const toggleSubtabsExpanded = () => {
-      if (subtabExpanded && subtabPanes.find((pane) => pane.id === resolvedActiveSubtab)?.advanced) {
+      if (
+        subtabExpanded &&
+        subtabPanes.find((pane) => pane.id === resolvedActiveSubtab)?.advanced
+      ) {
         setActiveSubtabByGroup((current) => ({
           ...current,
           [tabId]: defaultSubtabPanes[0]?.id ?? subtabPanes[0].id,
@@ -1179,19 +1411,20 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
         }
         className="space-y-3"
       >
-        <DashboardTabBar data-config-bot-subtab-list="true" variant="scroll" className="bg-background/80 h-11 border">
+        <DashboardTabBar
+          data-config-bot-subtab-list="true"
+          variant="scroll"
+          className="bg-background/80 h-11 border"
+        >
           {visibleSubtabPanes.map((pane) => (
             <Fragment key={pane.id}>
-              {pane.id === firstExpandedSubtabId && (
-                <span className="bg-border/90 mx-1 hidden h-7 w-[2px] transition-opacity duration-200 sm:block" />
-              )}
               <DashboardTabTrigger
                 value={pane.id}
                 data-config-bot-extra-tab={pane.advanced ? 'true' : undefined}
                 className={cn(
                   'min-h-8 text-base font-semibold',
                   pane.advanced &&
-                    'text-muted-foreground/80 decoration-border/80 hover:bg-background/70 data-[state=active]:bg-primary/10 data-[state=active]:text-primary underline decoration-dashed underline-offset-4 data-[state=active]:shadow-none motion-safe:animate-[config-tab-enter_180ms_ease-out_both]'
+                    'overflow-hidden text-muted-foreground/80 hover:bg-background/70 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none motion-safe:animate-[config-tab-enter_300ms_ease-out_both]'
                 )}
               >
                 {pane.label}
@@ -1199,36 +1432,12 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
             </Fragment>
           ))}
           {hasCollapsibleSubtabs && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="group h-8 shrink-0 gap-1 self-center px-2 text-sm leading-none transition-all duration-200 ease-out sm:px-2.5"
-              onClick={toggleSubtabsExpanded}
-            >
-              {subtabExpanded ? (
-                <ChevronLeft className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
-              )}
-              {subtabExpanded ? '收起' : '更多'}
-            </Button>
+            <ConfigTabsExpandButton expanded={subtabExpanded} onClick={toggleSubtabsExpanded} />
           )}
         </DashboardTabBar>
 
         {visibleSubtabPanes.map((pane) => (
           <TabsContent key={pane.id} value={pane.id} className="mt-0">
-            {chatManagementHintPaneIds.has(pane.id) && (
-              <div className="mb-3 flex flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                <span>需要按具体聊天流调整发言频率或查看聊天 Prompt 时，可以前往聊天管理。</span>
-                <Button asChild size="sm" variant="outline" className="h-8 shrink-0 self-start sm:self-center">
-                  <Link to="/chat-management">
-                    <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                    聊天管理
-                  </Link>
-                </Button>
-              </div>
-            )}
             {pane.content}
           </TabsContent>
         ))}
@@ -1238,7 +1447,10 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
 
   const renderTabContent = (tab: TabGroup) => {
     const tabNestedEntries = tab.sections
-      .map((sectionName) => [sectionName, configSchema.nested?.[sectionName]] as const)
+      .map((sectionName) => {
+        const schema = configSchema.nested?.[sectionName]
+        return [sectionName, schema ? getDisplaySectionSchema(sectionName, schema) : undefined] as const
+      })
       .filter((entry): entry is readonly [string, ConfigSchema] => Boolean(entry[1]))
 
     if (tabNestedEntries.length === 0) {
@@ -1261,91 +1473,78 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
     }
 
     return (
-      <DynamicConfigForm
-        schema={tabSchema}
-        values={values}
-        onChange={(fieldPath, value) => {
-          const [sectionName, ...restPath] = fieldPath.split('.')
-          if (!sectionName) {
-            return
-          }
+      <>
+        <DynamicConfigForm
+          schema={tabSchema}
+          values={values}
+          onChange={(fieldPath, value) => {
+            const [sectionName, ...restPath] = fieldPath.split('.')
+            if (!sectionName) {
+              return
+            }
 
-          updateSectionValueByPath(sectionName, restPath, value)
-        }}
-        hooks={fieldHooks}
-        advancedVisible={advancedVisible}
-        sectionColumns={2}
-      />
+            updateSectionValueByPath(sectionName, restPath, value)
+          }}
+          hooks={fieldHooks}
+          advancedVisible={advancedVisible}
+          sectionColumns={2}
+          sectionLeadingContent={sectionLeadingContent}
+          sectionTrailingContent={sectionTrailingContent}
+          fieldTrailingContent={fieldTrailingContent}
+        />
+        {tab.id === 'bot' && (basicChatContextSchema || basicChatTimingSchema) && (
+          <Card>
+            <CardHeader className="border-b border-border/50 pb-3">
+              <CardTitle className="text-base text-primary">聊天</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-3">
+              {basicChatContextSchema && (
+                <DynamicConfigForm
+                  schema={basicChatContextSchema}
+                  values={sectionValues.chat ?? {}}
+                  onChange={(field, value) => updateSectionValueByPath('chat', [field], value)}
+                  basePath="chat"
+                  hooks={fieldHooks}
+                />
+              )}
+              {basicChatTimingSchema && (
+                <DynamicConfigForm
+                  schema={basicChatTimingSchema}
+                  values={(sectionValues.chat?.reply_timing as ConfigSectionData) ?? {}}
+                  onChange={(field, value) => updateSectionValueByPath('chat', ['reply_timing', field], value)}
+                  basePath="chat.reply_timing"
+                  hooks={fieldHooks}
+                />
+              )}
+            </CardContent>
+          </Card>
+        )}
+        {tab.id === 'bot' && basicMemoryFields.length > 0 && (
+          <Card>
+            <CardHeader className="border-b border-border/50 pb-3">
+              <CardTitle className="text-base text-primary">记忆</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-3">
+              {basicMemoryFields.map(({ section, schema }) => (
+                <DynamicConfigForm
+                  key={section}
+                  schema={schema}
+                  values={(sectionValues.a_memorix?.[section] as ConfigSectionData) ?? {}}
+                  onChange={(field, value) => updateSectionValueByPath('a_memorix', [section, field], value)}
+                  basePath={`a_memorix.${section}`}
+                  hooks={fieldHooks}
+                />
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </>
     )
   }
 
   return (
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-      <DashboardTabBar
-        data-config-bot-tab-list="true"
-        className="h-auto min-h-[3.25rem] content-start items-stretch sm:flex-wrap"
-      >
-        {visibleTabGroups.map((tab) => {
-          const isExpandedOnlyTab = tab.advanced
-          return (
-            <Fragment key={tab.id}>
-              {tab.id === firstExpandedTabId && (
-                <span className="bg-border/90 mx-1 hidden h-7 w-[2px] transition-opacity duration-200 sm:block" />
-              )}
-              <DashboardTabTrigger
-                value={tab.id}
-                data-config-bot-extra-tab={isExpandedOnlyTab ? 'true' : undefined}
-                className={cn(
-                  'min-h-9 text-lg font-semibold',
-                  isExpandedOnlyTab &&
-                    'text-muted-foreground/80 decoration-border/80 hover:bg-background/70 data-[state=active]:bg-primary/10 data-[state=active]:text-primary underline decoration-dashed underline-offset-4 data-[state=active]:shadow-none motion-safe:animate-[config-tab-enter_180ms_ease-out_both]'
-                )}
-              >
-                {tab.label}
-              </DashboardTabTrigger>
-            </Fragment>
-          )
-        })}
-        {hasCollapsibleTabs && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="group h-9 shrink-0 gap-1 self-center px-2 text-sm leading-none transition-all duration-200 ease-out sm:px-2.5"
-            onClick={toggleExpanded}
-          >
-            {expanded ? (
-              <ChevronLeft className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
-            )}
-            {expanded ? '收起' : '更多'}
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant={advancedVisible ? 'default' : 'outline'}
-          size="sm"
-          className="h-9 shrink-0 self-center px-2.5 text-sm leading-none transition-all duration-200 ease-out sm:ml-auto"
-          onClick={() => setAdvancedVisible((current) => !current)}
-        >
-          高级设置
-        </Button>
-      </DashboardTabBar>
-      {tabGuideVisible && (
-        <div className="bg-muted/20 text-muted-foreground mt-2 flex flex-col gap-2 rounded-md border px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
-          <span>点击“更多”展开隐藏配置栏目；点击“高级设置”显示高级配置项。</span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-6 self-start px-2 text-xs sm:self-center"
-            onClick={dismissTabGuide}
-          >
-            我知道了
-          </Button>
-        </div>
-      )}
+    <MemorySwitchProvider memoryEnabled={(sectionValues.a_memorix?.plugin as ConfigSectionData)?.enabled === true}>
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       {tabGroups.map((tab) => (
         <TabsContent
           key={tab.id}
@@ -1379,5 +1578,6 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
         </AlertDialogContent>
       </AlertDialog>
     </Tabs>
+    </MemorySwitchProvider>
   )
 }
