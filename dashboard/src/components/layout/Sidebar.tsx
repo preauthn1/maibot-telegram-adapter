@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -13,6 +13,7 @@ import { useMenuSections } from './use-menu-sections'
 
 interface SidebarProps {
   sidebarOpen: boolean
+  mobile?: boolean
   mobileMenuOpen: boolean
   onMobileMenuClose: () => void
   onSidebarFix: () => void
@@ -23,6 +24,7 @@ const SIDEBAR_COLLAPSE_TRANSITION_MS = 220
 
 export function Sidebar({
   sidebarOpen,
+  mobile = false,
   mobileMenuOpen,
   onMobileMenuClose,
   onSidebarFix,
@@ -31,12 +33,14 @@ export function Sidebar({
   const { config: sidebarBg, inheritedFrom } = useBackground('sidebar')
   const inheritsPageBackground = inheritedFrom === 'page'
   const menuSections = useMenuSections()
+  const sidebarRef = useRef<HTMLElement>(null)
+  const [focusExpanded, setFocusExpanded] = useState(false)
   const [hoverExpanded, setHoverExpanded] = useState(false)
   const [fixTransitionActive, setFixTransitionActive] = useState(false)
   const [collapseTransitionActive, setCollapseTransitionActive] = useState(false)
   const hoverExpandTimerRef = useRef<number | null>(null)
   const collapseTransitionTimerRef = useRef<number | null>(null)
-  const sidebarRevealed = sidebarOpen || hoverExpanded || fixTransitionActive
+  const sidebarRevealed = sidebarOpen || hoverExpanded || focusExpanded || fixTransitionActive
   const visuallyOpen = sidebarRevealed || collapseTransitionActive
 
   const cancelHoverExpand = useCallback(() => {
@@ -70,8 +74,50 @@ export function Sidebar({
     }
   }, [cancelCollapseTransition, cancelHoverExpand, sidebarOpen])
 
+  // 移动抽屉保护焦点；关闭后交还给打开菜单的控件。
+  useEffect(() => {
+    if (!mobile || !mobileMenuOpen) return
+    const previousFocus = document.activeElement as HTMLElement | null
+    const sidebar = sidebarRef.current
+    sidebar?.querySelector<HTMLElement>('button, a[href]')?.focus()
+    return () => {
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
+    }
+  }, [mobile, mobileMenuOpen])
+
   return (
+    // 移动端 aside 是带焦点约束的 dialog，桌面键盘处理直接返回。
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <aside
+      ref={sidebarRef}
+      id={mobile ? 'mobile-sidebar' : undefined}
+      role={mobile && mobileMenuOpen ? 'dialog' : undefined}
+      aria-modal={mobile && mobileMenuOpen ? true : undefined}
+      aria-label={t('a11y.sidebarNav')}
+      inert={mobile && !mobileMenuOpen}
+      onFocusCapture={() => setFocusExpanded(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setFocusExpanded(false)
+      }}
+      onKeyDown={(event) => {
+        if (!mobile || !mobileMenuOpen) return
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          onMobileMenuClose()
+        }
+        if (event.key === 'Tab') {
+          const controls = event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), a[href]')
+          const first = controls[0]
+          const last = controls[controls.length - 1]
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault()
+            last?.focus()
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault()
+            first?.focus()
+          }
+        }
+      }}
       data-dashboard-sidebar="true"
       data-dashboard-sidebar-hover-expanded={hoverExpanded ? 'true' : undefined}
       data-dashboard-sidebar-mobile-open={mobileMenuOpen ? 'true' : 'false'}
@@ -105,7 +151,7 @@ export function Sidebar({
         'fixed inset-y-0 left-0 isolate z-50 flex flex-col border-r transition-transform duration-300 motion-reduce:transition-none lg:relative lg:z-0 lg:h-full lg:w-[var(--layout-sidebar-width)] lg:transition-[clip-path] lg:duration-[220ms] lg:ease-[cubic-bezier(0.22,1,0.36,1)] lg:will-change-[clip-path]',
         inheritsPageBackground ? 'bg-transparent' : 'bg-card',
         // 桌面端始终保持完整内容宽度，仅用裁剪展示折叠状态，避免悬浮时反复触发布局计算。
-        'w-[var(--layout-sidebar-width)]',
+        'w-[var(--layout-sidebar-width)] max-w-[calc(100vw-3rem)] lg:max-w-none',
         sidebarRevealed
           ? 'lg:[clip-path:inset(0_0_0_0)]'
           : 'lg:[clip-path:inset(0_calc(var(--layout-sidebar-width)-var(--layout-sidebar-collapsed-width))_0_0)]',
@@ -125,7 +171,13 @@ export function Sidebar({
       {/* Logo 区域 */}
       <div className="relative z-10">
         <LogoArea sidebarOpen={sidebarRevealed} />
-        {!sidebarOpen && hoverExpanded && (
+        {mobile && (
+          <button type="button" onClick={onMobileMenuClose} aria-label={t('a11y.closeMenu')}
+            className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-lg hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <X aria-hidden="true" className="h-5 w-5" />
+          </button>
+        )}
+        {!mobile && !sidebarOpen && (hoverExpanded || focusExpanded) && (
           <button
             type="button"
             data-dashboard-sidebar-fix-switch="true"
@@ -187,7 +239,7 @@ export function Sidebar({
                 >
                   <h3
                     data-dashboard-sidebar-section-title="true"
-                    className="text-muted-foreground/60 text-sm font-semibold tracking-wider whitespace-nowrap uppercase"
+                    className="text-muted-foreground text-sm font-semibold tracking-wider whitespace-nowrap uppercase"
                   >
                     {t(section.title)}
                   </h3>

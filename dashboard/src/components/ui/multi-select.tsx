@@ -103,14 +103,14 @@ function SortableBadge({
       ref={setNodeRef}
       style={style}
       className={cn(
-        'inline-flex items-center gap-1',
+        'inline-flex min-w-0 max-w-full items-center gap-1',
         isDragging && 'shadow-lg'
       )}
     >
       <Badge
         variant="secondary"
         className={cn(
-          'flex items-center gap-1 hover:bg-secondary/80',
+          'flex min-w-0 max-w-full items-center gap-1 hover:bg-secondary/80',
           !disabled && 'cursor-move',
           disabled && 'opacity-60',
           compact && 'min-h-6 max-w-[calc(100vw-5rem)] px-1.5 py-0 text-[11px] leading-none sm:max-w-full'
@@ -119,6 +119,8 @@ function SortableBadge({
         <div
           {...attributes}
           {...listeners}
+          aria-label={`排序 ${label}`}
+          tabIndex={disabled ? -1 : 0}
           className={cn(
             'flex items-center',
             !disabled && 'cursor-grab active:cursor-grabbing',
@@ -127,10 +129,11 @@ function SortableBadge({
         >
           <GripVertical className="h-3 w-3 text-muted-foreground" />
         </div>
-        <span className={cn(compact && 'min-w-0 truncate')}>{label}</span>
+        <span className={cn('min-w-0 [overflow-wrap:anywhere]', compact && 'truncate')}>{label}</span>
         <span
           role="button"
-          tabIndex={0}
+          tabIndex={disabled ? -1 : 0}
+          aria-label={`移除 ${label}`}
           className={cn(
             'ml-1 inline-flex shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-destructive/20 focus:outline-none focus:ring-1 focus:ring-destructive',
             compact ? 'h-4 w-4' : 'h-5 w-5'
@@ -232,7 +235,8 @@ export function MultiSelect({
         <Button
           variant="outline"
           role="combobox"
-          aria-expanded={open}
+          aria-expanded={disabled ? false : open}
+          aria-label={placeholder}
           disabled={disabled}
           className={cn(
             'h-auto w-full justify-between',
@@ -249,7 +253,7 @@ export function MultiSelect({
               items={selected}
               strategy={horizontalListSortingStrategy}
             >
-              <div className="flex flex-1 flex-wrap gap-1">
+              <div className="flex min-w-0 flex-1 flex-wrap gap-1 text-left">
                 {selected.length === 0 ? (
                   <span className={cn('text-muted-foreground', compact && 'text-sm')}>{placeholder}</span>
                 ) : (
@@ -273,7 +277,7 @@ export function MultiSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" strokeWidth={2} fill="none" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-2rem)] p-0" align="start">
         <Command>
           <CommandInput placeholder="搜索..." className="h-9" />
           <CommandList>
@@ -285,6 +289,7 @@ export function MultiSelect({
                   <CommandItem
                     key={option.value}
                     value={option.value}
+                    keywords={[option.label]}
                     disabled={disabled}
                     onSelect={() => handleSelect(option.value)}
                   >
@@ -298,7 +303,7 @@ export function MultiSelect({
                     >
                       <Check className="h-3 w-3" strokeWidth={2} fill="none" />
                     </div>
-                    <span>{option.label}</span>
+                    <span className="min-w-0 [overflow-wrap:anywhere]">{option.label}</span>
                   </CommandItem>
                 )
               })}

@@ -327,7 +327,7 @@ export function Header({
             aria-label={t('header.expandTopbar')}
             aria-expanded={!topbarCollapsed}
             title={t('header.expandTopbar')}
-            className="bg-foreground/70 relative z-10 h-2 w-24 transition-shadow"
+            className="bg-foreground/70 relative z-10 h-2 w-24 transition-shadow before:absolute before:-inset-y-3 before:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="sr-only">{t('header.expandTopbar')}</span>
           </button>
@@ -350,11 +350,13 @@ export function Header({
           <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-4">
             {/* 移动端菜单按钮 */}
             <button
+              type="button"
               onClick={onMobileMenuToggle}
-              aria-label={t('a11y.closeMenu')}
+              aria-controls="mobile-sidebar"
+              aria-label={mobileMenuOpen ? t('a11y.closeMenu') : '打开菜单'}
               aria-expanded={mobileMenuOpen}
               className={cn(
-                'hover:bg-accent rounded-lg p-2 lg:hidden',
+                'hover:bg-accent rounded-lg p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden',
                 workspaceMode !== 'settings' && 'hidden'
               )}
             >
@@ -406,7 +408,7 @@ export function Header({
                   </div>
                 ))}
               </div>
-              <Tabs value={workspaceMode} aria-label={t('workspace.switcherLabel')}>
+              <Tabs value={workspaceMode} activationMode="manual" aria-label={t('workspace.switcherLabel')}>
                 <TabsList
                   ref={workspaceTabsRef}
                   data-dashboard-workspace-tabs="true"
@@ -448,6 +450,15 @@ export function Header({
                     >
                       <Link
                         to={to}
+                        aria-label={t(labelKey)}
+                        aria-controls={undefined}
+                        aria-current={workspaceMode === value ? 'page' : undefined}
+                        onKeyDown={(event) => {
+                          if (event.key === ' ') {
+                            event.preventDefault()
+                            event.currentTarget.click()
+                          }
+                        }}
                         onPointerEnter={() => {
                           if (!workspaceHoverLocked) {
                             if (workspaceHoverTimerRef.current !== null) {
@@ -551,6 +562,7 @@ export function Header({
                   size="sm"
                   className="gap-2"
                   onClick={() => setBackendManagerOpen(true)}
+                  aria-label={`${t('header.toggleConnection')}：${activeBackendName}`}
                   title={t('header.toggleConnection')}
                 >
                   <Database className="h-4 w-4" />
@@ -597,7 +609,7 @@ export function Header({
               size="icon"
               onClick={() => {
                 setHoveredHeaderAction('docs')
-                window.open('https://docs.mai-mai.org', '_blank')
+                window.open('https://docs.mai-mai.org', '_blank', 'noopener,noreferrer')
               }}
               className="relative isolate hidden border-0 bg-transparent shadow-none sm:inline-flex"
               title={t('header.viewDocs')}
@@ -712,7 +724,7 @@ export function Header({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="sm:hidden"
+                  className="md:hidden"
                   title={t('header.moreActions')}
                   aria-label={t('header.moreActions')}
                 >
@@ -720,6 +732,16 @@ export function Header({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => onSearchOpenChange(true)} className="cursor-pointer gap-2 md:hidden">
+                  <Search aria-hidden="true" className="h-4 w-4" />
+                  {t('header.searchPlaceholder')}
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="cursor-pointer gap-2 sm:hidden">
+                  <a href="https://docs.mai-mai.org" target="_blank" rel="noopener noreferrer">
+                    <BookOpen aria-hidden="true" className="h-4 w-4" />
+                    {t('header.viewDocs')}
+                  </a>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={(event) => {
                     const newTheme = actualTheme === 'dark' ? 'light' : 'dark'
@@ -783,7 +805,7 @@ export function Header({
             aria-label={topbarCollapsed ? t('header.expandTopbar') : t('header.collapseTopbar')}
             aria-expanded={!topbarCollapsed}
             title={topbarCollapsed ? t('header.expandTopbar') : t('header.collapseTopbar')}
-            className="bg-foreground/70 flex h-3 w-24 shrink-0 items-center justify-center transition-shadow"
+            className="bg-foreground/70 relative flex h-3 w-24 shrink-0 items-center justify-center transition-shadow before:absolute before:-inset-y-3 before:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className="sr-only">
               {topbarCollapsed ? t('header.expandTopbar') : t('header.collapseTopbar')}

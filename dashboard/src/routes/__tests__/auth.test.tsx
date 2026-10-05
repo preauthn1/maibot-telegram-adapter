@@ -257,5 +257,8 @@ describe('AuthPage 主题切换与帮助弹窗', () => {
     expect(await screen.findByText('auth.helpTitle')).toBeInTheDocument()
     expect(screen.getByText('auth.method1Title')).toBeInTheDocument()
     expect(screen.getByText('auth.method2Title')).toBeInTheDocument()
+    expect(postMock).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toHaveClass('overflow-y-auto', 'max-h-[85dvh]')
   })
 })
