@@ -20,6 +20,7 @@ from src.services.bot_account_service import get_bot_accounts
 from src.services.embedding_service import EmbeddingServiceClient
 
 from .identity_guard import guard_identity
+from .llm_sentence_splitter import split_text_with_llm
 from .typo_generator import ChineseTypoGenerator
 
 if TYPE_CHECKING:
@@ -35,6 +36,8 @@ class ProcessedResponseSegment:
 
     text: str
     quote_previous: bool = False
+    # 原始文本中紧跟本段的分隔符；多条消息被压缩合并为一条时，用它恢复句间的停顿
+    separator: str = ""
 
 
 def is_english_letter(char: str) -> bool:
@@ -278,8 +281,8 @@ async def get_embedding(text: str, request_type: str = "embedding") -> Optional[
     return embedding
 
 
-def split_into_sentences_w_remove_punctuation(text: str) -> list[str]:
-    """将文本分割成句子，并根据概率合并
+def _split_into_sentence_segments(text: str) -> list[tuple[str, str]]:
+    """将文本分割成 (句子, 尾随分隔符) 元组，并根据概率合并
     1. 识别分割点（, ， 。 ; 空格），但如果分割点左右都是英文字母则不分割。
     2. 将文本分割成 (内容, 分隔符) 的元组。
     3. 根据原始文本长度计算合并概率，概率性地合并相邻段落。
@@ -287,7 +290,9 @@ def split_into_sentences_w_remove_punctuation(text: str) -> list[str]:
     Args:
         text: 要分割的文本字符串 (假定颜文字已被保护)
     Returns:
-        List[str]: 分割和合并后的句子列表
+        List[Tuple[str, str]]: 分割和合并后的 (句子, 尾随分隔符) 列表，
+        尾随分隔符是原始文本中紧跟该句的分隔符（最后一句为空字符串），
+        供后续把多句压缩回一条消息时恢复句间停顿。
     """
     # 预处理：处理多余的换行符
     # 1. 将连续的换行符替换为单个换行符（保留换行符用于分割）
@@ -301,7 +306,9 @@ def split_into_sentences_w_remove_punctuation(text: str) -> list[str]:
 
     len_text = len(text)
     if len_text < 3:
-        return list(text) if random.random() < 0.01 else [text]
+        if random.random() < 0.01:
+            return [(char, "") for char in text]
+        return [(text, "")]
 
     # 先标记哪些位置位于成对引号内部，避免在引号内部进行句子分割
     # 支持的引号包括：中英文单/双引号和常见中文书名号/引号
@@ -403,8 +410,9 @@ def split_into_sentences_w_remove_punctuation(text: str) -> list[str]:
     segments = [(content, sep) for content, sep in segments if content or sep]
 
     # 如果分割后为空（例如，输入全是分隔符且不满足保留条件），恢复颜文字并返回
+    # 如果原始文本非空，则返回原始文本（可能只包含未被分割的字符或颜文字占位符）
     if not segments:
-        return [text] if text else []  # 如果原始文本非空，则返回原始文本（可能只包含未被分割的字符或颜文字占位符）
+        return [(text, "")] if text else []
 
     # 2. 概率合并
     if len_text < 12:
@@ -444,40 +452,26 @@ def split_into_sentences_w_remove_punctuation(text: str) -> list[str]:
             merged_segments.append((current_content, current_sep))
             idx += 1
 
-    # 提取最终的句子内容
-    final_sentences = [content for content, sep in merged_segments if content]  # 只保留有内容的段
+    # 提取最终的句子内容（保留尾随分隔符，供压缩拼接时恢复停顿）
+    sentence_segments = [(content, sep) for content, sep in merged_segments if content]  # 只保留有内容的段
 
     # 清理可能引入的空字符串和仅包含空白的字符串
-    final_sentences = [
-        s for s in final_sentences if s.strip()
+    sentence_segments = [
+        (sentence, sep) for sentence, sep in sentence_segments if sentence.strip()
     ]  # 过滤掉空字符串以及仅包含空白（如换行符、空格）的字符串
-    final_sentences = [
-        normalized_sentence
-        for sentence in final_sentences
+    sentence_segments = [
+        (normalized_sentence, sep)
+        for sentence, sep in sentence_segments
         if (normalized_sentence := re.sub(r"[^\S\r\n]*[\r\n]+[^\S\r\n]*", " ", sentence).strip())
     ]
 
-    logger.debug(f"分割并合并后的句子: {final_sentences}")
-    return final_sentences
+    logger.debug(f"分割并合并后的句子: {[sentence for sentence, _sep in sentence_segments]}")
+    return sentence_segments
 
 
-def merge_sentences_to_max_count(sentences: list[str], max_count: int) -> list[str]:
-    """按顺序将分句合并到指定条数以内。"""
-
-    if len(sentences) <= max_count:
-        return sentences
-
-    merged_sentences: list[str] = []
-    sentence_count = len(sentences)
-    start_index = 0
-    for group_index in range(max_count):
-        remaining_sentences = sentence_count - start_index
-        remaining_groups = max_count - group_index
-        group_size = (remaining_sentences + remaining_groups - 1) // remaining_groups
-        merged_sentences.append("".join(sentences[start_index : start_index + group_size]))
-        start_index += group_size
-
-    return merged_sentences
+def split_into_sentences_w_remove_punctuation(text: str) -> list[str]:
+    """将文本分割成句子，并根据概率合并（不保留分隔符信息，仅返回句子内容）"""
+    return [sentence for sentence, _separator in _split_into_sentence_segments(text)]
 
 
 def _merge_processed_segments_to_max_count(
@@ -515,10 +509,17 @@ def _merge_processed_segments_to_max_count(
     for group_index, group_start in enumerate(sorted_starts):
         group_end = sorted_starts[group_index + 1] if group_index + 1 < len(sorted_starts) else segment_count
         group = segments[group_start:group_end]
+        # 组内多段被压缩为一条消息时，补回各段尾随的分隔符，避免多句硬拼接成无标点的一整坨
+        merged_text_parts: list[str] = []
+        for position, segment in enumerate(group):
+            merged_text_parts.append(segment.text)
+            if position < len(group) - 1:
+                merged_text_parts.append(segment.separator)
         merged_segments.append(
             ProcessedResponseSegment(
-                text="".join(segment.text for segment in group),
+                text="".join(merged_text_parts),
                 quote_previous=group[0].quote_previous,
+                separator=group[-1].separator,
             )
         )
 
@@ -595,6 +596,50 @@ def _apply_identity_guard(text: str) -> str:
     return result.text
 
 
+def _apply_response_post_processing(
+    split_sentences: list[tuple[str, str]],
+    typo_generator: ChineseTypoGenerator,
+    enable_chinese_typo: bool,
+    allow_correction_segment: bool,
+) -> list[ProcessedResponseSegment]:
+    """对已完成断句的文本执行错别字注入和纠正段处理。
+
+    Args:
+        split_sentences: 已断句的 (句子, 尾随分隔符) 列表。
+        typo_generator: 错别字生成器。
+        enable_chinese_typo: 本次回复是否允许错别字处理。
+        allow_correction_segment: 是否允许额外追加一条“纠正”消息；关闭分句时必须为 False。
+
+    Returns:
+        list[ProcessedResponseSegment]: 处理后的消息段。
+    """
+    segments: list[ProcessedResponseSegment] = []
+    for sentence, sentence_separator in split_sentences:
+        if global_config.chinese_typo.enable and enable_chinese_typo:
+            typoed_text, typo_corrections = typo_generator.create_typo_sentence(sentence)
+            if typo_corrections:
+                # 关闭分句时不能额外发一条"纠正"消息，否则一次回复又变成多条。
+                if not allow_correction_segment:
+                    segments.append(ProcessedResponseSegment(sentence, separator=sentence_separator))
+                    continue
+                # 50%概率新增正确字/词，50%概率用正确分句替换错别字分句
+                if random.random() < 0.5:
+                    quote_previous = (
+                        global_config.chinese_typo.enable_correction_quote
+                        and random.random() < global_config.chinese_typo.correction_quote_probability
+                    )
+                    segments.append(ProcessedResponseSegment(typoed_text, separator=sentence_separator))
+                    segments.append(ProcessedResponseSegment(typo_corrections, quote_previous=quote_previous))
+                else:
+                    # 用正确的分句替换错别字分句
+                    segments.append(ProcessedResponseSegment(sentence, separator=sentence_separator))
+            else:
+                segments.append(ProcessedResponseSegment(typoed_text, separator=sentence_separator))
+        else:
+            segments.append(ProcessedResponseSegment(sentence, separator=sentence_separator))
+    return segments
+
+
 def process_llm_response_segments(
     text: str,
     enable_splitter: bool = True,
@@ -643,36 +688,18 @@ def process_llm_response_segments(
         word_replace_rate=global_config.chinese_typo.word_replace_rate,
     )
 
-    if global_config.response_splitter.enable and enable_splitter:
-        split_sentences = split_into_sentences_w_remove_punctuation(cleaned_text)
+    splitter_enabled = global_config.response_splitter.enable and enable_splitter
+    if splitter_enabled:
+        split_sentences = _split_into_sentence_segments(cleaned_text)
     else:
-        split_sentences = [cleaned_text]
+        split_sentences = [(cleaned_text, "")]
 
-    segments: list[ProcessedResponseSegment] = []
-    for sentence in split_sentences:
-        if global_config.chinese_typo.enable and enable_chinese_typo:
-            typoed_text, typo_corrections = typo_generator.create_typo_sentence(sentence)
-            if typo_corrections:
-                # 50%概率新增正确字/词，50%概率用正确分句替换错别字分句
-                if random.random() < 0.5:
-                    quote_previous = (
-                        global_config.chinese_typo.enable_correction_quote
-                        and random.random() < global_config.chinese_typo.correction_quote_probability
-                    )
-                    segments.append(ProcessedResponseSegment(typoed_text))
-                    segments.append(
-                        ProcessedResponseSegment(
-                            typo_corrections,
-                            quote_previous=quote_previous,
-                        )
-                    )
-                else:
-                    # 用正确的分句替换错别字分句
-                    segments.append(ProcessedResponseSegment(sentence))
-            else:
-                segments.append(ProcessedResponseSegment(typoed_text))
-        else:
-            segments.append(ProcessedResponseSegment(sentence))
+    segments = _apply_response_post_processing(
+        split_sentences,
+        typo_generator,
+        enable_chinese_typo,
+        allow_correction_segment=splitter_enabled,
+    )
 
     if len(segments) > max_sentence_num:
         if global_config.response_splitter.enable_overflow_return_all:
@@ -695,11 +722,58 @@ def process_llm_response_segments(
             ProcessedResponseSegment(
                 text=recovered_text,
                 quote_previous=segment.quote_previous,
+                separator=segment.separator,
             )
             for segment, recovered_text in zip(segments, recovered_sentences, strict=True)
         ]
 
     return segments
+
+
+async def process_llm_response_segments_async(
+    text: str,
+    enable_splitter: bool = True,
+    enable_chinese_typo: bool = True,
+) -> list[ProcessedResponseSegment]:
+    """异步处理回复文本，支持使用 LLM 按语义断句。"""
+    if global_config.response_splitter.mode != "llm":
+        return process_llm_response_segments(text, enable_splitter, enable_chinese_typo)
+
+    # 全局或单次关闭分句时不走 LLM 断句，交给同步链路按“不分句”处理（含身份守卫）。
+    if (
+        not global_config.response_post_process.enable_response_post_process
+        or not global_config.response_splitter.enable
+        or not enable_splitter
+    ):
+        return process_llm_response_segments(text, enable_splitter, enable_chinese_typo)
+
+    # LLM 断句链路不经过同步处理函数，身份守卫必须在这里同样最先执行。
+    text = _apply_identity_guard(text)
+
+    try:
+        split_sentences = await split_text_with_llm(text)
+    except Exception:
+        logger.exception("LLM 断句失败")
+        raise
+
+    typo_generator = ChineseTypoGenerator(
+        error_rate=global_config.chinese_typo.error_rate,
+        min_freq=global_config.chinese_typo.min_freq,
+        tone_error_rate=global_config.chinese_typo.tone_error_rate,
+        word_replace_rate=global_config.chinese_typo.word_replace_rate,
+    )
+    segments = _apply_response_post_processing(
+        split_sentences,
+        typo_generator,
+        enable_chinese_typo,
+        allow_correction_segment=True,
+    )
+    max_sentence_num = global_config.response_splitter.max_sentence_num
+    if len(segments) > max_sentence_num:
+        if global_config.response_splitter.enable_overflow_return_all:
+            return [ProcessedResponseSegment(text)]
+        return [ProcessedResponseSegment(_get_random_default_reply())]
+    return _merge_processed_segments_to_max_count(segments, global_config.response_splitter.max_split_num)
 
 
 def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese_typo: bool = True) -> list[str]:
