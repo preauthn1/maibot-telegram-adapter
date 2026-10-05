@@ -1213,7 +1213,8 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
                 "message_id": message_id_from_context_message(message),
                 "source": message.source,
                 "role": message.role,
-                "timestamp": message.timestamp.isoformat(timespec="seconds"),
+                # 带时区偏移，评审展示时可无歧义换算到 UTC+8
+                "timestamp": message.timestamp.astimezone().isoformat(timespec="seconds"),
                 "text": visible_text.strip(),
                 "quote_target_ids": extract_quote_target_ids(getattr(message, "raw_message", None)),
                 "attachments": extract_visual_attachments_from_sequence(getattr(message, "raw_message", None)),
