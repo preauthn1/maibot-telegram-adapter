@@ -172,6 +172,12 @@ class RelationWriteService:
                 )
                 if embeddings.ndim == 1:
                     embeddings = embeddings.reshape(1, -1)
+                if (
+                    embeddings.ndim != 2
+                    or embeddings.shape[1] == 0
+                    or not np.isfinite(embeddings).all()
+                ):
+                    raise ValueError("invalid_relation_embedding")
                 if embeddings.shape[0] != len(batch_records):
                     raise ValueError(
                         "关系批量向量数量不匹配: "
@@ -204,7 +210,7 @@ class RelationWriteService:
                         )
                     added_hashes.update(record.hash_value for record in records_to_add)
             except Exception as exc:
-                err = str(exc)[:max_error_len]
+                err = ("relation_vector_write_failed:" + type(exc).__name__)[:max_error_len]
                 failed_errors.update({record.hash_value: err for record in batch_records})
 
         with self.metadata_store.transaction(immediate=True):
@@ -364,7 +370,7 @@ class RelationWriteService:
                 vector_text = self.build_relation_vector_text(subject, predicate, obj)
                 embedding = await self.embedding_manager.encode(vector_text)
         except Exception as e:
-            err = str(e)[:max_error_len]
+            err = ("relation_vector_write_failed:" + type(e).__name__)[:max_error_len]
             self.metadata_store.set_relation_vector_state(
                 hash_value,
                 "failed",
@@ -407,9 +413,19 @@ class RelationWriteService:
 
             if embedding is None:
                 raise RuntimeError("关系向量 embedding 未生成")
+            embedding = np.asarray(embedding, dtype=np.float32)
+            if embedding.ndim == 1:
+                embedding = embedding.reshape(1, -1)
+            if (
+                embedding.ndim != 2
+                or embedding.shape[0] != 1
+                or embedding.shape[1] == 0
+                or not np.isfinite(embedding).all()
+            ):
+                raise ValueError("invalid_relation_embedding")
             added = int(
                 target_store.add(
-                    vectors=embedding.reshape(1, -1),
+                    vectors=embedding,
                     ids=[vector_id],
                 )
                 or 0
@@ -429,7 +445,7 @@ class RelationWriteService:
                 vector_state="ready",
             )
         except Exception as e:
-            err = str(e)[:max_error_len]
+            err = ("relation_vector_write_failed:" + type(e).__name__)[:max_error_len]
             self.metadata_store.set_relation_vector_state(
                 hash_value,
                 "failed",
