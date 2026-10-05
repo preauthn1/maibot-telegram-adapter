@@ -3052,12 +3052,17 @@ class DualPathRetriever:
         if effective_start is None or effective_end is None:
             return False
 
+        # 半开区间相交：查询窗口 [time_from, time_to)，事件区间 [effective_start, effective_end)；
+        # 单点事件（start == end）以 effective_start >= time_from 判定。SQL 侧使用同一口径（审计 F06）。
+        starts_after_from = temporal.time_from is None or (
+            effective_end > temporal.time_from or effective_start >= temporal.time_from
+        )
         if temporal.time_from is not None and temporal.time_to is not None:
-            return effective_end >= temporal.time_from and effective_start <= temporal.time_to
+            return starts_after_from and effective_start < temporal.time_to
         if temporal.time_from is not None:
-            return effective_end >= temporal.time_from
+            return starts_after_from
         if temporal.time_to is not None:
-            return effective_start <= temporal.time_to
+            return effective_start < temporal.time_to
         return True
 
     def _apply_temporal_filter_to_paragraphs(
