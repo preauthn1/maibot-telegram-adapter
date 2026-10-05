@@ -1498,8 +1498,8 @@ class SDKMemoryKernel(KernelCompatibilityMixin):
         request: KernelSearchRequest,
         plugin_config: dict,
         source: Optional[str],
-        time_from: Optional[str] = None,
-        time_to: Optional[str] = None,
+        time_from: Optional[float] = None,
+        time_to: Optional[float] = None,
         enforce_chat_filter: bool,
     ) -> SearchExecutionResult:
         return await self._search_service._search_execution_once(
@@ -1524,8 +1524,8 @@ class SDKMemoryKernel(KernelCompatibilityMixin):
         top_k: int,
         request: KernelSearchRequest,
         plugin_config: dict,
-        time_from: Optional[str] = None,
-        time_to: Optional[str] = None,
+        time_from: Optional[float] = None,
+        time_to: Optional[float] = None,
         enforce_chat_filter: bool,
     ) -> SearchExecutionResult:
         return await self._search_service._search_execution_for_chat_scope(
