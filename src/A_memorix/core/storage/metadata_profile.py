@@ -2,9 +2,24 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import json
+import math
 import sqlite3
 
 from .value_coercion import optional_float
+
+
+def _validated_profile_time(value):
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError("invalid_profile_time")
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("invalid_profile_time") from None
+    if not math.isfinite(result):
+        raise ValueError("invalid_profile_time")
+    return result
 
 
 class MetadataProfileMixin:
@@ -193,61 +208,58 @@ class MetadataProfileMixin:
         vector_evidence = vector_evidence or []
         evidence_ids = evidence_ids or []
         fact_claim_ids = fact_claim_ids or []
-        ts = float(updated_at) if updated_at is not None else datetime.now().timestamp()
+        updated_at = _validated_profile_time(updated_at)
+        expires_at = _validated_profile_time(expires_at)
+        ts = updated_at if updated_at is not None else datetime.now().timestamp()
 
-        cursor = self._conn.cursor()
-        cursor.execute(
-            """
-            SELECT profile_version
-            FROM person_profile_snapshots
-            WHERE person_id = ?
-            ORDER BY profile_version DESC
-            LIMIT 1
-            """,
-            (str(person_id),),
-        )
-        row = cursor.fetchone()
-        next_version = int(row[0]) + 1 if row else 1
+        # Serialize version allocation before reading the current maximum.
+        with self.transaction(immediate=True):
+            cursor = self._conn.cursor()
+            cursor.execute(
+                """
+                SELECT profile_version
+                FROM person_profile_snapshots
+                WHERE person_id = ?
+                ORDER BY profile_version DESC
+                LIMIT 1
+                """,
+                (str(person_id),),
+            )
+            row = cursor.fetchone()
+            next_version = int(row[0]) + 1 if row else 1
 
-        cursor.execute(
-            """
-            INSERT INTO person_profile_snapshots (
-                person_id, profile_version, profile_text,
-                aliases_json, relation_edges_json, vector_evidence_json, evidence_ids_json,
-                fact_claim_ids_json, evidence_fingerprint, updated_at, expires_at, source_note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(person_id),
-                next_version,
-                str(profile_text or ""),
-                json.dumps(aliases, ensure_ascii=False),
-                json.dumps(relation_edges, ensure_ascii=False),
-                json.dumps(vector_evidence, ensure_ascii=False),
-                json.dumps(evidence_ids, ensure_ascii=False),
-                json.dumps(fact_claim_ids, ensure_ascii=False),
-                str(evidence_fingerprint or ""),
-                ts,
-                float(expires_at) if expires_at is not None else None,
-                str(source_note or ""),
-            ),
-        )
-        self._conn.commit()
-        latest = self.get_latest_person_profile_snapshot(person_id)
-        return latest or {
-            "person_id": person_id,
-            "profile_version": next_version,
-            "profile_text": str(profile_text or ""),
-            "aliases": aliases,
-            "relation_edges": relation_edges,
-            "vector_evidence": vector_evidence,
-            "evidence_ids": evidence_ids,
-            "fact_claim_ids": fact_claim_ids,
-            "evidence_fingerprint": str(evidence_fingerprint or ""),
-            "updated_at": ts,
-            "expires_at": expires_at,
-            "source_note": source_note,
-        }
+            cursor.execute(
+                """
+                INSERT INTO person_profile_snapshots (
+                    person_id, profile_version, profile_text,
+                    aliases_json, relation_edges_json, vector_evidence_json, evidence_ids_json,
+                    fact_claim_ids_json, evidence_fingerprint, updated_at, expires_at, source_note
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(person_id),
+                    next_version,
+                    str(profile_text or ""),
+                    json.dumps(aliases, ensure_ascii=False),
+                    json.dumps(relation_edges, ensure_ascii=False),
+                    json.dumps(vector_evidence, ensure_ascii=False),
+                    json.dumps(evidence_ids, ensure_ascii=False),
+                    json.dumps(fact_claim_ids, ensure_ascii=False),
+                    str(evidence_fingerprint or ""),
+                    ts,
+                    float(expires_at) if expires_at is not None else None,
+                    str(source_note or ""),
+                ),
+            )
+            inserted_id = cursor.lastrowid
+            latest = self.get_latest_person_profile_snapshot(person_id)
+            if latest is None:
+                raise RuntimeError("profile_snapshot_readback_failed")
+            if (latest.get("snapshot_id") != inserted_id
+                    or latest.get("person_id") != str(person_id)
+                    or latest.get("profile_version") != next_version):
+                raise RuntimeError("profile_snapshot_readback_mismatch")
+            return latest
 
     def refresh_person_profile_snapshot_cache(
         self,
@@ -258,33 +270,36 @@ class MetadataProfileMixin:
         updated_at: Optional[float] = None,
     ) -> Dict[str, Any]:
         """证据未变化时延长快照有效期，不创建新的画像版本。"""
-        ts = float(updated_at) if updated_at is not None else datetime.now().timestamp()
-        cursor = self._conn.cursor()
-        cursor.execute(
-            """
-            UPDATE person_profile_snapshots
-            SET updated_at = ?, expires_at = ?, source_note = ?
-            WHERE snapshot_id = ?
-            """,
-            (
-                ts,
-                float(expires_at) if expires_at is not None else None,
-                str(source_note or ""),
-                int(snapshot_id),
-            ),
-        )
-        if cursor.rowcount != 1:
-            self._conn.rollback()
-            raise ValueError(f"人物画像快照不存在: snapshot_id={snapshot_id}")
-        self._conn.commit()
-        cursor.execute("SELECT person_id FROM person_profile_snapshots WHERE snapshot_id = ?", (int(snapshot_id),))
-        row = cursor.fetchone()
-        if not row:
-            raise RuntimeError(f"人物画像快照刷新后读取失败: snapshot_id={snapshot_id}")
-        latest = self.get_latest_person_profile_snapshot(str(row[0]))
-        if latest is None:
-            raise RuntimeError(f"人物画像快照刷新后人物记录丢失: snapshot_id={snapshot_id}")
-        return latest
+        updated_at = _validated_profile_time(updated_at)
+        expires_at = _validated_profile_time(expires_at)
+        ts = updated_at if updated_at is not None else datetime.now().timestamp()
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute(
+                """
+                UPDATE person_profile_snapshots
+                SET updated_at = ?, expires_at = ?, source_note = ?
+                WHERE snapshot_id = ?
+                """,
+                (
+                    ts,
+                    float(expires_at) if expires_at is not None else None,
+                    str(source_note or ""),
+                    int(snapshot_id),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError(f"人物画像快照不存在: snapshot_id={snapshot_id}")
+            cursor.execute("SELECT person_id FROM person_profile_snapshots WHERE snapshot_id = ?", (int(snapshot_id),))
+            row = cursor.fetchone()
+            if not row:
+                raise RuntimeError(f"人物画像快照刷新后读取失败: snapshot_id={snapshot_id}")
+            latest = self.get_latest_person_profile_snapshot(str(row[0]))
+            if latest is None:
+                raise RuntimeError(f"人物画像快照刷新后人物记录丢失: snapshot_id={snapshot_id}")
+            if int(latest["snapshot_id"]) != int(snapshot_id):
+                raise ValueError("obsolete_profile_snapshot")
+            return latest
 
     def get_person_profile_override(self, person_id: str) -> Optional[Dict[str, Any]]:
         """获取人物画像手工覆盖内容。"""
@@ -323,7 +338,10 @@ class MetadataProfileMixin:
         if not person_id:
             raise ValueError("person_id 不能为空")
 
-        text = str(override_text or "").strip()
+        if not isinstance(override_text, str):
+            raise ValueError("invalid_profile_override_text")
+        updated_at = _validated_profile_time(updated_at)
+        text = override_text.strip()
         if not text:
             self.delete_person_profile_override(person_id)
             return {
@@ -335,46 +353,54 @@ class MetadataProfileMixin:
             }
 
         ts = float(updated_at) if updated_at is not None else datetime.now().timestamp()
-        cursor = self._conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO person_profile_overrides (
-                person_id, override_text, updated_at, updated_by, source
-            ) VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(person_id) DO UPDATE SET
-                override_text = excluded.override_text,
-                updated_at = excluded.updated_at,
-                updated_by = excluded.updated_by,
-                source = excluded.source
-            """,
-            (
-                str(person_id),
-                text,
-                ts,
-                str(updated_by or ""),
-                str(source or ""),
-            ),
-        )
-        self._conn.commit()
-        return self.get_person_profile_override(person_id) or {
-            "person_id": str(person_id),
-            "override_text": text,
-            "updated_at": ts,
-            "updated_by": str(updated_by or ""),
-            "source": str(source or ""),
-        }
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO person_profile_overrides (
+                    person_id, override_text, updated_at, updated_by, source
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(person_id) DO UPDATE SET
+                    override_text = excluded.override_text,
+                    updated_at = excluded.updated_at,
+                    updated_by = excluded.updated_by,
+                    source = excluded.source
+                """,
+                (
+                    str(person_id),
+                    text,
+                    ts,
+                    str(updated_by or ""),
+                    str(source or ""),
+                ),
+            )
+            expected = {
+                "person_id": str(person_id),
+                "override_text": text,
+                "updated_at": ts,
+                "updated_by": str(updated_by or ""),
+                "source": str(source or ""),
+            }
+            saved = self.get_person_profile_override(person_id)
+            if saved is None or any(saved.get(key) != value for key, value in expected.items()):
+                raise RuntimeError("profile_override_readback_failed")
+            return saved
 
     def delete_person_profile_override(self, person_id: str) -> bool:
         """删除人物画像手工覆盖。"""
         if not person_id:
             return False
-        cursor = self._conn.cursor()
-        cursor.execute(
-            "DELETE FROM person_profile_overrides WHERE person_id = ?",
-            (str(person_id),),
-        )
-        self._conn.commit()
-        return cursor.rowcount > 0
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute(
+                "DELETE FROM person_profile_overrides WHERE person_id = ?",
+                (str(person_id),),
+            )
+            deleted = cursor.rowcount > 0
+            cursor.execute("SELECT 1 FROM person_profile_overrides WHERE person_id = ?", (str(person_id),))
+            if cursor.fetchone() is not None:
+                raise RuntimeError("profile_override_delete_readback_failed")
+            return deleted
 
     @staticmethod
     def _normalize_person_profile_aliases(aliases: List[str]) -> List[str]:

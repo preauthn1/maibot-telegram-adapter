@@ -1,7 +1,7 @@
 # Telegram 真人账号适配器
 
 用**真实 Telegram 个人账号**（MTProto / Telethon）而不是 Bot 账号收发消息。
-对方看到的是一个普通用户，没有 BOT 标记，也不受 Bot API 的诸多限制。
+不受 Bot API 的诸多限制。这是自动账号：被认真问到身份时如实说明，不伪装为人工操作者。
 
 ## 与官方 Bot API 适配器的区别
 

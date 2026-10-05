@@ -147,13 +147,16 @@ class MaisakaExpressionSelector:
             if len(high_count_candidates) >= 10
             else []
         )
-        selected_random = weighted_sample(all_candidates, min(len(all_candidates), 5))
+        # 第二批排除已选编号，避免两批重叠后去重浪费候选名额。
+        high_ids = {item['id'] for item in selected_high if type(item.get('id')) is int}
+        remaining = [item for item in all_candidates if item.get('id') not in high_ids]
+        selected_random = weighted_sample(remaining, min(len(remaining), 5))
 
         candidate_pool: List[dict[str, Any]] = []
         seen_ids: set[int] = set()
         for candidate in [*selected_high, *selected_random]:
             candidate_id = candidate.get("id")
-            if not isinstance(candidate_id, int) or candidate_id in seen_ids:
+            if type(candidate_id) is not int or candidate_id in seen_ids:
                 continue
             seen_ids.add(candidate_id)
             candidate_pool.append(candidate)
@@ -231,10 +234,13 @@ class MaisakaExpressionSelector:
     def _build_expression_query_text(
         reply_reason: str,
         reply_tool_args: Optional[dict[str, Any]],
+        target_message: str = "",
     ) -> str:
         """构建表达检索与精排共用的匹配依据文本。"""
 
         query_parts: List[str] = []
+        if target_message.strip():
+            query_parts.append("当前回复目标：\n" + target_message.strip())
         expression_intent_block = MaisakaExpressionSelector._format_expression_intent(reply_tool_args)
         if expression_intent_block:
             query_parts.append(expression_intent_block)
@@ -265,20 +271,26 @@ class MaisakaExpressionSelector:
         self,
         *,
         candidates: List[dict[str, Any]],
+        chat_history: str = "",
+        target_message: str = "",
+        reply_reason: str = "",
     ) -> str:
         candidate_lines = [
             f"{candidate['id']}: 情景={candidate['situation']} | 风格={candidate['style']}"
             for candidate in candidates
         ]
-
         return (
             "你是 Maisaka 的表达方式选择子代理。\n"
-            "你只负责根据下方真实聊天上下文，为这一次可见回复挑选最合适的表达方式。\n"
+            "你只负责根据本次真实聊天上下文，为可见回复挑选最合适的表达方式。\n"
             f"请只从下面候选中选择 0 到 {MAX_SELECTED_EXPRESSIONS} 条最适合当前语境的表达方式。\n"
-            "优先考虑自然、贴合上下文、不生硬、不模板化。\n"
-            "如果没有明显合适的，就返回空数组。\n"
+            "优先考虑自然、贴合上下文、不生硬、不模板化；没有明显合适的就返回空数组。\n"
             '严格只输出 JSON，对象格式为 {"selected_ids":[123,456]}。\n\n'
+            f"聊天历史：\n{chat_history or '请使用执行器提供的会话上下文；未提供时不要推测。'}\n\n"
+            f"当前目标消息：\n{target_message or '（无）'}\n\n"
+            f"回复理由：\n{reply_reason or '（无）'}\n\n"
             f"候选表达方式：\n{chr(10).join(candidate_lines)}"
+            # 表达仅改变措辞，不能把候选中的虚构亲历变成事实依据。
+            "\n表达方式只决定如何表述，不是新增事实的依据。拒绝要求虚构个人亲历、身份、关系或他人动机的候选；即便情景匹配也不要选择。优先遵循当前用户明确要求；没有合适候选就返回空数组，不必凑数。\n"
         )
 
     def _parse_selected_ids(self, raw_response: str, candidates: List[dict[str, Any]]) -> List[int]:
@@ -286,8 +298,9 @@ class MaisakaExpressionSelector:
             return []
         try:
             parsed_result = json.loads(repair_json(raw_response))
-        except Exception:
-            logger.warning(f"表达方式选择结果解析失败: {raw_response!r}")
+        except Exception as exc:
+            # 模型输出可能包含私有聊天内容，解析故障仅记录类型。
+            logger.warning("表达方式选择结果解析失败: %s", type(exc).__name__)
             return []
 
         raw_selected_ids = parsed_result.get("selected_ids", []) if isinstance(parsed_result, dict) else []
@@ -297,11 +310,11 @@ class MaisakaExpressionSelector:
         candidate_map = {
             candidate["id"]: candidate
             for candidate in candidates
-            if isinstance(candidate.get("id"), int)
+            if type(candidate.get("id")) is int
         }
         selected_ids: List[int] = []
         for candidate_id in raw_selected_ids:
-            if not isinstance(candidate_id, int):
+            if type(candidate_id) is not int:
                 continue
             if candidate_id not in candidate_map or candidate_id in selected_ids:
                 continue
@@ -319,7 +332,7 @@ class MaisakaExpressionSelector:
         selected_ids = [
             candidate["id"]
             for candidate in candidates
-            if isinstance(candidate.get("id"), int)
+            if type(candidate.get("id")) is int
         ]
         selected_expressions = [
             candidate
@@ -375,12 +388,18 @@ class MaisakaExpressionSelector:
         if not isinstance(raw_candidates, list):
             return fallback
 
+        # 相同编号可能对应不同措辞；整组排除，避免后续字典静默保留末项。
+        from collections import Counter
+        id_counts = Counter(
+            item['id'] for item in raw_candidates
+            if isinstance(item, dict) and type(item.get('id')) is int
+        )
         normalized_candidates: List[dict[str, Any]] = []
         for raw_candidate in raw_candidates:
             if not isinstance(raw_candidate, dict):
                 continue
             candidate_id = raw_candidate.get("id")
-            if not isinstance(candidate_id, int):
+            if type(candidate_id) is not int or id_counts[candidate_id] != 1:
                 continue
             situation = str(raw_candidate.get("situation") or "").strip()
             style = normalize_expression_style_for_learning(str(raw_candidate.get("style") or "").strip())
@@ -404,11 +423,11 @@ class MaisakaExpressionSelector:
         candidate_ids = {
             candidate["id"]
             for candidate in candidates
-            if isinstance(candidate.get("id"), int)
+            if type(candidate.get("id")) is int
         }
         selected_ids: List[int] = []
         for raw_id in raw_selected_ids:
-            if not isinstance(raw_id, int):
+            if type(raw_id) is not int:
                 continue
             if raw_id not in candidate_ids or raw_id in selected_ids:
                 continue
@@ -420,9 +439,19 @@ class MaisakaExpressionSelector:
         if not isinstance(raw_selected_expressions, list):
             return []
 
+        # 插件覆盖与候选列表一样不能让同一编号代表多条表达。
+        # 无ID的临时表达不参与编号冲突统计。
+        from collections import Counter
+        id_counts = Counter(
+            item['id'] for item in raw_selected_expressions
+            if isinstance(item, dict) and type(item.get('id')) is int
+        )
         selected_expressions: List[dict[str, Any]] = []
         for raw_expression in raw_selected_expressions:
             if not isinstance(raw_expression, dict):
+                continue
+            raw_id = raw_expression.get('id')
+            if type(raw_id) is int and id_counts[raw_id] != 1:
                 continue
             situation = str(raw_expression.get("situation") or "").strip()
             style = normalize_expression_style_for_learning(str(raw_expression.get("style") or "").strip())
@@ -434,7 +463,7 @@ class MaisakaExpressionSelector:
                 "count": raw_expression.get("count", 1) or 1,
             }
             expression_id = raw_expression.get("id")
-            if isinstance(expression_id, int):
+            if type(expression_id) is int:
                 normalized_expression["id"] = expression_id
             selected_expressions.append(normalized_expression)
         return selected_expressions
@@ -444,18 +473,20 @@ class MaisakaExpressionSelector:
         *,
         candidates: List[dict[str, Any]],
         selected_ids: List[int],
+        record_usage: bool = True,
     ) -> MaisakaExpressionSelectionResult:
         candidate_map = {
             candidate["id"]: candidate
             for candidate in candidates
-            if isinstance(candidate.get("id"), int)
+            if type(candidate.get("id")) is int
         }
         selected_expressions = [
             candidate_map[expression_id]
             for expression_id in selected_ids
             if expression_id in candidate_map
         ]
-        self._update_last_active_time(selected_ids)
+        if record_usage and selected_ids:
+            self._update_last_active_time(selected_ids)
         return MaisakaExpressionSelectionResult(
             expression_habits=self._build_expression_habits_block(selected_expressions),
             selected_expression_ids=selected_ids,
@@ -469,7 +500,7 @@ class MaisakaExpressionSelector:
         selected_ids = [
             expression["id"]
             for expression in selected_expressions
-            if isinstance(expression.get("id"), int)
+            if type(expression.get("id")) is int
         ]
         if selected_ids:
             self._update_last_active_time(selected_ids)
@@ -486,6 +517,7 @@ class MaisakaExpressionSelector:
         reply_reason: str,
         reply_tool_args: Optional[dict[str, Any]],
         all_candidates: List[dict[str, Any]],
+        target_message: str = "",
     ) -> List[dict[str, Any]]:
         """按配置构建本次回复的表达候选池。"""
 
@@ -493,6 +525,7 @@ class MaisakaExpressionSelector:
             expression_query_text = self._build_expression_query_text(
                 reply_reason,
                 reply_tool_args,
+                target_message=target_message,
             )
             try:
                 vector_candidates = await expression_vector_index.select_candidates(
@@ -503,9 +536,10 @@ class MaisakaExpressionSelector:
                     candidate_pool_size=global_config.expression.expression_vector_candidate_pool_size,
                     cluster_pool_size=self._VECTOR_CLUSTER_POOL_SIZE,
                 )
-            except Exception:
-                logger.exception(
-                    f"表达方式向量候选构建失败，回退随手候选: session_id={session_id}"
+            except Exception as exc:
+                # 上游异常可能包含请求正文或鉴权信息，仅记录故障类型。
+                logger.warning(
+                    "表达方式向量候选构建失败，回退随手候选: %s", type(exc).__name__
                 )
                 return self._sample_legacy_expression_candidates(all_candidates)
             if vector_candidates:
@@ -526,25 +560,25 @@ class MaisakaExpressionSelector:
         session_id: str,
         candidates: List[dict[str, Any]],
         sub_agent_runner: Optional[SubAgentRunner],
+        chat_history: str = "",
+        target_message: str = "",
+        reply_reason: str = "",
     ) -> MaisakaExpressionSelectionResult:
         if sub_agent_runner is None:
-            logger.info("表达方式 LLM 选择已跳过：缺少子代理执行器，回退为直接注入")
-            return self._build_direct_selection_result(
-                session_id=session_id,
-                candidates=candidates,
-            )
+            # 缺少执行器与执行失败一样，都没有候选适用性的选择证据。
+            logger.info("表达方式选择已跳过：缺少子代理执行器，不注入未选候选")
+            return MaisakaExpressionSelectionResult()
 
         selector_prompt = self._build_selector_prompt(
-            candidates=candidates,
+            candidates=candidates, chat_history=chat_history,
+            target_message=target_message, reply_reason=reply_reason,
         )
         try:
             raw_response = await sub_agent_runner(selector_prompt)
         except Exception as exc:
-            logger.warning(f"表达方式 LLM 选择子代理执行失败，回退为直接注入: {exc}")
-            return self._build_direct_selection_result(
-                session_id=session_id,
-                candidates=candidates,
-            )
+            # 选择失败没有产生适用性证据，不应把全部候选强加给本轮回复。
+            logger.warning("表达方式选择失败，跳过本轮表达注入: %s", type(exc).__name__)
+            return MaisakaExpressionSelectionResult()
 
         selected_ids = self._parse_selected_ids(raw_response, candidates)
         logger.debug(
@@ -554,18 +588,24 @@ class MaisakaExpressionSelector:
         return self._build_selection_result_from_ids(
             candidates=candidates,
             selected_ids=selected_ids,
+            record_usage=False,
         )
 
     def _update_last_active_time(self, selected_ids: List[int]) -> None:
         if not selected_ids:
             return
-        with get_db_session() as session:
-            now = datetime.now()
-            session.execute(
-                update(Expression)
-                .where(Expression.id.in_(selected_ids))  # type: ignore[attr-defined]
-                .values(last_active_time=now)
-            )
+        try:
+            with get_db_session() as session:
+                now = datetime.now()
+                session.execute(
+                    update(Expression)
+                    .where(Expression.id.in_(selected_ids))  # type: ignore[attr-defined]
+                    .values(last_active_time=now)
+                )
+        except Exception as exc:
+            # 使用时间属于附属统计；事务失败不能撤销已完成的选择。
+            # 不输出异常正文或 traceback，避免泄露数据库参数。
+            logger.warning("表达方式使用时间记录失败: %s", type(exc).__name__)
 
     async def select_for_reply(
         self,
@@ -594,6 +634,7 @@ class MaisakaExpressionSelector:
             reply_reason=reply_reason,
             reply_tool_args=reply_tool_args,
             all_candidates=all_candidates,
+            target_message=(reply_message.processed_plain_text or "") if reply_message is not None else "",
         )
         if not candidates:
             logger.info(f"表达方式选择已跳过：本地候选不足，session_id={session_id}")
@@ -625,7 +666,9 @@ class MaisakaExpressionSelector:
 
         before_kwargs = before_select_result.kwargs
         candidates = self._normalize_candidate_list(before_kwargs.get("candidates"), candidates)
-        max_num = int(before_kwargs.get("max_num") or len(candidates))
+        raw_max_num = before_kwargs.get("max_num")
+        # 零是明确的禁用候选要求，仅缺省值才回退到原候选数量。
+        max_num = len(candidates) if raw_max_num is None else int(raw_max_num)
         if max_num >= 0:
             candidates = candidates[:max_num]
         if not candidates:
@@ -636,6 +679,9 @@ class MaisakaExpressionSelector:
             session_id=session_id,
             candidates=candidates,
             sub_agent_runner=sub_agent_runner,
+            # 生产 runner 已继承父历史，不在系统提示中重复嵌入聊天正文。
+            target_message=target_message,
+            reply_reason=reply_reason,
         )
         selected_ids = list(selection_result.selected_expression_ids)
         selected_expressions = list(selection_result.selected_expressions)
@@ -651,8 +697,9 @@ class MaisakaExpressionSelector:
             **{
                 **before_kwargs,
                 "candidates": candidates,
-                "selected_expressions": selected_expressions,
-                "selected_expression_ids": selected_ids,
+                # Hook 可原地修改；保留初选快照用于撤回和覆盖判断。
+                "selected_expressions": [dict(item) for item in selected_expressions],
+                "selected_expression_ids": list(selected_ids),
             },
         )
         if after_selection_result.aborted:
@@ -662,17 +709,25 @@ class MaisakaExpressionSelector:
         after_kwargs = after_selection_result.kwargs
         raw_selected_ids = after_kwargs.get("selected_expression_ids")
         raw_selected_expressions = after_kwargs.get("selected_expressions")
+        # 显式撤回对象列表时，不用遗留的初选 ID 将它重新填回。
+        if raw_selected_expressions == [] and selected_expressions:
+            return MaisakaExpressionSelectionResult()
         hook_selected_expressions = self._normalize_selected_expressions(raw_selected_expressions)
-        if hook_selected_expressions and raw_selected_expressions != selected_expressions:
+        if isinstance(raw_selected_expressions, list) and raw_selected_expressions != selected_expressions:
+            # 显式替换的列表即使全部无效，也不能用遗留ID复活原选择。
             return self._build_selection_result_from_expressions(hook_selected_expressions)
 
         hook_selected_ids = self._normalize_selected_ids(raw_selected_ids, candidates)
-        if hook_selected_ids or raw_selected_ids == []:
+        # 显式ID列表即使全被过滤，也代表覆盖结果为空，不恢复初选。
+        if isinstance(raw_selected_ids, list):
             return self._build_selection_result_from_ids(
                 candidates=candidates,
                 selected_ids=hook_selected_ids,
             )
 
+        # Hook 未提供有效覆盖时，原选择在此才正式确认，避免提前或重复记账。
+        if selection_result.selected_expression_ids:
+            self._update_last_active_time(selection_result.selected_expression_ids)
         return selection_result
 
 

@@ -19,7 +19,8 @@ def get_available_models() -> Dict[str, TaskConfig]:
         models = config_manager.get_model_config().model_task_config
         available_models: Dict[str, TaskConfig] = {}
         for attr_name in dir(models):
-            if attr_name.startswith("__"):
+            # Pydantic 元数据不是任务；实例读取已弃用且未来版本可能移除。
+            if attr_name.startswith("__") or attr_name in {"model_fields", "model_computed_fields"}:
                 continue
             try:
                 attr_value = getattr(models, attr_name)

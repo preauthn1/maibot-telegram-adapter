@@ -328,14 +328,15 @@ class MemoryEmbeddingStateService(KernelServiceBase):
 
     def _enqueue_paragraph_vector_backfill(self, paragraph_hash: str, *, error: str = "") -> None:
         if self.metadata_store is None:
-            return
+            raise RuntimeError("paragraph_backfill_metadata_store_missing")
         try:
             self.metadata_store.enqueue_paragraph_vector_backfill(
                 paragraph_hash,
                 error=str(error or ""),
             )
         except Exception as exc:
-            logger.warning(f"登记 paragraph 向量回填任务失败: {exc}")
+            logger.warning(f"登记 paragraph 向量回填任务失败: {type(exc).__name__}")
+            raise
 
     def _load_vector_stores_for_runtime(self, *, require_existing: bool = False) -> None:
         """启动和指纹恢复共用加载规则，仅在双池未就绪时校验旧单池。"""

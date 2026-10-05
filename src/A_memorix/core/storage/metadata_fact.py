@@ -136,6 +136,30 @@ def _evidence_identity(evidence_type: Any, evidence_id: Any) -> tuple[str, str]:
     return normalized_type, normalized_id
 
 
+def _validated_evidence_weight(weight: float) -> float:
+    from math import isfinite
+    try:
+        normalized_weight = float(weight)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("invalid_fact_evidence_weight") from None
+    if isinstance(weight, bool) or not isfinite(normalized_weight) or not 0 <= normalized_weight <= 1:
+        raise ValueError("invalid_fact_evidence_weight")
+    return normalized_weight
+
+
+def _validated_fact_time(value) -> Optional[float]:
+    from math import isfinite
+    if value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("invalid_fact_time") from None
+    if isinstance(value, bool) or not isfinite(result):
+        raise ValueError("invalid_fact_time")
+    return result
+
+
 class MetadataFactMixin:
     """维护事实 claim、证据和状态转换。
 
@@ -259,6 +283,7 @@ class MetadataFactMixin:
     ) -> None:
         if not evidence_type or not evidence_id:
             return
+        normalized_weight = _validated_evidence_weight(weight)
         cursor.execute(
             """
             INSERT INTO fact_evidence (
@@ -275,7 +300,7 @@ class MetadataFactMixin:
                 evidence_type,
                 evidence_id,
                 stance,
-                min(1.0, max(0.0, float(weight))),
+                normalized_weight,
                 float(observed_at),
                 json.dumps(metadata or {}, ensure_ascii=False, sort_keys=True),
             ),
@@ -321,10 +346,16 @@ class MetadataFactMixin:
         normalized_evidence_type, normalized_evidence_id = _evidence_identity(evidence_type, evidence_id)
         if normalized_evidence_type and normalized_evidence_stance != "support":
             raise ValueError("upsert_fact_claim 只能用 support 证据断言事实；反向证据请使用 add_fact_evidence")
-        normalized_confidence = min(1.0, max(0.0, float(confidence)))
-        now = float(observed_at) if observed_at is not None else datetime.now().timestamp()
-        normalized_valid_from = float(valid_from) if valid_from is not None else None
-        normalized_valid_to = float(valid_to) if valid_to is not None else None
+        from math import isfinite
+        try:
+            normalized_confidence = float(confidence)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError("invalid_fact_confidence") from None
+        if isinstance(confidence, bool) or not isfinite(normalized_confidence) or not 0 <= normalized_confidence <= 1:
+            raise ValueError("invalid_fact_confidence")
+        now = _validated_fact_time(observed_at) if observed_at is not None else datetime.now().timestamp()
+        normalized_valid_from = _validated_fact_time(valid_from)
+        normalized_valid_to = _validated_fact_time(valid_to)
         if (
             normalized_valid_from is not None
             and normalized_valid_to is not None
@@ -354,6 +385,8 @@ class MetadataFactMixin:
             )
         )
 
+        if normalized_evidence_type:
+            evidence_weight = _validated_evidence_weight(evidence_weight)
         created = False
         reinforced = False
         restored = False
@@ -583,12 +616,13 @@ class MetadataFactMixin:
     ) -> Dict[str, Any]:
         """给既有 claim 增加证据，不隐式改变 claim 状态。"""
 
+        weight = _validated_evidence_weight(weight)
         claim_token = _required_token("claim_id", claim_id)
         normalized_type, normalized_id = _evidence_identity(evidence_type, evidence_id)
         if not normalized_type:
             raise ValueError("事实证据不能为空")
         normalized_stance = _enum_token("stance", stance, _EVIDENCE_STANCES)
-        now = float(observed_at) if observed_at is not None else datetime.now().timestamp()
+        now = _validated_fact_time(observed_at) if observed_at is not None else datetime.now().timestamp()
         with self.transaction(immediate=True) as connection:
             cursor = connection.cursor()
             cursor.execute("SELECT 1 FROM fact_claims WHERE claim_id = ?", (claim_token,))
@@ -869,7 +903,7 @@ class MetadataFactMixin:
         """
         params: List[Any] = [normalized_scope_type, normalized_scope_id, *normalized_statuses]
         if effective_at is not None:
-            point = float(effective_at)
+            point = _validated_fact_time(effective_at)
             sql += " AND (valid_from IS NULL OR valid_from <= ?) AND (valid_to IS NULL OR valid_to > ?)"
             params.extend([point, point])
         sql += " ORDER BY updated_at DESC, claim_id ASC LIMIT ?"
@@ -888,7 +922,7 @@ class MetadataFactMixin:
         """返回可进入人物画像的当前事实，排序不依赖向量召回分数。"""
 
         token = _required_token("person_id", person_id)
-        point = float(effective_at) if effective_at is not None else datetime.now().timestamp()
+        point = _validated_fact_time(effective_at) if effective_at is not None else datetime.now().timestamp()
         cursor = self._conn.cursor()
         cursor.execute(
             """
@@ -932,7 +966,7 @@ class MetadataFactMixin:
         """返回画像可投影 claim，包括可信稳定事实和明确标记的不确定事实。"""
 
         token = _required_token("person_id", person_id)
-        point = float(effective_at) if effective_at is not None else datetime.now().timestamp()
+        point = _validated_fact_time(effective_at) if effective_at is not None else datetime.now().timestamp()
         cursor = self._conn.cursor()
         cursor.execute(
             """
