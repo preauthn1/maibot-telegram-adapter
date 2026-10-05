@@ -233,8 +233,8 @@ class AggregateQueryService:
         top_k: int,
         mix: bool,
         mix_top_k: Optional[int],
-        time_from: Optional[str],
-        time_to: Optional[str],
+        time_from: Optional[float],
+        time_to: Optional[float],
         search_runner: Optional[BranchRunner],
         time_runner: Optional[BranchRunner],
         episode_runner: Optional[BranchRunner],
@@ -267,7 +267,7 @@ class AggregateQueryService:
                 },
             )
 
-        if time_from or time_to:
+        if time_from is not None or time_to is not None:
             if time_runner is not None:
                 scheduled.append(("time", asyncio.create_task(time_runner())))
             else:
