@@ -6,6 +6,7 @@ import random
 import re
 import time
 
+from src.common.utils.prompt_time import format_prompt_datetime, prompt_now
 from src.chat.message_receive.chat_manager import BotChatSession
 from src.chat.message_receive.message import SessionMessage
 from src.chat.utils.chat_experience import build_scoped_experience_prompt_block
@@ -694,7 +695,8 @@ class BaseMaisakaReplyGenerator:
         keywords_reaction_prompt: str = "",
         reply_tool_args: Optional[Dict[str, Any]] = None,
     ) -> str:
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 固定 UTC+8，与 Planner 的当前时间、消息时间保持同一时区和日期。
+        current_time = format_prompt_datetime(prompt_now())
         sections: List[str] = [f"当前时间：{current_time}"]
         target_message_block = self._build_target_message_block(reply_message)
         if target_message_block:

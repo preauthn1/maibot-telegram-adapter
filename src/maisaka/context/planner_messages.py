@@ -4,6 +4,7 @@ from datetime import datetime
 from html import escape
 from typing import Optional, Sequence
 
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.chat.message_receive.message import SessionMessage
 from src.common.data_models.message_component_data_model import (
     MessageSequence,
@@ -59,7 +60,7 @@ def build_planner_prefix(
 
     message_attrs.extend(
         [
-            f'time="{escape(timestamp.strftime("%H:%M:%S"), quote=True)}"',
+            f'time="{escape(format_prompt_datetime(timestamp), quote=True)}"',
             f'user="{escape(user_name, quote=True)}"',
         ]
     )
