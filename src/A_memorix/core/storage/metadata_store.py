@@ -836,14 +836,15 @@ class MetadataStore(
             )
             params.append(f"%{str(person).strip().lower()}%")
 
+        # 半开区间相交 [start_ts, end_ts)，与 dual_path._is_temporal_match 同一口径（审计 F06）。
         if start_ts is not None and end_ts is not None:
-            conditions.append(f"({effective_end} >= ? AND {effective_start} <= ?)")
-            params.extend([start_ts, end_ts])
+            conditions.append(f"(({effective_end} > ? OR {effective_start} >= ?) AND {effective_start} < ?)")
+            params.extend([start_ts, start_ts, end_ts])
         elif start_ts is not None:
-            conditions.append(f"({effective_end} >= ?)")
-            params.append(start_ts)
+            conditions.append(f"({effective_end} > ? OR {effective_start} >= ?)")
+            params.extend([start_ts, start_ts])
         elif end_ts is not None:
-            conditions.append(f"({effective_start} <= ?)")
+            conditions.append(f"({effective_start} < ?)")
             params.append(end_ts)
 
         where_sql = " AND ".join(conditions)
