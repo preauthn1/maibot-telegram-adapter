@@ -6,6 +6,7 @@ from typing import Optional
 
 import re
 
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.common.data_models.message_component_data_model import (
     AtComponent,
     EmojiComponent,
@@ -17,7 +18,7 @@ from src.common.data_models.message_component_data_model import (
 )
 
 SPEAKER_PREFIX_PATTERN = re.compile(
-    r"^(?:(?P<timestamp>\d{2}:\d{2}:\d{2}))?(?:\[msg_id:(?P<message_id>[^\]]+)\])?\[(?P<speaker>[^\]]+)\](?P<content>.*)$",
+    r"^(?:(?P<timestamp>(?:\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}:\d{2}))?(?:\[msg_id:(?P<message_id>[^\]]+)\])?\[(?P<speaker>[^\]]+)\](?P<content>.*)$",
     re.DOTALL,
 )
 
@@ -30,7 +31,8 @@ def format_speaker_content(
 ) -> str:
     """将可见文本格式化为带说话人前缀的样式。"""
 
-    time_prefix = timestamp.strftime("%H:%M:%S") if timestamp is not None else ""
+    # 带日期并统一换算到 UTC+8，避免跨日时与“当前时间”对不上。
+    time_prefix = format_prompt_datetime(timestamp) if timestamp is not None else ""
     message_id_prefix = f"[msg_id:{message_id}]" if message_id else ""
     return f"{time_prefix}{message_id_prefix}[{speaker_name}]{content}"
 

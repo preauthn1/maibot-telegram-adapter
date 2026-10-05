@@ -8,6 +8,7 @@ from json_repair import repair_json
 from sqlalchemy import update
 from sqlmodel import select
 
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.chat.message_receive.message import SessionMessage
 from src.chat.replyer.expression_vector_index import expression_vector_index
 from src.common.database.database import get_db_session
@@ -188,7 +189,7 @@ class MaisakaExpressionSelector:
         content = " ".join((message.processed_plain_text or "").split()).strip()
         if len(content) > 120:
             content = content[:120] + "..."
-        timestamp = message.timestamp.strftime("%H:%M:%S") if isinstance(message.timestamp, datetime) else ""
+        timestamp = format_prompt_datetime(message.timestamp) if isinstance(message.timestamp, datetime) else ""
         return f"- {timestamp} {message.role}: {content}".strip()
 
     @staticmethod

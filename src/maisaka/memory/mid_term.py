@@ -13,6 +13,7 @@ from pydantic import BaseModel
 import json
 import re
 
+from src.common.utils.prompt_time import format_prompt_datetime
 from src.common.data_models.embedding_service_data_models import EmbeddingResult
 from src.common.data_models.llm_service_data_models import LLMResponseResult
 from src.common.data_models.message_component_data_model import DictComponent, MessageSequence
@@ -567,7 +568,7 @@ def _build_summary_planner_prefix(
 ) -> str:
     return (
         f'<message msg_id="{escape(message_id, quote=True)}" '
-        f'time="{escape(timestamp.strftime("%H:%M:%S"), quote=True)}">\n'
+        f'time="{escape(format_prompt_datetime(timestamp), quote=True)}">\n'
     )
 
 
@@ -578,7 +579,7 @@ def _build_time_range(messages: Sequence[LLMContextMessage]) -> str:
 
     start_time = min(timestamps)
     end_time = max(timestamps)
-    return f"{start_time.strftime('%Y-%m-%d %H:%M:%S')} ~ {end_time.strftime('%Y-%m-%d %H:%M:%S')}"
+    return f"{format_prompt_datetime(start_time)} ~ {format_prompt_datetime(end_time)}"
 
 
 def _collect_participants(messages: Sequence[LLMContextMessage]) -> list[str]:
