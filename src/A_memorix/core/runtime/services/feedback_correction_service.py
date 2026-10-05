@@ -861,11 +861,18 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
         decision = str(payload.get("decision", "") or "").strip().lower()
         if decision not in allowed:
             decision = "none"
+        from math import isfinite
+        raw_confidence = payload.get("confidence", 0.0)
+        confidence = 0.0
         try:
-            confidence = float(payload.get("confidence", 0.0) or 0.0)
-        except (TypeError, ValueError):
+            confidence = float(raw_confidence)
+            valid_confidence = not isinstance(raw_confidence, bool) and isfinite(confidence) and 0.0 <= confidence <= 1.0
+        except (TypeError, ValueError, OverflowError):
+            valid_confidence = False
+        if not valid_confidence:
+            # 不将异常评分夹成合法满分；即使自动应用阈值为零也不得修改。
             confidence = 0.0
-        confidence = min(1.0, max(0.0, confidence))
+            decision = "none"
 
         valid_hashes = {str(item or "").strip() for item in hit_hashes if str(item or "").strip()}
         target_hashes_raw = payload.get("target_hashes")
@@ -875,25 +882,43 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
             target_hashes_candidates = target_hashes_raw
         else:
             target_hashes_candidates = []
-        target_hashes = [
-            str(item or "").strip() for item in target_hashes_candidates if str(item or "").strip() in valid_hashes
-        ]
+        if any(not isinstance(item, str) or not item.strip() or item.strip() not in valid_hashes
+               for item in target_hashes_candidates):
+            # 不静默缩小模型指定的修改范围，混入未知目标时整次停止自动应用。
+            target_hashes = []
+            decision = "none"
+        else:
+            target_hashes = [item.strip() for item in target_hashes_candidates]
 
         corrected_relations: List[Dict[str, Any]] = []
         raw_relations = payload.get("corrected_relations")
-        if isinstance(raw_relations, list):
+        if isinstance(raw_relations, list) and len(raw_relations) > 6:
+            # 不截断纠正事实集合，否则可能遗忘完整旧事实却只写入部分新事实。
+            decision = "none"
+        elif isinstance(raw_relations, list):
             for item in raw_relations:
-                if not isinstance(item, dict):
-                    continue
-                subject = str(item.get("subject", "") or "").strip()
-                predicate = str(item.get("predicate", "") or "").strip()
-                obj = str(item.get("object", "") or "").strip()
-                if not (subject and predicate and obj):
-                    continue
+                if not isinstance(item, dict) or not all(
+                    isinstance(item.get(key), str) and item[key].strip()
+                    for key in ("subject", "predicate", "object")
+                ):
+                    decision = "none"
+                    corrected_relations = []
+                    break
+                subject = item["subject"].strip()
+                predicate = item["predicate"].strip()
+                obj = item["object"].strip()
+                raw_rel_conf = item.get("confidence", 1.0)
+                rel_conf = 0.0
                 try:
-                    rel_conf = float(item.get("confidence", 1.0) or 1.0)
-                except (TypeError, ValueError):
-                    rel_conf = 1.0
+                    rel_conf = float(raw_rel_conf)
+                    valid_rel_conf = not isinstance(raw_rel_conf, bool) and isfinite(rel_conf) and 0.0 <= rel_conf <= 1.0
+                except (TypeError, ValueError, OverflowError):
+                    valid_rel_conf = False
+                if not valid_rel_conf:
+                    # 一条替代事实异常也不执行部分纠正；保留零分而非提升为满分。
+                    decision = "none"
+                    corrected_relations = []
+                    break
                 corrected_relations.append(
                     {
                         "subject": subject,
@@ -945,21 +970,35 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
                 failed_hashes.append(relation_hash)
                 continue
 
-            after_status = self.metadata_store.restore_relation_status_from_snapshot(relation_hash, snapshot)
+            try:
+                after_status = self.metadata_store.restore_relation_status_from_snapshot(relation_hash, snapshot)
+            except Exception as restore_exc:
+                # 单条恢复异常明确计入失败，继续挽回其他关系；不输出异常正文。
+                failed_hashes.append(relation_hash)
+                logger.warning(
+                    f"反馈单条关系恢复失败: task_id={task_id} error_type={type(restore_exc).__name__}"
+                )
+                continue
             if after_status is None:
                 failed_hashes.append(relation_hash)
                 continue
 
             restored_hashes.append(relation_hash)
-            self.metadata_store.append_feedback_action_log(
-                task_id=task_id,
-                query_tool_id=query_tool_id,
-                action_type="compensate_restore_relation",
-                target_hash=relation_hash,
-                before_payload=status_map.get(relation_hash, {}),
-                after_payload=after_status,
-                reason=reason,
-            )
+            try:
+                self.metadata_store.append_feedback_action_log(
+                    task_id=task_id,
+                    query_tool_id=query_tool_id,
+                    action_type="compensate_restore_relation",
+                    target_hash=relation_hash,
+                    before_payload=status_map.get(relation_hash, {}),
+                    after_payload=after_status,
+                    reason=reason,
+                )
+            except Exception as audit_exc:
+                # 单条审计失败不阻断剩余关系恢复及最终图重建。
+                logger.warning(
+                    f"反馈补偿审计失败: task_id={task_id} error_type={type(audit_exc).__name__}"
+                )
 
         if restored_hashes or failed_hashes:
             self._rebuild_graph_from_metadata()
@@ -986,7 +1025,8 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
                     "subject": str(row.get("subject", "") or "").strip(),
                     "predicate": str(row.get("predicate", "") or "").strip(),
                     "object": str(row.get("object", "") or "").strip(),
-                    "confidence": float(row.get("confidence", 1.0) or 1.0),
+                    # 规范化后的合法零分必须原样传递，不以真假值判断缺省。
+                    "confidence": float(row.get("confidence", 1.0)),
                     "metadata": {
                         "supersedes_hash": supersedes_hash,
                         "supersedes_hashes": relation_hashes,
@@ -1018,13 +1058,44 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
             respect_filter=False,
         )
         if isinstance(payload, dict):
-            stored_ids = tokens(payload.get("stored_ids"))
+            from copy import deepcopy
+            # 适配字段只写入独立快照，避免污染底层回执及共享的嵌套审计内容。
+            payload = deepcopy(payload)
+            raw_stored_ids = payload.get("stored_ids", [])
+            # 回执ID具有位置语义；禁止转换类型、跳过空项或去重后伪装成功。
+            if (not isinstance(raw_stored_ids, list)
+                    or any(not isinstance(item, str) or not item.strip() for item in raw_stored_ids)
+                    or len(set(raw_stored_ids)) != len(raw_stored_ids)):
+                return {"success": False, "error": "invalid_ingest_stored_ids"}
+            stored_ids = list(raw_stored_ids)
             corrected_relation_hashes = stored_ids[1:]
             payload["external_id"] = external_id
             payload["source"] = self._chat_source(session_id)
             payload["paragraph_hashes"] = stored_ids[:1]
             payload["corrected_relation_hashes"] = corrected_relation_hashes
-            base_success = bool(payload.get("success")) if "success" in payload else True
+            # 显式回执不接受真假值转换，避免字符串 false 被误认成功。
+            if "success" in payload and type(payload["success"]) is not bool:
+                payload["success"] = False
+                payload["error"] = "invalid_ingest_success_type"
+                return payload
+            base_success = payload.get("success", True)
+            if base_success and payload.get("reason") == "exists" and not stored_ids:
+                # 幂等回执不含新增ID；必须回读映射和有效关联，不能仅凭exists认定成功。
+                ref = self.metadata_store.get_external_memory_ref(external_id)
+                paragraph_hash = ref.get("paragraph_hash") if isinstance(ref, dict) else None
+                paragraph = self.metadata_store.get_paragraph(paragraph_hash) if paragraph_hash else None
+                expected = list(dict.fromkeys(
+                    self.metadata_store.compute_relation_hash(row["subject"], row["predicate"], row["object"])
+                    for row in relation_rows
+                ))
+                linked = {row["hash"] for row in self.metadata_store.get_paragraph_relations(paragraph_hash)} if paragraph else set()
+                if (paragraph and not paragraph.get("is_deleted") and expected
+                        and all(h in linked and self.metadata_store.get_relation(h, include_inactive=False)
+                                for h in expected)):
+                    payload["paragraph_hashes"] = [paragraph_hash]
+                    payload["corrected_relation_hashes"] = expected
+                    payload["idempotent_replay"] = True
+                    corrected_relation_hashes = expected
             payload["success"] = base_success and bool(corrected_relation_hashes)
             if not payload["success"] and not str(payload.get("error", "") or "").strip():
                 payload["error"] = "missing_corrected_relations"
@@ -1047,7 +1118,17 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
         后续人工回退使用的补偿计划。
         """
         threshold = feedback_cfg_auto_apply_threshold()
-        confidence = float(decision.get("confidence", 0.0) or 0.0)
+        from math import isfinite
+        raw_confidence = decision.get("confidence", 0.0)
+        if isinstance(raw_confidence, bool):
+            return {"applied": False, "reason": "invalid_confidence"}
+        try:
+            confidence = float(raw_confidence)
+        except (TypeError, ValueError, OverflowError):
+            return {"applied": False, "reason": "invalid_confidence"}
+        # NaN比较不会进入低置信度分支，必须显式拒绝，避免绕过修改门槛。
+        if not isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+            return {"applied": False, "reason": "invalid_confidence"}
         if confidence < threshold:
             return {
                 "applied": False,
@@ -1093,35 +1174,26 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
         assert self.metadata_store is not None
         old_relation_rows = self._query_relation_rows_by_hashes(relation_hashes, include_inactive=True)
         before_status = self.metadata_store.get_relation_status_batch(relation_hashes)
-        forget_result = self._apply_v5_relation_action(action="forget", hashes=relation_hashes, strength=1.0)
-        forget_success = bool(forget_result.get("success"))
-        after_status = self.metadata_store.get_relation_status_batch(relation_hashes)
-        for hash_value in relation_hashes:
-            self.metadata_store.append_feedback_action_log(
-                task_id=task_id,
-                query_tool_id=query_tool_id,
-                action_type="forget_relation",
-                target_hash=hash_value,
-                before_payload=before_status.get(hash_value) if isinstance(before_status, dict) else {},
-                after_payload=after_status.get(hash_value) if isinstance(after_status, dict) else {},
-                reason=str(decision.get("reason", "") or ""),
-            )
-
+        # 每个待修改目标都必须有旧状态，不能缺失恢复依据仍执行遗忘。
+        if not isinstance(before_status, dict) or any(
+            not isinstance(before_status.get(key), dict) or not before_status[key]
+            for key in relation_hashes
+        ):
+            raise ValueError("incomplete_feedback_relation_snapshots")
+        # 在任何遗忘操作之前取得替代关系快照，读取失败时保持旧记忆不变。
         ingest_result = None
         corrected_relation_hash_candidates: List[str] = []
         corrected_relation_specs_by_hash: Dict[str, Dict[str, Any]] = {}
         if decision_type == "correct" and corrected_relations and self.metadata_store is not None:
             for item in corrected_relations:
-                try:
-                    relation_hash = self.metadata_store.compute_relation_hash(
-                        str(item.get("subject", "") or "").strip(),
-                        str(item.get("predicate", "") or "").strip(),
-                        str(item.get("object", "") or "").strip(),
-                    )
-                except Exception:
-                    continue
-                if not relation_hash:
-                    continue
+                # ID计算属于修改前置条件，失败必须传播，不能跳过后继续遗忘。
+                relation_hash = self.metadata_store.compute_relation_hash(
+                    str(item.get("subject", "") or "").strip(),
+                    str(item.get("predicate", "") or "").strip(),
+                    str(item.get("object", "") or "").strip(),
+                )
+                if not isinstance(relation_hash, str) or not relation_hash.strip():
+                    raise ValueError("invalid_corrected_relation_hash")
                 corrected_relation_hash_candidates.append(relation_hash)
                 corrected_relation_specs_by_hash[relation_hash] = {
                     "subject": str(item.get("subject", "") or "").strip(),
@@ -1133,6 +1205,26 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
             if corrected_relation_hash_candidates
             else {}
         )
+        forget_result = self._apply_v5_relation_action(action="forget", hashes=relation_hashes, strength=1.0)
+        forget_success = bool(forget_result.get("success"))
+        after_status = self.metadata_store.get_relation_status_batch(relation_hashes)
+        for hash_value in relation_hashes:
+            try:
+                self.metadata_store.append_feedback_action_log(
+                    task_id=task_id,
+                    query_tool_id=query_tool_id,
+                    action_type="forget_relation",
+                    target_hash=hash_value,
+                    before_payload=before_status.get(hash_value) if isinstance(before_status, dict) else {},
+                    after_payload=after_status.get(hash_value) if isinstance(after_status, dict) else {},
+                    reason=str(decision.get("reason", "") or ""),
+                )
+            except Exception as audit_exc:
+                # 已发生遗忘，附属审计异常不得阻断后续写入或失败补偿。
+                logger.warning(
+                    f"反馈遗忘审计失败: task_id={task_id} error_type={type(audit_exc).__name__}"
+                )
+
         if not forget_success:
             return {
                 "applied": False,
@@ -1154,21 +1246,49 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
         profile_refresh_person_ids: List[str] = []
         rollback_plan: Dict[str, Any] = {}
         if decision_type == "correct" and corrected_relations:
-            ingest_result = await self._ingest_feedback_relations(
-                query_tool_id=query_tool_id,
-                session_id=session_id,
-                relation_hashes=relation_hashes,
-                corrected_relations=corrected_relations,
-            )
-            self.metadata_store.append_feedback_action_log(
-                task_id=task_id,
-                query_tool_id=query_tool_id,
-                action_type="ingest_correction",
-                target_hash=relation_hashes[0] if relation_hashes else "",
-                before_payload={"target_hashes": relation_hashes},
-                after_payload=ingest_result,
-                reason=str(decision.get("reason", "") or ""),
-            )
+            try:
+                ingest_result = await self._ingest_feedback_relations(
+                    query_tool_id=query_tool_id,
+                    session_id=session_id,
+                    relation_hashes=relation_hashes,
+                    corrected_relations=corrected_relations,
+                )
+            except (Exception, asyncio.CancelledError):
+                # 旧关系已经遗忘；写入抛错或取消也必须尝试同步补偿，再传播原异常。
+                try:
+                    interrupted_restore = self._restore_feedback_relations_from_snapshots(
+                        task_id=task_id,
+                        query_tool_id=query_tool_id,
+                        relation_hashes=relation_hashes,
+                        snapshots=before_status if isinstance(before_status, dict) else {},
+                        current_statuses=after_status if isinstance(after_status, dict) else {},
+                        reason="feedback_correction_ingest_interrupted",
+                    )
+                    failed_hashes = interrupted_restore.get("failed_hashes", []) if isinstance(interrupted_restore, dict) else []
+                    if failed_hashes:
+                        logger.warning(
+                            f"反馈纠错中断补偿部分失败: task_id={task_id} failed_count={len(failed_hashes)}"
+                        )
+                except Exception as restore_exc:
+                    logger.warning(
+                        f"反馈纠错中断补偿失败: task_id={task_id} error_type={type(restore_exc).__name__}"
+                    )
+                raise
+            try:
+                self.metadata_store.append_feedback_action_log(
+                    task_id=task_id,
+                    query_tool_id=query_tool_id,
+                    action_type="ingest_correction",
+                    target_hash=relation_hashes[0] if relation_hashes else "",
+                    before_payload={"target_hashes": relation_hashes},
+                    after_payload=ingest_result,
+                    reason=str(decision.get("reason", "") or ""),
+                )
+            except Exception as audit_exc:
+                # 写入失败后的必要补偿不能被附属审计故障阻断，告警不泄露异常正文。
+                logger.warning(
+                    f"反馈纠错写入审计失败: task_id={task_id} error_type={type(audit_exc).__name__}"
+                )
 
             ingest_success = bool((ingest_result or {}).get("success")) if isinstance(ingest_result, dict) else False
             if not ingest_success:
@@ -1478,19 +1598,21 @@ class MemoryFeedbackCorrectionService(KernelServiceBase):
                 last_error=str(apply_result.get("error", "") or "") if final_status == "error" else "",
             )
         except Exception as exc:
-            logger.warning(f"反馈纠错任务处理失败: task_id={task_id} err={exc}", exc_info=True)
+            # 后端异常正文可能含连接或鉴权信息，日志和持久化审计只保存类型。
+            error_type = type(exc).__name__
+            logger.warning(f"反馈纠错任务处理失败: task_id={task_id} error_type={error_type}")
             self.metadata_store.append_feedback_action_log(
                 task_id=task_id,
                 query_tool_id=query_tool_id,
                 action_type="error",
-                reason=str(exc),
+                reason=error_type,
                 after_payload=decision_payload if decision_payload else None,
             )
             self.metadata_store.finalize_feedback_task(
                 task_id=task_id,
                 status="error",
                 decision_payload=decision_payload if decision_payload else None,
-                last_error=str(exc),
+                last_error=error_type,
             )
 
     async def _feedback_correction_loop(self) -> None:

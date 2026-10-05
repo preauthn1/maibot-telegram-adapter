@@ -653,6 +653,10 @@ def process_llm_response_segments(
         if global_config.chinese_typo.enable and enable_chinese_typo:
             typoed_text, typo_corrections = typo_generator.create_typo_sentence(sentence)
             if typo_corrections:
+                # 关闭分句时不能额外发一条"纠正"消息，否则一次回复又变成多条。
+                if not (global_config.response_splitter.enable and enable_splitter):
+                    segments.append(ProcessedResponseSegment(sentence))
+                    continue
                 # 50%概率新增正确字/词，50%概率用正确分句替换错别字分句
                 if random.random() < 0.5:
                     quote_previous = (

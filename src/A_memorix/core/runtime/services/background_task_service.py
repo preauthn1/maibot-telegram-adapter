@@ -386,11 +386,17 @@ class MemoryBackgroundTaskService(KernelServiceBase):
                     continue
                 if self._is_embedding_degraded():
                     continue
-                await self._run_paragraph_backfill_once(
-                    limit=self._paragraph_vector_backfill_batch_size(),
-                    max_retry=self._paragraph_vector_backfill_max_retry(),
-                    trigger="loop",
-                )
+                try:
+                    await self._run_paragraph_backfill_once(
+                        limit=self._paragraph_vector_backfill_batch_size(),
+                        max_retry=self._paragraph_vector_backfill_max_retry(),
+                        trigger="loop",
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    # 单批失败后仍按原间隔调度，不能让可重试任务失去消费者。
+                    logger.warning("段落回填批次失败: error_type=%s", type(exc).__name__)
         except asyncio.CancelledError:
             raise
         except Exception as exc:

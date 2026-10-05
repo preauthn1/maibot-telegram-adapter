@@ -316,14 +316,15 @@ class MemoryEmbeddingStateService(KernelServiceBase):
 
     def _enqueue_paragraph_vector_backfill(self, paragraph_hash: str, *, error: str = "") -> None:
         if self.metadata_store is None:
-            return
+            raise RuntimeError("paragraph_backfill_metadata_store_missing")
         try:
             self.metadata_store.enqueue_paragraph_vector_backfill(
                 paragraph_hash,
                 error=str(error or ""),
             )
         except Exception as exc:
-            logger.warning(f"登记 paragraph 向量回填任务失败: {exc}")
+            logger.warning(f"登记 paragraph 向量回填任务失败: {type(exc).__name__}")
+            raise
 
     async def _restore_vector_channel_after_embedding_recovery(self) -> bool:
         if str(self._vector_health.get("error_code", "") or "") != "embedding_fingerprint_unavailable":

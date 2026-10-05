@@ -217,7 +217,8 @@ class ToolExecutionResult:
         """
 
         if self.content.strip():
-            return self.content.strip()
+            # 空白只用于判断是否有正文；非空结果的代码/段落布局必须原样进入历史。
+            return self.content
         if self.content_items:
             parts = [item.build_history_text() for item in self.content_items if item.build_history_text().strip()]
             if parts:
