@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 from src.core.tooling import ToolExecutionContext, ToolExecutionResult, ToolInvocation, ToolSpec
 from src.services.memory_service import memory_service
+from src.maisaka.memory.profile_scope import check_profile_scope
 
 from .context import BuiltinToolRuntimeContext
 
@@ -93,7 +94,6 @@ async def handle_tool(
 ) -> ToolExecutionResult:
     """执行 query_person_profile 内置工具。"""
 
-    del context
     person_id = str(invocation.arguments.get("person_id") or "").strip()
     person_name = str(invocation.arguments.get("person_name") or "").strip()
     if not person_id and not person_name:
@@ -103,16 +103,22 @@ async def handle_tool(
         )
 
     limit = _normalize_limit(invocation.arguments.get("limit"))
+    session_id = context.session_id if context is not None else ""
+    if not session_id:
+        return tool_ctx.build_failure_result(
+            invocation.tool_name,
+            "人物画像查询缺少当前会话范围，已拒绝输出。",
+        )
     try:
         if person_id:
             payload = await memory_service.profile_admin(
-                action="query",
+                action="evidence",
                 person_id=person_id,
                 limit=limit,
             )
         else:
             payload = await memory_service.profile_admin(
-                action="query",
+                action="evidence",
                 person_keyword=person_name,
                 limit=limit,
             )
@@ -134,12 +140,19 @@ async def handle_tool(
         requested_person_name=person_name,
         limit=limit,
     )
-    if not bool(payload.get("success")):
+    if payload.get("success") is not True:
         error_message = str(payload.get("error") or "未找到人物画像。").strip()
         return tool_ctx.build_failure_result(
             invocation.tool_name,
             error_message,
             structured_content=structured_content,
+        )
+    scope_ok, scope_reason = check_profile_scope(payload, session_id)
+    if not scope_ok:
+        return tool_ctx.build_failure_result(
+            invocation.tool_name,
+            f"人物画像已拒绝输出：{scope_reason}",
+            structured_content={**structured_content, "scope_allowed": False, "scope_reason": scope_reason},
         )
 
     profile_text = structured_content["summary"]

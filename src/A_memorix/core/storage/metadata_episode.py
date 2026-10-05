@@ -904,7 +904,7 @@ class MetadataEpisodeMixin:
         created_at: Optional[float] = None,
         error: str = "",
     ) -> None:
-        """登记段落向量回填任务。"""
+        """登记段落向量回填任务；重复入队不能撤销正在执行的领取状态。"""
         token = str(paragraph_hash or "").strip()
         if not token:
             return
@@ -913,27 +913,28 @@ class MetadataEpisodeMixin:
         created_ts = float(created_at) if created_at is not None else now
         error_text = str(error or "").strip() or None
 
-        cursor = self._conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO paragraph_vector_backfill (
-                paragraph_hash, status, retry_count, last_error, created_at, updated_at
-            ) VALUES (?, 'pending', 0, ?, ?, ?)
-            ON CONFLICT(paragraph_hash) DO UPDATE SET
-                status = CASE
-                    WHEN paragraph_vector_backfill.status = 'done' THEN 'done'
-                    ELSE 'pending'
-                END,
-                last_error = CASE
-                    WHEN paragraph_vector_backfill.status = 'done' THEN paragraph_vector_backfill.last_error
-                    ELSE excluded.last_error
-                END,
-                created_at = COALESCE(paragraph_vector_backfill.created_at, excluded.created_at),
-                updated_at = excluded.updated_at
-            """,
-            (token, error_text, created_ts, now),
-        )
-        self._conn.commit()
+        with self.transaction(immediate=True):
+            cursor = self._conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO paragraph_vector_backfill (
+                    paragraph_hash, status, retry_count, last_error, created_at, updated_at
+                ) VALUES (?, 'pending', 0, ?, ?, ?)
+                ON CONFLICT(paragraph_hash) DO UPDATE SET
+                    status = CASE
+                        WHEN paragraph_vector_backfill.status = 'done' THEN 'done'
+                        ELSE 'pending'
+                    END,
+                    last_error = CASE
+                        WHEN paragraph_vector_backfill.status = 'done' THEN paragraph_vector_backfill.last_error
+                        ELSE excluded.last_error
+                    END,
+                    created_at = COALESCE(paragraph_vector_backfill.created_at, excluded.created_at),
+                    updated_at = excluded.updated_at
+                WHERE paragraph_vector_backfill.status != 'running'
+                """,
+                (token, error_text, created_ts, now),
+            )
 
     def fetch_paragraph_vector_backfill_batch(
         self,
@@ -957,6 +958,16 @@ class MetadataEpisodeMixin:
         )
         return [dict(row) for row in cursor.fetchall()]
 
+    def claim_paragraph_vector_backfill_batch(
+        self, limit: int = 64, max_retry: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """同步事务内查询并领取，避免并发消费者重复取得同一待办。"""
+        with self.transaction(immediate=True):
+            rows = self.fetch_paragraph_vector_backfill_batch(limit=limit, max_retry=max_retry)
+            if rows:
+                self.mark_paragraph_vector_backfill_running([row["paragraph_hash"] for row in rows])
+            return rows
+
     def mark_paragraph_vector_backfill_running(self, hashes: List[str]) -> None:
         """批量标记段落回填任务为 running。"""
         if not hashes:
@@ -966,20 +977,20 @@ class MetadataEpisodeMixin:
         uniq = list(dict.fromkeys([str(h or "").strip() for h in hashes if str(h or "").strip()]))
         if not uniq:
             return
-        chunk_size = 500
-        for i in range(0, len(uniq), chunk_size):
-            chunk = uniq[i : i + chunk_size]
-            placeholders = ",".join(["?"] * len(chunk))
-            cursor.execute(
-                f"""
-                UPDATE paragraph_vector_backfill
-                SET status = 'running', updated_at = ?
-                WHERE paragraph_hash IN ({placeholders})
-                  AND status IN ('pending', 'failed')
-                """,
-                [now] + chunk,
-            )
-        self._conn.commit()
+        with self.transaction(immediate=True):
+            chunk_size = 500
+            for i in range(0, len(uniq), chunk_size):
+                chunk = uniq[i : i + chunk_size]
+                placeholders = ",".join(["?"] * len(chunk))
+                cursor.execute(
+                    f"""
+                    UPDATE paragraph_vector_backfill
+                    SET status = 'running', updated_at = ?
+                    WHERE paragraph_hash IN ({placeholders})
+                      AND status IN ('pending', 'failed')
+                    """,
+                    [now] + chunk,
+                )
 
     def mark_paragraph_vector_backfill_done(self, hashes: List[str]) -> None:
         """批量标记段落回填任务为 done。"""
@@ -990,21 +1001,22 @@ class MetadataEpisodeMixin:
         uniq = list(dict.fromkeys([str(h or "").strip() for h in hashes if str(h or "").strip()]))
         if not uniq:
             return
-        chunk_size = 500
-        for i in range(0, len(uniq), chunk_size):
-            chunk = uniq[i : i + chunk_size]
-            placeholders = ",".join(["?"] * len(chunk))
-            cursor.execute(
-                f"""
-                UPDATE paragraph_vector_backfill
-                SET status = 'done',
-                    last_error = NULL,
-                    updated_at = ?
-                WHERE paragraph_hash IN ({placeholders})
-                """,
-                [now] + chunk,
-            )
-        self._conn.commit()
+        # 分块只是参数限制，不是提交边界；后块失败必须撤回整批。
+        with self.transaction(immediate=True):
+            chunk_size = 500
+            for i in range(0, len(uniq), chunk_size):
+                chunk = uniq[i : i + chunk_size]
+                placeholders = ",".join(["?"] * len(chunk))
+                cursor.execute(
+                    f"""
+                    UPDATE paragraph_vector_backfill
+                    SET status = 'done',
+                        last_error = NULL,
+                        updated_at = ?
+                    WHERE paragraph_hash IN ({placeholders})
+                    """,
+                    [now] + chunk,
+                )
 
     def mark_paragraph_vector_backfill_failed(self, paragraph_hash: str, error: str = "") -> None:
         """标记单个段落回填任务失败并累加重试。"""
@@ -1012,19 +1024,19 @@ class MetadataEpisodeMixin:
         if not token:
             return
         now = datetime.now().timestamp()
-        cursor = self._conn.cursor()
-        cursor.execute(
-            """
-            UPDATE paragraph_vector_backfill
-            SET status = 'failed',
-                retry_count = COALESCE(retry_count, 0) + 1,
-                last_error = ?,
-                updated_at = ?
-            WHERE paragraph_hash = ?
-            """,
-            (str(error or ""), now, token),
-        )
-        self._conn.commit()
+        with self.transaction(immediate=True):
+            cursor = self._conn.cursor()
+            cursor.execute(
+                """
+                UPDATE paragraph_vector_backfill
+                SET status = 'failed',
+                    retry_count = COALESCE(retry_count, 0) + 1,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE paragraph_hash = ?
+                """,
+                (str(error or ""), now, token),
+            )
 
     def get_paragraph_vector_backfill_status_counts(self) -> Dict[str, int]:
         """统计段落回填任务状态。"""
