@@ -120,7 +120,7 @@ def _build_success_content(result: MemorySearchResult, *, limit: int) -> str:
     """构造工具成功时的可读内容。"""
 
     summary = str(result.summary or "").strip()
-    snippet = result.to_text(limit=max(1, int(limit)), truncate_content=False)
+    snippet = result.to_text(limit=max(1, int(limit)), truncate_content=False, preserve_whitespace=True)
 
     if result.hits:
         if snippet:
@@ -142,6 +142,9 @@ def _build_replyer_memory_reference(structured_content: Dict[str, Any]) -> str:
         return ""
 
     lines = [REPLYER_MEMORY_REFERENCE_MARKER]
+    # 人物过滤已被移除时，回复器不能把关键词命中当成已确认的人物事实。
+    if structured_content.get("fallback_applied") is True and structured_content.get("fallback_reason") == "person_filter_miss":
+        lines.append("人物定向检索未命中，以下为关键词检索结果；不能据此确认命中内容属于目标人物。")
     query = str(structured_content.get("query") or "").strip()
     mode = str(structured_content.get("mode") or "").strip()
     effective_mode = str(structured_content.get("effective_mode") or "").strip()
@@ -157,15 +160,15 @@ def _build_replyer_memory_reference(structured_content: Dict[str, Any]) -> str:
     for index, raw_hit in enumerate(raw_hits, start=1):
         if not isinstance(raw_hit, dict):
             continue
-        content = str(raw_hit.get("content") or "").strip()
-        if not content:
+        content = str(raw_hit.get("content") or "")
+        if not content.strip():
             continue
         hit_type = str(raw_hit.get("type") or "").strip()
         title = str(raw_hit.get("title") or "").strip()
         label_parts = [part for part in (title, hit_type) if part]
         label = f"（{' / '.join(label_parts)}）" if label_parts else ""
-        normalized_content = " ".join(content.split())
-        hit_lines.append(f"{index}. {label}{normalized_content}")
+        # 记忆正文可能包含代码缩进、分段条件和否定，不能压平或strip。
+        hit_lines.append(f"{index}. {label}{content}")
 
     if not hit_lines:
         return ""
@@ -223,7 +226,8 @@ async def handle_tool(
     fallback_applied = False
     fallback_reason = ""
     fallback_query = ""
-    effective_mode = mode
+    # 普通search不启用后端时序过滤；显式时间约束需走hybrid。
+    effective_mode = "hybrid" if mode == "search" and (time_start is not None or time_end is not None) else mode
     primary_hit_count = 0
 
     logger.info(
@@ -234,7 +238,7 @@ async def handle_tool(
         result = await memory_service.search(
             clean_query,
             limit=limit,
-            mode=mode,
+            mode=effective_mode,
             chat_id=session_id,
             person_id=person_id,
             time_start=time_start,
@@ -244,10 +248,11 @@ async def handle_tool(
             group_id=group_id,
         )
     except Exception as exc:
-        logger.exception(f"{runtime.log_prefix} 长期记忆检索执行异常: {exc}")
+        # 后端异常可能含连接串或鉴权参数，只记录类型并保留失败语义。
+        logger.warning(f"{runtime.log_prefix} 长期记忆检索执行异常: {type(exc).__name__}")
         return tool_ctx.build_failure_result(
             invocation.tool_name,
-            f"长期记忆检索失败：{exc}",
+            "长期记忆检索失败；暂不能确认是否存在相关记忆。",
         )
     primary_hit_count = len(result.hits)
 
@@ -256,7 +261,8 @@ async def handle_tool(
         fallback_applied = True
         fallback_reason = "person_filter_miss"
         fallback_query = clean_query
-        effective_mode = "search"
+        # search后端不构造时间过滤；带明确时间边界时必须使用hybrid。
+        effective_mode = "hybrid" if time_start is not None or time_end is not None else "search"
         logger.info(
             f"{runtime.log_prefix} 人物过滤未命中，降级为关键词检索: "
             f"query={fallback_query!r} original_mode={mode} person_id={person_id!r}"
@@ -265,11 +271,12 @@ async def handle_tool(
             fallback_result = await memory_service.search(
                 fallback_query,
                 limit=limit,
-                mode="search",
+                mode=effective_mode,
                 chat_id=session_id,
                 person_id="",
-                time_start=None,
-                time_end=None,
+                # 只撤销未命中的人物过滤，不扩大用户明确指定的时间范围。
+                time_start=time_start,
+                time_end=time_end,
                 respect_filter=respect_filter,
                 user_id=user_id,
                 group_id=group_id,
@@ -277,9 +284,12 @@ async def handle_tool(
             if fallback_result.success:
                 result = fallback_result
             else:
-                logger.warning(f"{runtime.log_prefix} 关键词降级检索失败，回退原结果: error={fallback_result.error}")
+                # 原始人物检索为空不代表降级查询成功；不可把故障包装成没有记忆。
+                logger.warning(f"{runtime.log_prefix} 关键词降级检索失败")
+                result = MemorySearchResult(success=False, error="人物定向检索未命中，关键词降级检索失败；暂不能确认是否存在相关记忆。")
         except Exception as exc:
-            logger.warning(f"{runtime.log_prefix} 关键词降级检索异常，回退原结果: {exc}")
+            logger.warning(f"{runtime.log_prefix} 关键词降级检索异常: {type(exc).__name__}")
+            result = MemorySearchResult(success=False, error="人物定向检索未命中，关键词降级检索失败；暂不能确认是否存在相关记忆。")
 
     structured_content: Dict[str, Any] = result.to_dict()
     structured_content.update(
