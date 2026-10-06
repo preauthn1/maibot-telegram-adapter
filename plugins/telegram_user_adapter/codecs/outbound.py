@@ -34,6 +34,7 @@ from ..content_safety import detect_nsfw
 from ..fragment_guard import limit_message_segments
 from ..high_risk_chats import get_chat_profile, should_block as high_risk_should_block
 from ..humanize import humanize_chat_text, is_emoji_only
+from ..lowercase_style import to_lowercase_style
 from ..low_information import LowInformationGuard, LowInformationTargetReservation, is_low_information
 from ..send_queue import candidate_enqueued_at
 from ..output_sanity import detect_pollution
@@ -702,6 +703,12 @@ class TelegramUserOutboundCodec:
             # 这类文本一次泄漏就足以暴露，宁可少说一句也不能发出去。
             # 群聊（负数 chat_id）里不当风纪委员：劝撤回/提举报/喊管理一律不发。
             # 见 anti_policing.py 的 2026-10-03 被踢事故说明。
+            # 账号主人的打字习惯：英文全小写。命令/链接/代码等原样保留。
+            lowered = to_lowercase_style(text)
+            if lowered != text:
+                self._last_humanize_rules.append("lowercase")
+                text = lowered
+
             if str(chat_id).startswith("-") and is_group_policing(text):
                 self._logger.info(f"群聊管人话术拦截，不发送: chat={chat_id} text={text!r}")
                 return None
@@ -972,6 +979,21 @@ class TelegramUserOutboundCodec:
                 self.stickers.finish(chat_id, success=success)
                 if target_reserved and not success:
                     self._low_information_targets.release(chat_id, str(explicit_target_message_id))
+
+        if seg_type == "ambient_sticker":
+            catalog = getattr(self._tg, "ambient_stickers", None)
+            if catalog is None or not isinstance(seg_data, dict) or set(seg_data) != {"index"} \
+                    or type(seg_data["index"]) is not int:
+                return None
+            allowed, _ = self._send_budget.check(chat_id)
+            if not allowed:
+                return None
+            await catalog.refresh(self._tg.client)
+            document = catalog.get(seg_data["index"])
+            if document is None:
+                return None
+            await self._humanize_before_send(entity, 0)
+            return await self._tg.client.send_file(entity, document, reply_to=reply_to)
 
         if seg_type == "voice":
             if not binary_b64:
