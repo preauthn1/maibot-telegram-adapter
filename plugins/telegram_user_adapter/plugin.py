@@ -49,6 +49,8 @@ from .high_risk_chats import (
 )
 from .human_rhythm import get_activity_multiplier
 from .official_stickers import PACK_SHORT_NAME, enabled as stickers_enabled
+from .ambient_stickers import AmbientScheduler, AmbientStickerCatalog, enabled as ambient_enabled
+from .high_risk_chats import is_high_risk as _ambient_high_risk
 from .people_memory import PeopleMemory
 from .permission_state import HEALTHY, PermissionStateStore
 from .presence import PresenceManager
@@ -93,6 +95,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._self_improvement: Optional[SelfImprovementStore] = None
         self._run_task: Optional[asyncio.Task[None]] = None
         self._presence_task: Optional[asyncio.Task[None]] = None
+        self._ambient_task: Optional[asyncio.Task[None]] = None
+        self._ambient_scheduler = AmbientScheduler()
         self._style_profile_task: Optional[asyncio.Task[None]] = None
         self._read_notifications_task: Optional[asyncio.Task[None]] = None
         self._read_notifications: Optional[ReadNotificationsWorker] = None
@@ -1476,6 +1480,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 self.ctx.logger.info("UtyaDuck 原生贴纸目录已校验，Telegram official=%s", self._outbound_codec.stickers.server_official)
             except Exception as exc:
                 self.ctx.logger.error("UtyaDuck 目录不可用，贴纸发送禁用: %s", type(exc).__name__)
+        self._tg_client.ambient_stickers = None
+        if ambient_enabled():
+            try:
+                catalog = AmbientStickerCatalog()
+                usable = await catalog.refresh(self._tg_client.client)
+                self._tg_client.ambient_stickers = catalog
+                self.ctx.logger.info("奶龙环境贴纸目录已校验，可用 %d 张", usable)
+            except Exception as exc:
+                self.ctx.logger.error("奶龙环境贴纸目录不可用，功能停用: %s: %s", type(exc).__name__, exc)
 
         # 把 SKILL.md 里积累的失败模式载入发言前自检。
         #
@@ -1594,6 +1607,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 self._presence_watch_loop(),
                 name="telegram_user_adapter.presence_watch",
             )
+        if getattr(self._tg_client, "ambient_stickers", None) is not None:
+            self._ambient_task = asyncio.create_task(
+                self._ambient_sticker_loop(), name="telegram_user_adapter.ambient_stickers",
+            )
 
     def _notification_group_ids(self) -> List[str]:
         """只允许显式群白名单；空名单/黑名单模式不扩大读取范围。"""
@@ -1624,6 +1641,56 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             peer = update.message.peer_id
         if isinstance(peer, (types.PeerChat, types.PeerChannel)):
             worker.notify(utils.get_peer_id(peer))
+
+    async def _ambient_sticker_loop(self) -> None:
+        """每分钟检查一次活跃群，按概率随机发一张奶龙贴纸；发送走完整网关。"""
+        while not self._stop_requested:
+            try:
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                return
+            try:
+                await self._ambient_sticker_tick()
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:  # noqa: BLE001 - 环境动作失败不影响主链路
+                self.ctx.logger.warning("环境贴纸检查失败: %s", type(exc).__name__)
+
+    async def _ambient_sticker_tick(self) -> None:
+        catalog = getattr(self._tg_client, "ambient_stickers", None)
+        if catalog is None or not catalog.ready or self._send_queue is None or self._chat_filter is None:
+            return
+        if self._send_queue.in_quiet_hours():
+            return
+        if self._presence is not None and not self._presence._schedule.allows_online():
+            return
+        cfg = self._load_settings().chat
+        for session in self._ambient_scheduler.sessions():
+            base, topic = parse_topic_group_id(session)
+            if cfg.group_list_type != "whitelist" or not self._chat_filter._id_matches(base, cfg.group_list):
+                continue
+            if _ambient_high_risk(base) or self._is_write_forbidden(session):
+                continue
+            due, _reason = self._ambient_scheduler.due(session, last_spoke_at=self._last_spoke_at.get(session))
+            if not due:
+                continue
+            index = catalog.pick()
+            if index is None:
+                return
+            result = await self.handle_telegram_user_gateway({
+                "message_info": {"group_info": {"group_id": session}, "additional_config": {}},
+                "raw_message": [{"type": "ambient_sticker", "data": {"index": index}}],
+            })
+            sent = bool(result.get("success"))
+            self._ambient_scheduler.commit(session, sent=sent)
+            self.ctx.logger.info(
+                "环境贴纸: chat=%s 序号=%d 结果=%s%s", session, index,
+                "已发送" if sent else "未发送",
+                "" if sent else f"（{result.get('error') or result.get('policy_reason')}）",
+            )
+            if self._transcript is not None:
+                await self._transcript.log_event(session, "ambient_sticker", {"index": index, "sent": sent})
+            return  # 每轮最多一张
 
     async def _presence_watch_loop(self) -> None:
         """周期校正在线状态，使其符合作息表。
@@ -1732,6 +1799,11 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._style_profile_task = None
         if style_profile_task is not None:
             await reap_task(style_profile_task)
+
+        ambient_task = self._ambient_task
+        self._ambient_task = None
+        if ambient_task is not None:
+            await reap_task(ambient_task)
 
         # 先停巡检任务再强制下线，否则巡检可能在下线后又醒来一次。
         presence_task = self._presence_task
@@ -2054,6 +2126,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return
 
         self._last_inbound_at[session_key] = time.monotonic()
+        if str(session_key).startswith("-"):
+            self._ambient_scheduler.note_inbound(session_key)
         # 每条可见入站都进入该会话的短窗口分母，避免只按回复触发
         # 计数而漏掉真实群聊的整体话量。
         self._share_guard_for(session_key).note_inbound()
