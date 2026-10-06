@@ -37,11 +37,15 @@ def prepare_vision_image(
                 actual_format = (image.format or "").lower()
                 if actual_format not in {"jpeg", "png", "webp", "gif"}:
                     raise ValueError(f"不支持的格式: {actual_format}")
-                if getattr(image, "is_animated", False):
-                    raise ValueError("不支持直接发送动图，请先提取静态帧")
+                # 动图（GIF/APNG/动态 WebP）只取第一帧，转成静态 JPEG；
+                # 不能抛错，否则整轮 Planner 都会因一张动图失败。
+                animated = bool(getattr(image, "is_animated", False))
+                if animated:
+                    image.seek(0)
                 image.load()  # 小图同样校验，损坏数据不能绕过预处理。
                 if (
-                    actual_format in {"jpeg", "png", "webp"}
+                    not animated
+                    and actual_format in {"jpeg", "png", "webp"}
                     and len(raw) <= max_bytes
                     and max(image.size) <= max_side
                     and image.getexif().get(274, 1) == 1
