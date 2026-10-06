@@ -84,6 +84,7 @@ import {
   useAutoSave,
 } from './bot/hooks'
 import { CommandPermissions } from './bot/CommandPermissions'
+import { CoreSettings } from './bot/CoreSettings'
 import { GlobalLearningSettings } from './bot/GlobalLearningSettings'
 import { MemorySwitchGuard, MemorySwitchProvider } from './bot/MemorySwitchGuard'
 
@@ -1551,6 +1552,16 @@ function DynamicConfigTabs(props: DynamicConfigTabsProps) {
           value={tab.id}
           className="space-y-4 motion-safe:animate-[config-tab-content-enter_180ms_ease-out_both]"
         >
+          {tab.id === 'bot' && sectionValues.bot && sectionValues.personality && (
+            <CoreSettings
+              botSection={sectionValues.bot}
+              personalitySection={sectionValues.personality}
+              onPersonalitySectionChange={(value) => {
+                setSectionValue('personality', value)
+                setHasUnsavedChanges(true)
+              }}
+            />
+          )}
           {renderTabContent(tab)}
         </TabsContent>
       ))}

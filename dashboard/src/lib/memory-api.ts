@@ -385,13 +385,27 @@ export interface MemoryVectorHealth {
   updated_at?: number | null
 }
 
-export interface MemoryRuntimeSelfCheckPayload {
+export interface MemoryRuntimeOperationState {
+  skipped?: boolean
+  outcome?: string
+  disabled?: boolean
+  enabled?: boolean
+  memory_enabled?: boolean
+  runtime_ready?: boolean
+  retrieval_ready?: boolean
+  retrieval_mode?: string
+  message?: string
+}
+
+export interface MemoryRuntimeSelfCheckPayload extends MemoryRuntimeOperationState {
+  /** Handler-level completion; does not by itself prove runtime health. */
   success: boolean
   report?: Record<string, unknown>
   error?: string
 }
 
-export interface MemoryVectorRebuildPayload {
+export interface MemoryVectorRebuildPayload extends MemoryRuntimeOperationState {
+  /** Handler-level completion; the caller must also inspect health/readiness. */
   success: boolean
   dry_run?: boolean
   counts?: Record<string, number>
@@ -409,7 +423,7 @@ export interface MemoryVectorRebuildPayload {
   embedding_dimension?: number
   vector_rebuild_required?: boolean
   vector_rebuild_message?: string
-  self_check?: Record<string, unknown>
+  self_check?: { ok?: boolean; [key: string]: unknown }
   error?: string
 }
 

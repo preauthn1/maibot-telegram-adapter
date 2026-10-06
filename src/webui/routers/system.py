@@ -19,11 +19,14 @@ import asyncio
 import mimetypes
 import os
 import sqlite3
+import sys
 import time
 
 from src.common.database.database import engine, get_db_session
 from src.common.database.database_model import Images, ImageType
 from src.common.logger import get_logger
+from src.common.runtime_loop import get_main_loop
+from src.common.shutdown import is_shutdown_requested
 from src.common.update_notice import (
     build_debug_update_notice,
     get_changelog_history,
@@ -137,12 +140,16 @@ class RestartResponse(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    """状态响应"""
+    """状态响应；核心就绪与 WebUI 存活是两个独立信号。"""
 
-    running: bool
-    uptime: float
+    running: bool | None
+    uptime: float | None
     version: str
     start_time: str
+    webui_running: bool
+    webui_uptime: float
+    core_ready: bool | None
+    runtime_source: Literal['embedded_core', 'standalone_webui']
 
 
 class IncompatiblePluginNoticeResponse(BaseModel):
@@ -1488,21 +1495,64 @@ async def restart_maibot():
         raise HTTPException(status_code=500, detail=f"重启失败: {str(e)}") from e
 
 
+def _core_readiness() -> bool | None:
+    """Observe only the already-created core loop/listener, never initialize runtime."""
+    main_loop = get_main_loop()
+    if main_loop is None:
+        return None
+    if main_loop.is_closed() or not main_loop.is_running() or is_shutdown_requested():
+        return False
+    server_module = sys.modules.get('src.common.message_server.server')
+    if server_module is None:
+        return None
+    core_server = vars(server_module).get('global_server')
+    if core_server is None:
+        return False
+    listener = core_server._server
+    if listener is None:
+        return False
+    started = getattr(listener, 'started', None)
+    should_exit = getattr(listener, 'should_exit', None)
+    if started is None or should_exit is None:
+        return None
+    return bool(started and not should_exit)
+
+
+def _process_uptime() -> float | None:
+    """Read the current worker process age without making a Telegram claim."""
+    try:
+        # comm may contain spaces/parentheses; fields after its final ')' start at field 3.
+        stat_fields = Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()
+        start_ticks = int(stat_fields[19])
+        clock_ticks = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+        boot_time = next(
+            int(line.split()[1])
+            for line in Path('/proc/stat').read_text().splitlines()
+            if line.startswith('btime ')
+        )
+        process_start = boot_time + start_ticks / clock_ticks
+        return max(0.0, time.time() - process_start)
+    except (OSError, KeyError, IndexError, StopIteration, ValueError):
+        return None
+
+
 @router.get("/status", response_model=StatusResponse)
 def get_maibot_status():
-    """
-    获取麦麦运行状态
-
-    返回麦麦的运行状态、运行时长和版本信息。
-    """
+    """Return WebUI liveness separately from conservative core readiness."""
     try:
-        uptime = time.time() - _start_time
-
-        # 尝试获取版本信息（需要根据实际情况调整）
-        version = MMC_VERSION  # 可以从配置或常量中读取
-
+        now = time.time()
+        webui_uptime = max(0.0, now - _start_time)
+        embedded = get_main_loop() is not None or os.environ.get('MAIBOT_WORKER_PROCESS') == '1'
+        core_ready = _core_readiness() if embedded else None
         return StatusResponse(
-            running=True, uptime=uptime, version=version, start_time=datetime.fromtimestamp(_start_time).isoformat()
+            running=True if embedded else None,
+            uptime=_process_uptime() if embedded else None,
+            version=MMC_VERSION,
+            start_time=datetime.fromtimestamp(_start_time).isoformat(),
+            webui_running=True,
+            webui_uptime=webui_uptime,
+            core_ready=core_ready,
+            runtime_source='embedded_core' if embedded else 'standalone_webui',
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取状态失败: {str(e)}") from e
@@ -1772,13 +1822,5 @@ async def cleanup_local_cache(request: LocalCacheCleanupRequest):
 
 @router.post("/reload-config")
 def reload_config():
-    """
-    热重载配置（不重启进程）
-
-    仅重新加载配置文件，某些配置可能需要重启才能生效。
-    此功能需要在主程序中实现配置热重载逻辑。
-    """
-    # 这里需要调用主程序的配置重载函数
-    # 示例：await app_instance.reload_config()
-
-    return {"success": True, "message": "配置重载功能待实现"}
+    """Explicitly report that this endpoint cannot apply a configuration reload."""
+    raise HTTPException(status_code=501, detail="配置重载接口未实现；请使用配置文件监听或重启使配置生效")

@@ -3487,7 +3487,9 @@ async def _runtime_self_check(refresh: bool) -> dict:
 async def _runtime_auto_save(enabled: bool | None = None) -> dict:
     if enabled is None:
         config = await memory_service.runtime_admin(action="get_config")
-        return {"success": bool(config.get("success", False)), "auto_save": bool(config.get("auto_save", False))}
+        # Keep disabled/skipped/outcome and readiness fields visible to callers.
+        config["auto_save"] = bool(config.get("auto_save", False))
+        return config
     return await memory_service.runtime_admin(action="set_auto_save", enabled=enabled)
 
 

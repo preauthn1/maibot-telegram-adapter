@@ -20,18 +20,32 @@ export async function restartMaiBot(): Promise<{ success: boolean; message: stri
 /**
  * 检查麦麦运行状态
  */
-export async function getMaiBotStatus(): Promise<{
-  running: boolean
-  uptime: number
+export interface MaiBotRuntimeStatus {
+  /** 核心进程观察值；未知不是停止，也不表示 Telegram 已连接。 */
+  running: boolean | null
+  uptime: number | null
   version: string
   start_time: string
-}> {
-  return backendApi.get<{
-    running: boolean
-    uptime: number
-    version: string
-    start_time: string
-  }>('/api/webui/system/status', {
+  core_ready?: boolean | null
+  webui_running?: boolean | null
+  webui_uptime?: number | null
+  runtime_source?: 'embedded_core' | 'standalone_webui' | null
+}
+
+export interface MaiBotServiceStatus {
+  ActiveState: string | null
+  SubState: string | null
+  MainPID: string | number | null
+  Result?: string
+  running: boolean | null
+  control_available: boolean
+  control_mode: 'embedded' | 'independent' | 'unavailable'
+  webui_lifecycle: 'coupled' | 'independent'
+  webui_pid: number
+}
+
+export async function getMaiBotStatus(): Promise<MaiBotRuntimeStatus> {
+  return backendApi.get<MaiBotRuntimeStatus>('/api/webui/system/status', {
     errorMessage: '获取状态失败',
   })
 }

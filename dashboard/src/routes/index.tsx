@@ -494,6 +494,16 @@ function IndexPageContent() {
           ? 'stopped'
           : 'unknown'
   const botRuntimeLabel = t(`home.botStatus.${botRuntimeState}`)
+  const coreReadiness = botStatus?.core_ready === true ? '就绪' :
+    botStatus?.core_ready === false ? '未就绪' : '未知'
+  const webuiLiveness = botStatus?.webui_running === true ? '运行中' :
+    botStatus?.webui_running === false ? '未运行' : '未知'
+  const runtimeSource = botStatus?.runtime_source === 'embedded_core' ? '核心内嵌 WebUI' :
+    botStatus?.runtime_source === 'standalone_webui' ? '独立 WebUI' : '来源未知'
+  const botStatusDetail = `${runtimeSource} · 核心就绪：${coreReadiness} · WebUI：${webuiLiveness}；` +
+    `主服务：${botStatus?.service_active_state ?? '未知'} / ${botStatus?.service_sub_state ?? '未知'}。` +
+    (botStatus?.webui_uptime != null ? ` WebUI 运行时长：${formatTime(botStatus.webui_uptime)}。` : '') +
+    '进程运行不代表 Telegram 已连接或可收发消息。'
   const storageDetails = [
     {
       key: 'images',
@@ -540,12 +550,10 @@ function IndexPageContent() {
           botRuntimeState={botRuntimeState}
           memoryEnabled={featureStatus.memoryEnabled}
           onlineData={dashboardData.hourly_data}
-          statusDetail={botStatus?.running === null || !botStatus
-            ? '主服务状态不可用；控制面板在线不代表麦麦在线。'
-            : '依据 maibot.service 状态；主服务运行时长暂不可用。'}
+          statusDetail={botStatusDetail}
           uptime={
             botStatus?.running && botStatus.uptime !== null
-              ? t('home.botStatus.uptime', { time: formatTime(botStatus.uptime) })
+              ? `核心运行时长：${formatTime(botStatus.uptime)}`
               : null
           }
           visualEnabled={featureStatus.visualEnabled}
