@@ -20,6 +20,7 @@ import {
   type MemoryMaintenanceAction,
 } from '@/components/memory/MemoryMaintenanceManager'
 import { MemoryMiniTabs } from '@/components/memory/MemoryMiniTabs'
+import { MemoryProfileManager } from '@/components/memory/MemoryProfileManager'
 import { MemoryTimelineManager } from '@/components/memory/MemoryTimelineManager'
 import { RoutePendingFallback } from '@/components/route-pending-fallback'
 import { AccentPanel } from '@/components/ui/accent-panel'
@@ -70,8 +71,6 @@ import { FeedbackTab } from './knowledge-base/tabs/FeedbackTab'
 import { ImportTab } from './knowledge-base/tabs/ImportTab'
 import { ImagesTab } from './knowledge-base/tabs/ImagesTab'
 import { MemoryRecordsTab } from './knowledge-base/tabs/MemoryRecordsTab'
-import { ProfileMaintenancePanel } from './knowledge-base/tabs/ProfileMaintenancePanel'
-import { ProfileSearchPanel } from './knowledge-base/tabs/ProfileSearchPanel'
 import { TuningTab } from './knowledge-base/tabs/TuningTab'
 import { KnowledgeGraphPage } from './knowledge-graph'
 
@@ -595,7 +594,8 @@ export function KnowledgeBasePage() {
     onRuntimeChanged: () => memoryRuntime.refreshRuntimeConfig(),
   })
 
-  // 人物画像领域：查询侧在「记忆查询 → 人物画像」，维护侧在「记忆检修 → 画像维护」，
+  // 人物画像领域：查询侧在「记忆查询 → 人物画像」，维护侧在「记忆检修 → 画像维护」。
+  // MemoryProfileManager 复用已有 profile console（统一 API、状态和深链），不启动第二套画像控制器。
   // 两侧共享同一份状态，因此在这里实例化一次后分别传入两个面板
   const memoryProfile = useMemoryProfileConsole({
     active:
@@ -1265,7 +1265,7 @@ export function KnowledgeBasePage() {
                     }}
                   />
                   <TabsContent value="profiles" className="space-y-4">
-                    <ProfileSearchPanel profile={memoryProfile} />
+                    <MemoryProfileManager profile={memoryProfile} view="query" />
                   </TabsContent>
                 </Tabs>
               </TabsContent>
@@ -1343,7 +1343,7 @@ export function KnowledgeBasePage() {
                     />
                   </TabsContent>
                   <TabsContent value="profiles" className="space-y-4">
-                    <ProfileMaintenancePanel profile={memoryProfile} />
+                    <MemoryProfileManager profile={memoryProfile} view="maintenance" />
                   </TabsContent>
                   <FeedbackTab feedback={memoryFeedback} />
                   <TuningTab tuning={memoryTuning} />

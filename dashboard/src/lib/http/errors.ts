@@ -11,6 +11,8 @@ export class ApiError extends Error {
   readonly status?: number
   /** 后端返回的原始错误体（JSON 解析结果或原始文本） */
   readonly detail?: unknown
+  /** 原始网络错误（若有）；用于区分超时、连接失败与 HTTP 错误。 */
+  readonly cause?: unknown
 
   constructor(
     message: string,
@@ -20,5 +22,6 @@ export class ApiError extends Error {
     this.name = 'ApiError'
     this.status = options.status
     this.detail = options.detail
+    this.cause = options.cause
   }
 }

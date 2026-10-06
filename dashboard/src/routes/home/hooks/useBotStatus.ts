@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { backendApi } from '@/lib/http'
+import type { MaiBotRuntimeStatus, MaiBotServiceStatus } from '@/lib/system-api'
 
 import type { BotStatus } from '../types'
 
@@ -57,23 +58,31 @@ export function useBotStatus() {
     const request = (async () => {
       try {
         const [runtimeResult, serviceResult] = await Promise.allSettled([
-          backendApi.get<BotStatus>('/api/webui/system/status'),
-          backendApi.get<{ ActiveState: string; SubState: string; MainPID: string }>(
-            '/api/webui/system/service'
-          ),
+          backendApi.get<MaiBotRuntimeStatus>('/api/webui/system/status'),
+          backendApi.get<MaiBotServiceStatus>('/api/webui/system/service'),
         ])
         if (runtimeResult.status === 'rejected') throw runtimeResult.reason
-        // /system/status 返回的是 WebUI 进程运行时长，并固定 running=true。
-        // 只用真实主服务状态判断在线；服务接口不可用时不能假定机器人在线。
+        const runtime = runtimeResult.value
         const service = serviceResult.status === 'fulfilled' ? serviceResult.value : null
-        const hasServiceState = typeof service?.ActiveState === 'string'
+        const hasRuntimeSource = runtime.runtime_source === 'embedded_core' ||
+          runtime.runtime_source === 'standalone_webui'
+        // 新契约的 running 是核心观察值，null 必须保留。旧响应只采信 service 的进程观察值。
+        const running = hasRuntimeSource
+          ? typeof runtime.running === 'boolean' ? runtime.running : null
+          : typeof service?.running === 'boolean' ? service.running : null
         const data: BotStatus = {
-          ...runtimeResult.value,
-          running: hasServiceState
-            ? service.ActiveState === 'active' && service.SubState === 'running' && Number(service.MainPID) > 0
-            : null,
-          // 现有 service 契约不含主服务 uptime，禁止用 WebUI uptime 代替。
-          uptime: null,
+          ...runtime,
+          running,
+          // 只保留已观察核心的 uptime；旧 WebUI 响应没有核心时长证据。
+          uptime: hasRuntimeSource && running === true && typeof runtime.uptime === 'number' &&
+            Number.isFinite(runtime.uptime) && runtime.uptime >= 0 ? runtime.uptime : null,
+          core_ready: typeof runtime.core_ready === 'boolean' ? runtime.core_ready : null,
+          webui_running: typeof runtime.webui_running === 'boolean' ? runtime.webui_running : null,
+          webui_uptime: typeof runtime.webui_uptime === 'number' && Number.isFinite(runtime.webui_uptime) &&
+            runtime.webui_uptime >= 0 ? runtime.webui_uptime : null,
+          runtime_source: hasRuntimeSource ? runtime.runtime_source : null,
+          service_active_state: service?.ActiveState ?? null,
+          service_sub_state: service?.SubState ?? null,
         }
         if (!isMountedRef.current) return
         botStatusCache = { timestamp: Date.now(), data }

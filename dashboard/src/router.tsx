@@ -293,6 +293,15 @@ const pluginMirrorsRoute = createRoute({
   component: lazyRouteComponent(() => import('./routes/plugin-mirrors'), 'PluginMirrorsPage'),
 })
 
+const focusRoute = createRoute({
+  getParentRoute: () => protectedRoute,
+  path: '/focus',
+  beforeLoad: async () => {
+    if (!(await checkAuth())) throw redirect({ to: '/auth' })
+  },
+  component: lazyRouteComponent(() => import('./routes/focus'), 'FocusCompanionPage'),
+})
+
 const customFeaturesRoute = createRoute({
   getParentRoute: () => protectedRoute,
   path: '/custom-features',
@@ -404,6 +413,7 @@ const routeTree = rootRoute.addChildren([
     adapterManagementRoute,
     pluginMirrorsRoute,
     customFeaturesRoute,
+    focusRoute,
     mcpSettingsRoute,
     dataTransferRoute,
     logsRoute,

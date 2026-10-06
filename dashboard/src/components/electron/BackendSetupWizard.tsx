@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { backendApi } from '@/lib/http'
 import { isElectron } from '@/lib/runtime'
 
 interface BackendSetupWizardProps {
@@ -84,21 +85,21 @@ export function BackendSetupWizard({ open }: BackendSetupWizardProps) {
     setTestError('')
 
     try {
-      const response = await fetch(`${url}/api/webui/system/health`, {
-        method: 'GET',
+      const response = await backendApi.get<{ status: string; service: string }>('/api/webui/health', {
+        baseUrl: url.trim(),
+        auth: 'none',
         signal: AbortSignal.timeout(10000),
       })
-      if (response.ok) {
-        setTestStatus('success')
-      } else {
-        setTestStatus('error')
-        setTestError(`服务器返回状态码 ${response.status}`)
+      if (response.status !== 'healthy' || response.service !== 'MaiBot WebUI') {
+        throw new Error('响应不是 MaiBot WebUI 健康状态，请检查后端地址')
       }
+      setTestStatus('success')
     } catch (err) {
       setTestStatus('error')
-      if (err instanceof DOMException && err.name === 'TimeoutError') {
+      const cause = err
+      if (cause instanceof DOMException && cause.name === 'TimeoutError') {
         setTestError('连接超时，请检查地址是否正确')
-      } else if (err instanceof TypeError) {
+      } else if (cause instanceof TypeError) {
         setTestError('无法连接到服务器，请检查地址和网络')
       } else {
         setTestError(err instanceof Error ? err.message : '未知错误')

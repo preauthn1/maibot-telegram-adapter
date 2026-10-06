@@ -48,6 +48,7 @@ export const menuSections: MenuSection[] = [
         searchDescription: 'search.items.homeDesc',
       },
       { icon: LocalChatIcon, label: 'workspace.chat', path: '/chat' },
+      { icon: LocalChatIcon, label: '专注陪伴', path: '/focus', searchDescription: '专注计时与本地陪伴页面' },
     ],
   },
   {

@@ -5,12 +5,20 @@
  */
 import type { LucideIcon } from 'lucide-react'
 
+import type { MaiBotRuntimeStatus } from '@/lib/system-api'
+
 // 机器人状态接口
 export interface BotStatus {
   running: boolean | null
   uptime: number | null
   version: string
   start_time: string
+  core_ready?: boolean | null
+  webui_running?: boolean | null
+  webui_uptime?: number | null
+  runtime_source?: MaiBotRuntimeStatus['runtime_source']
+  service_active_state?: string | null
+  service_sub_state?: string | null
 }
 
 export interface ReleaseStatus {

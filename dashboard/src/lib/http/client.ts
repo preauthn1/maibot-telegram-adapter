@@ -27,6 +27,10 @@ export interface RequestOptions {
   /** 额外请求头，会覆盖默认头 */
   headers?: HeadersInit
   signal?: AbortSignal
+  /** 显式目标后端（首次连接健康探测）；不更改当前活动后端。 */
+  baseUrl?: string
+  /** 公共健康探测可显式匿名；其余请求保留实例的认证与 401 策略。 */
+  auth?: 'none'
   /**
    * 响应解析方式，默认 'json'。
    * 'response' 返回原始 Response（仅在 HTTP 成功时；失败仍抛 ApiError）。
@@ -105,7 +109,8 @@ export function createApiClient(clientOptions: ApiClientOptions): ApiClient {
     const { query, body, headers, signal, parse = 'json', errorMessage, cache } = options
 
     // 拼接完整 URL：base + path + query
-    const base = await resolveBaseUrl()
+    const base = options.baseUrl ?? await resolveBaseUrl()
+    const requestAuth = options.auth ?? auth
     let url = `${base}${path}`
     if (query) {
       const params = buildSearchParams(query)
@@ -127,7 +132,7 @@ export function createApiClient(clientOptions: ApiClientOptions): ApiClient {
         method,
         headers: requestHeaders,
         body: isFormData ? body : body === undefined ? undefined : JSON.stringify(body),
-        credentials: auth === 'cookie' ? 'include' : undefined,
+        credentials: requestAuth === 'cookie' ? 'include' : 'omit',
         signal,
         cache,
       })
@@ -139,7 +144,7 @@ export function createApiClient(clientOptions: ApiClientOptions): ApiClient {
 
     // 401 拦截与 onUnauthorized 回调绑定：配置了回调的实例（如主后端）跳转登录页并抛固定文案；
     // 未配置回调的实例（如登录流程的 authApi）让 401 走普通错误路径，透传后端的真实错误信息
-    if (response.status === 401 && auth === 'cookie' && onUnauthorized) {
+    if (response.status === 401 && requestAuth === 'cookie' && onUnauthorized) {
       onUnauthorized()
       throw new ApiError('认证失败，请重新登录', { status: 401 })
     }

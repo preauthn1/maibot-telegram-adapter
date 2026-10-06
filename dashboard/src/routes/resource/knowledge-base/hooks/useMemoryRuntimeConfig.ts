@@ -22,7 +22,18 @@ import {
   rebuildMemoryRuntimeVectors,
   refreshMemoryRuntimeSelfCheck,
   type MemoryRuntimeConfigPayload,
+  type MemoryRuntimeOperationState,
 } from '@/lib/memory-api'
+
+/** 拒绝 disabled/skipped/unready 的成功空操作；不把 success 当作健康结论。 */
+function runtimeOperationBlockReason(payload: MemoryRuntimeOperationState): string | null {
+  if (payload.skipped === true || payload.outcome === 'disabled' || payload.disabled === true ||
+    payload.enabled === false || payload.memory_enabled === false || payload.retrieval_mode === 'disabled') {
+    return '记忆系统禁用或操作被跳过，没有执行请求。'
+  }
+  if (payload.runtime_ready === false) return '记忆运行时尚未就绪，没有确认请求已执行。'
+  return null
+}
 
 /** 向量重建待定操作的载荷：dry-run 预览已暂存，confirm 时执行真重建（无额外参数） */
 interface VectorRebuildOperation {
@@ -83,10 +94,20 @@ export function useMemoryRuntimeConfig(): UseMemoryRuntimeConfigResult {
       const payload = await refreshMemoryRuntimeSelfCheck()
       const nextRuntime = await getMemoryRuntimeConfig()
       setRuntimeConfig(nextRuntime)
+      const blockReason = runtimeOperationBlockReason(payload)
+      const skipped = blockReason !== null
+      const reportHealthy = payload.report?.ok === true
+      const runtimeHealthy = nextRuntime.runtime_ready === true && nextRuntime.retrieval_ready === true &&
+        nextRuntime.memory_enabled !== false && nextRuntime.embedding_degraded !== true
+      const healthy = payload.success && !skipped && reportHealthy && runtimeHealthy
+      const disabledOrSkipped = blockReason !== null ? blockReason :
+        !payload.success ? (payload.error ?? '处理器未成功完成自检。') :
+        !reportHealthy ? '处理器返回成功，但自检报告未确认健康。' :
+        !runtimeHealthy ? '自检报告返回成功，但运行时尚未就绪。' : '自检报告与运行时状态均正常。'
       toast({
-        title: payload.success ? '自检通过' : '自检未通过',
-        description: payload.success ? '运行时状态正常' : '请检查 embedding 配置和外部服务连通性',
-        variant: payload.success ? 'default' : 'destructive',
+        title: healthy ? '自检通过' : skipped ? '自检未执行' : '自检未通过',
+        description: disabledOrSkipped,
+        variant: healthy ? 'default' : 'destructive',
       })
     } catch (error) {
       toast({
@@ -114,11 +135,25 @@ export function useMemoryRuntimeConfig(): UseMemoryRuntimeConfigResult {
           const payload = await rebuildMemoryRuntimeVectors({ dry_run: false })
           const nextRuntime = await getMemoryRuntimeConfig()
           setRuntimeConfig(nextRuntime)
+          const blockReason = runtimeOperationBlockReason(payload)
+          const skipped = blockReason !== null
+          const handlerSucceeded = payload.success && !skipped && (payload.failed ?? 0) === 0
+          const reportHealthy = payload.self_check?.ok === true
+          const runtimeHealthy = nextRuntime.runtime_ready === true && nextRuntime.retrieval_ready === true &&
+            nextRuntime.memory_enabled !== false && nextRuntime.embedding_degraded !== true
+          const healthy = handlerSucceeded && reportHealthy && runtimeHealthy
+          const detail = skipped
+            ? (blockReason ?? '记忆运行时操作未执行。')
+            : healthy
+              ? `处理器完成、自检报告与运行时健康均确认：已处理 ${payload.done ?? 0} 条。`
+              : payload.success
+                ? `处理器返回成功，但运行时或自检未确认健康（已处理 ${payload.done ?? 0} 条，失败 ${payload.failed ?? 0} 条）。`
+                : (payload.error ?? `向量重建失败（已处理 ${payload.done ?? 0} 条，失败 ${payload.failed ?? 0} 条）。`)
           setVectorRebuildDialogOpenState(false)
           toast({
-            title: payload.success ? '向量重建完成' : '向量重建未完全成功',
-            description: `已处理 ${payload.done ?? 0} 条，失败 ${payload.failed ?? 0} 条`,
-            variant: payload.success ? 'default' : 'destructive',
+            title: healthy ? '向量重建完成' : skipped ? '向量重建未执行' : '向量重建未完全成功',
+            description: detail,
+            variant: healthy ? 'default' : 'destructive',
           })
         } catch (error) {
           toast({
@@ -136,12 +171,20 @@ export function useMemoryRuntimeConfig(): UseMemoryRuntimeConfigResult {
     try {
       setVectorRebuildDialogOpenState(true)
       setVectorRebuildPreview(null)
+      vectorRebuildPendingOp.cancel()
       const payload = await rebuildMemoryRuntimeVectors({ dry_run: true })
-      const preview = payload.counts ?? null
+      const blockReason = runtimeOperationBlockReason(payload)
+      if (blockReason) throw new Error(blockReason)
+      if (!payload.success || payload.dry_run !== true || !payload.counts) {
+        throw new Error(payload.error ?? '后端未返回可执行的向量重建预览')
+      }
+      const preview = payload.counts
       setVectorRebuildPreview(preview)
       // 预览完成后暂存待定操作，进入等待确认态
       vectorRebuildPendingOp.submit({ preview })
     } catch (error) {
+      setVectorRebuildDialogOpenState(false)
+      vectorRebuildPendingOp.cancel()
       toast({
         title: '读取向量重建预览失败',
         description: error instanceof Error ? error.message : '未知错误',

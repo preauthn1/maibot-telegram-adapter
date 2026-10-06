@@ -958,6 +958,8 @@ class AMemorixHostService:
                 "enabled": False,
                 "memory_enabled": False,
                 "disabled": True,
+                "skipped": True,
+                "outcome": "disabled",
                 "reason": reason,
                 "message": message,
                 "runtime_ready": False,

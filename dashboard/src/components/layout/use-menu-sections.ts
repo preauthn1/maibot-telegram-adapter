@@ -68,7 +68,8 @@ export function useMenuSections(): MenuSection[] {
         })
         .catch(() => {
           if (!cancelled) {
-            setFeatureFlags({ behaviorLearning: true, replyEffects: false })
+            // Keep missing config visible: unavailable flags must not silently enable features.
+            setFeatureFlags(null)
           }
         })
     }
