@@ -96,6 +96,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._run_task: Optional[asyncio.Task[None]] = None
         self._presence_task: Optional[asyncio.Task[None]] = None
         self._ambient_task: Optional[asyncio.Task[None]] = None
+        # 监听意外退出后的自动重连任务；卸载或配置重建时取消。
+        self._reconnect_task: Optional[asyncio.Task[None]] = None
+        self._unloading: bool = False
         self._ambient_scheduler = AmbientScheduler()
         self._style_profile_task: Optional[asyncio.Task[None]] = None
         self._read_notifications_task: Optional[asyncio.Task[None]] = None
@@ -280,6 +283,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 先存记忆再断连接：断连可能抛异常，那样记忆就白攒了。
         self._people.save()
 
+        self._unloading = True
+        await self._cancel_reconnect()
         await self._stop_client()
 
     async def on_config_update(self, scope: str, config_data: Dict[str, Any], version: str) -> None:
@@ -295,6 +300,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if scope != "self":
             return
         self.set_plugin_config(config_data)
+        await self._cancel_reconnect()
         await self._restart_if_needed()
 
     @Tool(
@@ -1872,6 +1878,72 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 # 从独立任务回收，清空自身引用以免 stop 再等待当前监听任务。
                 self._run_task = None
                 await self._stop_client()
+                # 2026-10-06 13:30 网络抖动后监听退出，进程仍 active 却 45 分钟收不到消息。
+                self._schedule_reconnect()
+
+    _RECONNECT_DELAYS = (30.0, 60.0, 120.0, 300.0, 600.0)
+
+    def _schedule_reconnect(self) -> None:
+        """安排一次后台自动重连；已有重连任务或插件正在卸载时不重复安排。"""
+        if self._unloading:
+            return
+        task = self._reconnect_task
+        if task is not None and not task.done():
+            return
+        self._reconnect_task = asyncio.create_task(
+            self._reconnect_loop(), name="telegram_user_adapter.reconnect",
+        )
+
+    async def _cancel_reconnect(self) -> None:
+        task = self._reconnect_task
+        self._reconnect_task = None
+        if task is None or task.done() or task is asyncio.current_task():
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+
+    async def _reconnect_loop(self) -> None:
+        """退避重连：30s、60s、120s、300s，之后每 10 分钟一次，直到恢复。
+
+        只用已有会话重新连接，不发验证码、不重新登录。会话未授权或配置无效时
+        停止重试并记错误日志，由人工处理，避免对失效授权反复撞墙。
+        """
+        attempt = 0
+        try:
+            while not self._unloading:
+                base = self._RECONNECT_DELAYS[min(attempt, len(self._RECONNECT_DELAYS) - 1)]
+                delay = base * random.uniform(0.8, 1.2)
+                self.ctx.logger.warning(
+                    f"Telegram 监听已断开，{delay:.0f}s 后第 {attempt + 1} 次自动重连（沿用已有授权，不重新登录）"
+                )
+                await asyncio.sleep(delay)
+                if self._unloading:
+                    return
+                if self._run_task is not None and not self._run_task.done():
+                    # 期间已被配置更新等路径重建。
+                    return
+                try:
+                    await self._restart_if_needed()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 - 重连失败按类型决定是否继续
+                    text = str(exc)
+                    if "未授权" in text or "配置无效" in text:
+                        self.ctx.logger.error(f"自动重连停止：{text}，需要人工处理")
+                        return
+                    attempt += 1
+                    cause = type(exc.__cause__).__name__ if exc.__cause__ else type(exc).__name__
+                    self.ctx.logger.warning(f"自动重连第 {attempt} 次失败: {cause}")
+                    continue
+                if self._run_task is not None:
+                    self.ctx.logger.info(f"Telegram 自动重连成功（第 {attempt + 1} 次尝试）")
+                else:
+                    self.ctx.logger.info("插件当前配置为不连接，自动重连结束")
+                return
+        finally:
+            if self._reconnect_task is asyncio.current_task():
+                self._reconnect_task = None
 
     def _is_write_forbidden(self, chat_id: str) -> bool:
         """判断会话此刻是否应停止生成与排队（禁言/被踢/FloodWait 未到探测时间）。
