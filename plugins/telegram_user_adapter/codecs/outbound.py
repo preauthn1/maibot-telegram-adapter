@@ -117,6 +117,8 @@ class TelegramUserOutboundCodec:
         self._last_original_text = ""
         # 口头禅「确实/的确」按会话发言条数的冷却计数器（每放行 1 次后冷却 120 条出站，对齐真人约 0.5% 频率）
         self._queshi_cooldown_remaining: dict[str, int] = {}
+        # 同一目标消息已发送过「查不到/不敢乱报」免责说明时，阻止同一目标重复刷多条免责变体
+        self._disclaimed_targets: set[tuple[str, str]] = set()
 
     def refresh_lessons(self, skill_markdown: str) -> int:
         """从 SKILL.md 文本重载发言前自检的教训库。
@@ -728,6 +730,31 @@ class TelegramUserOutboundCodec:
                                 self._last_humanize_rules.append("verbal_tic_queshi")
                     elif _q_rem > 0:
                         _q_cd_map[str(chat_id)] = _q_rem - 1
+                # 客服排障套路去模板化：剥离句首「先看看/先检查/先试试/试试开启/目前没查到」与句尾「即可/就行/再试试」
+                _before_hd = text
+                for _hd_prefix in (
+                    "可以先试试", "先试试", "试试看", "先试下", "试试", "先",
+                ):
+                    if text.startswith(_hd_prefix):
+                        _hd_rem = text[len(_hd_prefix):].lstrip()
+                        if _hd_rem.startswith((
+                            "看看", "看下", "检查", "开启", "打开", "关掉", "关闭", "切换", "切到",
+                            "对比", "把", "用", "换", "买", "开", "加", "进入", "确认", "更新",
+                            "重装", "重启", "手动", "排查",
+                        )):
+                            text = _hd_rem
+                            break
+                if text.startswith("目前") and text[2:].startswith(("还没", "没查到", "没有找到", "主要还是", "看下来", "还不确定", "暂不")):
+                    text = text[2:].lstrip()
+                for _hd_tail in ("即可", "就行", "再试试", "试试看", "试试"):
+                    if len(text) >= 6 and (text.endswith(_hd_tail) or text.endswith(_hd_tail + "。")):
+                        _base_hd = text[:-1] if text.endswith("。") else text
+                        _trimmed_hd = _base_hd[:-len(_hd_tail)].rstrip()
+                        if len(_trimmed_hd) >= 2:
+                            text = _trimmed_hd + ("。" if text.endswith("。") else "")
+                            break
+                if text != _before_hd:
+                    self._last_humanize_rules.append("helpdesk_template")
                 # 按会话 style_policy.drop_trailing_period 剥离末尾单句号，保留「。。。」省略号与英文「.」。
                 if style_policy.drop_trailing_period and text.endswith("。") and not text.endswith("。。"):
                     text = text[:-1].rstrip()
@@ -838,6 +865,19 @@ class TelegramUserOutboundCodec:
             if not is_unlimited(chat_id) and not is_acknowledgement and self._reply_reuse_guard.is_recent_cross_chat_duplicate(chat_id, text, now=now):
                 self._logger.info(f"跨聊天流短回复重复，跳过发送: chat={chat_id} text={text!r}")
                 return None
+
+            # 同一目标重复免责声明拦截：对同一 explicit_target_message_id，
+            # 最多只允许发一次「查不到/没查到/不敢乱报/无法确认」说明，禁止同一轮连发多条免责变体。
+            if explicit_target_message_id is not None and any(
+                kw in text for kw in ("不敢乱报", "不敢瞎报", "没查到可靠", "暂时查不到", "无法可靠", "不能准确换算", "来源互相冲突")
+            ):
+                _disc_set = getattr(self, "_disclaimed_targets", None)
+                if isinstance(_disc_set, set):
+                    _dkey = (str(chat_id), str(explicit_target_message_id))
+                    if _dkey in _disc_set:
+                        self._logger.info(f"同一目标重复免责声明拦截: chat={chat_id} target={explicit_target_message_id}")
+                        return None
+                    _disc_set.add(_dkey)
 
             # 命令格式保护：补分隔 + 代码块包裹。
             #

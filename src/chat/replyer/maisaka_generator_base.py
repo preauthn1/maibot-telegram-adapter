@@ -13,6 +13,7 @@ from src.chat.replyer.density import density_prompt_line, density_violation, len
 from src.chat.replyer.style_variety import (
     banned_tics,
     is_question,
+    strip_helpdesk_template_text,
     strip_verbal_tic_text,
     style_variety_prompt_line,
     tic_violation,
@@ -1245,13 +1246,10 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
         # )
 
         filtered_history = [message for message in chat_history if self._should_keep_replyer_history_message(message)]
-        # 信息密度对齐：目标长度取本群群友最近发言正文的中位数，只在群聊启用。
-        # 只统计群友（排除麦麦自己的 guided_reply / outbound_send），并且只量正文：
-        # processed_plain_text 带 "HH:MM:SS[msg_id:…][昵称]" 前缀（约 40 字），
-        # 直接量它会让目标长度虚高一倍多。
+        # 信息密度对齐与风格多样性：群聊与私聊同步启用（Codex 审计发现私聊此前因未启用密度控制导致平均 49.5 字长篇说教）。
         density_target = 0
         density_ceiling = 0
-        if self.chat_stream is not None and self.chat_stream.is_group_session:
+        if self.chat_stream is not None:
             peer_texts = [
                 self._extract_peer_body_text(message)
                 for message in filtered_history[-60:]
@@ -1259,11 +1257,13 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             ]
             density_target = target_length(peer_texts)
             density_ceiling = length_ceiling(peer_texts)
-        # 风格多样性只在群聊启用，且每次生成只选一次档位（重试时沿用），
-        # 否则密度重生成会换一个档位，前后约束互相打架。
+            if not self.chat_stream.is_group_session:
+                # 私聊真人句长中位仅 6 字，严格限制私聊长篇说教上限
+                density_target = min(density_target, 12)
+                density_ceiling = min(density_ceiling, 28)
         style_variety_line = ""
         style_banned_tics: List[str] = []
-        if self.chat_stream is not None and self.chat_stream.is_group_session:
+        if self.chat_stream is not None:
             # 注意：不能对 filtered_history 先切片 [-80:] 再筛自身消息！
             # 群聊消息刷屏快，最近 80 条群消息里往往只有 1~2 条自身发言，会导致 TIC_WINDOW 冷却完全失效。
             # 必须先从全量 filtered_history 提取所有自身发言，再由 style_variety 按自身条数窗口截取。
@@ -1607,7 +1607,7 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             # 风格与口头禅治理：遵循「禁用风格重生成、优先 prompt + 本地确定性后处理」原则，
             # 命中口头禅或密度超标时在本地剥离冗余套话前缀/句尾句号，不触发额外 LLM 重生成调用。
             if not retry_requested and response_text:
-                cleaned_local = response_text
+                cleaned_local = strip_helpdesk_template_text(response_text)
                 if style_banned_tics:
                     hit_tic = tic_violation(cleaned_local, style_banned_tics)
                     if hit_tic is not None:
@@ -1630,8 +1630,13 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
                     violation = density_violation(cleaned_local, density_target, density_ceiling)
                     if violation is not None:
                         density_retried = True
+                        # 若存在多段说教（如双换行后的安全免责段），只保留第一段核心回答
+                        if "\n\n" in cleaned_local and "```" not in cleaned_local:
+                            first_para = cleaned_local.split("\n\n", 1)[0].strip()
+                            if len(first_para) >= 4:
+                                cleaned_local = first_para
                         logger.info(
-                            f"回复信息密度偏高（已由 prompt 约束，不触发重生成）: session={preview_chat_id} "
+                            f"回复信息密度偏高（已由本地后处理收敛，不触发重生成）: session={preview_chat_id} "
                             f"目标={density_target}字 原因={violation[0]}"
                         )
                 if cleaned_local != response_text and cleaned_local:
