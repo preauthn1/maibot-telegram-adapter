@@ -184,6 +184,39 @@ def strip_verbal_tic_text(text: str) -> str:
     return out
 
 
+def strip_helpdesk_template_text(text: str) -> str:
+    """剥离客服排障套路中的句首「先…/试试…」与句尾「…即可/就行/再试试」，还原真人群友直给结论的口吻。"""
+
+    s = (text or "").strip()
+    if not s:
+        return s
+    out = s
+    # 1. 句首冗余指令词
+    out = re.sub(
+        r"^(?:可以)?(?:先试试|试试看|先试下|试试|先)(?=(?:看看|看下|检查|开启|打开|关掉|关闭|切换|切到|对比|把|用|换|买|开|加|进入|确认|更新|重装|重启|手动|排查))",
+        "",
+        out,
+    ).strip()
+    # 2. 句首冗余「目前」（非时间对比）
+    out = re.sub(
+        r"^目前(?=还没|没查到|没有找到|主要还是|看下来|还不确定|暂不)",
+        "",
+        out,
+    ).strip()
+    # 3. 分句后跟「先」
+    out = re.sub(
+        r"(?<=[，,；;])\s*先(?=(?:看看|看下|检查|开启|打开|关掉|关闭|切换|切到|对比|把|用|换|买|开|加|进入|确认|更新|重装|重启|手动))",
+        "",
+        out,
+    ).strip()
+    # 4. 句尾冗余客服收尾词
+    if len(out) >= 5:
+        out2 = re.sub(r"(?:即可|就行|再试试|试试看|试试)([。！!？?]*)$", r"\1", out).strip()
+        if len(out2) >= 2:
+            out = out2
+    return out if len(out) >= 2 else s
+
+
 def tic_violation(text: str, banned: Sequence[str]) -> Optional[str]:
     """生成结果用了本条禁用的口头禅时，返回命中的词。"""
 
