@@ -10,7 +10,13 @@ from src.chat.message_receive.chat_manager import BotChatSession
 from src.chat.message_receive.message import SessionMessage
 from src.chat.utils.chat_experience import build_scoped_experience_prompt_block
 from src.chat.replyer.density import density_prompt_line, density_violation, length_ceiling, target_length
-from src.chat.replyer.style_variety import banned_tics, is_question, style_variety_prompt_line, tic_violation
+from src.chat.replyer.style_variety import (
+    banned_tics,
+    is_question,
+    strip_verbal_tic_text,
+    style_variety_prompt_line,
+    tic_violation,
+)
 from src.chat.replyer.unicode_noise import NOISE_RETRY_CONSTRAINT, detect_unicode_noise, strip_unicode_noise
 from src.chat.utils.identity_guard import build_identity_prompt_block
 from src.chat.utils.scene_context import build_chat_style_context_block, build_scene_context_block
@@ -225,7 +231,7 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             _, body = parse_speaker_content(plain_text)
         normalized_body = body.strip()
         # 剥离历史自身发言末尾的单个句号（含句尾 emoji 前的句号，保留省略号），
-        # 阻断历史库旧句号在上下文中的 few-shot 自我强化。
+        # 阻断历史库旧句号在上下文中的 few-shot 自我强化；保留历史里的「确实」以便 banned_tics 准确统计冷却窗口。
         if not normalized_body.endswith("。。"):
             normalized_body = re.sub(
                 r"(?<!。)。(\s*[\U0001f300-\U0001f9ff\U0001fa00-\U0001faff\u2600-\u27bf]*)$",
@@ -1258,11 +1264,14 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
         style_variety_line = ""
         style_banned_tics: List[str] = []
         if self.chat_stream is not None and self.chat_stream.is_group_session:
+            # 注意：不能对 filtered_history 先切片 [-80:] 再筛自身消息！
+            # 群聊消息刷屏快，最近 80 条群消息里往往只有 1~2 条自身发言，会导致 TIC_WINDOW 冷却完全失效。
+            # 必须先从全量 filtered_history 提取所有自身发言，再由 style_variety 按自身条数窗口截取。
             own_texts = [
                 text
                 for text in (
                     self._extract_guided_bot_reply(message)
-                    for message in filtered_history[-80:]
+                    for message in filtered_history
                     if isinstance(message, SessionBackedMessage)
                 )
                 if text and not text.startswith("[")
@@ -1602,8 +1611,9 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
                 if style_banned_tics:
                     hit_tic = tic_violation(cleaned_local, style_banned_tics)
                     if hit_tic is not None:
+                        cleaned_local = strip_verbal_tic_text(cleaned_local)
                         stripped_tic = re.sub(
-                            r"^(?:确实|的确|那就好|那就|对喽)[，,、\s]+",
+                            r"^(?:那就好|那就|对喽)[，,、\s]+",
                             "",
                             cleaned_local,
                         ).strip()

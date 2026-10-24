@@ -122,16 +122,66 @@ def overused_patterns(own_texts: Sequence[str]) -> List[str]:
     return notes
 
 
-# 口头禅：真人用得很少、模型却极爱用的固定附和词，以及曾造成复读/顺话认领的模板短句。
+# 口头禅：真人也会偶尔说「确实」（同群真人约 0.5%），但模型默认远高于真人。
+# 治理目标是「降频对齐真人」而非彻底禁绝：
+# 当最近 TIC_WINDOW（120）条**自身发言**里还没出现过「确实」时允许自然使用；
+# 一旦用过一次，接下来 120 条自身发言内进入冷却（提示词提醒 + 若模型仍惯性输出则本地去冗余），
+# 将稳态上限控制在 <= 1/120，与真人频率一致且保留自然语感。
 VERBAL_TICS: Sequence[str] = ("确实", "的确", "那就", "就行", "对喽", "啊？我人啊", "我人啊", "打磨")
-TIC_WINDOW = 40
+TIC_WINDOW = 120
 
 
 def banned_tics(own_texts: Sequence[str]) -> List[str]:
-    """返回本条回复禁止使用的口头禅（最近 ``TIC_WINDOW`` 条自己的发言里已出现过的）。"""
+    """返回本条回复处于冷却期、暂不使用的口头禅（最近 ``TIC_WINDOW`` 条自身发言里已出现过的）。"""
 
     recent = [t for t in own_texts if t][-TIC_WINDOW:]
     return [tic for tic in VERBAL_TICS if any(tic in t for t in recent)]
+
+
+def strip_verbal_tic_text(text: str) -> str:
+    """在不损失语义、不造成残句的前提下，剥离句首与句中冗余的口头禅副词「确实/的确」。"""
+
+    s = (text or "").strip()
+    if not s or ("确实" not in s and "的确" not in s):
+        return s
+    if re.fullmatch(r"(?:那)?(?:确实|的确)(?:是|啊|呢|吧)?[。！!？?~～]*", s):
+        return s
+
+    out = s
+    # 1. 句首带标点/空白
+    out = re.sub(
+        r"^(?:(?:哈哈+|行吧|对|是这样的|那)[，,\s]*)*(?:确实|的确)[，,、\s]+",
+        "",
+        out,
+    ).strip()
+
+    # 2. 句首无标点
+    if re.match(r"^(?:确实|的确)", out):
+        rem = re.sub(r"^(?:确实|的确)\s*", "", out).strip()
+        if len(rem) >= 2:
+            out = rem if len(rem) >= 3 else ("真" + rem)
+        elif len(rem) == 1:
+            out = "真" + rem
+
+    # 3a. 分句或句中副词后跟 >=2 字
+    out2 = re.sub(
+        r"(?<=[\u4e00-\u9fffA-Za-z0-9\s，,；;：:])\s*(?:确实|的确)\s*(?=[\u4e00-\u9fffA-Za-z0-9]{2,})",
+        "",
+        out,
+    ).strip()
+    if len(out2) >= 2:
+        out = out2
+
+    # 3b. 句中副词后仅跟 1 个字形容词到句末/分句末
+    out3 = re.sub(
+        r"(?<=[\u4e00-\u9fffA-Za-z0-9\s])\s*(?:确实|的确)\s*(?=[\u4e00-\u9fff](?:[，,。！!？?\s]|$))",
+        "挺",
+        out,
+    ).strip()
+    if len(out3) >= 2:
+        out = out3
+
+    return out
 
 
 def tic_violation(text: str, banned: Sequence[str]) -> Optional[str]:

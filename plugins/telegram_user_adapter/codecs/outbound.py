@@ -115,6 +115,8 @@ class TelegramUserOutboundCodec:
         self._last_typing_seconds = 0.0
         self._last_humanize_rules: list[str] = []
         self._last_original_text = ""
+        # 口头禅「确实/的确」按会话发言条数的冷却计数器（每放行 1 次后冷却 120 条出站，对齐真人约 0.5% 频率）
+        self._queshi_cooldown_remaining: dict[str, int] = {}
 
     def refresh_lessons(self, skill_markdown: str) -> int:
         """从 SKILL.md 文本重载发言前自检的教训库。
@@ -676,18 +678,56 @@ class TelegramUserOutboundCodec:
                         f"拟人化改写: {text!r} -> {humanized.text!r} 规则={humanized.applied_rules}"
                     )
                 text = humanized.text
-                # 剥离典型 AI/客服铺垫头（如「那就好，…」「确实，…」「说实话，…」），直接保留核心后半句。
+                # 剥离典型 AI/客服句首铺垫头（如「那就好，…」「说实话，…」），直接保留核心后半句。
                 for _fp in (
-                    "那就好，", "确实，", "的确，", "说实话，", "老实说，",
+                    "那就好，", "说实话，", "老实说，",
                     "简单来说，", "总的来看，", "总的来说，", "目前来看，",
-                    "那就好,", "确实,", "的确,",
+                    "那就好,",
                 ):
                     if text.startswith(_fp):
                         _rem = text[len(_fp):].lstrip()
-                        if len(_rem) >= 4:
+                        if len(_rem) >= 2:
                             text = _rem
                             self._last_humanize_rules.append("filler_prefix")
                         break
+                # 口头禅「确实/的确」频率调制（非彻底禁用，而是对齐真人约 0.5% 频率）：
+                # 按会话维护 120 条出站冷却窗口：
+                # - 当冷却计数 > 0 时，剥离句首/句中冗余的「确实/的确」；
+                # - 当冷却计数 == 0（已间隔 120 条未用）且非生硬的「确实，…」客服开头时，放行本次「确实」并重置 120 条冷却。
+                _q_cd_map = getattr(self, "_queshi_cooldown_remaining", None)
+                if isinstance(_q_cd_map, dict):
+                    _q_rem = _q_cd_map.get(str(chat_id), 0)
+                    if ("确实" in text or "的确" in text) and len(text) >= 4:
+                        _is_prefix_comma = text.startswith(("确实，", "的确，", "确实,", "的确,", "那确实，", "那确实,"))
+                        if _q_rem == 0 and not _is_prefix_comma:
+                            _q_cd_map[str(chat_id)] = 120
+                        else:
+                            _before_q = text
+                            for _qfp in ("确实，", "的确，", "确实,", "的确,", "那确实，", "那确实,"):
+                                if text.startswith(_qfp):
+                                    _rem_fp = text[len(_qfp):].lstrip()
+                                    if len(_rem_fp) >= 2:
+                                        text = _rem_fp
+                                    break
+                            for _qword in ("确实", "的确"):
+                                if text.startswith(_qword):
+                                    _rem_q = text[len(_qword):].lstrip()
+                                    if len(_rem_q) >= 3:
+                                        text = _rem_q
+                                    elif len(_rem_q) == 2:
+                                        text = "真" + _rem_q
+                                elif _qword in text:
+                                    _prefix_part, _, _suffix_part = text.partition(_qword)
+                                    _p_clean = _prefix_part.rstrip()
+                                    _s_clean = _suffix_part.lstrip()
+                                    if _p_clean and len(_s_clean) >= 2:
+                                        text = _p_clean + _s_clean
+                                    elif _p_clean and len(_s_clean) == 1:
+                                        text = _p_clean + "挺" + _s_clean
+                            if text != _before_q:
+                                self._last_humanize_rules.append("verbal_tic_queshi")
+                    elif _q_rem > 0:
+                        _q_cd_map[str(chat_id)] = _q_rem - 1
                 # 按会话 style_policy.drop_trailing_period 剥离末尾单句号，保留「。。。」省略号与英文「.」。
                 if style_policy.drop_trailing_period and text.endswith("。") and not text.endswith("。。"):
                     text = text[:-1].rstrip()
