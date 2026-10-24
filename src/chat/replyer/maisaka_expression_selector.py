@@ -11,6 +11,7 @@ from sqlmodel import select
 from src.common.utils.prompt_time import format_prompt_datetime
 from src.chat.message_receive.message import SessionMessage
 from src.chat.replyer.expression_vector_index import expression_vector_index
+from src.chat.replyer.style_variety import VERBAL_TICS
 from src.common.database.database import get_db_session
 from src.common.database.database_model import Expression, ModifiedBy
 from src.common.logger import get_logger
@@ -125,6 +126,34 @@ class MaisakaExpressionSelector:
                 or not situation
                 or not normalized_style
                 or is_prompt_example_expression_style(normalized_style)
+                # 口头禅与客服/卖萌模板表达不进候选，只在选取时过滤，保留测试合成候选兼容。
+                or any(tic in normalized_style for tic in VERBAL_TICS)
+                or any(
+                    bad in f"{situation} {normalized_style}"
+                    for bad in (
+                        "一两个字",
+                        "AI实锤",
+                        "大就是好好就是大",
+                        "神秘 MCP",
+                        "神秘mcp",
+                        "有什么问题",
+                        "帮你看看",
+                        "进一步协助",
+                        "先铺垫",
+                        "分点提问",
+                        "试试……",
+                        "先试试",
+                        "好奇也不告诉你",
+                        "姐姐文笔",
+                        "应该怎么叫呢",
+                        "对呀对呀",
+                        "您发一下",
+                        "提醒您",
+                        "先生，",
+                        "（不是）",
+                        "（bushi）",
+                    )
+                )
             ):
                 continue
             all_candidates.append(

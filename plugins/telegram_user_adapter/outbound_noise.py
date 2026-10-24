@@ -67,6 +67,11 @@ def is_noise_text(text: str) -> bool:
     if not stripped:
         return True
 
+    # 单独一个或两个句号（"。"、"。。"、"."）在聊天里属于无意义标点噪音或截断残留；
+    # 三个及以上的 "..." / "。。。" 是正常省略号语气，仍放行。
+    if stripped in {"。", "。。", "."}:
+        return True
+
     # 仅拦截"单个汉字"这一种形态：错别字纠正消息就长这样。
     # 数字、英文字母、标点、emoji 等单字符是真人常用回复，一律放行。
     if len(stripped) == 1 and _is_chinese_char(stripped):

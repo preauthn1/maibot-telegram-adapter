@@ -17,7 +17,7 @@ from typing import Iterable, List, Optional, Tuple
 
 import re
 
-DEFAULT_TARGET = 14
+DEFAULT_TARGET = 10
 MIN_TARGET = 6
 MAX_TARGET = 24
 MIN_SAMPLES = 5
@@ -28,12 +28,25 @@ _LIST_MARK = re.compile(r"(?:^|\s)(?:\d+[.、)]|[-•·])\s*|首先|其次|另�
 _NON_CHAT = re.compile(r"https?://|t\.me/|```|\n.*\n")
 
 
+def _strip_reply_quote_prefix(text: str) -> str:
+    """剥离适配器拼入的 `[回复<...>：...]，说：` 引用头与证据尾注，只量群友本人的正文。"""
+
+    cleaned = (text or "").strip()
+    if "[Telegram evidence:" in cleaned:
+        cleaned = cleaned.split("[Telegram evidence:", 1)[0].strip()
+    if cleaned.startswith("[回复<"):
+        _, sep, body = cleaned.partition("]，说：")
+        if sep:
+            cleaned = body.strip()
+    return cleaned
+
+
 def _chat_lengths(peer_texts: Iterable[str]) -> List[int]:
-    """群友"随口一句话"的长度列表：去掉链接、代码、多行长文。"""
+    """群友"随口一句话"的长度列表：去掉引用头、链接、代码、多行长文。"""
 
     lengths: List[int] = []
     for text in peer_texts:
-        stripped = (text or "").strip()
+        stripped = _strip_reply_quote_prefix(text)
         if not stripped or _NON_CHAT.search(stripped):
             continue
         if len(stripped) > CHAT_MESSAGE_MAX_LEN:

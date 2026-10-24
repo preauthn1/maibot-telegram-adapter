@@ -676,6 +676,24 @@ class TelegramUserOutboundCodec:
                         f"拟人化改写: {text!r} -> {humanized.text!r} 规则={humanized.applied_rules}"
                     )
                 text = humanized.text
+                # 剥离典型 AI/客服铺垫头（如「那就好，…」「确实，…」「说实话，…」），直接保留核心后半句。
+                for _fp in (
+                    "那就好，", "确实，", "的确，", "说实话，", "老实说，",
+                    "简单来说，", "总的来看，", "总的来说，", "目前来看，",
+                    "那就好,", "确实,", "的确,",
+                ):
+                    if text.startswith(_fp):
+                        _rem = text[len(_fp):].lstrip()
+                        if len(_rem) >= 4:
+                            text = _rem
+                            self._last_humanize_rules.append("filler_prefix")
+                        break
+                # 按会话 style_policy.drop_trailing_period 剥离末尾单句号，保留「。。。」省略号与英文「.」。
+                if style_policy.drop_trailing_period and text.endswith("。") and not text.endswith("。。"):
+                    text = text[:-1].rstrip()
+                    self._last_humanize_rules.append("trailing_period")
+                    if not text.strip():
+                        return None
 
                 # max_chars 来自群内 P95 长度，只是风格参考（已注入提示词）。
                 # 以它为硬线会整条丢弃略长但有用的回复（链接、就医提醒等），
