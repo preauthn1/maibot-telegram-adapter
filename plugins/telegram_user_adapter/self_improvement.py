@@ -47,7 +47,8 @@ _SUSPICION_PATTERNS = (
     r"^\s*(?:ai|bot|gpt|人机|机器人)\s*[吧吗么]\s*[?？]*\s*$",
     r"(?:是|像)(?:个)?(?:ai|bot|gpt)(?:\b|吧|吗|么|$)",
     r"(?:机器人|人机)(?:吧|吗|么|哦|啊)?$",
-    r"(?:chatgpt|大模型|语言模型|prompt)",
+    # 需带指代或疑问语境，避免群友转发「#大模型翻车 #AI资讯」新闻被误判为怀疑本账号
+    r"(?:你|这|是不是|像).{0,10}(?:chatgpt|大模型|语言模型|prompt)|(?:chatgpt|大模型|语言模型|prompt).{0,6}[?？吧吗么]",
     r"(?:回复|说话)(?:太|好|真)?(?:快|标准|规整)",
 )
 
@@ -195,11 +196,19 @@ def inspect_own_message(text: str) -> Tuple[str, List[str]]:
     if not normalized:
         return "", []
 
-    aggressive = [w for w in _SELF_AGGRESSIVE if w in normalized]
+    # 剥离技术复合词（如「回滚」「滚动」「滚轮」「垃圾邮件」「垃圾回收」「裸连」「裸机」），
+    # 避免技术讨论中的正常词汇被子串匹配误判为攻击性或不当用语。
+    scrubbed = re.sub(r"回滚|滚动|滚轮|翻滚|摇滚|垃圾桶|垃圾邮件|垃圾回收|垃圾箱|裸连|裸机|裸金属|裸奔", "", normalized)
+
+    aggressive = [
+        w
+        for w in _SELF_AGGRESSIVE
+        if (re.search(r"(?<![a-z0-9])sb(?![a-z0-9])", scrubbed) if w == "sb" else w in scrubbed)
+    ]
     if aggressive:
         return "aggressive", aggressive
 
-    nsfw = [w for w in _SELF_NSFW_FOLLOWUP if w in normalized]
+    nsfw = [w for w in _SELF_NSFW_FOLLOWUP if w in scrubbed]
     if nsfw:
         return "nsfw_followup", nsfw
 

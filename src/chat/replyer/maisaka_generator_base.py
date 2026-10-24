@@ -10,6 +10,7 @@ from src.chat.message_receive.chat_manager import BotChatSession
 from src.chat.message_receive.message import SessionMessage
 from src.chat.utils.chat_experience import build_scoped_experience_prompt_block
 from src.chat.replyer.density import density_prompt_line, density_violation, length_ceiling, target_length
+from src.chat.replyer.style_variety import banned_tics, is_question, style_variety_prompt_line, tic_violation
 from src.chat.replyer.unicode_noise import NOISE_RETRY_CONSTRAINT, detect_unicode_noise, strip_unicode_noise
 from src.chat.utils.identity_guard import build_identity_prompt_block
 from src.chat.utils.scene_context import build_chat_style_context_block, build_scene_context_block
@@ -223,6 +224,14 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
         else:
             _, body = parse_speaker_content(plain_text)
         normalized_body = body.strip()
+        # 剥离历史自身发言末尾的单个句号（含句尾 emoji 前的句号，保留省略号），
+        # 阻断历史库旧句号在上下文中的 few-shot 自我强化。
+        if not normalized_body.endswith("。。"):
+            normalized_body = re.sub(
+                r"(?<!。)。(\s*[\U0001f300-\U0001f9ff\U0001fa00-\U0001faff\u2600-\u27bf]*)$",
+                r"\1",
+                normalized_body,
+            ).strip()
         # 已发送历史用于后续事实核对，预览截断会丢失尾部否定并破坏代码格式。
         return normalized_body
 
@@ -527,14 +536,18 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
         if locale.startswith("en"):
             return (
                 "Output only the requested message, without unrelated prefixes or suffixes. "
-                "Preserve punctuation, brackets, JSON, code, quotations, and other formatting required by the current user request."
+                "Preserve punctuation, brackets, JSON, code, quotations, and other formatting required by the current user request. "
+                "Most messages need no emoji at all; use at most one occasionally, never as a habitual suffix. "
+                "Do not generate kaomoji or ASCII emoticons unless explicitly requested, and do not imitate emoticons from chat history or learned styles."
             )
         if locale.startswith("ja"):
             return (
                 "無関係な前置きや後置きを加えず、求められた発言内容だけを出力してください。"
                 "今回のユーザーの要求に必要な句読点、括弧、JSON、コード、引用などの形式は保持してください。"
+                "ほとんどの発言に絵文字は不要です。使うとしてもたまに一つだけにし、毎回末尾に付ける癖にしないでください。"
+                "明示的に求められない限り顔文字や ASCII 顔文字を出力せず、チャット履歴や学習した文体の顔文字も模倣しないでください。"
             )
-        return "只输出本轮要求的发言内容，不添加无关前后缀；保留用户明确要求的标点、括号、JSON、代码、引用及其他格式。"
+        return "只输出本轮要求的发言内容，不添加无关前后缀；保留用户明确要求的标点、括号、JSON、代码、引用及其他格式。大多数消息不需要 emoji，偶尔用也最多一个，不要养成句尾挂 emoji 的习惯；除非用户明确要求，否则禁止输出颜文字或 ASCII 表情，如 (￣▽￣)、(´･ω･`)、:)、:D。"
 
     @staticmethod
     def _replace_regex_capture_groups(reaction: str, match: re.Match[str]) -> str:
@@ -1143,9 +1156,17 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
                 for component in message.original_message.raw_message.components
                 if isinstance(component, TextComponent)
             )
-            return body.strip()
-        _, content = parse_speaker_content(message.processed_plain_text)
-        return content.strip()
+            cleaned = body.strip()
+        else:
+            _, content = parse_speaker_content(message.processed_plain_text)
+            cleaned = content.strip()
+        if "[Telegram evidence:" in cleaned:
+            cleaned = cleaned.split("[Telegram evidence:", 1)[0].strip()
+        if cleaned.startswith("[回复<"):
+            _, sep, after_quote = cleaned.partition("]，说：")
+            if sep:
+                cleaned = after_quote.strip()
+        return cleaned
 
     def _persist_reply_preview(
         self, result: ReplyGenerationResult, *, stream_id: Optional[str], reply_reason: str
@@ -1232,7 +1253,27 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             ]
             density_target = target_length(peer_texts)
             density_ceiling = length_ceiling(peer_texts)
+        # 风格多样性只在群聊启用，且每次生成只选一次档位（重试时沿用），
+        # 否则密度重生成会换一个档位，前后约束互相打架。
+        style_variety_line = ""
+        style_banned_tics: List[str] = []
+        if self.chat_stream is not None and self.chat_stream.is_group_session:
+            own_texts = [
+                text
+                for text in (
+                    self._extract_guided_bot_reply(message)
+                    for message in filtered_history[-80:]
+                    if isinstance(message, SessionBackedMessage)
+                )
+                if text and not text.startswith("[")
+            ]
+            style_banned_tics = banned_tics(own_texts)
+            target_text = (reply_message.processed_plain_text or "") if reply_message is not None else ""
+            style_variety_line = style_variety_prompt_line(
+                own_texts, banned=style_banned_tics, target_is_question=is_question(target_text)
+            )
         density_retried = False
+        tic_retried = False
         # 异常 Unicode 检测用的群友上下文：群友在聊外语时不拦。
         noise_peer_texts = [
             self._extract_peer_body_text(message)
@@ -1321,6 +1362,10 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
                 extra_prompt_text = "\n".join(
                     part for part in (extra_prompt_text.strip(), density_prompt_line(density_target)) if part
                 )
+            # 风格多样性：按真人分布随机本条长度档位，并指出自己最近用滥的表达。
+            # 放在密度提示之后，让「这次只回一两个字」覆盖「12 字左右」的整齐感。
+            if style_variety_line:
+                extra_prompt_text = "\n".join(part for part in (extra_prompt_text.strip(), style_variety_line) if part)
             active_reply_requirements = self._build_reply_requirements(
                 extra_prompt_text,
                 retry_constraints,
@@ -1550,16 +1595,43 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
                         f"unicode_noise_detected action=strip_tail session={preview_chat_id} "
                         f"删除={removed!r} 结果={response_text!r}"
                     )
-            if not retry_requested and density_target and not density_retried and response_text:
-                violation = density_violation(response_text, density_target, density_ceiling)
-                if violation is not None:
-                    density_retried = True
-                    retry_requested = True
-                    after_response_kwargs["retry_reason"] = violation[1]
-                    after_response_kwargs["matched_regex"] = f"信息密度:{violation[0]}"
-                    logger.info(
-                        f"回复信息密度超标，删减要点后重生成: session={preview_chat_id} "
-                        f"目标={density_target}字 原因={violation[0]}"
+            # 风格与口头禅治理：遵循「禁用风格重生成、优先 prompt + 本地确定性后处理」原则，
+            # 命中口头禅或密度超标时在本地剥离冗余套话前缀/句尾句号，不触发额外 LLM 重生成调用。
+            if not retry_requested and response_text:
+                cleaned_local = response_text
+                if style_banned_tics:
+                    hit_tic = tic_violation(cleaned_local, style_banned_tics)
+                    if hit_tic is not None:
+                        stripped_tic = re.sub(
+                            r"^(?:确实|的确|那就好|那就|对喽)[，,、\s]+",
+                            "",
+                            cleaned_local,
+                        ).strip()
+                        if len(stripped_tic) >= 2:
+                            cleaned_local = stripped_tic
+                        stripped_tail = re.sub(r"(?<=[\u4e00-\u9fff]{3})就行([。！!？?]?)$", r"\1", cleaned_local).strip()
+                        if len(stripped_tail) >= 2:
+                            cleaned_local = stripped_tail
+                        logger.info(
+                            f"回复命中口头禅，已本地后处理（不重生成）: session={preview_chat_id} "
+                            f"词={hit_tic} before={response_text!r} after={cleaned_local!r}"
+                        )
+                if density_target and not density_retried:
+                    violation = density_violation(cleaned_local, density_target, density_ceiling)
+                    if violation is not None:
+                        density_retried = True
+                        logger.info(
+                            f"回复信息密度偏高（已由 prompt 约束，不触发重生成）: session={preview_chat_id} "
+                            f"目标={density_target}字 原因={violation[0]}"
+                        )
+                if cleaned_local != response_text and cleaned_local:
+                    response_text = cleaned_local
+                    generation_result.output_items = tuple(
+                        replace_output_projection(
+                            generation_result.output_items,
+                            content=response_text,
+                            replace_content=True,
+                        )
                     )
             matched_regex = str(after_response_kwargs.get("matched_regex") or "").strip()
             matched_regex_pattern = str(after_response_kwargs.get("matched_regex_pattern") or "").strip()
