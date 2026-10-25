@@ -212,10 +212,13 @@ def inspect_own_message(text: str, *, is_group_chat: bool = True) -> Tuple[str, 
     if nsfw:
         return "nsfw_followup", nsfw
 
-    # 接入出站污染与群友角色边界检测（模态失明暴露、客服索图、冒充维护者审Bug、主动汇报搜索失败等）：
+    # 接入出站污染与群友角色边界检测（模态失明暴露、客服索图、冒充维护者审Bug、主动汇报搜索失败、LaTeX公式/猫娘尾癖等）：
+    raw_stripped = (text or "").strip()
+    if is_group_chat and (r"\[" in raw_stripped or r"\frac{" in raw_stripped or raw_stripped.endswith("喵")):
+        return "persona_or_modality_leak", ["群聊LaTeX公式或异样语癖暴露"]
     try:
         from .output_sanity import detect_pollution
-        polluted, reasons = detect_pollution((text or "").strip(), is_group_chat=is_group_chat)
+        polluted, reasons = detect_pollution(raw_stripped, is_group_chat=is_group_chat)
         if polluted and reasons:
             return "persona_or_modality_leak", reasons
     except Exception:

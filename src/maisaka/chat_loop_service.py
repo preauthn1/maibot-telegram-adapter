@@ -77,7 +77,7 @@ from src.maisaka.visual.message_limiter import limit_latest_images_in_messages
 from src.maisaka.context.emoji_candidates import EmojiCandidateMessage
 from src.maisaka.visual.mode_utils import resolve_enable_visual_planner
 from src.self_evolution.monitor import EvolutionMonitor, MetricEvent
-from src.self_evolution.policy import RuntimePolicyLoader
+from src.self_evolution.policy import RuntimePolicyLoader, resolve_self_evolution_path
 
 # Planner prompt 中"当前时间"使用的时区。
 #
@@ -661,7 +661,8 @@ class MaisakaChatLoopService:
         self._custom_chat_system_prompt = chat_system_prompt
         self._prompt_load_lock = asyncio.Lock()
         self._llm_chat_clients: dict[str, LLMServiceClient] = {}
-        self._evolution_policy = RuntimePolicyLoader(Path("data/self-evolution")).snapshot()
+        self._evolution_policy_loader = RuntimePolicyLoader(Path("data/self-evolution"))
+        self._evolution_policy = self._evolution_policy_loader.snapshot()
 
     @property
     def behavior_style_prompt(self) -> str:
@@ -1019,6 +1020,7 @@ class MaisakaChatLoopService:
             resolved_system_prompt = self._custom_chat_system_prompt
         else:
             resolved_system_prompt = self._build_chat_system_prompt()
+        self._evolution_policy = self._evolution_policy_loader.snapshot()
         resolved_system_prompt = RuntimePolicyLoader.apply(resolved_system_prompt, self._evolution_policy)
         bot_nickname_notice = self._build_bot_nickname_notice(selected_history)
         if bot_nickname_notice:
@@ -1376,8 +1378,9 @@ class MaisakaChatLoopService:
             try:
                 _has_tool_call = any(getattr(item, "tool_calls", None) for item in final_output_items) or bool(generation_result.tool_calls)
                 _ev_outcome = "policy_blocked" if _planner_blocked_latest else ("success" if _has_tool_call else "idle")
-                _ev_score = 0.0 if _planner_blocked_latest else (1.0 if _has_tool_call else 0.8)
-                EvolutionMonitor(Path("data/self-evolution/monitor")).record(
+                # 安全策略前置拦截属于预期防护边界，不计入模型质量退化分数（Codex 审计 C1）
+                _ev_score = None if _planner_blocked_latest else (1.0 if _has_tool_call else 0.9)
+                EvolutionMonitor(resolve_self_evolution_path("data/self-evolution/monitor")).record(
                     MetricEvent(
                         target="maisaka.planner",
                         outcome=_ev_outcome,
@@ -1385,8 +1388,8 @@ class MaisakaChatLoopService:
                         event_id=f"planner:{uuid.uuid4().hex}",
                     )
                 )
-            except (OSError, ValueError):
-                logger.debug("自演化监测记录失败，忽略本轮监测", exc_info=True)
+            except (OSError, ValueError) as exc:
+                logger.warning(f"自演化监测记录失败: error_type={type(exc).__name__}")
 
         return ChatResponse(
             output_items=tuple(final_output_items),

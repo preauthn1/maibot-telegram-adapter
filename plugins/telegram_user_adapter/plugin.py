@@ -671,32 +671,43 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 result = {**result, "policy_drop": True, "policy_reason": detailed_reason, "retryable": False}
                 if chat_id:
                     self._funnel.record("outbound_blocked", chat_id, reason=detailed_reason)
-                blocked_draft = str(result.get("blocked_draft_text") or "").strip()
-                if (
-                    chat_id
-                    and blocked_draft
-                    and self._self_improvement is not None
-                    and any(
-                        detailed_reason.startswith(prefix)
-                        for prefix in ("pollution:", "pre_send_review:", "persona:", "group_policing")
-                    )
-                ):
-                    try:
-                        await self._self_improvement.record_outcome(
-                            ChatOutcome(
-                                chat_id=str(chat_id).split(":", 1)[0],
-                                text=blocked_draft,
-                                violation_kind=detailed_reason.split(":", 1)[0],
-                                violation_hits=[detailed_reason],
-                            )
-                        )
-                    except Exception as exc:
-                        self._logger.warning("记录被拦截草稿自省失败: %s", type(exc).__name__)
+
             elif result.get("policy_drop") is True:
                 if chat_id:
                     self._funnel.record("outbound_blocked", chat_id, reason=str(result.get("policy_reason") or "policy"))
             elif chat_id and result.get("error"):
                 self._record_platform_failure(chat_id, result.get("error"))
+
+        _blocked_segs = result.get("blocked_segments")
+        if chat_id and isinstance(_blocked_segs, list) and _blocked_segs and self._self_improvement is not None:
+            _norm_cid = str(chat_id).split(":", 1)[0]
+            for _bseg in _blocked_segs:
+                if not isinstance(_bseg, dict):
+                    continue
+                _btxt = str(_bseg.get("text") or "").strip()
+                _breason = str(_bseg.get("reason") or "").strip()
+                if _btxt and any(
+                    _breason.startswith(prefix)
+                    for prefix in ("pollution:", "pre_send_review:", "persona:", "group_policing")
+                ):
+                    try:
+                        await self._self_improvement.record_outcome(
+                            ChatOutcome(
+                                chat_id=_norm_cid,
+                                text=_btxt,
+                                violation_kind=_breason.split(":", 1)[0],
+                                violation_hits=[_breason],
+                            )
+                        )
+                    except Exception as exc:
+                        self._logger.warning("记录被拦截分段自省失败: %s", type(exc).__name__)
+            if self._outbound_codec is not None and self._self_improvement.enabled:
+                try:
+                    self._outbound_codec.refresh_lessons(
+                        self._self_improvement.skill_path.read_text(encoding="utf-8", errors="replace")
+                    )
+                except OSError:
+                    pass
 
         if result.get("success") and chat_id:
             self._funnel.record(

@@ -131,7 +131,7 @@ class EvolutionMonitor:
                         None if raw_score is None else float(raw_score),
                         int(item.get("usage_count", 1)), item.get("metadata"), item.get("event_id"),
                     )
-                    if event.score is None:
+                    if event.score is None or event.outcome in {"policy_blocked", "policy_dropped"}:
                         continue
                     aggregates.setdefault(event.target, []).append(event)
                 except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:

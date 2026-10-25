@@ -881,17 +881,7 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             items.append(
                 ContextItemBuilder().set_role(RoleType.User).add_text_content(expression_habits.strip()).build()
             )
-        # 未核实的自动经验只作为低优先级参考资料，不具有指令权限。
-        experience_block = build_scoped_experience_prompt_block(getattr(self, "chat_stream", None))
-        if experience_block:
-            from src.maisaka.context.memory_reference_policy import MEMORY_REFERENCE_POLICY
-
-            items.append(
-                ContextItemBuilder()
-                .set_role(RoleType.User)
-                .add_text_content(MEMORY_REFERENCE_POLICY + "\n" + experience_block)
-                .build()
-            )
+        # 会话自动经验已在 _build_personality_prompt() 单点注入，此处不再重复注入（Codex 审计 B1）。
         if temporary_reply_style_message:
             items.append(
                 ContextItemBuilder().set_role(RoleType.User).add_text_content(temporary_reply_style_message).build()
