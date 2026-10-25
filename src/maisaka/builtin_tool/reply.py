@@ -440,18 +440,19 @@ async def handle_tool(
         terminal_targets[target_message_id] = metadata
         try:
             from src.self_evolution.monitor import EvolutionMonitor, MetricEvent
+            from src.self_evolution.policy import resolve_self_evolution_path
             import uuid as _uuid
-            EvolutionMonitor(Path("data/self-evolution/monitor")).record(
+            EvolutionMonitor(resolve_self_evolution_path("data/self-evolution/monitor")).record(
                 MetricEvent(
                     target="maisaka.replyer",
-                    outcome="failure",
-                    score=0.0,
+                    outcome="policy_dropped",
+                    score=None,
                     metadata={"reason": str(_planner_reason)[:120]},
                     event_id=f"replyer:{_uuid.uuid4().hex}",
                 )
             )
-        except Exception:
-            pass
+        except (OSError, ValueError) as exc:
+            logger.warning("自演化监测记录失败: %s", type(exc).__name__)
         return tool_ctx.build_failure_result(
             invocation.tool_name,
             f"策略跳过：当前目标或回复意图触发静默边界（{_planner_reason}），已停止生成，请勿补发。",
@@ -714,18 +715,23 @@ async def handle_tool(
         terminal_targets[target_message_id] = result_details
         try:
             from src.self_evolution.monitor import EvolutionMonitor, MetricEvent
+            from src.self_evolution.policy import resolve_self_evolution_path
             import uuid as _uuid
-            EvolutionMonitor(Path("data/self-evolution/monitor")).record(
+            _is_content_violation = any(
+                str(reason).startswith(p) or f"({p}" in str(reason)
+                for p in ("pollution:", "pre_send_review:", "persona:", "group_policing")
+            )
+            EvolutionMonitor(resolve_self_evolution_path("data/self-evolution/monitor")).record(
                 MetricEvent(
                     target="maisaka.replyer",
-                    outcome="failure" if outcome == "policy_dropped" else outcome,
-                    score=0.0 if outcome == "policy_dropped" else 0.3,
+                    outcome="failure" if _is_content_violation else ("policy_dropped" if outcome == "policy_dropped" else outcome),
+                    score=0.0 if _is_content_violation else (None if outcome == "policy_dropped" else 0.2),
                     metadata={"reason": str(reason)[:120]},
                     event_id=f"replyer:{_uuid.uuid4().hex}",
                 )
             )
-        except Exception:
-            pass
+        except (OSError, ValueError) as exc:
+            logger.warning("自演化监测记录失败: %s", type(exc).__name__)
         # 部分已送达也隔离整个目标，下一逻辑轮不能重放已确认的前缀。
         if outcome == "delivery_unknown" or partial:
             uncertain_targets[target_message_id] = result_details

@@ -454,6 +454,7 @@ class TelegramUserOutboundCodec:
         last_sent: Any = None
         errors: List[str] = []
         policy_reasons: List[str] = []
+        blocked_segments: List[Dict[str, str]] = []
         sent_any = False
         # 已确认送达的原始组件下标；混合批次据此只记录真正发出的组件。
         confirmed_indices: set = set()
@@ -509,6 +510,7 @@ class TelegramUserOutboundCodec:
                         explicit_target_message_id=explicit_target_message_id if not sent_any else None,
                         observations=text_observations,
                         policy_reasons=policy_reasons,
+                        blocked_segments=blocked_segments,
                         acknowledgement=acknowledgement,
                     )
                 except LowInformationTargetReservedError:
@@ -551,13 +553,15 @@ class TelegramUserOutboundCodec:
                     for s in raw_message
                     if isinstance(s, dict) and s.get("type") == "text" and str(s.get("data") or "").strip()
                 ).strip()
+                first_blocked_text = blocked_segments[0]["text"] if blocked_segments else raw_draft
                 return {
                     "success": False,
                     "error": f"所有消息段被出站闸门拦截 ({reason_detail})",
                     "error_code": "local_guard_blocked",
                     "policy_drop": True,
                     "policy_reason": reason_detail,
-                    "blocked_draft_text": raw_draft[:200],
+                    "blocked_draft_text": first_blocked_text[:200],
+                    "blocked_segments": blocked_segments,
                 }
             return {"success": False, "error": "; ".join(errors)}
 
@@ -593,6 +597,7 @@ class TelegramUserOutboundCodec:
         return {"success": True, "external_message_id": external_id or None,
                 "target_message_id": explicit_target_message_id,
                 "target_sender_id": explicit_target_sender_id,
+                "blocked_segments": blocked_segments,
                 "text_observations": text_observations, "metadata": metadata}
 
     @staticmethod
@@ -624,6 +629,7 @@ class TelegramUserOutboundCodec:
         explicit_target_message_id: Optional[int] = None,
         observations: Optional[List[Dict[str, Any]]] = None,
         policy_reasons: Optional[List[str]] = None,
+        blocked_segments: Optional[List[Dict[str, str]]] = None,
         acknowledgement: Optional[str] = None,
     ) -> Any:
         """发送单个消息段。
@@ -829,6 +835,8 @@ class TelegramUserOutboundCodec:
                 self._logger.info(f"群聊管人话术拦截，不发送: chat={chat_id} text={text!r}")
                 if policy_reasons is not None:
                     policy_reasons.append("group_policing")
+                if blocked_segments is not None:
+                    blocked_segments.append({"text": text[:200], "reason": "group_policing"})
                 return None
 
             polluted, reasons = detect_pollution(text, is_group_chat=str(chat_id).startswith("-"))
@@ -836,8 +844,11 @@ class TelegramUserOutboundCodec:
                 self._logger.error(
                     f"拦截污染文本，不发送: {text!r} 命中={reasons}"
                 )
+                _p_reason = "pollution:" + ",".join(reasons)
                 if policy_reasons is not None:
-                    policy_reasons.append("pollution:" + ",".join(reasons))
+                    policy_reasons.append(_p_reason)
+                if blocked_segments is not None:
+                    blocked_segments.append({"text": text[:200], "reason": _p_reason})
                 return None
 
             # 人设一致性：拦截与人设矛盾的身份自述。
@@ -857,8 +868,11 @@ class TelegramUserOutboundCodec:
                     f"人设一致性拦截: chat={chat_id} {persona.reason} "
                     f"命中={persona.matched!r} text={text!r}"
                 )
+                _per_reason = f"persona:{persona.reason}"
                 if policy_reasons is not None:
-                    policy_reasons.append(f"persona:{persona.reason}")
+                    policy_reasons.append(_per_reason)
+                if blocked_segments is not None:
+                    blocked_segments.append({"text": text[:200], "reason": _per_reason})
                 return None
 
             # 发言前自检：用已积累的教训拦住重犯。
@@ -867,8 +881,11 @@ class TelegramUserOutboundCodec:
                 self._logger.warning(
                     f"发言前自检拦截: chat={chat_id} {verdict.reason} text={text!r}"
                 )
+                _rev_reason = f"pre_send_review:{verdict.reason}"
                 if policy_reasons is not None:
-                    policy_reasons.append(f"pre_send_review:{verdict.reason}")
+                    policy_reasons.append(_rev_reason)
+                if blocked_segments is not None:
+                    blocked_segments.append({"text": text[:200], "reason": _rev_reason})
                 return None
 
             # 高风险群的额外约束：长度与语气。

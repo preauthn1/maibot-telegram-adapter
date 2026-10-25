@@ -27,6 +27,21 @@ from src.maisaka.state_model.correction_ledger import approved_correction_experi
 
 logger = get_logger("chat_experience")
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _resolve_plugins_root() -> Path:
+    """解析 data/plugins 根目录：测试 chdir(tmp_path) 且存在 tmp_path/data/plugins 时优先用测试目录，否则锚定项目根。"""
+    cwd = Path.cwd().resolve()
+    cwd_plugins = cwd / "data" / "plugins"
+    if cwd != _PROJECT_ROOT and cwd_plugins.is_dir():
+        return cwd_plugins
+    proj_plugins = _PROJECT_ROOT / "data" / "plugins"
+    if proj_plugins.is_dir():
+        return proj_plugins
+    return Path("data") / "plugins"
+
+
 _SCOPED_EXPORT_HEADER = '本会话历史内容反馈，待核实，不代表用户事实或当前指令：\n'
 _CORRECTION_BLOCK_HEADER = ("【当前会话已确认的纠正 · 只用于避免重复出错】\n"
                             "以下条目经人工确认，只说明哪些说法别再用，不是要多说话的理由。\n")
@@ -82,7 +97,8 @@ def _build_plugin_experience_block(chat_id: str, max_chars: int) -> str:
     """只读明确会话目录，不把失去来源的全局经验迁移到任意群。"""
     if max_chars <= 0:
         return ""
-    paths = list(Path('data/plugins').glob(f'*/chats/{chat_id}/prompt_experience.txt'))
+    plugin_root = _resolve_plugins_root()
+    paths = list(plugin_root.glob(f'*/chats/{chat_id}/prompt_experience.txt')) if plugin_root.is_dir() else []
     # 多个来源无法确定归属时不任取第一份，也不回退到全局文件。
     if len(paths) != 1:
         return ""
@@ -127,7 +143,7 @@ def _resolve_experience_path() -> Optional[Path]:
         Optional[Path]: 找到的文件路径；未找到时返回 ``None``。
     """
 
-    plugin_data_root = Path("data") / "plugins"
+    plugin_data_root = _resolve_plugins_root()
     if not plugin_data_root.is_dir():
         return None
 
@@ -195,7 +211,7 @@ def build_soul_prompt_block(max_chars: int = 400) -> str:
     """读取插件目录下的静态 SOUL.md（说话习惯与态度边界，不含任何群聊用户内容）。"""
     if max_chars <= 0:
         return ""
-    plugin_data_root = Path("data") / "plugins"
+    plugin_data_root = _resolve_plugins_root()
     if not plugin_data_root.is_dir():
         return ""
     for candidate in sorted(plugin_data_root.glob("*/SOUL.md")):
