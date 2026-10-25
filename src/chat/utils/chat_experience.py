@@ -189,3 +189,30 @@ def build_experience_prompt_block(max_chars: int = 600) -> str:
     )
     _cache_at = now
     return _cache_value[:max_chars]
+
+
+def build_soul_prompt_block(max_chars: int = 400) -> str:
+    """读取插件目录下的静态 SOUL.md（说话习惯与态度边界，不含任何群聊用户内容）。"""
+    if max_chars <= 0:
+        return ""
+    plugin_data_root = Path("data") / "plugins"
+    if not plugin_data_root.is_dir():
+        return ""
+    for candidate in sorted(plugin_data_root.glob("*/SOUL.md")):
+        if not candidate.is_file():
+            continue
+        try:
+            raw = candidate.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        body_lines = [
+            line.strip()
+            for line in raw.splitlines()
+            if line.strip()
+            and not line.strip().startswith("#")
+            and not line.strip().startswith(("这份文件", "你可以直接手工编辑", "标记为"))
+        ]
+        if body_lines:
+            block = "【我的长期说话习惯（SOUL.md）】\n" + "\n".join(body_lines)
+            return block[:max_chars]
+    return ""

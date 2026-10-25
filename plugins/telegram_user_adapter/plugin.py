@@ -671,6 +671,27 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 result = {**result, "policy_drop": True, "policy_reason": detailed_reason, "retryable": False}
                 if chat_id:
                     self._funnel.record("outbound_blocked", chat_id, reason=detailed_reason)
+                blocked_draft = str(result.get("blocked_draft_text") or "").strip()
+                if (
+                    chat_id
+                    and blocked_draft
+                    and self._self_improvement is not None
+                    and any(
+                        detailed_reason.startswith(prefix)
+                        for prefix in ("pollution:", "pre_send_review:", "persona:", "group_policing")
+                    )
+                ):
+                    try:
+                        await self._self_improvement.record_outcome(
+                            ChatOutcome(
+                                chat_id=str(chat_id).split(":", 1)[0],
+                                text=blocked_draft,
+                                violation_kind=detailed_reason.split(":", 1)[0],
+                                violation_hits=[detailed_reason],
+                            )
+                        )
+                    except Exception as exc:
+                        self._logger.warning("记录被拦截草稿自省失败: %s", type(exc).__name__)
             elif result.get("policy_drop") is True:
                 if chat_id:
                     self._funnel.record("outbound_blocked", chat_id, reason=str(result.get("policy_reason") or "policy"))
@@ -753,7 +774,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 出站自省：检查\"我刚才说的话\"本身有没有越界（怼人、顺着下流话题接话）。
         # 人设约束只是概率性的，模型仍可能翻车；把翻车样本记下来回灌 prompt，
         # 才能让同类错误越来越少，而不是每次都靠人工发现再改词库。
-        violation_kind, violation_hits = inspect_own_message(sent_text)
+        violation_kind, violation_hits = inspect_own_message(sent_text, is_group_chat=str(chat_id).startswith("-"))
         if violation_kind and self._self_improvement is not None:
             await self._self_improvement.record_outcome(
                 ChatOutcome(

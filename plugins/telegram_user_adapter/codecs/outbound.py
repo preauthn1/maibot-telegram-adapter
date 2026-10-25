@@ -546,12 +546,18 @@ class TelegramUserOutboundCodec:
                 # 没有任何段抛平台异常：全部被本地出站闸门（管人话术、污染、
                 # 复用、长度等）拦下，不是平台失败，不能进入权限状态机。
                 reason_detail = "; ".join(dict.fromkeys(policy_reasons)) if policy_reasons else "local_guard_blocked"
+                raw_draft = " ".join(
+                    str(s.get("data") or "").strip()
+                    for s in raw_message
+                    if isinstance(s, dict) and s.get("type") == "text" and str(s.get("data") or "").strip()
+                ).strip()
                 return {
                     "success": False,
                     "error": f"所有消息段被出站闸门拦截 ({reason_detail})",
                     "error_code": "local_guard_blocked",
                     "policy_drop": True,
                     "policy_reason": reason_detail,
+                    "blocked_draft_text": raw_draft[:200],
                 }
             return {"success": False, "error": "; ".join(errors)}
 

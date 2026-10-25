@@ -178,7 +178,7 @@ _SELF_NSFW_FOLLOWUP: Tuple[str, ...] = (
 )
 
 
-def inspect_own_message(text: str) -> Tuple[str, List[str]]:
+def inspect_own_message(text: str, *, is_group_chat: bool = True) -> Tuple[str, List[str]]:
     """自省一条**我们自己发出**的消息是否越界。
 
     人设改了不代表模型永远守规矩；把越界的话记下来，
@@ -211,6 +211,15 @@ def inspect_own_message(text: str) -> Tuple[str, List[str]]:
     nsfw = [w for w in _SELF_NSFW_FOLLOWUP if w in scrubbed]
     if nsfw:
         return "nsfw_followup", nsfw
+
+    # 接入出站污染与群友角色边界检测（模态失明暴露、客服索图、冒充维护者审Bug、主动汇报搜索失败等）：
+    try:
+        from .output_sanity import detect_pollution
+        polluted, reasons = detect_pollution((text or "").strip(), is_group_chat=is_group_chat)
+        if polluted and reasons:
+            return "persona_or_modality_leak", reasons
+    except Exception:
+        pass
 
     return "", []
 
@@ -276,6 +285,8 @@ class SelfImprovementStore:
             self._base_dir.mkdir(parents=True, exist_ok=True)
             self._load_state()
             self._ensure_files()
+            self._write_prompt_experience()
+            self._sync_all_scoped_experiences()
         except OSError as exc:
             self._logger.warning(f"初始化自我改进存储失败 {self._base_dir}: {exc}")
             self._enabled = False
@@ -435,6 +446,19 @@ class SelfImprovementStore:
             except (OSError, ValueError):
                 self._logger.warning("会话经验导出失败；未回退到全局经验")
 
+    def _sync_all_scoped_experiences(self) -> None:
+        """启动时将已持久化的会话级违规记录同步导出到对应 chats/<chat_id>/prompt_experience.txt。"""
+        seen_chats = {
+            str(item.get("chat_id", ""))
+            for item in (self._state.get("violation_samples") or [])
+            if isinstance(item, dict) and re.fullmatch(r"-?[0-9]+", str(item.get("chat_id", "")))
+        }
+        for cid in seen_chats:
+            try:
+                export_scoped_experience(self._base_dir, self._state, cid)
+            except (OSError, ValueError):
+                pass
+
     def _write_prompt_experience(self) -> None:
         """把经验导出为主程序可读的 prompt 片段。
 
@@ -548,6 +572,7 @@ class SelfImprovementStore:
             recent = violations[-5:]
             aggressive = [v for v in recent if v.get("kind") == "aggressive"]
             nsfw = [v for v in recent if v.get("kind") == "nsfw_followup"]
+            leaks = [v for v in recent if v.get("kind") not in {"aggressive", "nsfw_followup"}]
 
             lines: List[str] = []
             if aggressive:
@@ -556,6 +581,9 @@ class SelfImprovementStore:
             if nsfw:
                 lines.append("你曾经顺着下流话题接话，这是被带偏了。遇到这类内容要岔开或不接：")
                 lines.extend(f"- {v.get('our_text', '')[:50]}" for v in nsfw)
+            if leaks:
+                lines.append("你曾经生成过这些暴露机器/客服特征的话，不要再犯：")
+                lines.extend(f"- {v.get('our_text', '')[:50]}" for v in leaks)
             if lines:
                 sections.append("【我犯过的错】\n" + "\n".join(lines))
 
