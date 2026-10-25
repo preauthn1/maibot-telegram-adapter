@@ -19,7 +19,7 @@ from dataclasses import asdict
 from ..fidelity.provenance import provenance
 from ..fidelity.preview import existing_preview
 from ..fidelity.animation import bounded_gif
-from ..media_budget import MediaBudget
+from ..media_budget import MediaBudget, normalize_budget_chat_id
 from ..telegram_user_client import TelegramUserClient
 from ..utils import build_topic_group_id, pick_username
 
@@ -42,6 +42,7 @@ class TelegramUserInboundCodec:
         self._download_media: bool = True
         self._max_media_bytes: int = 8 * 1024 * 1024
         self._media_budget = MediaBudget()
+        self._recent_inbound_senders: Dict[Tuple[str, int], str] = {}
 
     def set_self(self, self_id: int, username: Optional[str]) -> None:
         """记录当前登录账号的身份。
@@ -53,6 +54,23 @@ class TelegramUserInboundCodec:
 
         self._self_id = self_id
         self._self_username = username
+
+    def note_outbound_target(
+        self,
+        chat_id: str,
+        reply_to_msg_id: Optional[int],
+        *,
+        target_sender_id: Optional[str] = None,
+    ) -> None:
+        """当我方回复某条消息时，将该消息发送者记为近期活跃互动对象，豁免后续补图的视觉预算降级。"""
+        norm_chat = normalize_budget_chat_id(chat_id)
+        if not norm_chat:
+            return
+        sender_uid = str(target_sender_id or "").strip()
+        if not sender_uid and isinstance(reply_to_msg_id, int) and reply_to_msg_id > 0:
+            sender_uid = self._recent_inbound_senders.get((norm_chat, reply_to_msg_id), "")
+        if sender_uid:
+            self._media_budget.note_peer_interaction(norm_chat, sender_uid)
 
     def set_media_policy(self, *, download_media: bool, max_media_bytes: int) -> None:
         """配置媒体下载策略。
@@ -80,6 +98,13 @@ class TelegramUserInboundCodec:
         sender_id = self._resolve_sender_id(event)
         if chat_id is None or sender_id is None:
             return None
+        norm_chat_key = normalize_budget_chat_id(chat_id)
+        msg_int_id = getattr(message, "id", None)
+        if norm_chat_key and isinstance(msg_int_id, int) and msg_int_id > 0:
+            self._recent_inbound_senders[(norm_chat_key, msg_int_id)] = str(sender_id)
+            if len(self._recent_inbound_senders) > 1024:
+                oldest_key = next(iter(self._recent_inbound_senders))
+                self._recent_inbound_senders.pop(oldest_key, None)
 
         sender = await self._safe_get_sender(event)
         user_nickname = pick_username(
@@ -182,6 +207,7 @@ class TelegramUserInboundCodec:
             segments.append({"type": "text", "data": "]，说："})
 
         text = getattr(message, "message", "") or ""
+        additional["current_message_text"] = text
         if text:
             # 不修改策略使用的字面正文；显式保真版本保存在元数据。
             additional["telegram_markdown"] = inbound_markdown(text, getattr(message, "entities", None))
@@ -189,16 +215,23 @@ class TelegramUserInboundCodec:
             segments.append({"type": "text", "data": text})
 
         # Phase 9：未指名我们的媒体按会话预算识别，超额只给文本占位（不下载、不调 VLM）。
+        # 对近期刚与我们互动的群友（如刚被我们回复或刚 @ 过我们），豁免盲降级，避免对话中途突然瞎眼。
         directed = self._is_mentioning_self(message, replied_message)
-        chat_key = str(getattr(message, "chat_id", "") or "")
+        chat_key = normalize_budget_chat_id(getattr(event, "chat_id", None) or getattr(message, "chat_id", None))
+        sender_uid = str(self._resolve_sender_id(event) or "")
         if getattr(message, "media", None) is not None and not self._media_budget.should_analyze(
-            chat_key, directed_at_us=directed
+            chat_key, directed_at_us=directed, sender_id=sender_uid or None
         ):
             media_segment = self._media_placeholder(message)
         else:
             media_segment = await self._build_media_segment(message)
         if media_segment is not None:
             segments.append(media_segment)
+
+        # 耦合修复：若当前消息既无正文也无有效媒体段（例如回复他人并发送贴纸/无附言视频/无附言文件），
+        # 不能只保留 `[回复<name:uid>：...]，说：` 空壳文本段，否则下游会收到末尾为空的残缺引用并触发胡乱回复。
+        if not text.strip() and media_segment is None:
+            return None, additional, False
 
         # 供旁观判定：这条消息 @ 了别人（实体级 mention，或文本 @handle）。
         other_mentions = False
@@ -233,7 +266,11 @@ class TelegramUserInboundCodec:
         if getattr(message, "voice", None) is not None:
             return {"type": "text", "data": "[语音]"}
         if getattr(message, "video", None) is not None:
+            if not (getattr(message, "message", "") or "").strip():
+                return None
             return {"type": "text", "data": "[视频]"}
+        if not (getattr(message, "message", "") or "").strip():
+            return None
         return {"type": "text", "data": "[媒体]"}
 
     async def _build_media_segment(self, message: Any) -> Optional[Dict[str, Any]]:
@@ -263,8 +300,14 @@ class TelegramUserInboundCodec:
         if getattr(message, "voice", None) is not None:
             return await self._build_downloaded_segment(message, "voice", "[语音]")
         if getattr(message, "video", None) is not None:
+            # 视频无法直接交给 VLM 解析；与贴纸同理，无附言纯视频不构造空壳占位段，
+            # 防止模型说出"视频看不到 发截图吧"。
+            if not (getattr(message, "message", "") or "").strip():
+                return None
             return {"type": "text", "data": "[视频]"}
         if getattr(message, "document", None) is not None:
+            if not (getattr(message, "message", "") or "").strip():
+                return None
             file_name = getattr(getattr(message, "file", None), "name", None) or "文件"
             return {"type": "text", "data": f"[文件:{file_name}]"}
         return {"type": "text", "data": "[媒体]"}

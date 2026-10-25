@@ -58,7 +58,7 @@ from .private_deflect import build_deflect_reply, should_deflect_private
 from .presence_schedule import PresenceSchedule
 from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
-from .reply_prejudge import MUST_SILENCE, ReplyPrejudge
+from .reply_prejudge import MUST_SILENCE, ReplyPrejudge, strip_reply_envelope
 from .read_notifications import ReadNotificationsWorker
 from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion, inspect_own_message
 from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
@@ -667,9 +667,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             error_code = str(result.get("error_code") or "")
             # 本地闸门拒绝（低信息去重等）不是平台失败，不进入权限状态机。
             if error_code in {"low_information_target_repeat", "local_guard_blocked"}:
-                result = {**result, "policy_drop": True, "policy_reason": error_code, "retryable": False}
+                detailed_reason = str(result.get("policy_reason") or error_code)
+                result = {**result, "policy_drop": True, "policy_reason": detailed_reason, "retryable": False}
                 if chat_id:
-                    self._funnel.record("outbound_blocked", chat_id, reason=error_code)
+                    self._funnel.record("outbound_blocked", chat_id, reason=detailed_reason)
             elif result.get("policy_drop") is True:
                 if chat_id:
                     self._funnel.record("outbound_blocked", chat_id, reason=str(result.get("policy_reason") or "policy"))
@@ -736,6 +737,18 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         )
         self._last_outbound_text[chat_id] = sent_text
         self._prejudge.note_outbound(chat_id, sent_text)
+        if self._inbound_codec is not None:
+            _target_mid = self._safe_int(result.get("target_message_id"))
+            _target_sid = str(result.get("target_sender_id") or "").strip() or None
+            if _target_mid is None or _target_sid is None:
+                _add_cfg = (message.get("message_info", {}) or {}).get("additional_config", {}) or {}
+                if _target_mid is None:
+                    _target_mid = self._safe_int(_add_cfg.get("reply_message_id"))
+                if _target_sid is None:
+                    _raw_sid = _add_cfg.get("target_message_sender_id") or _add_cfg.get("reply_sender_id")
+                    if _raw_sid is not None and str(_raw_sid).strip():
+                        _target_sid = str(_raw_sid).strip()
+            self._inbound_codec.note_outbound_target(chat_id, _target_mid, target_sender_id=_target_sid)
 
         # 出站自省：检查\"我刚才说的话\"本身有没有越界（怼人、顺着下流话题接话）。
         # 人设约束只是概率性的，模型仍可能翻车；把翻车样本记下来回灌 prompt，
@@ -2141,6 +2154,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 用虚拟 group_id（含 topic）作为会话键，保证各群/各话题上下文隔离（需求 6）。
         session_key = self._resolve_inbound_session_key(message_dict, chat_id)
         incoming_text = message_dict.get("processed_plain_text", "") or ""
+        _add_cfg_in = (message_dict.get("message_info", {}) or {}).get("additional_config", {}) or {}
+        own_inbound_text = _add_cfg_in.get("current_message_text")
+        if not isinstance(own_inbound_text, str):
+            own_inbound_text = strip_reply_envelope(incoming_text)
         is_mention = bool(message_dict.get("is_at"))
 
         # 静默时段直接在入站侧丢弃，不喂给 Host。
@@ -2165,7 +2182,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         # 广告直接丢弃：跟广告搭话纯烧 token，而且真人看到广告是划过去的，
         # 逐条认真回复本身就是机器人特征。必须在进上下文之前拦掉。
-        is_spam, spam_signals = detect_spam(incoming_text)
+        is_spam, spam_signals = detect_spam(own_inbound_text)
         if is_spam:
             self.ctx.logger.info(
                 f"检测到广告，已丢弃: session={session_key} 信号={spam_signals}"
@@ -2182,7 +2199,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # NSFW 内容直接丢弃整条消息，不进上下文、不进 Host、不触发回复。
         # 必须在入站侧拦：一旦进了上下文，即使这轮不复述，也会带偏后续几轮的
         # 语气和话题走向，出站过滤堵不住这个口子。
-        is_nsfw, nsfw_hits = detect_nsfw(incoming_text)
+        is_nsfw, nsfw_hits = detect_nsfw(own_inbound_text)
         if is_nsfw:
             # 只记命中词到本地日志用于排查，绝不回显到聊天里。
             self.ctx.logger.info(
@@ -2212,7 +2229,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 但不影响群里其他人正常对话。
         # 只统计有实际文本的消息——贴纸、图片、空消息本来就不会触发
         # LLM 推理，把它们计入配额会让正常用户被误限流。
-        if incoming_text.strip() and self._is_user_flooding(session_key, str(sender_id)):
+        if own_inbound_text.strip() and self._is_user_flooding(session_key, str(sender_id)):
             if self._transcript is not None:
                 await self._transcript.log_event(
                     chat_id=session_key,
@@ -2224,7 +2241,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         # 主动点表情：放在 NSFW 拦截之后，避免给不良内容点赞。
         # 用独立任务跑，点表情要等待随机停顿，绝不能阻塞入站路由。
-        self._maybe_schedule_reaction(event, chat_id, incoming_text, addressed_to_us=is_mention)
+        self._maybe_schedule_reaction(event, chat_id, own_inbound_text, addressed_to_us=is_mention)
 
         if is_mention:
             # 需求 5：被 @ 或被回复时，该群下次发送享有最高优先级。
@@ -2235,7 +2252,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             # 回应不带脏字，且同一个人只回一次：对方要的就是反应，
             # 给一次就够，继续纠缠不再理会。
             is_provoked, provoke_hits = detect_provocation(
-                incoming_text, is_directed=True
+                own_inbound_text, is_directed=True
             )
             if is_provoked:
                 comeback = self._provocation.build_response(
@@ -2283,7 +2300,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 人读完再回一次，不会逐条应答。逐条机械响应比发言总量
         # 更能解释账号为何被看出不是真人（2026-08-31 因用户举报被封）。
         arrival_token = self._debouncer.note_arrival(session_key, str(sender_id))
-        read_delay = 0.0 if is_unlimited(session_key) else estimate_read_delay(incoming_text)
+        read_delay = 0.0 if is_unlimited(session_key) else estimate_read_delay(own_inbound_text)
         self.ctx.logger.info(f"阅读延迟 {read_delay:.1f} 秒后处理")
         await asyncio.sleep(read_delay)
 
@@ -2305,7 +2322,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return
 
 
-        await self._record_inbound_feedback(session_key, incoming_text)
+        await self._record_inbound_feedback(session_key, own_inbound_text)
 
         if self._transcript is not None:
             chat = await self._safe_get_chat(event)
@@ -2338,7 +2355,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 被直接 @ 或回复时不能用"技术话题回避"吞掉直接提问或求助。
         if (
             blocks_tech(session_key)
-            and is_tech_topic(incoming_text, session_key)
+            and is_tech_topic(own_inbound_text, session_key)
             and not is_mention
         ):
             self.ctx.logger.info(
@@ -2359,7 +2376,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 冷却已被白白消耗，表现为"该说话时反而沉默"。
         trigger = self._trigger.evaluate(
             session_key,
-            incoming_text,
+            own_inbound_text,
             is_private=bool(getattr(event, "is_private", False)),
             is_directed=is_mention,
         )
@@ -2393,7 +2410,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         reply_target = str(additional_info.get("reply_target_user_id") or "")
         prejudge = self._prejudge.judge(
             chat_id=session_key,
-            text=incoming_text,
+            text=own_inbound_text,
             is_mention=is_mention,
             is_group=session_key.startswith("-"),
             mentions_other=bool(additional_info.get("mentions_other_user")),
@@ -2460,7 +2477,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         # 顺带从这条消息里学：对方自己说出来的稳定事实值得记住。
         # is_durable_fact 会拒掉"正在装系统"这类临时状态。
-        if self._people.remember(str(sender_id), incoming_text):
+        if self._people.remember(str(sender_id), own_inbound_text):
             # 记住了新东西就攒一笔，够 20 条落一次盘。
             #
             # 只在 on_unload 存的话，进程被 kill -9 或崩溃就全丢了——
