@@ -864,6 +864,18 @@ class MaisakaChatLoopService:
             if id_block := build_identity_prompt_block(global_config.bot.nickname).strip():
                 prompt_lines.append(id_block)
 
+        try:
+            from src.chat.utils.chat_experience import build_scoped_experience_prompt_block, build_soul_prompt_block
+            if soul_block := build_soul_prompt_block().strip():
+                prompt_lines.append(soul_block)
+            from src.chat.message_receive.chat_manager import chat_manager
+            _stream = chat_manager.get_stream(self._session_id) if self._session_id else None
+            if _stream is not None:
+                if exp_block := build_scoped_experience_prompt_block(_stream).strip():
+                    prompt_lines.append(exp_block)
+        except Exception:
+            pass
+
         if not prompt_lines:
             return ""
 
@@ -1362,11 +1374,14 @@ class MaisakaChatLoopService:
 
         if request_kind == "planner":
             try:
+                _has_tool_call = any(getattr(item, "tool_calls", None) for item in final_output_items) or bool(generation_result.tool_calls)
+                _ev_outcome = "policy_blocked" if _planner_blocked_latest else ("success" if _has_tool_call else "idle")
+                _ev_score = 0.0 if _planner_blocked_latest else (1.0 if _has_tool_call else 0.8)
                 EvolutionMonitor(Path("data/self-evolution/monitor")).record(
                     MetricEvent(
                         target="maisaka.planner",
-                        outcome="unscored",
-                        score=None,
+                        outcome=_ev_outcome,
+                        score=_ev_score,
                         event_id=f"planner:{uuid.uuid4().hex}",
                     )
                 )

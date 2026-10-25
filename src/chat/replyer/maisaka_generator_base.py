@@ -157,7 +157,10 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             if global_config.personality.enable_identity_guard:
                 prompt_lines.append(build_identity_prompt_block(bot_name))
 
-            # 自动经验是待核实参考：不进入 system identity，见 _build_experience_reference_message。
+            experience_block = build_scoped_experience_prompt_block(getattr(self, "chat_stream", None))
+            if experience_block:
+                prompt_lines.append(experience_block)
+
             return "\n".join(prompt_lines)
         except Exception as exc:
             logger.warning(f"构建 Maisaka 人设提示词失败: {exc}")

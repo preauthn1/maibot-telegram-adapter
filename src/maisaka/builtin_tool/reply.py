@@ -1,5 +1,6 @@
-﻿"""reply 内置工具。"""
+"""reply 内置工具。"""
 
+from pathlib import Path
 from typing import Any, Optional
 
 import json
@@ -437,6 +438,20 @@ async def handle_tool(
             "outcome": "blocked_by_policy",
         }
         terminal_targets[target_message_id] = metadata
+        try:
+            from src.self_evolution.monitor import EvolutionMonitor, MetricEvent
+            import uuid as _uuid
+            EvolutionMonitor(Path("data/self-evolution/monitor")).record(
+                MetricEvent(
+                    target="maisaka.replyer",
+                    outcome="failure",
+                    score=0.0,
+                    metadata={"reason": str(_planner_reason)[:120]},
+                    event_id=f"replyer:{_uuid.uuid4().hex}",
+                )
+            )
+        except Exception:
+            pass
         return tool_ctx.build_failure_result(
             invocation.tool_name,
             f"策略跳过：当前目标或回复意图触发静默边界（{_planner_reason}），已停止生成，请勿补发。",
@@ -697,6 +712,20 @@ async def handle_tool(
         # 失败工具历史只保留送达证据，不能携带含生成正文的 monitor_detail。
         failure_metadata = {**result_details, "pause_execution": True}
         terminal_targets[target_message_id] = result_details
+        try:
+            from src.self_evolution.monitor import EvolutionMonitor, MetricEvent
+            import uuid as _uuid
+            EvolutionMonitor(Path("data/self-evolution/monitor")).record(
+                MetricEvent(
+                    target="maisaka.replyer",
+                    outcome="failure" if outcome == "policy_dropped" else outcome,
+                    score=0.0 if outcome == "policy_dropped" else 0.3,
+                    metadata={"reason": str(reason)[:120]},
+                    event_id=f"replyer:{_uuid.uuid4().hex}",
+                )
+            )
+        except Exception:
+            pass
         # 部分已送达也隔离整个目标，下一逻辑轮不能重放已确认的前缀。
         if outcome == "delivery_unknown" or partial:
             uncertain_targets[target_message_id] = result_details
