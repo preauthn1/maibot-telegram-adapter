@@ -35,7 +35,7 @@ from ..fragment_guard import limit_message_segments
 from ..high_risk_chats import get_chat_profile, should_block as high_risk_should_block
 from ..humanize import humanize_chat_text, is_emoji_only
 from ..lowercase_style import to_lowercase_style
-from ..low_information import LowInformationGuard, LowInformationTargetReservation, is_low_information
+from ..low_information import LowInformationGuard, LowInformationTargetReservation, classify_short_outbound, is_low_information
 from ..send_queue import candidate_enqueued_at
 from ..output_sanity import detect_pollution
 from ..official_stickers import OfficialDuckStickers, PACK_SHORT_NAME, enabled as stickers_enabled
@@ -335,6 +335,19 @@ class TelegramUserOutboundCodec:
         # Telegram reply_to，但不能抹掉这个结构化目标，用于压制同一对象的
         # 并发泛化回复。没有明确对象时不猜测，也不按 topic 根消息去重。
         explicit_target_message_id = reply_to
+        explicit_target_sender_id: Optional[str] = None
+        for _seg in raw_message:
+            if isinstance(_seg, dict) and _seg.get("type") == "reply":
+                _seg_data = _seg.get("data")
+                if isinstance(_seg_data, dict):
+                    _raw_sender = _seg_data.get("target_message_sender_id")
+                    if _raw_sender is not None and str(_raw_sender).strip():
+                        explicit_target_sender_id = str(_raw_sender).strip()
+                break
+        if not explicit_target_sender_id:
+            _cfg_sender = additional_config.get("target_message_sender_id") or additional_config.get("reply_sender_id")
+            if _cfg_sender is not None and str(_cfg_sender).strip():
+                explicit_target_sender_id = str(_cfg_sender).strip()
         acknowledgement = acknowledgement_word(
             raw_message, explicit_target_message_id, additional_config.get("reply_message_id")
         )
@@ -440,6 +453,7 @@ class TelegramUserOutboundCodec:
 
         last_sent: Any = None
         errors: List[str] = []
+        policy_reasons: List[str] = []
         sent_any = False
         # 已确认送达的原始组件下标；混合批次据此只记录真正发出的组件。
         confirmed_indices: set = set()
@@ -494,6 +508,7 @@ class TelegramUserOutboundCodec:
                         current_reply,
                         explicit_target_message_id=explicit_target_message_id if not sent_any else None,
                         observations=text_observations,
+                        policy_reasons=policy_reasons,
                         acknowledgement=acknowledgement,
                     )
                 except LowInformationTargetReservedError:
@@ -530,7 +545,14 @@ class TelegramUserOutboundCodec:
             if not errors:
                 # 没有任何段抛平台异常：全部被本地出站闸门（管人话术、污染、
                 # 复用、长度等）拦下，不是平台失败，不能进入权限状态机。
-                return {"success": False, "error": "所有消息段被出站闸门拦截", "error_code": "local_guard_blocked"}
+                reason_detail = "; ".join(dict.fromkeys(policy_reasons)) if policy_reasons else "local_guard_blocked"
+                return {
+                    "success": False,
+                    "error": f"所有消息段被出站闸门拦截 ({reason_detail})",
+                    "error_code": "local_guard_blocked",
+                    "policy_drop": True,
+                    "policy_reason": reason_detail,
+                }
             return {"success": False, "error": "; ".join(errors)}
 
         external_id = str(getattr(last_sent, "id", "") or "")
@@ -563,6 +585,8 @@ class TelegramUserOutboundCodec:
                 "confirmed_indices": sorted(confirmed_indices),
             }
         return {"success": True, "external_message_id": external_id or None,
+                "target_message_id": explicit_target_message_id,
+                "target_sender_id": explicit_target_sender_id,
                 "text_observations": text_observations, "metadata": metadata}
 
     @staticmethod
@@ -593,6 +617,7 @@ class TelegramUserOutboundCodec:
         *,
         explicit_target_message_id: Optional[int] = None,
         observations: Optional[List[Dict[str, Any]]] = None,
+        policy_reasons: Optional[List[str]] = None,
         acknowledgement: Optional[str] = None,
     ) -> Any:
         """发送单个消息段。
@@ -737,10 +762,10 @@ class TelegramUserOutboundCodec:
                 ):
                     if text.startswith(_hd_prefix):
                         _hd_rem = text[len(_hd_prefix):].lstrip()
-                        if _hd_rem.startswith((
+                        if len(_hd_rem) >= 4 and _hd_rem.startswith((
                             "看看", "看下", "检查", "开启", "打开", "关掉", "关闭", "切换", "切到",
                             "对比", "把", "用", "换", "买", "开", "加", "进入", "确认", "更新",
-                            "重装", "重启", "手动", "排查",
+                            "重装", "重启", "手动", "排查", "查", "看", "选", "问", "测",
                         )):
                             text = _hd_rem
                             break
@@ -796,13 +821,17 @@ class TelegramUserOutboundCodec:
 
             if str(chat_id).startswith("-") and is_group_policing(text):
                 self._logger.info(f"群聊管人话术拦截，不发送: chat={chat_id} text={text!r}")
+                if policy_reasons is not None:
+                    policy_reasons.append("group_policing")
                 return None
 
-            polluted, reasons = detect_pollution(text)
+            polluted, reasons = detect_pollution(text, is_group_chat=str(chat_id).startswith("-"))
             if polluted:
                 self._logger.error(
                     f"拦截污染文本，不发送: {text!r} 命中={reasons}"
                 )
+                if policy_reasons is not None:
+                    policy_reasons.append("pollution:" + ",".join(reasons))
                 return None
 
             # 人设一致性：拦截与人设矛盾的身份自述。
@@ -822,19 +851,18 @@ class TelegramUserOutboundCodec:
                     f"人设一致性拦截: chat={chat_id} {persona.reason} "
                     f"命中={persona.matched!r} text={text!r}"
                 )
+                if policy_reasons is not None:
+                    policy_reasons.append(f"persona:{persona.reason}")
                 return None
 
             # 发言前自检：用已积累的教训拦住重犯。
-            #
-            # self_improvement 是事后学习——发出去才知道被质疑。
-            # 借鉴 Hermes「动手前先加载相关知识」的做法，把
-            # SKILL.md 里记录的失败模式在发言前先匹配一遍。
-            # 账号已因用户举报被封过一次，事后补救来不及。
             verdict = review_draft(text, store=self._lesson_store)
             if not verdict.allowed:
                 self._logger.warning(
                     f"发言前自检拦截: chat={chat_id} {verdict.reason} text={text!r}"
                 )
+                if policy_reasons is not None:
+                    policy_reasons.append(f"pre_send_review:{verdict.reason}")
                 return None
 
             # 高风险群的额外约束：长度与语气。
@@ -857,13 +885,18 @@ class TelegramUserOutboundCodec:
             # 同一句短泛化回应如果刚在另一个聊天流发过，会成为跨群可见的
             # 自动化指纹。此处拒绝发送，不用同义词改写制造新的模板。
             now = time.monotonic()
-            # 原始完整 payload 与最终输出都必须满足契约。
-            is_acknowledgement = acknowledgement is not None and text == acknowledgement
-            if not is_unlimited(chat_id) and not is_acknowledgement and self._reply_reuse_guard.is_recent_repeat(chat_id, text, now=now):
+            # 统一短回复/确认词分类契约。
+            short_cls = classify_short_outbound(text, acknowledgement=acknowledgement)
+            is_acknowledgement = short_cls.is_acknowledgement
+            if not is_unlimited(chat_id) and not short_cls.bypass_repeat_and_rate_guard and self._reply_reuse_guard.is_recent_repeat(chat_id, text, now=now):
                 self._logger.info(f"同聊天流短回复复读，跳过发送: chat={chat_id} text={text!r}")
+                if policy_reasons is not None:
+                    policy_reasons.append("recent_repeat")
                 return None
-            if not is_unlimited(chat_id) and not is_acknowledgement and self._reply_reuse_guard.is_recent_cross_chat_duplicate(chat_id, text, now=now):
+            if not is_unlimited(chat_id) and not short_cls.bypass_repeat_and_rate_guard and self._reply_reuse_guard.is_recent_cross_chat_duplicate(chat_id, text, now=now):
                 self._logger.info(f"跨聊天流短回复重复，跳过发送: chat={chat_id} text={text!r}")
+                if policy_reasons is not None:
+                    policy_reasons.append("cross_chat_duplicate")
                 return None
 
             # 同一目标重复免责声明拦截：对同一 explicit_target_message_id，
@@ -906,10 +939,12 @@ class TelegramUserOutboundCodec:
 
             formatted, parse_mode = format_command_segments(text)
 
-            if not is_unlimited(chat_id) and not is_acknowledgement and not self._low_information_guard.allows(text):
+            if not is_unlimited(chat_id) and short_cls.is_low_info and not self._low_information_guard.allows(text):
                 self._logger.info("低信息动作族限频，跳过发送")
+                if policy_reasons is not None:
+                    policy_reasons.append("low_information_rate_limit")
                 return None
-            short_lived = is_acknowledgement or is_low_information(text)
+            short_lived = short_cls.is_short_lived
             if not is_unlimited(chat_id) and short_lived and time.monotonic() - enqueued_at >= self._low_information_budget_seconds:
                 self._logger.info("低信息候选已过期，跳过发送")
                 return None

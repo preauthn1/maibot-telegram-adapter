@@ -44,11 +44,26 @@ _CLOSING = {
 }
 _STRIP = re.compile(r"[\s~～!！。.,，…、?？\u3000]+|[哈呀啊吧呢嘛啦]+$")
 _QUESTION = re.compile(r"[?？]|吗$|么$|呢$|怎么|为什么|如何|有没有|是不是|能不能|可以吗")
+# 剥离入站 codec 拼装的 `[回复<name:uid>：...]，说：` 引用头，只对当前发言者自己的正文做分类，
+# 防止引用他人 Bug 报告、问句或收尾词污染当前消息的预判档位（Codex 耦合审计 #3）。
+_REPLY_ENVELOPE_PREFIX = re.compile(r"^\s*\[回复<[^>\n]*>：[\s\S]*?\]，说：\s*")
+# 群友面向项目作者提交的结构化 Bug 报告 / GitHub Issue 模板：
+# 未明确 @ 我们时，普通群友绝不主动接单审阅或写排障评语。
+_BUG_REPORT_TEMPLATE = re.compile(
+    r"问题描述\s*/\s*Describe the bug|复现步骤\s*/\s*To Reproduce|软件版本\s*/\s*Version|操作系统版本\s*/\s*OS Version",
+    re.IGNORECASE,
+)
 _TOKEN = re.compile(r"[\u4e00-\u9fff]{2,}|[A-Za-z]{3,}|\d{2,}")
 
 
+def strip_reply_envelope(text: str) -> str:
+    """剥离入站 `[回复<...>：...]，说：` 引用前缀，仅返回当前发言者自己的正文。"""
+    raw = text or ""
+    return _REPLY_ENVELOPE_PREFIX.sub("", raw, count=1)
+
+
 def _normalize(text: str) -> str:
-    return _STRIP.sub("", (text or "").strip().lower())
+    return _STRIP.sub("", strip_reply_envelope(text).strip().lower())
 
 
 def is_closing_signal(text: str) -> bool:
@@ -119,10 +134,13 @@ class ReplyPrejudge:
         # 回复别人的消息交给 Host 判断（真人也常在别人的楼里插一句）。
         if mentions_other:
             return Prejudge(MUST_SILENCE, "bystander")
-        if is_closing_signal(text):
+        own_text = strip_reply_envelope(text or "")
+        if _BUG_REPORT_TEMPLATE.search(own_text):
+            return Prejudge(MUST_SILENCE, "bug_report_for_author")
+        if is_closing_signal(own_text):
             return Prejudge(MUST_SILENCE, "closing_signal")
 
-        tokens = frozenset(_TOKEN.findall(text or ""))
+        tokens = frozenset(_TOKEN.findall(own_text))
         if tokens:
             current = time.monotonic() if now is None else now
             hits = sum(
@@ -133,6 +151,6 @@ class ReplyPrejudge:
             if hits >= self._JOKE_MAX_REPLIES:
                 return Prejudge(MUST_SILENCE, "duplicate_joke")
 
-        if _QUESTION.search(text or ""):
+        if _QUESTION.search(own_text):
             return Prejudge(SHOULD_REPLY)
         return Prejudge(OBSERVE)

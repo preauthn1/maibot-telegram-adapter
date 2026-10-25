@@ -414,6 +414,36 @@ async def handle_tool(
     if len(terminal_targets) >= 256:
         terminal_targets.pop(next(iter(terminal_targets)))
 
+    # Planner/Replyer 共享结构化前置策略：
+    # 在调用 Replyer 生成前拦截针对裸媒体占位符、索要截图意图或作者专属 Bug 报告模板的 reply 调用。
+    from src.chat.utils.identity_guard import check_planner_reply_policy
+    _exp_intent = reply_tool_args.get("expression_intent")
+    _prefer_list = tuple(_exp_intent.get("prefer") or ()) if isinstance(_exp_intent, dict) else ()
+    _planner_allowed, _planner_reason = check_planner_reply_policy(
+        target_text=getattr(target_message, "processed_plain_text", "") or "",
+        reply_reference=str(reply_tool_args.get("reply_reference") or ""),
+        prefer_items=_prefer_list,
+        is_group_chat=bool(getattr(tool_ctx.runtime, "_is_group_chat", True)),
+    )
+    if not _planner_allowed:
+        await mark_continuity_blocked("planner_policy_guard")
+        metadata = {
+            "delivery_outcome": "policy_dropped",
+            "policy_reason": _planner_reason,
+            "policy_silence": True,
+            "sent": False,
+            "retryable": False,
+            "pause_execution": True,
+            "outcome": "blocked_by_policy",
+        }
+        terminal_targets[target_message_id] = metadata
+        return tool_ctx.build_failure_result(
+            invocation.tool_name,
+            f"策略跳过：当前目标或回复意图触发静默边界（{_planner_reason}），已停止生成，请勿补发。",
+            structured_content={"msg_id": target_message_id, **metadata},
+            metadata=metadata,
+        )
+
     if tool_ctx.runtime.chat_stream.platform != CLI_PLATFORM_NAME:
         policy = await send_service.preflight_reply_policy(tool_ctx.runtime.session_id, target_message)
         if policy.get("allowed") is not True:

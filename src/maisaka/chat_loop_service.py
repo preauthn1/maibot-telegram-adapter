@@ -859,6 +859,11 @@ class MaisakaChatLoopService:
         if chat_prompt := ChatConfigUtils.get_chat_prompt_for_chat(self._session_id, self._is_group_chat).strip():
             prompt_lines.append(f"本聊天专用注意事项：\n{chat_prompt}")
 
+        if getattr(global_config.personality, "enable_identity_guard", True):
+            from src.chat.utils.identity_guard import build_identity_prompt_block
+            if id_block := build_identity_prompt_block(global_config.bot.nickname).strip():
+                prompt_lines.append(id_block)
+
         if not prompt_lines:
             return ""
 
@@ -1111,6 +1116,29 @@ class MaisakaChatLoopService:
             max_context_size=max_context_size,
             is_group_chat=self._is_group_chat,
         )
+        # Planner 生成前结构化前置策略（与 builtin_tool/reply.py 及 maisaka_generator_base.py 共用 check_planner_reply_policy）：
+        # 检查最新入站用户消息是否命中裸媒体占位符或作者专属 Bug 报告模板；若最新消息不可回复，追加结构化禁用提示并在单目标场景下移除 reply 工具。
+        _planner_blocked_latest = False
+        _planner_policy_tails: list[str] = list(tail_user_messages or [])
+        if request_kind == "planner":
+            from src.chat.utils.identity_guard import check_planner_reply_policy
+            for _h_msg in reversed(selected_history):
+                if isinstance(_h_msg, SessionBackedMessage) and _h_msg.source_kind == "user":
+                    _orig = _h_msg.original_message
+                    if _orig is not None and not is_bot_self(_orig.platform, _orig.message_info.user_info.user_id):
+                        _raw_txt = getattr(_orig, "processed_plain_text", "") or _h_msg.processed_plain_text or ""
+                        _ok, _p_reason = check_planner_reply_policy(
+                            target_text=_raw_txt,
+                            is_group_chat=bool(self._is_group_chat),
+                        )
+                        if not _ok:
+                            _planner_blocked_latest = True
+                            _disp_id = to_display_message_id(_orig.message_id) if _orig.message_id else ""
+                            _planner_policy_tails.append(
+                                f"[策略前置阻断] 最新消息 (msg_id={_disp_id}) 命中静默边界 ({_p_reason})，禁止对该消息调用 reply 工具，请直接调用 no_reply 或 wait。"
+                            )
+                        break
+        tail_user_messages = _planner_policy_tails
         built_messages, history_item_count = self._build_request_messages(
             selected_history,
             enable_visual_message=enable_visual_message,
@@ -1209,6 +1237,15 @@ class MaisakaChatLoopService:
                 tool_provider_by_name.get(resolve_tool_definition_name(definition), "")
                 for definition in all_tools
             ]
+        if request_kind == "planner" and _planner_blocked_latest:
+            # 当最新入站用户消息已被 check_planner_reply_policy 判定为不可回复（如纯未解析媒体占位或面向作者的 Bug 模板）时，
+            # 在 Planner 工具集中前置移除 reply，从源头杜绝 Planner 生成无效的 reply 调用（Codex 耦合终审 #6）。
+            _filtered_pairs = [
+                (d, pt) for d, pt in zip(all_tools, tool_provider_types, strict=True)
+                if resolve_tool_definition_name(d) != "reply"
+            ]
+            all_tools = [d for d, _ in _filtered_pairs]
+            tool_provider_types = [pt for _, pt in _filtered_pairs]
         if request_kind == "planner":
             self._active_tool_names = tuple(
                 name for definition in all_tools if (name := resolve_tool_definition_name(definition))

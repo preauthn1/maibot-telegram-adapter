@@ -1240,6 +1240,23 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             result.error_message = "聊天历史为空"
             return finalize(False)
 
+        # Replyer 生成前结构化前置策略（与 chat_loop_service.py 及 builtin_tool/reply.py 共用 check_planner_reply_policy）：
+        from src.chat.utils.identity_guard import check_planner_reply_policy
+        _exp_intent = active_reply_tool_args.get("expression_intent")
+        _prefer_list = tuple(_exp_intent.get("prefer") or ()) if isinstance(_exp_intent, dict) else ()
+        _is_group = bool(self.chat_stream.is_group_session) if self.chat_stream is not None else True
+        _target_txt = (getattr(reply_message, "processed_plain_text", "") or "") if reply_message is not None else ""
+        _policy_ok, _policy_reason = check_planner_reply_policy(
+            target_text=_target_txt,
+            reply_reference=str(active_reply_tool_args.get("reply_reference") or reply_reason or ""),
+            prefer_items=_prefer_list,
+            is_group_chat=_is_group,
+        )
+        if not _policy_ok:
+            logger.info(f"Maisaka 回复器前置策略阻断生成: reason={_policy_reason}")
+            result.error_message = f"policy_dropped:{_policy_reason}"
+            return finalize(False)
+
         # logger.info(
         #     f"Maisaka 回复器开始生成: 流={stream_id} 原因={reply_reason!r} "
         #     f"历史条数={len(chat_history)} 目标ID={reply_message.message_id if reply_message else None}"

@@ -1,13 +1,14 @@
 """保守识别低信息动作族；按实际成功消息维护全局滑窗。"""
 from collections import deque
-from typing import Deque, Dict, Tuple
+from dataclasses import dataclass
+from typing import Deque, Dict, Optional, Tuple
 import re
 
 
 # 仅匹配完整泛化回应，不凭字数判断；数字、命令、型号与技术结论不在此列。
 _FAMILY = re.compile(
     r"(?:那|这)?(?:确实|真的|的确)?(?:太贵了|贵了|贵|正常|离谱|夸张|好贵|有点贵)"
-    r"|(?:也是|确实|确实如此|没错|有道理|原来如此)"
+    r"|(?:也是|确实|确实如此|没错|有道理|原来如此|是这样的|是这样)"
     r"|(?:那还行(?:能用了)?|也行|都行|行吧|这速度舒服|那确实看着爽)"
     # 完整匹配只用于低信息额度分类，不等同于直接禁止发送。
     # 拒绝和停止请求具有明确语用意义，不纳入空洞附和；
@@ -82,3 +83,30 @@ class LowInformationTargetReservation:
     def release(self, chat_id: str, target_message_id: str) -> None:
         """仅释放本次失败发送的明确目标预占。"""
         self._reservations.pop((str(chat_id), str(target_message_id)), None)
+
+
+@dataclass(frozen=True)
+class ShortOutboundClassification:
+    """统一短回复/确认词分类结果对象，消除 acknowledgement 与 low_information 的双轨分裂（Codex 耦合审计 #4）。"""
+    is_acknowledgement: bool
+    is_low_info: bool
+
+    @property
+    def is_short_lived(self) -> bool:
+        return self.is_acknowledgement or self.is_low_info
+
+    @property
+    def bypass_repeat_and_rate_guard(self) -> bool:
+        return self.is_acknowledgement
+
+    @property
+    def forbid_custom_emoji_suffix(self) -> bool:
+        return self.is_acknowledgement or self.is_low_info
+
+
+def classify_short_outbound(text: str, *, acknowledgement: Optional[str] = None) -> ShortOutboundClassification:
+    """一次性计算当前出站文本的确认词契约与低信息分类（互斥优先级：acknowledgement > low_info）。"""
+    norm = (text or "").strip()
+    is_ack = bool(acknowledgement is not None and norm == acknowledgement)
+    low_info = False if is_ack else is_low_information(norm)
+    return ShortOutboundClassification(is_acknowledgement=is_ack, is_low_info=low_info)
