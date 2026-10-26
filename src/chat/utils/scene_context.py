@@ -25,6 +25,20 @@ import math
 
 logger = logging.getLogger(__name__)
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _resolve_plugins_root() -> Path:
+    cwd = Path.cwd().resolve()
+    cwd_plugins = cwd / "data" / "plugins"
+    if cwd != _PROJECT_ROOT and cwd_plugins.is_dir():
+        return cwd_plugins
+    proj_plugins = _PROJECT_ROOT / "data" / "plugins"
+    if proj_plugins.is_dir():
+        return proj_plugins
+    return Path("data") / "plugins"
+
+
 # 适配器把当前账号资料写到 data/plugins/<插件ID>/ 下的这个文件。
 _PROFILE_FILE_NAME = "account_profile.json"
 _CHAT_STYLE_FILE_NAME = "SKILL.md"
@@ -62,7 +76,7 @@ def _load_account_profile() -> Dict[str, Any]:
     if _profile_cache and (now - _profile_cache_at) < _CACHE_TTL_SECONDS:
         return _profile_cache
 
-    plugin_root = Path("data") / "plugins"
+    plugin_root = _resolve_plugins_root()
     if not plugin_root.is_dir():
         _profile_cache_at = now
         return {}
@@ -113,7 +127,7 @@ def _load_chat_style(chat_id: str) -> str:
     global _style_cache, _style_cache_at, _style_signature
 
     now = time.monotonic()
-    plugin_root = Path("data") / "plugins"
+    plugin_root = _resolve_plugins_root()
     candidates = sorted(plugin_root.glob(f"*/chats/*/{_CHAT_STYLE_FILE_NAME}"))
     signature = []
     snapshots = {}
@@ -129,7 +143,7 @@ def _load_chat_style(chat_id: str) -> str:
         return _style_cache.get(chat_id, "")
 
     loaded: Dict[str, str] = {}
-    plugin_root = Path("data") / "plugins"
+    plugin_root = _resolve_plugins_root()
     if plugin_root.is_dir():
         source_counts: Dict[str, int] = {}
         for candidate in candidates:
@@ -146,62 +160,74 @@ def _load_chat_style(chat_id: str) -> str:
             except (OSError, UnicodeError):
                 # 单张文件损坏仅影响该来源，不让其他会话的人设装配降级。
                 continue
-            if values.get("style_enabled") != "true":
+            auto_style_enabled = values.get("style_enabled") == "true"
+            manual_style_enabled = values.get("manual_style_enabled") == "true"
+            # 若显式设置 style_enabled: false，则整体禁用该卡片提示注入
+            if values.get("style_enabled") == "false":
                 continue
-            profile_chat_id = candidate.parent.name
-            max_chars = values.get("style_max_chars", "")
             try:
-                max_chars_number = int(max_chars)
-                max_emoji = int(values.get("max_emoji", "1"))
                 risk_max_chars = int(values.get("max_chars", "0"))
             except ValueError:
                 continue
-            try:
-                peer_samples = int(values.get("peer_style_samples", "0"))
-                peer_median_chars = float(values.get("peer_median_chars", "0"))
-                peer_question_rate = float(values.get("peer_question_rate", "0"))
-                if not 0.0 <= peer_question_rate <= 1.0:
-                    raise ValueError("peer_question_rate 必须在 0 到 1 之间")
-                if peer_samples < 0 or not math.isfinite(peer_median_chars) or peer_median_chars < 0:
-                    raise ValueError("无效同群统计")
-            except ValueError:
-                logger.warning("忽略无效同群统计；保留人工规则及独立发送限制")
-                peer_samples, peer_median_chars, peer_question_rate = 0, 0.0, 0.0
-            if max_chars_number <= 0 or max_emoji < 0:
+            if not auto_style_enabled and not manual_style_enabled and risk_max_chars <= 0:
                 continue
+            profile_chat_id = candidate.parent.name
             lines = ["【当前聊天流的表达边界】"]
-            if values.get("style_source") == "owner_inbound_v1":
-                source_description = "本账号入站记录（已按采样规则排除自动出站，但不证明真人作者身份）"
-            else:
-                source_description = "该账号历史出站（来源未核验，可能包含自动生成内容）"
-            lines.append(
-                f"{source_description}的长度 P90 为 {max_chars_number} 字符；"
-                "这只是描述统计，不是目标长度或真人表达标准。不要为了凑短句删除条件、否定或引用。"
-            )
-            if risk_max_chars > 0:
-                lines.append(f"本会话人工配置的发送硬上限为 {risk_max_chars} 字符；在此范围内保留完整意思。")
-            if peer_samples >= 80 and peer_median_chars > 0:
+            if auto_style_enabled:
+                max_chars = values.get("style_max_chars", "")
+                try:
+                    max_chars_number = int(max_chars)
+                    max_emoji = int(values.get("max_emoji", "1"))
+                except ValueError:
+                    continue
+                try:
+                    peer_samples = int(values.get("peer_style_samples", "0"))
+                    peer_median_chars = float(values.get("peer_median_chars", "0"))
+                    peer_question_rate = float(values.get("peer_question_rate", "0"))
+                    if not 0.0 <= peer_question_rate <= 1.0:
+                        raise ValueError("peer_question_rate 必须在 0 到 1 之间")
+                    if peer_samples < 0 or not math.isfinite(peer_median_chars) or peer_median_chars < 0:
+                        raise ValueError("无效同群统计")
+                except ValueError:
+                    logger.warning("忽略无效同群统计；保留人工规则及独立发送限制")
+                    peer_samples, peer_median_chars, peer_question_rate = 0, 0.0, 0.0
+                if max_chars_number <= 0 or max_emoji < 0:
+                    continue
+                if values.get("style_source") == "owner_inbound_v1":
+                    source_description = "本账号入站记录（已按采样规则排除自动出站，但不证明真人作者身份）"
+                else:
+                    source_description = "该账号历史出站（来源未核验，可能包含自动生成内容）"
                 lines.append(
-                    f"本群已观察到 {peer_samples} 条其他成员消息，其中位长度约 {peer_median_chars} 字。"
-                    "这只是长度参照，不要复制任何人的口头禅、错别字或句式。"
+                    f"{source_description}的长度 P90 为 {max_chars_number} 字符；"
+                    "这只是描述统计，不是目标长度或真人表达标准。不要为了凑短句删除条件、否定或引用。"
                 )
-                if peer_question_rate >= 0.04:
+                if risk_max_chars > 0:
+                    lines.append(f"本会话人工配置的发送硬上限为 {risk_max_chars} 字符；在此范围内保留完整意思。")
+                if peer_samples >= 80 and peer_median_chars > 0:
                     lines.append(
-                        "本群存在自然追问；信息不足时可以问一个会改变判断的具体条件，"
-                        "但不要为了显得互动而每条都反问。"
+                        f"本群已观察到 {peer_samples} 条其他成员消息，其中位长度约 {peer_median_chars} 字。"
+                        "这只是长度参照，不要复制任何人的口头禅、错别字或句式。"
                     )
-            if values.get("preserve_trailing_period") == "true":
-                lines.append("该聊天流中句尾句号是正常习惯，可以保留；不要为了统一口吻强行删掉。")
-            else:
-                lines.append("该聊天流中句尾通常不使用句号；不必为完整书面句而补句号。")
-            if max_emoji == 0:
-                lines.append("本聊天流不使用 emoji；保留文字内容的完整含义。")
-            elif values.get("allow_emoji_only") == "true":
-                lines.append(f"该聊天流可以偶尔用纯 emoji 作回应，单条最多 {max_emoji} 个；不要连续使用。")
-            else:
-                lines.append(f"该聊天流不使用纯 emoji 回复；含文字时最多 {max_emoji} 个 emoji。")
+                    if peer_question_rate >= 0.04:
+                        lines.append(
+                            "本群存在自然追问；信息不足时可以问一个会改变判断的具体条件，"
+                            "但不要为了显得互动而每条都反问。"
+                        )
+                if values.get("preserve_trailing_period") == "true":
+                    lines.append("该聊天流中句尾句号是正常习惯，可以保留；不要为了统一口吻强行删掉。")
+                else:
+                    lines.append("该聊天流中句尾通常不使用句号；不必为完整书面句而补句号。")
+                if max_emoji == 0:
+                    lines.append("本聊天流不使用 emoji；保留文字内容的完整含义。")
+                elif values.get("allow_emoji_only") == "true":
+                    lines.append(f"该聊天流可以偶尔用纯 emoji 作回应，单条最多 {max_emoji} 个；不要连续使用。")
+                else:
+                    lines.append(f"该聊天流不使用纯 emoji 回复；含文字时最多 {max_emoji} 个 emoji。")
+            elif risk_max_chars > 0:
+                lines.append(f"本会话人工配置的发送硬上限为 {risk_max_chars} 字符；在此范围内保留完整意思。")
+
             # 仅显式启用的人工卡片正文进入提示；自动统计不会获得指令权限。
-            if values.get("manual_style_enabled") == "true":
+            if manual_style_enabled:
                 # 使用与头部解析相同的整行边界，仅移除分隔线自身换行。
                 # 人工示例的缩进、前导空行与尾随换行属于正文，不做 strip。
                 body_offset = 4
@@ -214,7 +240,8 @@ def _load_chat_style(chat_id: str) -> str:
                     logger.warning("跳过超长人工画像正文：超过 6000 字符，未截断；结构化约束仍保留，请修订源文件")
                 elif body:
                     lines.append("【人工维护的本群表达规则；不覆盖事实与安全约束】\n" + body)
-            loaded[profile_chat_id] = "\n".join(lines)
+            if len(lines) > 1:
+                loaded[profile_chat_id] = "\n".join(lines)
 
     _style_cache = loaded
     _style_signature = signature

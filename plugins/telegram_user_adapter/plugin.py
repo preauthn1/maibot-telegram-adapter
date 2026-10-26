@@ -2497,16 +2497,6 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 此前只有 SOUL.md（我是谁）和 SKILL.md（怎么说话），没有任何地方
         # 记「对方是谁」。同一个人昨天说过在用 OpenWrt，今天再聊路由毫无
         # 印象——真人群友之间会记得"这人搞前端""那位有台 NAS"。
-        person_block = self._people.build_prompt_block(str(sender_id))
-        if person_block:
-            message_info = message_dict.setdefault("message_info", {})
-            additional = message_info.setdefault("additional_config", {})
-            additional["telegram_user_person_facts"] = person_block
-            self.ctx.logger.debug(
-                f"注入人物记忆: sender={sender_id} 共 "
-                f"{len(person_block.splitlines())} 条"
-            )
-
         # 顺带从这条消息里学：对方自己说出来的稳定事实值得记住。
         # is_durable_fact 会拒掉"正在装系统"这类临时状态。
         if self._people.remember(str(sender_id), own_inbound_text):

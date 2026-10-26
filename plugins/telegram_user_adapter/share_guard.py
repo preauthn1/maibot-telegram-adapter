@@ -37,17 +37,12 @@
    事故中我们自己回了句"好家伙当面投我票行行行 我少说话"，
    然后照发不误——嘴上说说不算数。
 
-## ⚠️ 当前状态：已实现但未接线
+## 当前状态：已接入 plugin.py 主链路
 
-本模块通过了单元测试，但**尚未接入任何发送链路**。原因是接线点
-需要决策（Planner 决策前 vs 发送前），且 ``note_complaint()``
-的触发源要与 doubt_response 的检测结果打通。
-
-未接线不影响现有功能。接线时需要：
-    1. 在 plugin.py 入站处理里调用 ``note_inbound()``
-    2. 在发送成功后调用 ``note_outbound()``
-    3. 在 ``is_doubt_aimed_at_us()`` 命中时调用 ``note_complaint()``
-    4. 在 outbound codec 的发送预算检查处加 ``allows_send()``
+- 入站处理调用 ``note_inbound()``
+- 发送成功后调用 ``note_outbound()``
+- 投诉/举报事件调用 ``note_complaint()``
+- 出站预检与排队前调用 ``allows_send()``
 """
 
 from collections import deque
