@@ -867,11 +867,14 @@ class MaisakaChatLoopService:
 
         try:
             from src.chat.utils.chat_experience import build_scoped_experience_prompt_block, build_soul_prompt_block
+            from src.chat.utils.scene_context import build_chat_style_context_block
             if soul_block := build_soul_prompt_block().strip():
                 prompt_lines.append(soul_block)
             from src.chat.message_receive.chat_manager import chat_manager
             _stream = chat_manager.get_stream(self._session_id) if self._session_id else None
             if _stream is not None:
+                if style_block := build_chat_style_context_block(_stream).strip():
+                    prompt_lines.append(style_block)
                 if exp_block := build_scoped_experience_prompt_block(_stream).strip():
                     prompt_lines.append(exp_block)
         except Exception:
