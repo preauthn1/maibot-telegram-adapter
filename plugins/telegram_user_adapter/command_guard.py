@@ -54,6 +54,18 @@ _COMMAND_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# 仅真正的 shell 命令/脚本才套代码块；单纯发网址（https://...）若套上行内代码会导致 Telegram 无法直接点击跳转。
+_SHELL_ONLY_PATTERN = re.compile(
+    r"(?:^|\s)(?:"
+    r"curl|wget|bash|sh|zsh|sudo|apt|apt-get|yum|dnf|pacman|"
+    r"docker|systemctl|ssh|scp|rsync|git|npm|pip|pip3|python|python3|"
+    r"chmod|chown|iptables|nft|nano|vim"
+    r")\s"
+    r"|\|\s*(?:bash|sh)\b"
+    r"|\b[a-z0-9][a-z0-9-]*\.(?:sh|py)\b",
+    re.IGNORECASE,
+)
+
 # 续行特征：以管道/逻辑运算符/重定向开头 = 上一段没写完。
 _CONTINUATION_HEAD = re.compile(r"^\s*(?:\||&&|\|\||>>|>|&|\))")
 
@@ -241,8 +253,8 @@ def protect_commands(text: str) -> str:
 def format_command_segments(text: str) -> Tuple[str, Optional[str]]:
     """为含命令的文本套代码块，并给出 parse_mode。
 
-    普通聊天返回 ``(原文, None)``——绝不对闲聊启用 Markdown，
-    否则 ``*`` ``_`` 等字符会被当作格式标记吃掉或触发 400。
+    普通聊天或单纯分享网址返回 ``(原文, None)``——绝不对闲聊启用 Markdown，
+    也不把普通 URL 包成行内代码（否则 Telegram 链接将变成等宽字体且无法点击）。
 
     Args:
         text: 待发送文本。
@@ -252,7 +264,7 @@ def format_command_segments(text: str) -> Tuple[str, Optional[str]]:
             parse_mode 为 ``None`` 时应以纯文本发送。
     """
 
-    if not text or _is_json_container(text) or not has_command(text):
+    if not text or _is_json_container(text) or not _SHELL_ONLY_PATTERN.search(text):
         return text, None
 
     if _ALREADY_FENCED.search(text):

@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import base64
 import random
+import re
 import time
 
 from ..acknowledgement_context import acknowledgement_word
@@ -792,6 +793,16 @@ class TelegramUserOutboundCodec:
                             break
                 if text != _before_hd:
                     self._last_humanize_rules.append("helpdesk_template")
+                # 剥离 AI 检索汇总式冒号标签头（如「有两个说法：…」「登录页：…」）及「A / B」斜杠并列格式
+                _before_fmt = text
+                text = re.sub(
+                    r"^\s*(?:有(?:两|二|三|多|几)个(?:说法|地址|入口|域名|链接)|(?:官方)?(?:登录页|注册页|官网(?:地址|入口|链接)?|入口|链接|地址|群组|频道)(?:是|为)?)\s*[：:]\s*",
+                    "",
+                    text,
+                )
+                text = re.sub(r"(?<=\S)\s+/\s+(?=\S)", " 或 ", text)
+                if text != _before_fmt:
+                    self._last_humanize_rules.append("search_summary_format")
                 # 按会话 style_policy.drop_trailing_period 剥离末尾单句号，保留「。。。」省略号与英文「.」。
                 if style_policy.drop_trailing_period and text.endswith("。") and not text.endswith("。。"):
                     text = text[:-1].rstrip()
