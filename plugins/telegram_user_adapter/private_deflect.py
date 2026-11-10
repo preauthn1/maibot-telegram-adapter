@@ -69,6 +69,9 @@ def should_deflect_private(
         bool: 应当发挡箭牌返回 ``True``；白名单或已挡过返回 ``False``。
     """
 
+    if not whitelist:
+        # 空白名单 = 私聊整体关闭：任何私聊都不回复、不发挡箭牌，包括拿不到 ID 的。
+        return False
     if not sender_id:
         # 拿不到 ID 按陌生人处理——保守优先
         return True

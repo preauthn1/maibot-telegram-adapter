@@ -304,7 +304,7 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         json_schema_extra={"label": "每小时点表情上限", "order": 24},
     )
     max_consecutive_replies: int = Field(
-        default=3,
+        default=2,
         description=(
             "同一会话内连续发言的上限。超过后强制冷却，直到别人插话才重置。"
             "真人不会在陌生大群里贴着一个人连续接话，这是被识破的头号原因。"
@@ -316,12 +316,12 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         },
     )
     consecutive_cooldown: float = Field(
-        default=180.0,
+        default=240.0,
         description="触发连续发言上限后的冷却时长（秒）。",
         json_schema_extra={"label": "连发冷却（秒）", "order": 26},
     )
     per_user_reply_limit: int = Field(
-        default=20,
+        default=8,
         description=(
             "同一个人在观察窗口内最多能引发多少次回复。"
             "防止有人靠连续刷屏把 token 烧光；正常聊天远达不到这个数。"

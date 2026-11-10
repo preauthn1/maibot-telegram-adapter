@@ -420,11 +420,18 @@ async def handle_tool(
     from src.chat.utils.identity_guard import check_planner_reply_policy
     _exp_intent = reply_tool_args.get("expression_intent")
     _prefer_list = tuple(_exp_intent.get("prefer") or ()) if isinstance(_exp_intent, dict) else ()
+    _t_add_cfg = getattr(getattr(target_message, "message_info", None), "additional_config", None) or {}
+    _t_directed = bool(
+        getattr(target_message, "is_at", False)
+        or getattr(target_message, "is_mentioned", False)
+        or _t_add_cfg.get("is_mentioned")
+    )
     _planner_allowed, _planner_reason = check_planner_reply_policy(
         target_text=getattr(target_message, "processed_plain_text", "") or "",
         reply_reference=str(reply_tool_args.get("reply_reference") or ""),
         prefer_items=_prefer_list,
         is_group_chat=bool(getattr(tool_ctx.runtime, "_is_group_chat", True)),
+        is_directed=_t_directed,
     )
     if not _planner_allowed:
         await mark_continuity_blocked("planner_policy_guard")

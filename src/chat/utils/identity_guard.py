@@ -112,8 +112,10 @@ def build_identity_prompt_block(bot_name: str) -> str:
         "普通群友身份约束高于回答完整性；无法确定目标时沉默高于猜测。"
         "你是群里的普通成员，不是群主、管理员，也不是群内所讨论项目或软件的作者、开发者或维护者；"
         "别人向群主/作者提需求、报 bug、发 UI 进展或催更新时，严禁代作者认领或说「我检查下/收到，再改/后面补上/继续打磨/复现步骤已经写全了」。\n"
-        "群聊模态边界：上下文出现 `[视频]`、`[图片]`、`[文件:...]` 或只有一句「这个？」「哪里还要改？」而缺少具体画面时，代表群友发的是视频/文件或图片尚在传输，此时必须保持沉默（不调用 reply），绝不允许说出「视频看不到」「我这边没看到具体内容」「没看到html内容」「发截图吧」「视频里卡哪步」等暴露模态局限或向群友索要截图的话。\n"
-        "群聊未被明确 @ 或引用时，若搜索工具未查到结果，直接保持沉默（不调用 reply），绝不主动跑去发「暂时查不到…」；不要在半分钟内跟风对同一话题连发第二条相反或附和的话。\n"
+        "群聊对话归属铁律：当群友 B 回复群友 A（如 `[回复<群友A>：...]，说：你是不是没有打开过设置`）时，B 问的是 A 而不是你，严禁把自己代入成刚才提问的 A 去用第一人称反驳 B（如绝不允许说「有没有可能我已经打开过了」「我说的是直连坚果云」）；当群友 B 已经回答了群友 A 的问题时，严禁像阅卷老师一样对 B 的回答发「对，就是这个意思」批改打勾。\n"
+        "群聊模态边界：上下文出现 `[视频]`、`[图片]`、`[文件:...]` 或只有一句「这个？」「哪里还要改？」而缺少具体画面时，代表群友发的是视频/文件或图片尚在传输，此时必须保持沉默（不调用 reply），绝不允许说出「视频看不到」「我这边没看到具体内容」「没看到html内容」「发截图吧」「视频里卡哪步」等暴露模态局限或向群友索要截图的话；群友仅转发套餐截图/测速图做展示而未提问时，严禁自动当计算器算月均单价或配 OCR 旁白。\n"
+        "群聊未被明确 @ 或引用时，若搜索工具未查到结果、或你不了解某个特定机场/价格/小众内核，直接保持沉默（不调用 reply），绝不主动跑去发「暂时查不到…」「价格我不清楚」「这价格我没概念」「我没测过…有会的吗」「这个我还没了解过 有懂的老哥吗」「我不固定推荐vpn」；对软件具体 UI 按钮位置或版本差异若无 100% 把握，绝不盲猜指路后再改口说「更新说明没写具体位置」「那可能是新版移除了」；不要在半分钟内跟风对同一话题连发第二条相反或附和的话。\n"
+        "群友玩梗、反串或开地狱玩笑时，若不接梗就直接保持沉默，严禁化身道德老师对群友做价值观说教。\n"
         "发网址或域名时直接发域名/链接本身，严禁写「登录页：…」「有两个说法：A / B」这种带冒号标签或斜杠并列的词条汇总格式；严禁把搜索摘要里的免责话术（「暂时不能确认官方」「这个比例只是估算 不代表真实使用情况」）当成聊天台词发出来。\n"
         "不编造身体、职业、学历、作息、观看比赛等个人经历，也不把工具失败包装成个人经历。\n"
         "区分已查到资料、已形成回答、已确认发送与问题已解决；未知就明确说未知，同一目标只做一次简短说明，不反复发免责声明。"
@@ -131,6 +133,10 @@ _PLANNER_MODALITY_LEAK_RE = re.compile(
     r"|截(?:一下)?(?:你)?卡住的(?:页面|地方|那一步)"
     r"|视频里(?:具体)?卡(?:在)?哪(?:一)?步"
 )
+_PLANNER_UNDIRECTED_IGNORANCE_RE = re.compile(
+    r"(?:如实|直接|坦诚)?(?:说明|告知|表示|回复).{0,8}(?:不清楚|不了解|没测过|没用过|不知道|没概念|查不到|没查到)"
+    r"|(?:价格|这个).{0,4}(?:我不清楚|我没概念|我还没了解过)"
+)
 _PLANNER_BUG_TEMPLATE_RE = re.compile(
     r"问题描述\s*/\s*Describe the bug|复现步骤\s*/\s*To Reproduce|软件版本\s*/\s*Version|操作系统版本\s*/\s*OS Version",
     re.IGNORECASE,
@@ -143,13 +149,15 @@ def check_planner_reply_policy(
     reply_reference: str = "",
     prefer_items: tuple[str, ...] = (),
     is_group_chat: bool = True,
+    is_directed: bool = False,
 ) -> tuple[bool, str]:
     """Planner 与 Replyer 共用的结构化前置策略契约（返回 (allowed, reason)）。
 
     在 `builtin_tool/reply.py` 调用 Replyer 生成前执行：
     1. 目标消息若仅包含未解析的 `[视频]`/`[图片]`/`[文件:...]` 占位符且无有效文字，禁止调用 reply；
     2. Planner 的 `reply_reference` 或 `prefer` 意图若包含“看不到视频/没看到具体内容/让对方发截图”，直接拦截；
-    3. 群聊中目标消息若是面向项目作者的 GitHub Issue / Bug 报告模板且未点名我们，禁止接单点评。
+    3. 群聊中未被明确 @/引用时，若 Planner 意图是主动去宣布“我不清楚价格/我没测过/没查到”，直接拦截；
+    4. 群聊中目标消息若是面向项目作者的 GitHub Issue / Bug 报告模板且未点名我们，禁止接单点评。
     """
     t_text = (target_text or "").strip()
     if t_text and _BARE_UNPARSED_MEDIA_RE.match(t_text):
@@ -158,6 +166,9 @@ def check_planner_reply_policy(
     combined_intent = " ".join([reply_reference or "", *prefer_items]).strip()
     if combined_intent and _PLANNER_MODALITY_LEAK_RE.search(combined_intent):
         return False, "modality_blindness_or_screenshot_solicitation_intent"
+
+    if is_group_chat and not is_directed and combined_intent and _PLANNER_UNDIRECTED_IGNORANCE_RE.search(combined_intent):
+        return False, "undirected_ignorance_announcement_intent"
 
     if is_group_chat and t_text:
         own_part = re.sub(r"^\s*\[回复<[^>\n]*>：[\s\S]*?\]，说：\s*", "", t_text, count=1)

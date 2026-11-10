@@ -34,7 +34,7 @@ _CN_TZ = timezone(timedelta(hours=8))
 
 
 def enabled() -> bool:
-    return os.environ.get("MAIBOT_AMBIENT_STICKERS", "1").strip().lower() not in {"0", "false", "off", "no"}
+    return os.environ.get("MAIBOT_AMBIENT_STICKERS", "0").strip().lower() in {"1", "true", "on", "yes"}
 
 
 def excluded_indices() -> frozenset:

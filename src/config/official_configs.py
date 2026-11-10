@@ -4515,7 +4515,7 @@ class ChineseTypoConfig(ConfigBase):
     __ui_parent__ = "response_post_process"
 
     enable: bool = Field(
-        default=True,
+        default=False,
         json_schema_extra={
             "label": {
                 "zh_CN": "启用错别字",
@@ -4525,10 +4525,10 @@ class ChineseTypoConfig(ConfigBase):
             "x-widget": "switch",
         },
     )
-    """让麦麦偶尔打错字，更像真人聊天。"""
+    """让麦麦偶尔打错字，更像真人聊天（默认关闭，防止生成同音异字破绽）。"""
 
     enable_correction_quote: bool = Field(
-        default=True,
+        default=False,
         json_schema_extra={
             "label": {
                 "zh_CN": "错别字纠正时引用原消息",
