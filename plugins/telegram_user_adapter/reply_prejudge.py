@@ -40,7 +40,8 @@ MUST_SILENCE = "must_silence"
 _CLOSING = {
     "哦", "噢", "喔", "嗯", "嗯嗯", "好", "好的", "好吧", "行", "行吧", "ok", "okk", "okay",
     "知道了", "收到", "了解", "明白", "明白了", "懂了", "晚安", "睡了", "睡觉了", "拜拜", "88",
-    "byebye", "bye", "下了", "溜了", "先这样", "就这样", "算了",
+    "byebye", "bye", "下了", "溜了", "先这样", "就这样", "算了", "可以了", "搞定了", "解决了",
+    "安装成功", "安装成功了", "已经更新", "更新好了", "能用了", "正常了", "好了",
 }
 _STRIP = re.compile(r"[\s~～!！。.,，…、?？\u3000]+|[哈呀啊吧呢嘛啦]+$")
 _QUESTION = re.compile(r"[?？]|吗$|么$|呢$|怎么|为什么|如何|有没有|是不是|能不能|可以吗")
@@ -52,6 +53,16 @@ _REPLY_ENVELOPE_PREFIX = re.compile(r"^\s*\[回复<[^>\n]*>：[\s\S]*?\]，说�
 _BUG_REPORT_TEMPLATE = re.compile(
     r"问题描述\s*/\s*Describe the bug|复现步骤\s*/\s*To Reproduce|软件版本\s*/\s*Version|操作系统版本\s*/\s*OS Version",
     re.IGNORECASE,
+)
+# 群友对另一位群友的纯私人追问或无上下文短促反问（如 `[回复<别人>] ？`、`你用的这个吗`、`多少钱的机场`、`发来瞅瞅`），
+# 属于典型的两人点对点对话，第三人强行插嘴会造成「替别人答私事/替提问者认领身份」（2026-10-23 / 10-25 事故）。
+_PEER_TO_PEER_ONLY = re.compile(
+    r"^(?:"
+    r"[?？!！。…]+|"
+    r"你(?:是|不是|用的|在用|说的|那|这个|那个|哪|怎么|咋|还没|打开过).*|"
+    r"发来(?:我)?瞅瞅|绿叶链接发出来瞅瞅|说出来让我死心|"
+    r"多少钱的机场[?？]*|你们能用吗[?？]*|你在串.*|我在串.*"
+    r")$"
 )
 _TOKEN = re.compile(r"[\u4e00-\u9fff]{2,}|[A-Za-z]{3,}|\d{2,}")
 
@@ -134,7 +145,9 @@ class ReplyPrejudge:
         # 回复别人的消息交给 Host 判断（真人也常在别人的楼里插一句）。
         if mentions_other:
             return Prejudge(MUST_SILENCE, "bystander")
-        own_text = strip_reply_envelope(text or "")
+        own_text = strip_reply_envelope(text or "").strip()
+        if replies_to_other and (len(own_text) <= 4 or _PEER_TO_PEER_ONLY.match(own_text)):
+            return Prejudge(MUST_SILENCE, "bystander")
         if _BUG_REPORT_TEMPLATE.search(own_text):
             return Prejudge(MUST_SILENCE, "bug_report_for_author")
         if is_closing_signal(own_text):

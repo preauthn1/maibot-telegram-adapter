@@ -2354,7 +2354,11 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return
 
 
-        await self._record_inbound_feedback(session_key, own_inbound_text)
+        await self._record_inbound_feedback(
+            session_key,
+            own_inbound_text,
+            is_directed=is_mention or self._is_reply_to_us(event),
+        )
 
         if self._transcript is not None:
             chat = await self._safe_get_chat(event)
@@ -3002,12 +3006,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return f"[{who} 给你刚才说的「{quoted}」点了 {emojis}]"
         return f"[{who} 给你刚才发的消息点了 {emojis}]"
 
-    async def _record_inbound_feedback(self, session_key: str, incoming_text: str) -> None:
+    async def _record_inbound_feedback(
+        self, session_key: str, incoming_text: str, *, is_directed: bool = False
+    ) -> None:
         """把入站消息作为上一次发言的效果反馈。
 
         Args:
             session_key: 会话键。
             incoming_text: 对方消息文本。
+            is_directed: 该入站消息是否明确回复/@我们（群聊中未指向我们的质疑不得归咎于我们上一条发言）。
         """
 
         store = self._self_improvement
@@ -3018,7 +3025,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if not our_last_text:
             return
 
-        suspected = detect_suspicion(incoming_text)
+        is_group = str(session_key).startswith("-")
+        suspected = detect_suspicion(incoming_text) and (not is_group or is_directed)
 
         # 有人接话了，取消"冷场"判定任务。
         pending = self._pending_outcome.pop(session_key, None)

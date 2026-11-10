@@ -370,6 +370,27 @@ class TelegramUserOutboundCodec:
                 self._has_screen_media(m) for m in newer_messages
             ):
                 keep_quote = True
+            # 多线交叉保留引用：中间哪怕只有 1 条新消息，只要中间说话人不是目标消息本人（例如插进了第三人的新话题），
+            # 或有人在回复另一条消息，去掉引用都会让长思考延迟后的回复在视觉上直接空降到别人无关的新话题下面。
+            if not keep_quote and newer_messages:
+                inter_senders = {
+                    str(getattr(m, "sender_id", None))
+                    for m in newer_messages
+                    if getattr(m, "sender_id", None) is not None
+                }
+                cross_reply = any(
+                    getattr(getattr(m, "reply_to", None), "reply_to_msg_id", None)
+                    not in (None, reply_to)
+                    for m in newer_messages
+                )
+                target_sender_str = str(explicit_target_sender_id) if explicit_target_sender_id else None
+                other_speaker_interleaved = (
+                    bool(inter_senders - {target_sender_str})
+                    if target_sender_str
+                    else len(newer_messages) >= 1
+                )
+                if len(inter_senders) >= 2 or cross_reply or other_speaker_interleaved:
+                    keep_quote = True
             if not keep_quote:
                 reply_to = None
 
@@ -752,17 +773,23 @@ class TelegramUserOutboundCodec:
                             for _qword in ("确实", "的确"):
                                 if text.startswith(_qword):
                                     _rem_q = text[len(_qword):].lstrip()
-                                    if len(_rem_q) >= 3:
+                                    if len(_rem_q) >= 3 and not _rem_q.startswith(("没有", "没", "不", "不是", "没法", "不能", "不会")):
                                         text = _rem_q
-                                    elif len(_rem_q) == 2:
+                                    elif len(_rem_q) == 2 and not _rem_q.startswith(("没有", "没", "不", "不是")):
                                         text = "真" + _rem_q
                                 elif _qword in text:
                                     _prefix_part, _, _suffix_part = text.partition(_qword)
                                     _p_clean = _prefix_part.rstrip()
                                     _s_clean = _suffix_part.lstrip()
-                                    if _p_clean and len(_s_clean) >= 2:
-                                        text = _p_clean + _s_clean
-                                    elif _p_clean and len(_s_clean) == 1:
+                                    # 仅当「确实」后面跟助动词/程度副词（有/是/会/能/要/太/很/挺/容易/可能/应该）时才去冗余；
+                                    # 绝不硬删「那我查错了 确实没有」「轻量党确实舒服」中的「确实」，防止造成反问歧义或主谓残缺。
+                                    if (
+                                        _p_clean
+                                        and len(_s_clean) >= 2
+                                        and _s_clean.startswith(("有", "是", "会", "能", "要", "得", "太", "很", "挺", "比较", "容易", "可能", "应该", "可以", "需要"))
+                                    ):
+                                        text = _p_clean + (" " if _prefix_part.endswith(" ") and not _p_clean.endswith(("，", ",")) else "") + _s_clean
+                                    elif _p_clean and len(_s_clean) == 1 and _s_clean not in {"没", "不", "无", "否"}:
                                         text = _p_clean + "挺" + _s_clean
                             if text != _before_q:
                                 self._last_humanize_rules.append("verbal_tic_queshi")
@@ -836,11 +863,8 @@ class TelegramUserOutboundCodec:
             # 这类文本一次泄漏就足以暴露，宁可少说一句也不能发出去。
             # 群聊（负数 chat_id）里不当风纪委员：劝撤回/提举报/喊管理一律不发。
             # 见 anti_policing.py 的 2026-10-03 被踢事故说明。
-            # 账号主人的打字习惯：英文全小写。命令/链接/代码等原样保留。
-            lowered = to_lowercase_style(text)
-            if lowered != text:
-                self._last_humanize_rules.append("lowercase")
-                text = lowered
+            # 禁止再把全篇英文专有名词（Apple/WebDAV/TikTok/220G/MITM）强行压成全小写，
+            # 防止出站消息呈现「全小写机械排版指纹」。
 
             if str(chat_id).startswith("-") and is_group_policing(text):
                 self._logger.info(f"群聊管人话术拦截，不发送: chat={chat_id} text={text!r}")

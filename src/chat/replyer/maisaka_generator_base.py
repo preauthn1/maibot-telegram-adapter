@@ -1239,11 +1239,18 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
         _prefer_list = tuple(_exp_intent.get("prefer") or ()) if isinstance(_exp_intent, dict) else ()
         _is_group = bool(self.chat_stream.is_group_session) if self.chat_stream is not None else True
         _target_txt = (getattr(reply_message, "processed_plain_text", "") or "") if reply_message is not None else ""
+        _rm_add_cfg = getattr(getattr(reply_message, "message_info", None), "additional_config", None) or {}
+        _rm_directed = bool(
+            getattr(reply_message, "is_at", False)
+            or getattr(reply_message, "is_mentioned", False)
+            or _rm_add_cfg.get("is_mentioned")
+        ) if reply_message is not None else False
         _policy_ok, _policy_reason = check_planner_reply_policy(
             target_text=_target_txt,
             reply_reference=str(active_reply_tool_args.get("reply_reference") or reply_reason or ""),
             prefer_items=_prefer_list,
             is_group_chat=_is_group,
+            is_directed=_rm_directed,
         )
         if not _policy_ok:
             logger.info(f"Maisaka 回复器前置策略阻断生成: reason={_policy_reason}")
@@ -1599,21 +1606,30 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             retry_requested = self._coerce_hook_bool(after_response_kwargs.get("retry"), default=False)
             if response_text:
                 noise = detect_unicode_noise(response_text, noise_peer_texts)
-                if noise is not None and not noise_retried and retry_count < REPLYER_MAX_HOOK_RETRIES:
-                    response_text, _ = strip_unicode_noise(response_text)
-                    noise_retried = True
-                    retry_requested = True
-                    after_response_kwargs["retry_reason"] = NOISE_RETRY_CONSTRAINT
-                    after_response_kwargs["matched_regex"] = f"异常字符:{noise}"
-                    logger.warning(
-                        f"unicode_noise_detected action=regenerate session={preview_chat_id} 片段={noise!r}"
-                    )
-                elif noise is not None:
-                    response_text, removed = strip_unicode_noise(response_text)
-                    logger.warning(
-                        f"unicode_noise_detected action=strip_tail session={preview_chat_id} "
-                        f"删除={removed!r} 结果={response_text!r}"
-                    )
+                if noise is not None:
+                    stripped_resp, removed = strip_unicode_noise(response_text, noise_peer_texts)
+                    if stripped_resp and len(stripped_resp) >= 2:
+                        # 直接剥离异常尾缀保留干净正文，既100%消除尾缀污染又不额外浪费一次LLM重生成延迟
+                        response_text = stripped_resp
+                        generation_result.output_items = tuple(
+                            replace_output_projection(
+                                generation_result.output_items,
+                                content=response_text,
+                                replace_content=True,
+                            )
+                        )
+                        logger.warning(
+                            f"unicode_noise_detected action=strip_tail session={preview_chat_id} "
+                            f"删除={removed!r} 结果={response_text!r}"
+                        )
+                    elif not noise_retried and retry_count < REPLYER_MAX_HOOK_RETRIES:
+                        noise_retried = True
+                        retry_requested = True
+                        after_response_kwargs["retry_reason"] = NOISE_RETRY_CONSTRAINT
+                        after_response_kwargs["matched_regex"] = f"异常字符:{noise}"
+                        logger.warning(
+                            f"unicode_noise_detected action=regenerate session={preview_chat_id} 片段={noise!r}"
+                        )
             # 风格与口头禅治理：遵循「禁用风格重生成、优先 prompt + 本地确定性后处理」原则，
             # 命中口头禅或密度超标时在本地剥离冗余套话前缀/句尾句号，不触发额外 LLM 重生成调用。
             if not retry_requested and response_text:
