@@ -171,9 +171,18 @@ async def apply_telegram_event(plugin_id: str, stream_id: str, event: Dict[str, 
             runtime.message_cache[:] = [item for item in runtime.message_cache
                 if not (item.message_id == message.message_id and item.platform == "telegram")]
             if event["operation"] == "delete":
+                removed_ids = [
+                    str(getattr(item, "message_id", ""))
+                    for item in runtime._chat_history
+                    if getattr(item, "message_id", None) == message.message_id
+                    and getattr(getattr(item, "original_message", None), "platform", None) == "telegram"
+                ]
                 runtime._chat_history[:] = [item for item in runtime._chat_history
                     if not (getattr(item, "message_id", None) == message.message_id
                     and getattr(getattr(item, "original_message", None), "platform", None) == "telegram")]
+                if removed_ids:
+                    runtime._recent_deleted_message_ids.extend(removed_ids)
+                    del runtime._recent_deleted_message_ids[:-5]
                 continue
             history = await runtime._reasoning_engine._build_history_message(message, source_kind="telegram_history")
             from src.plugin_runtime.capabilities.telegram_event_journal import suppress_live_message

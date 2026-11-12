@@ -257,8 +257,23 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
             "order": 18,
         },
     )
+    custom_emoji_suffix_enabled: bool = Field(
+        default=False,
+        description="是否以概率在普通文本消息末尾附加 Nachoneko 自定义 emoji（默认关闭，防止在技术/严肃回复后挂突兀表情）。",
+        json_schema_extra={"label": "Nachoneko 末尾表情", "order": 19},
+    )
+    custom_emoji_suffix_probability: float = Field(
+        default=0.0,
+        description="末尾附加 Nachoneko 自定义 emoji 的概率（0-1）。",
+        json_schema_extra={"label": "末尾表情概率", "order": 20},
+    )
+    custom_emoji_suffix_cooldown: float = Field(
+        default=600.0,
+        description="同一会话附加末尾自定义 emoji 的最小间隔（秒）。",
+        json_schema_extra={"label": "末尾表情冷却（秒）", "order": 21},
+    )
 
-    @field_validator("quote_probability", mode="before")
+    @field_validator("quote_probability", "custom_emoji_suffix_probability", mode="before")
     @classmethod
     def _normalize_quote_probability(cls, value: Any) -> float:
         """把引用概率规范化到 0-1。"""
@@ -304,7 +319,7 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         json_schema_extra={"label": "每小时点表情上限", "order": 24},
     )
     max_consecutive_replies: int = Field(
-        default=2,
+        default=3,
         description=(
             "同一会话内连续发言的上限。超过后强制冷却，直到别人插话才重置。"
             "真人不会在陌生大群里贴着一个人连续接话，这是被识破的头号原因。"
@@ -316,18 +331,18 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         },
     )
     consecutive_cooldown: float = Field(
-        default=240.0,
+        default=180.0,
         description="触发连续发言上限后的冷却时长（秒）。",
         json_schema_extra={"label": "连发冷却（秒）", "order": 26},
     )
     per_user_reply_limit: int = Field(
-        default=8,
+        default=20,
         description=(
-            "同一个人在观察窗口内最多能引发多少次回复。"
-            "防止有人靠连续刷屏把 token 烧光；正常聊天远达不到这个数。"
+            "同一个人在观察窗口内最多能触发多少次 Host 推理（只计真正路由给 Host 的消息）。"
+            "防止有人靠连续刷屏把 token 烧光；对方说话的条数本身不计入。"
         ),
         json_schema_extra={
-            "hint": "达到上限后暂时不再回复此人，但仍正常回复其他人。",
+            "hint": "达到上限后此人的消息只写入上下文、不再唤醒推理；不影响其他人，私聊不受限。",
             "label": "单用户回复上限",
             "order": 27,
         },
@@ -337,6 +352,24 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         description="单用户回复上限的统计窗口（秒）。",
         json_schema_extra={"label": "单用户统计窗口（秒）", "order": 28},
     )
+    image_burst_sample_chats: List[str] = Field(
+        default_factory=list,
+        description="启用无文字连发图片节流采样的群聊 ID 列表（节省视觉 Token，默认空）。",
+        json_schema_extra={"label": "连发图片采样群聊", "order": 29},
+    )
+
+    @field_validator("image_burst_sample_chats", mode="before")
+    @classmethod
+    def _normalize_image_burst_sample_chats(cls, value: Any) -> List[str]:
+        """把连发图片采样群聊规范化为字符串列表。"""
+
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, (list, tuple, set)):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return []
 
     @field_validator("per_user_reply_limit", mode="before")
     @classmethod
@@ -384,6 +417,7 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
 
     @field_validator(
         "typing_chars_per_second",
+        "custom_emoji_suffix_cooldown",
         "min_think_delay",
         "max_typing_delay",
         "read_delay",

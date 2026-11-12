@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from src.chat.message_receive.message import SessionMessage
 from src.chat.utils.utils import get_chat_type_and_target_info, is_bot_self
 from src.common.utils.math_utils import translate_timestamp_to_human_readable
+from src.common.utils.prompt_time import format_prompt_datetime, prompt_now
 from src.config.config import global_config
 from src.llm_models.payload_content.context_item import ContextItem, ContextItemBuilder, RoleType
 from src.maisaka.context.message_adapter import parse_speaker_content
@@ -147,7 +148,7 @@ class RetroReplyPromptMixin:
             "expression_habits_block": expression_habits.strip(),
             "extra_info_block": self._build_retro_extra_info_block(reply_requirements),
             "dialogue_prompt": self._build_retro_dialogue_block(chat_history),
-            "time_block": f"当前时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "time_block": f"当前时间：{format_prompt_datetime(prompt_now())}",
             "reply_target_block": self._build_retro_reply_target_block(reply_message),
             "planner_reasoning": combined_reference,
             "keywords_reaction_prompt": self._build_keyword_reaction_prompt(

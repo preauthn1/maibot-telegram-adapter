@@ -9,6 +9,7 @@ from sqlmodel import select
 
 from src.common.utils.prompt_time import format_prompt_datetime
 from src.chat.replyer.expression_vector_index import ExpressionVectorIndexUpsertItem, expression_vector_index
+from src.chat.replyer.style_variety import VERBAL_TICS
 from src.chat.utils.utils import is_bot_self
 from src.common.data_models.expression_data_model import MaiExpression
 from src.common.data_models.llm_service_data_models import LLMResponseResult
@@ -674,6 +675,21 @@ class ExpressionLearner:
             # 过滤掉包含 "[图片" 的内容
             if "[图片" in situation or "[图片" in normalized_style or "[图片" in context:
                 logger.info(f"跳过包含图片标记的表达方式：situation={situation}, style={style}, source_id={source_id}")
+                continue
+            # 过滤掉口头禅（如“确实”）与客服/证据标记污染，避免脏表达不断入库并触发向量重嵌入
+            if any(tic in normalized_style for tic in VERBAL_TICS) or any(
+                bad in f"{situation} {normalized_style}"
+                for bad in (
+                    "Telegram evidence",
+                    "UNTRUSTED",
+                    "发来我",
+                    "帮你看看",
+                    "进一步协助",
+                    "截图呢",
+                    "发下截图",
+                )
+            ):
+                logger.debug(f"跳过口头禅或客服/元数据污染表达：situation={situation}, style={style}")
                 continue
 
             filtered_expressions.append((situation, normalized_style))

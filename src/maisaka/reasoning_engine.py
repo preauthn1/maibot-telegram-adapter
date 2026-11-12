@@ -101,6 +101,8 @@ if TYPE_CHECKING:
 logger = get_logger("maisaka_reasoning_engine")
 
 HISTORY_DEFERRED_TOOL_RESULT_NAMES = {"wait"}
+# 每个逻辑轮次 web_search + tavily_search 合计可用次数
+SEARCH_ATTEMPTS_PER_TURN = 3
 TOOL_RESULT_MEDIA_TYPES = {"image", "audio", "resource_link", "resource", "binary"}
 STOP_AFTER_EXECUTION_PAUSE_REASON = "stop_after_execution"
 BEHAVIOR_SELECTOR_CONTEXT_MESSAGE_LIMIT = 8
@@ -168,6 +170,7 @@ class MaisakaReasoningEngine:
         self._runtime = runtime
         self._last_reasoning_content: str = ""
         self._active_logical_turn_id: str | None = None
+        self._search_attempt_turns: dict[str, int] = {}
 
     @property
     def last_reasoning_content(self) -> str:
@@ -519,6 +522,25 @@ class MaisakaReasoningEngine:
         """构造本轮 planner 的一次性注入消息。"""
 
         injected_messages: list[str] = []
+        if self._runtime._recent_deleted_message_ids:
+            deleted_list = ", ".join(self._runtime._recent_deleted_message_ids)
+            self._runtime._recent_deleted_message_ids.clear()
+            injected_messages.append(
+                f"[撤回感知提醒] 会话中刚才有消息（msg_id={deleted_list}）被发送者撤回并已从历史移除，请勿继续引用或追问已被撤回的内容。"
+            )
+        from src.maisaka.context.person_candidates import current_person_candidates
+        person_candidates = await current_person_candidates(profile_message)
+        if person_candidates:
+            injected_messages.append(person_candidates)
+        from src.maisaka.context.continuity_bridge import ledger_call
+        try:
+            continuity_summary = await ledger_call(
+                "summary", self._runtime.session_id, str(profile_message.message_info.user_info.user_id)
+            )
+            if continuity_summary:
+                injected_messages.append(continuity_summary)
+        except Exception as exc:
+            logger.warning("Planner 互动摘要降级: %s", type(exc).__name__)
         if deferred_tools_reminder:
             injected_messages.append(deferred_tools_reminder)
 
@@ -732,6 +754,34 @@ class MaisakaReasoningEngine:
             state.cycle_end = CycleEnd("tool_continue", "Planner 工具执行完成，继续下一轮内部思考。")
             return planner_no_tool_count, False
 
+        # 私聊一对一场景下，若对方发来非停止的新消息而 Planner 首轮未调用任何工具（例如误套用群聊潜水逻辑），
+        # 给一次明确的私聊动作提醒，避免私聊消息直接被静默吞掉。
+        if planner_no_tool_count == 0 and not getattr(self._runtime.chat_stream, "is_group_session", True):
+            from src.chat.utils.utils import is_bot_self
+            from src.maisaka.context.interaction_continuity import is_explicit_stop
+            from src.maisaka.state_model import get_private_closing_store
+
+            closing_phase = get_private_closing_store().get(self._runtime.session_id).phase
+            if closing_phase not in {"closing_declared", "closed_ack_sent", "quiet_hold"} and any(
+                isinstance(msg, SessionBackedMessage)
+                and not is_bot_self(msg.raw_message.platform, msg.raw_message.message_info.user_info.user_id)
+                and not is_explicit_stop(str(msg.raw_message.processed_plain_text or ""))
+                for msg in self._runtime._chat_history[-4:]
+            ):
+                planner_no_tool_count += 1
+                self._clear_planner_no_tool_hints()
+                self._runtime._chat_history.append(
+                    ReferenceMessage(
+                        content="当前是一对一私聊，对方刚刚发来了新消息。私聊不适用群聊的潜水跳过规则；除非对方明确要求停止，否则请调用 reply 工具自然回应对方。",
+                        timestamp=datetime.now(),
+                        reference_type=ReferenceMessageType.PLANNER_TOOL_HINT,
+                        remaining_uses_value=1,
+                        display_prefix="[私聊回应提醒]",
+                    )
+                )
+                state.cycle_end = CycleEnd("private_no_tool_recheck", "私聊首轮未调用工具，重审一次回应动作。")
+                return planner_no_tool_count, False
+
         planner_no_tool_count, cycle_end, should_end_after_no_tool = self._handle_planner_no_tool_retry(
             planner_no_tool_count,
             planner_extra_lines,
@@ -820,9 +870,15 @@ class MaisakaReasoningEngine:
         except Exception as exc:
             logger.debug(f"{self._runtime.log_prefix} 黑话参考消息刷新失败，已跳过: {exc}")
         fast_path, fast_reason = self._evaluate_fast_path(source_messages)
+        interleaved_reminder = self._runtime.build_interleaved_timing_reminder(source_messages)
+        closing_hint = getattr(self._runtime, "_last_private_closing_hint", "") or ""
+        if closing_hint:
+            self._runtime._last_private_closing_hint = ""
         if fast_path:
             # Phase 7：高心流纯文本轮次跳过重型记忆/画像注入，Planner 与全部出站闸门照常。
-            injected_user_messages = [deferred_tools_reminder] if deferred_tools_reminder else []
+            injected_user_messages = [
+                msg for msg in (interleaved_reminder, closing_hint, deferred_tools_reminder) if msg
+            ]
             logger.info(f"{self._runtime.log_prefix} 高能对话快速通道: 跳过记忆/画像注入 原因={fast_reason}")
         else:
             injected_user_messages = await self._build_planner_injected_user_messages(
@@ -830,6 +886,10 @@ class MaisakaReasoningEngine:
                 source_messages=source_messages,
                 deferred_tools_reminder=deferred_tools_reminder,
             )
+            if closing_hint:
+                injected_user_messages.insert(0, closing_hint)
+            if interleaved_reminder:
+                injected_user_messages.insert(0, interleaved_reminder)
         if not resolve_enable_visual_planner():
             log_pending_image_recognition_before_text_planner(
                 self._runtime._chat_history,
@@ -1499,7 +1559,7 @@ class MaisakaReasoningEngine:
         # logical turn 结束/切换后恢复正常裁剪，内部轮数上限仍限制增长。
         if self._active_logical_turn_id and any(
             isinstance(message, ToolResultMessage)
-            and message.tool_name == "web_search"
+            and message.tool_name in {"web_search", "tavily_search", "fetch_url", "sports_schedule"}
             and message.logical_turn_id == self._active_logical_turn_id
             for message in self._runtime._chat_history
         ):
@@ -2170,6 +2230,25 @@ class MaisakaReasoningEngine:
             )
         )
 
+    def _reserve_search_attempt(self) -> bool:
+        """两条搜索通路共用逻辑轮次额度；调用前预占，不因失败释放。
+
+        每轮最多 SEARCH_ATTEMPTS_PER_TURN 次：首次结果不可靠时允许换关键词再查，
+        但仍限制 web_search/tavily_search 叠加刷调用。
+        """
+        turn = self._active_logical_turn_id
+        if not turn:
+            return False
+        used = self._search_attempt_turns.get(turn, 0)
+        if used >= SEARCH_ATTEMPTS_PER_TURN:
+            return False
+        self._search_attempt_turns.pop(turn, None)
+        self._search_attempt_turns[turn] = used + 1
+        # 仅保存短期轮次标识，不冒充跨重启的问题连续性。
+        while len(self._search_attempt_turns) > 128:
+            del self._search_attempt_turns[next(iter(self._search_attempt_turns))]
+        return True
+
     async def _handle_tool_calls(
         self,
         tool_calls: list[ToolCall],
@@ -2225,7 +2304,10 @@ class MaisakaReasoningEngine:
             for tool_spec in await self._runtime._tool_registry.list_tools(availability_context)
         }
         total_tool_count = len(tool_calls)
-        search_in_batch = any(call.func_name == "web_search" for call in tool_calls)
+        search_in_batch = any(
+            call.func_name in {"web_search", "tavily_search", "fetch_url", "sports_schedule"}
+            for call in tool_calls
+        )
         for tool_index, tool_call in enumerate(tool_calls, start=1):
             self._log_tool_call_source(tool_call, stage=f"Planner {tool_index}/{total_tool_count}")
             invocation = self._build_tool_invocation(tool_call, latest_thought)
@@ -2241,7 +2323,13 @@ class MaisakaReasoningEngine:
                 result = ToolExecutionResult(
                     tool_name=invocation.tool_name,
                     success=False,
-                    error_message="同批包含 web_search，回复已延后。先阅读本轮搜索结果，再调用 reply；不要补充来源之外的猜测。",
+                    error_message="同批包含搜索工具，回复已延后。先阅读本轮搜索结果，再调用 reply；不要补充来源之外的猜测。",
+                )
+            elif invocation.tool_name in {"web_search", "tavily_search"} and not self._reserve_search_attempt():
+                result = ToolExecutionResult(
+                    tool_name=invocation.tool_name, success=False,
+                    error_message=f"本逻辑轮次的 {SEARCH_ATTEMPTS_PER_TURN} 次搜索额度已用完；可用 fetch_url 读取已知权威页面，否则依据已有结果如实说明。",
+                    metadata={"reason_code": "search_turn_budget_exhausted", "retryable": False},
                 )
             else:
                 result = await self._runtime._tool_registry.invoke(invocation, execution_context)

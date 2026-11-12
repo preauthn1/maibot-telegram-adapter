@@ -171,6 +171,7 @@ class ChatTranscriptLogger:
         timing_source: str = "unspecified",
         latency_anchor: str = "unspecified",
         native_sticker: Optional[Dict[str, Any]] = None,
+        giphy_gif: Optional[Dict[str, Any]] = None,
     ) -> None:
         """记录一条已发出的消息及其拟人化决策。
 
@@ -192,7 +193,12 @@ class ChatTranscriptLogger:
             {
                 "direction": "out",
                 "native_sticker": native_sticker,
-                "content_kind": "telegram_native_sticker" if native_sticker else "text",
+                "giphy_gif": giphy_gif,
+                "content_kind": (
+                    "telegram_giphy_gif" if giphy_gif
+                    else "telegram_native_sticker" if native_sticker
+                    else "text"
+                ),
                 "chat_id": chat_id,
                 "message_id": message_id,
                 "text": text,

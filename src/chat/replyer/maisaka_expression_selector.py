@@ -126,7 +126,9 @@ class MaisakaExpressionSelector:
                 or not situation
                 or not normalized_style
                 or is_prompt_example_expression_style(normalized_style)
-                # 口头禅与客服/卖萌模板表达不进候选，只在选取时过滤，保留测试合成候选兼容。
+                # 口头禅与客服/卖萌模板表达不进候选：模型本身就爱用「确实」「试试」「帮你看看」，
+                # 表达库再推一把会导致出站高频复刻客服排障腔（如 10-24 17:29 被 id=640/642 诱导吐出「具体哪里不对？发下截图看看」）。
+                # 只在选取时过滤，保留测试合成候选兼容。
                 or any(tic in normalized_style for tic in VERBAL_TICS)
                 or any(
                     bad in f"{situation} {normalized_style}"

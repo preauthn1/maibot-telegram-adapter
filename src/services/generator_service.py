@@ -77,6 +77,7 @@ async def _build_message_sequence(
     *,
     enable_splitter: bool,
     enable_chinese_typo: bool,
+    is_group_chat: bool = True,
 ) -> tuple[Optional[MessageSequence], List[str]]:
     if not content:
         return None, []
@@ -85,6 +86,7 @@ async def _build_message_sequence(
         content,
         enable_splitter=enable_splitter,
         enable_chinese_typo=enable_chinese_typo,
+        is_group_chat=is_group_chat,
     )
     processed_output = [segment.text for segment in processed_segments]
     return MessageSequence(components=[TextComponent(text) for text in processed_output]), processed_output
@@ -147,10 +149,12 @@ async def generate_reply(
         if not success:
             logger.warning("[GeneratorService] 回复生成失败")
             return False, None
+        _is_group = bool(getattr(chat_stream, "is_group_session", getattr(chat_stream, "group_info", None) is not None)) if chat_stream is not None else True
         reply_set, processed_output = await _build_message_sequence(
             llm_response.content,
             enable_splitter=enable_splitter,
             enable_chinese_typo=enable_chinese_typo,
+            is_group_chat=_is_group,
         )
         llm_response.processed_output = processed_output
         llm_response.reply_set = reply_set
@@ -203,10 +207,12 @@ async def rewrite_reply(
             reason=reason,
             reply_to=reply_to,
         )
-        reply_set, processed_output = _build_message_sequence(
+        _is_group = bool(getattr(chat_stream, "is_group_session", getattr(chat_stream, "group_info", None) is not None)) if chat_stream is not None else True
+        reply_set, processed_output = await _build_message_sequence(
             llm_response.content if success and llm_response else None,
             enable_splitter=enable_splitter,
             enable_chinese_typo=enable_chinese_typo,
+            is_group_chat=_is_group,
         )
         if llm_response is not None:
             llm_response.processed_output = processed_output

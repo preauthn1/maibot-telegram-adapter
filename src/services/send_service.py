@@ -985,12 +985,27 @@ async def _send_via_platform_io(
         return None
 
     if delivery_report is not None:
+        actual_ids = []
+        partial_receipt = False
+        for receipt in delivery_batch.sent_receipts:
+            metadata = receipt.metadata if isinstance(receipt.metadata, dict) else {}
+            content = metadata.get("delivery_content")
+            content = content if isinstance(content, dict) else {}
+            partial_receipt = partial_receipt or content.get("complete") is False
+            parts = content.get("parts")
+            parts = parts if isinstance(parts, list) else []
+            for part in parts:
+                if isinstance(part, dict) and part.get("message_id"):
+                    actual_ids.append(str(part["message_id"]))
+            if receipt.external_message_id:
+                actual_ids.append(str(receipt.external_message_id))
+        delivery_report.update(sent_message_ids=list(dict.fromkeys(actual_ids)), partial_delivery=partial_receipt)
         delivery_report.update(
             outcome=("sent" if delivery_batch.has_success else
                      "policy_dropped" if delivery_batch.is_policy_dropped else
-                     "delivery_unknown" if any(r.metadata.get("delivery_unknown") for r in delivery_batch.receipts)
+                     "delivery_unknown" if any(not isinstance(r.metadata, dict) or r.metadata.get("delivery_unknown") for r in delivery_batch.receipts)
                      else "delivery_failed"),
-            reason="; ".join(str(r.metadata.get("policy_reason") or r.error or "") for r in delivery_batch.failed_receipts),
+            reason="; ".join(str((r.metadata.get("policy_reason") if isinstance(r.metadata, dict) else "") or r.error or "") for r in delivery_batch.failed_receipts),
             retryable=False,
         )
     try:
@@ -1185,6 +1200,7 @@ async def _send_to_target_with_message(
     sync_to_maisaka_history: bool = False,
     maisaka_source_kind: str = "outbound_send",
     delivery_report: Optional[dict] = None,
+    continuity_context: Optional[dict] = None,
 ) -> Optional[SessionMessage]:
     """向指定目标构建并发送消息。
 
@@ -1240,6 +1256,18 @@ async def _send_to_target_with_message(
         storage_message = _coerce_bool(after_build_kwargs.get("storage_message"), storage_message)
         show_log = _coerce_bool(after_build_kwargs.get("show_log"), show_log)
 
+        from src.maisaka.context.continuity_bridge import ENVELOPE_KEY, validate_envelope
+        config = dict(outbound_message.message_info.additional_config or {})
+        config.pop(ENVELOPE_KEY, None)  # 不继承入站/工具伪造的账本元数据。
+        if (maisaka_source_kind == "guided_reply" and outbound_message.platform == "telegram"
+                and continuity_context is None):
+            raise ValueError("guided reply missing continuity envelope")
+        if continuity_context is not None:
+            validated = validate_envelope(continuity_context)
+            if validated["session_id"] != stream_id:
+                raise ValueError("continuity target mismatch")
+            config[ENVELOPE_KEY] = dict(continuity_context)
+        outbound_message.message_info.additional_config = config
         sent_message = await send_session_message_with_message(
             outbound_message,
             typing=typing,

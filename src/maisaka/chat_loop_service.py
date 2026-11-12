@@ -108,6 +108,7 @@ PROMPT_PREVIEW_CATEGORY_BY_REQUEST_KIND = {
     "sub_agent": "sub_agent",
 }
 CONTEXT_SELECTION_CACHE_STABILITY_RATIO = 2.0
+CONTEXT_PREFIX_ANCHOR_STRIDE = 12
 PLANNER_FINAL_USER_REMINDER_TEMPLATE = (
     "你需要输出对{bot_name}发言的分析，视情况输出文本内容的分析，思考是否进行工具调用"
 )
@@ -663,6 +664,7 @@ class MaisakaChatLoopService:
         self._llm_chat_clients: dict[str, LLMServiceClient] = {}
         self._evolution_policy_loader = RuntimePolicyLoader(Path("data/self-evolution"))
         self._evolution_policy = self._evolution_policy_loader.snapshot()
+        self._prefix_anchor_by_kind: dict[str, tuple[int, int]] = {}
 
     @property
     def behavior_style_prompt(self) -> str:
@@ -1026,8 +1028,6 @@ class MaisakaChatLoopService:
         self._evolution_policy = self._evolution_policy_loader.snapshot()
         resolved_system_prompt = RuntimePolicyLoader.apply(resolved_system_prompt, self._evolution_policy)
         bot_nickname_notice = self._build_bot_nickname_notice(selected_history)
-        if bot_nickname_notice:
-            resolved_system_prompt = f"{bot_nickname_notice}\n\n{resolved_system_prompt}"
         system_item.add_text_content(resolved_system_prompt)
         items.append(system_item.build())
 
@@ -1071,6 +1071,7 @@ class MaisakaChatLoopService:
         normalized_injected_items: List[ContextItem] = []
         current_chat_attention = self._build_current_chat_attention_tail_message()
         final_user_messages = [
+            bot_nickname_notice,
             *(injected_user_messages or []),
             self._build_current_time_user_message(),
             *(tail_user_messages or []),
@@ -1132,6 +1133,7 @@ class MaisakaChatLoopService:
             enable_visual_message=enable_visual_message,
             max_context_size=max_context_size,
             is_group_chat=self._is_group_chat,
+            prefix_anchor_cache=self._prefix_anchor_by_kind,
         )
         # Planner 生成前结构化前置策略（与 builtin_tool/reply.py 及 maisaka_generator_base.py 共用 check_planner_reply_policy）：
         # 检查最新入站用户消息是否命中裸媒体占位符或作者专属 Bug 报告模板；若最新消息不可回复，追加结构化禁用提示并在单目标场景下移除 reply 工具。
@@ -1421,6 +1423,7 @@ class MaisakaChatLoopService:
         request_kind: str = "planner",
         max_context_size: Optional[int] = None,
         is_group_chat: Optional[bool] = None,
+        prefix_anchor_cache: Optional[dict[str, tuple[int, int]]] = None,
     ) -> tuple[List[LLMContextMessage], str]:
         """选择LLM上下文消息"""
 
@@ -1446,22 +1449,74 @@ class MaisakaChatLoopService:
             enable_visual_message=active_enable_visual_message,
         )
 
-        for index in range(len(filtered_history) - 1, -1, -1):
-            message = filtered_history[index]
-            if (
-                build_context_items_from_history_entry(
-                    message,
-                    enable_visual_message=active_enable_visual_message,
-                )
-                == ()
-            ):
-                continue
-
-            selected_indices.append(index)
-            if message.count_in_context:
-                counted_message_count += 1
-                if counted_message_count >= effective_context_size:
+        # 阶梯式 KV 前缀锚点：固定历史起点对象的 id，直到窗口超出 effective_context_size + STRIDE 才向前滚动一次，
+        # 彻底消除“每来 1 条新消息，首条消息向前滑 1 条导致整段 Prompt KV 缓存 100% 失效”的问题。
+        anchor_start_idx: Optional[int] = None
+        if prefix_anchor_cache is not None and request_kind in prefix_anchor_cache:
+            anchor_obj_id, _ = prefix_anchor_cache[request_kind]
+            for idx, msg in enumerate(filtered_history):
+                if id(msg) == anchor_obj_id:
+                    counted_from_anchor = 0
+                    valid_from_anchor = True
+                    for sub_msg in filtered_history[idx:]:
+                        if (
+                            build_context_items_from_history_entry(
+                                sub_msg,
+                                enable_visual_message=active_enable_visual_message,
+                            )
+                            == ()
+                        ):
+                            continue
+                        if sub_msg.count_in_context:
+                            counted_from_anchor += 1
+                    if counted_from_anchor <= effective_context_size + CONTEXT_PREFIX_ANCHOR_STRIDE:
+                        anchor_start_idx = idx
+                    else:
+                        valid_from_anchor = False
+                    if not valid_from_anchor:
+                        anchor_start_idx = None
                     break
+
+        if anchor_start_idx is not None:
+            for index in range(anchor_start_idx, len(filtered_history)):
+                message = filtered_history[index]
+                if (
+                    build_context_items_from_history_entry(
+                        message,
+                        enable_visual_message=active_enable_visual_message,
+                    )
+                    == ()
+                ):
+                    continue
+                selected_indices.append(index)
+                if message.count_in_context:
+                    counted_message_count += 1
+        else:
+            for index in range(len(filtered_history) - 1, -1, -1):
+                message = filtered_history[index]
+                if (
+                    build_context_items_from_history_entry(
+                        message,
+                        enable_visual_message=active_enable_visual_message,
+                    )
+                    == ()
+                ):
+                    continue
+
+                selected_indices.append(index)
+                if message.count_in_context:
+                    counted_message_count += 1
+                    if counted_message_count >= effective_context_size:
+                        break
+            if prefix_anchor_cache is not None and selected_indices:
+                earliest_counted_idx = min(
+                    (i for i in selected_indices if filtered_history[i].count_in_context),
+                    default=min(selected_indices),
+                )
+                prefix_anchor_cache[request_kind] = (
+                    id(filtered_history[earliest_counted_idx]),
+                    earliest_counted_idx,
+                )
 
         selected_indices = sorted({*always_selected_indices, *selected_indices})
 
@@ -1478,7 +1533,8 @@ class MaisakaChatLoopService:
         )
         selected_history, _ = normalize_tool_call_result_pairs(selected_history)
         selected_context_count = sum(1 for message in selected_history if message.count_in_context)
-        tool_turn_overflow = max(0, selected_context_count - effective_context_size)
+        anchor_headroom = max(0, selected_context_count_before_tool_expansion - effective_context_size)
+        tool_turn_overflow = max(0, selected_context_count - max(effective_context_size, selected_context_count_before_tool_expansion))
         if tool_turn_overflow > 0:
             logger.info(
                 "上下文选择为保持完整工具轮次允许超出窗口: "
@@ -1489,11 +1545,12 @@ class MaisakaChatLoopService:
         tool_message_count = sum(1 for message in selected_history if isinstance(message, ToolResultMessage))
         normal_message_count = len(selected_history) - tool_message_count
         stability_text = f"|cache_window {base_context_size}->{effective_context_size}"
+        anchor_text = f"|anchor +{anchor_headroom}" if anchor_headroom else ""
         overflow_text = f"|tool_turn_overflow +{tool_turn_overflow}" if tool_turn_overflow else ""
         selection_reason = (
             f"实际发送 {len(selected_history)} 条消息"
             f"|消息 {normal_message_count} 条|tool {tool_message_count} 条"
-            f"{stability_text}{overflow_text}"
+            f"{stability_text}{anchor_text}{overflow_text}"
         )
         return (
             selected_history,

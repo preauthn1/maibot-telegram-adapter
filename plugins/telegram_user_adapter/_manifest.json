@@ -45,8 +45,6 @@
   ],
   "capabilities": [
     "maisaka.context.append",
-    "chat.get_stream_by_group_id",
-    "chat.get_stream_by_user_id",
     "frequency.set_adjust",
     "send.text",
     "send.custom"

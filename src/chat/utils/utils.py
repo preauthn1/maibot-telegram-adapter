@@ -567,11 +567,12 @@ def _get_random_default_reply() -> str:
     return random.choice(default_replies)
 
 
-def _apply_identity_guard(text: str) -> str:
+def _apply_identity_guard(text: str, *, is_group_chat: bool = True) -> str:
     """对回复文本执行身份守卫，拦截自曝 AI 身份/底层模型的内容。
 
     Args:
         text: LLM 生成的原始回复文本。
+        is_group_chat: 当前是否为群聊会话。
 
     Returns:
         str: 经过守卫处理的文本。
@@ -581,7 +582,7 @@ def _apply_identity_guard(text: str) -> str:
         return text
 
     try:
-        result = guard_identity(text)
+        result = guard_identity(text, is_group_chat=is_group_chat)
     except Exception as exc:  # noqa: BLE001 - 守卫本身异常不应阻断回复
         logger.warning(f"身份守卫执行失败，按原文放行: {exc}")
         return text
@@ -644,12 +645,16 @@ def process_llm_response_segments(
     text: str,
     enable_splitter: bool = True,
     enable_chinese_typo: bool = True,
+    *,
+    is_group_chat: bool = True,
 ) -> list[ProcessedResponseSegment]:
     """处理回复文本，并保留错别字纠正消息的引用提示。"""
 
     # 身份守卫必须最先执行，且不受 enable_response_post_process 开关影响：
     # 它是防止暴露 AI 身份的安全兜底，而不是风格化处理。
-    text = _apply_identity_guard(text)
+    text = _apply_identity_guard(text, is_group_chat=is_group_chat)
+    if not text.strip():
+        return []
 
     if not global_config.response_post_process.enable_response_post_process:
         return [ProcessedResponseSegment(text)]
@@ -734,10 +739,14 @@ async def process_llm_response_segments_async(
     text: str,
     enable_splitter: bool = True,
     enable_chinese_typo: bool = True,
+    *,
+    is_group_chat: bool = True,
 ) -> list[ProcessedResponseSegment]:
     """异步处理回复文本，支持使用 LLM 按语义断句。"""
     if global_config.response_splitter.mode != "llm":
-        return process_llm_response_segments(text, enable_splitter, enable_chinese_typo)
+        return process_llm_response_segments(
+            text, enable_splitter, enable_chinese_typo, is_group_chat=is_group_chat
+        )
 
     # 全局或单次关闭分句时不走 LLM 断句，交给同步链路按“不分句”处理（含身份守卫）。
     if (
@@ -745,10 +754,14 @@ async def process_llm_response_segments_async(
         or not global_config.response_splitter.enable
         or not enable_splitter
     ):
-        return process_llm_response_segments(text, enable_splitter, enable_chinese_typo)
+        return process_llm_response_segments(
+            text, enable_splitter, enable_chinese_typo, is_group_chat=is_group_chat
+        )
 
     # LLM 断句链路不经过同步处理函数，身份守卫必须在这里同样最先执行。
-    text = _apply_identity_guard(text)
+    text = _apply_identity_guard(text, is_group_chat=is_group_chat)
+    if not text.strip():
+        return []
 
     try:
         split_sentences = await split_text_with_llm(text)
@@ -776,7 +789,13 @@ async def process_llm_response_segments_async(
     return _merge_processed_segments_to_max_count(segments, global_config.response_splitter.max_split_num)
 
 
-def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese_typo: bool = True) -> list[str]:
+def process_llm_response(
+    text: str,
+    enable_splitter: bool = True,
+    enable_chinese_typo: bool = True,
+    *,
+    is_group_chat: bool = True,
+) -> list[str]:
     """处理回复文本，并返回兼容旧调用链的纯文本列表。"""
 
     return [
@@ -785,6 +804,7 @@ def process_llm_response(text: str, enable_splitter: bool = True, enable_chinese
             text,
             enable_splitter=enable_splitter,
             enable_chinese_typo=enable_chinese_typo,
+            is_group_chat=is_group_chat,
         )
     ]
 

@@ -166,6 +166,9 @@ _MODELS_REQUIRING_MAX_COMPLETION_TOKENS: Set[Tuple[str, str]] = set()
 """记录本进程内已确认「仅支持 max_completion_tokens」的模型，键为 (base_url, model_identifier)。
 命中后直接使用 max_completion_tokens，避免重复触发首次失败重试。"""
 
+_MODELS_REJECTING_STREAM_OPTIONS: Set[Tuple[str, str]] = set()
+"""记录本进程内已确认不支持 `stream_options={"include_usage": True}` 的模型，自动降级并记忆。"""
+
 OpenAIStreamResponseHandler = Callable[
     [AsyncStream[ChatCompletionChunk], asyncio.Event | None],
     Coroutine[Any, Any, Tuple[APIResponse, UsageTuple | None]],
@@ -329,7 +332,17 @@ def _normalize_image_part_for_openai(part: ContextImagePart) -> Tuple[str, str] 
                 return image_format, part.image_base64
 
             if image_format == "gif":
-                # 部分 OpenAI 兼容视觉接口会拒绝动画 GIF 或动画 WebP，因此只传递首帧。
+                # 若 GIF 为多帧动图，抽取关键帧横向拼接为单张 JPEG（上限 6 帧），
+                # 既避免 OpenAI 兼容接口拒收动画 GIF，又保留首帧无文字/末帧反转表情包的语义。
+                if bool(getattr(image, "is_animated", False)) and int(getattr(image, "n_frames", 1) or 1) > 1:
+                    try:
+                        from src.common.utils.utils_image import ImageUtils
+
+                        storyboard_jpeg = ImageUtils.gif_2_static_image(image_bytes, max_frames=6)
+                        if storyboard_jpeg:
+                            return "jpeg", base64.b64encode(storyboard_jpeg).decode("utf-8")
+                    except Exception:
+                        pass
                 image.seek(0)
                 first_frame = image.copy()
                 if first_frame.mode not in {"RGB", "RGBA"}:
@@ -608,11 +621,19 @@ def _convert_tool_options(tool_options: List[ToolOption]) -> List[ChatCompletion
     return converted_tools
 
 
+def _usage_attr_or_key(obj: Any, key: str, default: Any = None) -> Any:
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def _extract_usage_record(usage: Any) -> UsageTuple | None:
     """从响应对象中提取 usage 元组，并判断供应商是否上报了 Prompt 缓存用量。
 
     Args:
-        usage: OpenAI SDK 返回的 usage 对象。
+        usage: OpenAI SDK 返回的 usage 对象或兼容字典。
 
     Returns:
         UsageTuple | None: `(prompt_tokens, completion_tokens, total_tokens,
@@ -620,25 +641,47 @@ def _extract_usage_record(usage: Any) -> UsageTuple | None:
     """
     if usage is None:
         return None
-    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-    # 用 None 哨兵区分「字段缺失」与「字段为 0」：StepFun 等供应商只在命中时返回缓存字段
-    reported_hit_tokens = getattr(usage, "prompt_cache_hit_tokens", None)
-    reported_miss_tokens = getattr(usage, "prompt_cache_miss_tokens", None)
-    prompt_tokens_details = getattr(usage, "prompt_tokens_details", None)
-    reported_cached_tokens = (
-        getattr(prompt_tokens_details, "cached_tokens", None) if prompt_tokens_details is not None else None
+    prompt_tokens = int(
+        _usage_attr_or_key(usage, "prompt_tokens", None)
+        or _usage_attr_or_key(usage, "input_tokens", 0)
+        or 0
     )
+    completion_tokens = int(
+        _usage_attr_or_key(usage, "completion_tokens", None)
+        or _usage_attr_or_key(usage, "output_tokens", 0)
+        or 0
+    )
+    total_tokens = int(_usage_attr_or_key(usage, "total_tokens", 0) or (prompt_tokens + completion_tokens))
+    # 用 None 哨兵区分「字段缺失」与「字段为 0」；兼容 OpenAI prompt_tokens_details.cached_tokens、
+    # DeepSeek prompt_cache_hit_tokens 以及 Anthropic/反代 cache_read_input_tokens。
+    reported_hit_tokens = _usage_attr_or_key(usage, "prompt_cache_hit_tokens", None)
+    if reported_hit_tokens is None:
+        reported_hit_tokens = _usage_attr_or_key(usage, "cache_read_input_tokens", None)
+    reported_miss_tokens = _usage_attr_or_key(usage, "prompt_cache_miss_tokens", None)
+    prompt_tokens_details = (
+        _usage_attr_or_key(usage, "prompt_tokens_details", None)
+        or _usage_attr_or_key(usage, "input_tokens_details", None)
+    )
+    reported_cached_tokens = (
+        _usage_attr_or_key(prompt_tokens_details, "cached_tokens", None)
+        if prompt_tokens_details is not None
+        else None
+    )
+    if reported_cached_tokens is None and prompt_tokens_details is not None:
+        reported_cached_tokens = _usage_attr_or_key(prompt_tokens_details, "cache_read_input_tokens", None)
     prompt_cache_reported = (
         reported_hit_tokens is not None or reported_miss_tokens is not None or reported_cached_tokens is not None
     )
-    prompt_cache_hit_tokens = reported_hit_tokens or reported_cached_tokens or 0
-    prompt_cache_miss_tokens = reported_miss_tokens or 0
-    if prompt_cache_miss_tokens == 0 and prompt_cache_hit_tokens > 0:
+    prompt_cache_hit_tokens = int(
+        reported_hit_tokens if reported_hit_tokens is not None else (reported_cached_tokens or 0)
+    )
+    prompt_cache_miss_tokens = int(reported_miss_tokens or 0)
+    if prompt_cache_miss_tokens == 0 and (prompt_cache_hit_tokens > 0 or prompt_cache_reported):
         prompt_cache_miss_tokens = max(prompt_tokens - prompt_cache_hit_tokens, 0)
     return (
         prompt_tokens,
-        getattr(usage, "completion_tokens", 0) or 0,
-        getattr(usage, "total_tokens", 0) or 0,
+        completion_tokens,
+        total_tokens,
         prompt_cache_hit_tokens,
         prompt_cache_miss_tokens,
         prompt_cache_reported,
@@ -1032,21 +1075,18 @@ def _build_api_status_message(error: APIStatusError) -> str:
 
 
 def _is_max_tokens_unsupported_error(error: APIStatusError) -> bool:
-    """判断该 400 错误是否为「max_tokens 不被支持、应改用 max_completion_tokens」。
-
-    以错误原文匹配为主判据（OpenAI 的报错即 "Use 'max_completion_tokens' instead."）。
-    错误正文可能落在 error.message，也可能仅落在 response.text（如经代理/网关，或 SDK
-    未解析到标准 error 结构时），故复用 _build_api_status_message 同时覆盖两者。
-
-    Args:
-        error: OpenAI SDK 抛出的状态错误。
-
-    Returns:
-        bool: 命中该特征返回 True。
-    """
+    """判断该 400 错误是否为「max_tokens 不被支持、应改用 max_completion_tokens」。"""
     if error.status_code != 400:
         return False
     return "max_completion_tokens" in _build_api_status_message(error).lower()
+
+
+def _is_stream_options_unsupported_error(error: APIStatusError) -> bool:
+    """判断该 400/422 错误是否为上游不支持 `stream_options` / `include_usage`。"""
+    if error.status_code not in (400, 422):
+        return False
+    msg = _build_api_status_message(error).lower()
+    return "stream_options" in msg or "include_usage" in msg
 
 
 @dataclass(slots=True)
@@ -1562,20 +1602,15 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                 omit if "temperature" in request_overrides.extra_body else _coerce_openai_argument(request.temperature)
             )
 
-            async def _dispatch(use_max_completion_tokens: bool) -> Tuple[APIResponse, UsageTuple | None]:
-                """构造并发起一次 chat.completions 请求。
-
-                Args:
-                    use_max_completion_tokens: 为 True 时改用 max_completion_tokens 承载
-                        最大输出 token 数，并省略原生 max_tokens（适配 gpt-5 系列等模型）。
-                """
+            async def _dispatch(
+                use_max_completion_tokens: bool,
+                include_stream_usage: bool = True,
+            ) -> Tuple[APIResponse, UsageTuple | None]:
+                """构造并发起一次 chat.completions 请求。"""
                 # 每次用副本，避免重试两次之间相互污染 extra_body
                 extra_body = dict(request_overrides.extra_body)
                 if use_max_completion_tokens:
-                    # 清除经由 extra_params.body 嵌套传入、未被 reserved_body_keys 过滤的
-                    # 遗留 max_tokens，否则重试仍会同时发送 max_tokens 导致再次 400。
                     extra_body.pop("max_tokens", None)
-                    # 自动改用 max_completion_tokens：用户未显式给值时用任务级 max_tokens 填充
                     if "max_completion_tokens" not in extra_body and request.max_tokens is not None:
                         extra_body["max_completion_tokens"] = request.max_tokens
                     max_tokens_argument = omit
@@ -1589,6 +1624,9 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                     "max_completion_tokens",
                     extra_body.get("max_tokens", None if max_tokens_argument is omit else max_tokens_argument),
                 )
+                stream_options_arg: Any = omit
+                if model_info.force_stream_mode and include_stream_usage and "stream_options" not in extra_body:
+                    stream_options_arg = {"include_usage": True}
                 snapshot_provider_request["request_kwargs"] = {
                     "extra_body": extra_body or None,
                     "extra_headers": request_overrides.extra_headers or None,
@@ -1598,6 +1636,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                     "model": model_info.model_identifier,
                     "response_format": _snapshot_openai_argument(openai_response_format),
                     "stream": bool(model_info.force_stream_mode),
+                    "stream_options": _snapshot_openai_argument(stream_options_arg),
                     "temperature": _snapshot_openai_argument(temperature_argument),
                     "tools": tools_payload,
                 }
@@ -1616,6 +1655,7 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
                             temperature=temperature_argument,
                             max_tokens=max_tokens_argument,
                             stream=True,
+                            stream_options=stream_options_arg,
                             response_format=openai_response_format,
                             extra_headers=request_overrides.extra_headers or None,
                             extra_query=request_overrides.extra_query or None,
@@ -1657,22 +1697,27 @@ class OpenaiClient(AdapterClient[AsyncStream[ChatCompletionChunk], ChatCompletio
             # 命中「max_tokens 不被支持」的 400 错误时自动改用 max_completion_tokens 重试并记忆。
             cache_key = (self.api_provider.base_url or "", model_info.model_identifier)
             use_mct = cache_key in _MODELS_REQUIRING_MAX_COMPLETION_TOKENS
-            # 仅当本次确实发送了原生 max_tokens（显式参数或 extra_body 嵌套传入）时，才把
-            # 「max_tokens 不被支持」的 400 归因于该模型；否则可能把本就没发 max_tokens 的
-            # 请求误记为「必须使用 max_completion_tokens」。
+            use_stream_usage = cache_key not in _MODELS_REJECTING_STREAM_OPTIONS
             sent_legacy_max_tokens = not use_mct and (
                 "max_tokens" in request_overrides.extra_body
                 or (request.max_tokens is not None and "max_completion_tokens" not in request_overrides.extra_body)
             )
             try:
-                response_result = await _dispatch(use_mct)
+                response_result = await _dispatch(use_mct, include_stream_usage=use_stream_usage)
             except APIStatusError as exc:
-                if sent_legacy_max_tokens and _is_max_tokens_unsupported_error(exc):
+                if model_info.force_stream_mode and use_stream_usage and _is_stream_options_unsupported_error(exc):
+                    _MODELS_REJECTING_STREAM_OPTIONS.add(cache_key)
+                    use_stream_usage = False
+                    logger.info(
+                        f"模型 '{model_info.name}' 不支持 stream_options.include_usage，自动降级重试并记忆该模型。"
+                    )
+                    response_result = await _dispatch(use_mct, include_stream_usage=False)
+                elif sent_legacy_max_tokens and _is_max_tokens_unsupported_error(exc):
                     _MODELS_REQUIRING_MAX_COMPLETION_TOKENS.add(cache_key)
                     logger.info(
                         f"模型 '{model_info.name}' 不支持 max_tokens，自动改用 max_completion_tokens 重试并记忆该模型。"
                     )
-                    response_result = await _dispatch(True)
+                    response_result = await _dispatch(True, include_stream_usage=use_stream_usage)
                 else:
                     raise
             response, usage_record = response_result

@@ -66,9 +66,8 @@ def _resolve_candidate(
                 platform=clean_platform,
                 user_id=clean_user_id,
             )
-        elif clean_person_name:
-            person_id = resolve_person_id_for_memory(person_name=clean_person_name)
         else:
+            # 昵称不唯一；缺少稳定用户 ID 时不猜测人物身份。
             person_id = ""
     except Exception as exc:
         logger.debug(

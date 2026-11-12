@@ -98,16 +98,58 @@ class ReplyPrejudge:
     # 同一梗：我们最近出站里与入站共享关键词，窗口内已接过 N 次则停。
     _JOKE_WINDOW_SECONDS = 15 * 60
     _JOKE_MAX_REPLIES = 2
+    # 群聊发言后短期跟进窗口（对标 companion_v2/conversation/group_followup.py）：
+    # 我方在群内回复某位群友后，45 秒内该群友发出的未转向他人的续接发言自动开启跟进。
+    _FOLLOWUP_WINDOW_SECONDS = 45.0
+    _FOLLOWUP_MAX_INTERLEAVED = 3
 
     def __init__(self) -> None:
         self._our_recent: Dict[str, Deque[Tuple[float, frozenset]]] = defaultdict(lambda: deque(maxlen=12))
+        self._followup_targets: Dict[str, Tuple[str, float, int]] = {}
 
-    def note_outbound(self, chat_id: str, text: str, now: Optional[float] = None) -> None:
-        """记录我方一条已成功发出的消息，用于同梗计数。"""
+    def note_outbound(
+        self,
+        chat_id: str,
+        text: str,
+        now: Optional[float] = None,
+        *,
+        target_sender_id: Optional[str] = None,
+    ) -> None:
+        """记录我方一条已成功发出的消息，用于同梗计数与群聊短期跟进窗口。"""
 
+        current = time.monotonic() if now is None else now
         tokens = frozenset(_TOKEN.findall(text or ""))
         if tokens:
-            self._our_recent[str(chat_id)].append((time.monotonic() if now is None else now, tokens))
+            self._our_recent[str(chat_id)].append((current, tokens))
+        if target_sender_id and str(target_sender_id).strip():
+            self._followup_targets[str(chat_id)] = (str(target_sender_id).strip(), current, 0)
+
+    def is_followup_active(
+        self,
+        chat_id: str,
+        sender_id: str,
+        *,
+        mentions_other: bool = False,
+        replies_to_other: bool = False,
+        now: Optional[float] = None,
+    ) -> bool:
+        """判断当前群聊发言者是否处于我方刚回复后的 45 秒短期跟进窗口内。"""
+
+        key = str(chat_id)
+        entry = self._followup_targets.get(key)
+        if entry is None:
+            return False
+        target_uid, replied_at, interleaved = entry
+        current = time.monotonic() if now is None else now
+        if current - replied_at > self._FOLLOWUP_WINDOW_SECONDS or interleaved > self._FOLLOWUP_MAX_INTERLEAVED:
+            self._followup_targets.pop(key, None)
+            return False
+        if str(sender_id).strip() != target_uid:
+            self._followup_targets[key] = (target_uid, replied_at, interleaved + 1)
+            return False
+        if mentions_other or replies_to_other:
+            return False
+        return True
 
     def judge(
         self,
@@ -118,6 +160,7 @@ class ReplyPrejudge:
         is_group: bool,
         mentions_other: bool,
         replies_to_other: bool,
+        sender_id: str = "",
         now: Optional[float] = None,
     ) -> Prejudge:
         """给出预判档位。
@@ -166,4 +209,12 @@ class ReplyPrejudge:
 
         if _QUESTION.search(own_text):
             return Prejudge(SHOULD_REPLY)
+        if sender_id and self.is_followup_active(
+            chat_id,
+            sender_id,
+            mentions_other=mentions_other,
+            replies_to_other=replies_to_other,
+            now=now,
+        ):
+            return Prejudge(SHOULD_REPLY, "group_followup_active")
         return Prejudge(OBSERVE)

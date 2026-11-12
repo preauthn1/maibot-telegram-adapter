@@ -30,6 +30,7 @@ from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase, Tool
 from .codecs import TelegramUserInboundCodec
 from .codecs.outbound import TelegramUserOutboundCodec
 from .codecs.reactions import ReactionInfo, parse_reaction_update
+from .channel_stickers import ChannelStickerCatalog
 from .config import TelegramUserPluginSettings
 from .constants import PLATFORM_NAME, SESSION_FILE_NAME, TELEGRAM_USER_GATEWAY_NAME
 from .content_safety import detect_nsfw
@@ -58,7 +59,8 @@ from .private_deflect import build_deflect_reply, should_deflect_private
 from .presence_schedule import PresenceSchedule
 from .provocation import ProvocationResponder, detect_provocation
 from .reaction_policy import ReactionPolicy, resolve_allowed_reactions
-from .reply_prejudge import MUST_SILENCE, ReplyPrejudge, strip_reply_envelope
+from .reply_prejudge import MUST_SILENCE, ReplyPrejudge, is_closing_signal, strip_reply_envelope
+from .rest_backlog import RestBacklogStore
 from .read_notifications import ReadNotificationsWorker
 from .self_improvement import ChatOutcome, SelfImprovementStore, detect_suspicion, inspect_own_message
 from .send_queue import PRIORITY_MENTION, PRIORITY_NORMAL, QuietHoursError, SendQueue, is_quiet_hours
@@ -66,6 +68,7 @@ from .share_guard import ShareGuard
 from .small_chat import SmallChatModerator, estimate_read_delay
 from .spam_filter import detect_spam
 from .style_profiles import sync_style_profiles
+from .task_deflection import reaction as task_deflection_reaction, should_deflect as should_deflect_task
 from .telegram_user_client import TelegramUserClient, is_available as telethon_is_available
 from .transcript import ChatTranscriptLogger
 from .trigger import TriggerManager
@@ -74,6 +77,25 @@ from .usage_stats import ModelPricing, UsageTracker
 from .utils import parse_topic_group_id
 from .manual_history import ingest_manual_outgoing
 
+
+
+
+def _stream_id_from_capability(result: Any) -> str:
+    """从 ``chat.get_stream_by_*`` 的返回里取 Host stream_id。
+
+    maibot_sdk 2.9 起 ``call_capability`` 会按 ``_CAPABILITY_RESULT_KEYS``
+    把 ``{"success": True, "stream": {...}}`` 解包成 ``stream`` 本身（未找到时为 None）。
+    插件此前仍按外层包装读取 ``result["success"]``，导致三处会话解析恒失败：
+    群权重写回、表情回应上下文、超限消息上下文全部静默失效。
+    这里同时兼容解包后与未解包两种形态，避免 SDK 再次调整时复发。
+    """
+
+    if not isinstance(result, dict):
+        return ""
+    stream = result.get("stream") if "success" in result else result
+    if not result.get("success", True) or not isinstance(stream, dict):
+        return ""
+    return str(stream.get("stream_id") or "")
 
 
 class TelegramUserAdapterPlugin(MaiBotPlugin):
@@ -108,6 +130,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         from .native_tools import ObservedStickers
         from .button_tools import ButtonTickets
         self._observed_stickers = ObservedStickers()
+        self._channel_stickers = ChannelStickerCatalog()
         self._button_tickets = ButtonTickets()
         self._public_pages = None
         self._sticker_contexts: set[str] = set()
@@ -149,6 +172,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._consecutive_replies: Dict[str, int] = {}
         # 触发连发上限的时刻，用于冷却计时。
         self._consecutive_blocked_at: Dict[str, float] = {}
+        # 连发计数代际号：新入站重置计数时递增，防止排队中旧发送失败后错减新一轮计数。
+        self._consecutive_epoch: Dict[str, int] = {}
         # (会话键, 发送者ID) -> 最近消息时间戳，用于识别单人刷屏。
         self._user_message_times: Dict[tuple[str, str], List[float]] = {}
         # 各群互动质量追踪，用于动态调整发言意愿。
@@ -157,6 +182,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._provocation = ProvocationResponder()
         # 频率能力是否已失败过，避免逐条刷同样的错误日志。
         self._frequency_cap_failed = False
+        self._frequency_writeback_paused_logged = False
         # 小群参与率约束：某休闲小群实测 63.6%，远高于技术群的 12%。
         self._small_chat = SmallChatModerator()
         # 话语权闸门：小群参与率只看“我方/入站”，此处额外限制短窗口
@@ -169,6 +195,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 人物记忆：记住群友的稳定事实（见 people_memory 模块注释）
         # on_load 会换成带落盘路径的实例
         self._people = PeopleMemory()
+        self._people_lock = asyncio.Lock()
         # 距上次落盘攒了多少条新事实
         self._people_dirty = 0
         # 攒够多少条就落一次盘。20 条：够摊薄写盘开销，
@@ -190,6 +217,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 每 N 次出站写一次用量洞察，避免每条都写膨胀 transcript。
         self._usage_log_interval = 50
         self._edit_tracker = EditTracker()
+        self._rest_backlog: Optional[RestBacklogStore] = None
         self._event_bridge = None
         # 各会话近期发言者，用于估算群规模（小群 vs 大群）。
         self._recent_speakers: Dict[str, deque[str]] = {}
@@ -209,12 +237,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 人物记忆改为落盘：__init__ 阶段拿不到 ctx.paths，所以在这里
         # 换成带路径的实例。纯内存版重启即失忆，"记住群友"就成了空话。
         self._people = PeopleMemory(
-            storage_path=self.ctx.paths.data_dir / "people_memory.json",
+            # 旧文件缺少会话/消息来源，保留原样，不自动迁移或覆盖。
+            storage_path=self.ctx.paths.data_dir / "people_memory_scoped_v1.json",
             logger=self.ctx.logger,
         )
         self.ctx.logger.info(f"人物记忆已载入 {self._people.known_people()} 人")
 
         self._permissions = PermissionStateStore(self.ctx.paths.data_dir / "permission_state.json")
+        self._rest_backlog = RestBacklogStore(self.ctx.paths.data_dir / "rest_backlog.json")
         self._funnel = FunnelLog(self.ctx.paths.data_dir / "funnel")
         blocked = [
             f"{chat}={info['state']}"
@@ -281,7 +311,11 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         """插件卸载时断开连接并保存记忆。"""
 
         # 先存记忆再断连接：断连可能抛异常，那样记忆就白攒了。
-        self._people.save()
+        try:
+            async with self._people_lock:
+                await self._save_people_locked()
+        except OSError:
+            self.ctx.logger.warning("人物候选保存失败，仍继续卸载连接")
 
         self._unloading = True
         await self._cancel_reconnect()
@@ -303,6 +337,49 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         await self._cancel_reconnect()
         await self._restart_if_needed()
 
+    async def _bind_sticker_route_from_tool_context(self, kwargs: Dict[str, Any]) -> str:
+        """为工具调用补建 Host stream 路由；失败时不创建任何本地兜底路由。"""
+        stream_id = str(kwargs.get("stream_id") or "")
+        if stream_id and stream_id in self._sticker_routes:
+            return stream_id
+        if kwargs.get("platform") != PLATFORM_NAME:
+            return ""
+
+        is_group = kwargs.get("group_id") is not None
+        raw_target = kwargs.get("group_id") if is_group else kwargs.get("user_id")
+        if raw_target is None:
+            raw_target = kwargs.get("chat_id")
+            is_group = str(raw_target or "").startswith("-")
+        if raw_target is None or str(raw_target).strip() == "":
+            return ""
+        capability = "chat.get_stream_by_group_id" if is_group else "chat.get_stream_by_user_id"
+        key = "group_id" if is_group else "user_id"
+        try:
+            route_result = await self.ctx.call_capability(
+                capability, platform=PLATFORM_NAME, **{key: str(raw_target)}
+            )
+        except Exception as exc:  # noqa: BLE001 - 工具边界只暴露安全失败
+            self.ctx.logger.warning("贴纸工具补建会话路由失败: %s", type(exc).__name__)
+            return ""
+        resolved = _stream_id_from_capability(route_result)
+        if not resolved:
+            return ""
+        target = str(raw_target)
+        self._sticker_routes[resolved] = (target, is_group)
+        self._sticker_routes.move_to_end(resolved)
+        try:
+            allowed_context = {"platform": PLATFORM_NAME, "stream_id": resolved, "user_id": "" if is_group else target}
+            self._native_scope(allowed_context)
+        except Exception as exc:
+            self._sticker_routes.pop(resolved, None)
+            self.ctx.logger.info("贴纸工具补建路由未通过授权检查: %s", type(exc).__name__)
+            return ""
+        while len(self._sticker_routes) > 256:
+            old_sid, (old_target, _) = self._sticker_routes.popitem(last=False)
+            del old_sid
+            self._sticker_contexts.discard(old_target)
+        return resolved
+
     @Tool(
         "official_duck_sticker",
         description="在当前 Telegram 会话发送一张用户批准的 UtyaDuck 原生贴纸。先用 list 查看可用精确 emoji；只用于适合语境的独立情绪反应，不附加重复文字，不替代事实回答。",
@@ -310,15 +387,41 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                     "emoji": {"type": "string", "description": "list 返回的精确 emoji；不能猜路径或文档 ID"}},
     )
     async def official_duck_sticker(self, action: str = "list", emoji: str = "", **kwargs: Any) -> Dict[str, Any]:
-        """SDK 注入会话路由；不提供任何模型可填写的目的地参数。"""
+        """SDK 注入会话路由；路由缺失时只补建真实 Host stream，不绕过授权。"""
         codec = self._outbound_codec
         if not stickers_enabled() or codec is None or kwargs.get("platform") != PLATFORM_NAME:
             return {"success": False, "error": "原生贴纸仅在就绪的 Telegram 会话可用"}
+
         stream_id = str(kwargs.get("stream_id") or "")
-        bound = self._sticker_routes.get(stream_id)
+        for attempt in range(2):
+            if stream_id and stream_id in self._sticker_routes:
+                break
+            stream_id = await self._bind_sticker_route_from_tool_context(kwargs)
+            if stream_id:
+                break
+            if attempt == 0:
+                # Host 的聊天流注册可能与工具轮次并发完成，给它一次极短重试窗口。
+                await asyncio.sleep(0.1)
+        bound = self._sticker_routes.get(stream_id) if stream_id else None
         if bound is None:
-            return {"success": False, "error": "当前会话没有通过适配器名单过滤", "content": "当前 Telegram 会话尚无已验证路由，不能发送贴纸。"}
-        target, is_group = bound
+            return {
+                "success": False,
+                "error": "当前会话没有通过适配器名单过滤",
+                "content": "贴纸发送未获授权路由；已重试一次，未发送，也不要改用文字假装已发送。",
+                "retryable": False,
+            }
+
+        # 发送前再次走统一范围校验，确保补建路由不等于绕过白名单。
+        try:
+            _, target, _, _ = self._native_scope({
+                "platform": PLATFORM_NAME,
+                "stream_id": stream_id,
+                "user_id": str(kwargs.get("user_id") or ""),
+            })
+        except Exception:
+            return {"success": False, "error": "当前会话未通过贴纸发送授权检查", "retryable": False,
+                    "content": "贴纸未发送：当前会话不在允许范围内。"}
+        is_group = target.startswith("-")
         choices = [e for e in sorted(codec.stickers._emojis) if codec.stickers.select(e) is not None]
         if action == "list":
             return {"success": bool(choices), "pack": PACK_SHORT_NAME, "emojis": choices,
@@ -334,7 +437,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         result = await self.handle_telegram_user_gateway({
             "message_info": info, "raw_message": [{"type": "sticker", "data": emoji}],
         })
-        result["content"] = "原生贴纸已发送，请勿附加重复文字。" if result.get("success") else "贴纸未发送（限频或发送闸门拦截），不要改用另一动作绕过。"
+        result["content"] = "原生贴纸已发送并完成 Telegram 回读确认，请勿附加重复文字。" if result.get("success") else "贴纸未发送（限频、授权或发送闸门拦截），不要改用另一动作绕过。"
         return result
 
     def _native_scope(self, context: Dict[str, Any]) -> tuple[str, str, int, Optional[int]]:
@@ -372,15 +475,23 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 return await raw_read(client, chat, topic, params["method"], params["params"],
                                       self._load_settings().native_tools.raw_read_enabled)
             if action == "stickers":
-                matches = self._observed_stickers.search(target, params["query"])
+                observed = self._observed_stickers.search(target, params["query"])
+                channel = self._channel_stickers.search(params["query"])
+                matches = observed + channel
                 return {"success": True, "stickers": matches,
                         "content": json.dumps(matches, ensure_ascii=False),
-                        "send_tool": "telegram_send_sticker", "observed_only": True}
+                        "send_tool": "telegram_send_sticker", "observed_only": False}
             if action == "send_sticker":
-                self._observed_stickers.resolve(target, params["sticker_ref"])
+                sticker_ref = params["sticker_ref"]
+                source = "observed"
+                try:
+                    self._observed_stickers.resolve(target, sticker_ref)
+                except ValueError:
+                    await self._channel_stickers.resolve(client, sticker_ref)
+                    source = "zhaxia_cn"
                 receipt = await self.ctx.call_capability("send.custom", stream_id=sid,
                     message_type="telegram_observed_sticker",
-                    content={"sticker_ref": params["sticker_ref"], "scope": target},
+                    content={"sticker_ref": sticker_ref, "scope": target, "source": source},
                     processed_plain_text="", storage_message=False, sync_to_maisaka_history=False,
                     maisaka_source_kind="plugin_send", return_details=True)
                 confirmed = bool(receipt.get("success") and receipt.get("message_id"))
@@ -459,7 +570,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
     async def telegram_get_chat_info(self, **kwargs: Any) -> Dict[str, Any]:
         return await self._native_action('info', kwargs)
 
-    @Tool('telegram_search_stickers', description='搜索当前聊天/话题已见贴纸的 emoji 与已有识别描述；返回不透明 sticker_ref，描述可能不可用。', parameters={'query': {'type': 'string'}})
+    @Tool('telegram_search_stickers', description='搜索当前聊天已见贴纸及 @zhaxia_cn 推荐贴纸的 emoji；返回不透明 sticker_ref。', parameters={'query': {'type': 'string'}})
     async def telegram_search_stickers(self, query: str = "", **kwargs: Any) -> Dict[str, Any]:
         return await self._native_action('stickers', kwargs, query=query)
 
@@ -519,7 +630,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             if reserved and count > limit:
                 return {"allowed": False, "reason": "consecutive_limit"}
             if not reserved and count >= limit:
-                blocked_at = self._consecutive_blocked_at.get(chat_id, self._last_spoke_at.get(chat_id, 0.0))
+                last_spoke = getattr(self, "_last_spoke_at", {})
+                blocked_at = self._consecutive_blocked_at.get(chat_id, last_spoke.get(chat_id, 0.0))
                 if time.monotonic() - blocked_at < settings.behavior.consecutive_cooldown:
                     return {"allowed": False, "reason": "consecutive_limit"}
         return {"allowed": True, "reason": ""}
@@ -559,6 +671,17 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return {"success": False, "error": "Telegram 真人账号适配器未初始化"}
 
         chat_id = self._resolve_outbound_chat_id(message)
+        from src.maisaka.context.continuity_bridge import ENVELOPE_KEY, validate_envelope
+        continuity = (message.get("message_info", {}).get("additional_config") or {}).get(ENVELOPE_KEY)
+        if continuity is not None:
+            try:
+                validated = validate_envelope(continuity)
+                actual_sid = await self._resolve_host_stream_id(chat_id)
+                if not actual_sid or validated["session_id"] != actual_sid:
+                    raise ValueError("continuity destination mismatch")
+            except Exception as exc:
+                self.ctx.logger.warning("互动目标验证失败: %s", type(exc).__name__)
+                return {"success": False, "error": "continuity_scope_blocked", "error_code": "local_guard_blocked", "retryable": False}
 
         # 已被禁言/踢出的会话：不再排队、不再重试，避免对封禁群反复撞墙。
         if chat_id and self._is_write_forbidden(chat_id):
@@ -605,7 +728,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 而 config.py 对该项的描述是「贴着一个人连续接话是被识破的
         # 头号原因」。失败路径在 finally 里回滚。
         reserved_chat = ""
+        reserved_epoch: Optional[int] = None
         if chat_id:
+            reserved_epoch = self._consecutive_epoch.get(chat_id, 0)
             self._consecutive_replies[chat_id] = (
                 self._consecutive_replies.get(chat_id, 0) + 1
             )
@@ -636,7 +761,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             )
         except QuietHoursError:
             # 静默时段：安静丢弃，绝不向聊天回显任何内容（需求 4 + 9）。
-            self._release_consecutive(reserved_chat)
+            self._release_consecutive(reserved_chat, epoch=reserved_epoch)
             if self._transcript is not None and chat_id:
                 await self._transcript.log_event(
                     chat_id,
@@ -645,10 +770,10 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 )
             return {"success": False, "error": "quiet_hours", "silent": True, "policy_drop": True}
         except asyncio.CancelledError:
-            self._release_consecutive(reserved_chat)
+            self._release_consecutive(reserved_chat, epoch=reserved_epoch)
             raise
         except Exception as exc:  # noqa: BLE001 - 出站异常统一转成静默失败
-            self._release_consecutive(reserved_chat)
+            self._release_consecutive(reserved_chat, epoch=reserved_epoch)
             self.ctx.logger.error(f"Telegram 发送失败: {exc}")
             if chat_id:
                 self._record_platform_failure(chat_id, exc)
@@ -663,7 +788,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         if not result.get("success"):
             # 发送未成功，把预占的名额还回去
-            self._release_consecutive(reserved_chat)
+            self._release_consecutive(reserved_chat, epoch=reserved_epoch)
             error_code = str(result.get("error_code") or "")
             # 本地闸门拒绝（低信息去重等）不是平台失败，不进入权限状态机。
             if error_code in {"low_information_target_repeat", "local_guard_blocked"}:
@@ -678,6 +803,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             elif chat_id and result.get("error"):
                 self._record_platform_failure(chat_id, result.get("error"))
 
+        # 无论整批发送成功还是全部被拦，只要存在被安全/人设/污染/发言前自检拦截的分段，
+        # 逐段写入 self_improvement 违规样本并导出到本群 chats/<chat_id>/prompt_experience.txt（Codex 审计 A3/A4）。
         _blocked_segs = result.get("blocked_segments")
         if chat_id and isinstance(_blocked_segs, list) and _blocked_segs and self._self_improvement is not None:
             _norm_cid = str(chat_id).split(":", 1)[0]
@@ -768,19 +895,22 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             if observations else self._extract_text_from_message(message)
         )
         self._last_outbound_text[chat_id] = sent_text
-        self._prejudge.note_outbound(chat_id, sent_text)
+        _target_mid = self._safe_int(result.get("target_message_id"))
+        _target_sid = str(result.get("target_sender_id") or "").strip() or None
+        if _target_mid is None or _target_sid is None:
+            _add_cfg = (message.get("message_info", {}) or {}).get("additional_config", {}) or {}
+            if _target_mid is None:
+                _target_mid = self._safe_int(_add_cfg.get("reply_message_id"))
+            if _target_sid is None:
+                _raw_sid = _add_cfg.get("target_message_sender_id") or _add_cfg.get("reply_sender_id")
+                if _raw_sid is not None and str(_raw_sid).strip():
+                    _target_sid = str(_raw_sid).strip()
         if self._inbound_codec is not None:
-            _target_mid = self._safe_int(result.get("target_message_id"))
-            _target_sid = str(result.get("target_sender_id") or "").strip() or None
-            if _target_mid is None or _target_sid is None:
-                _add_cfg = (message.get("message_info", {}) or {}).get("additional_config", {}) or {}
-                if _target_mid is None:
-                    _target_mid = self._safe_int(_add_cfg.get("reply_message_id"))
-                if _target_sid is None:
-                    _raw_sid = _add_cfg.get("target_message_sender_id") or _add_cfg.get("reply_sender_id")
-                    if _raw_sid is not None and str(_raw_sid).strip():
-                        _target_sid = str(_raw_sid).strip()
+            if not _target_sid and isinstance(_target_mid, int) and _target_mid > 0:
+                norm_key = str(chat_id).split(":", 1)[0]
+                _target_sid = self._inbound_codec._recent_inbound_senders.get((norm_key, _target_mid)) or None
             self._inbound_codec.note_outbound_target(chat_id, _target_mid, target_sender_id=_target_sid)
+        self._prejudge.note_outbound(chat_id, sent_text, target_sender_id=_target_sid)
 
         # 出站自省：检查\"我刚才说的话\"本身有没有越界（怼人、顺着下流话题接话）。
         # 人设约束只是概率性的，模型仍可能翻车；把翻车样本记下来回灌 prompt，
@@ -846,6 +976,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                         priority=priority,
                         reply_is_quote=observation["reply_is_quote"],
                         native_sticker=observation.get("native_sticker"),
+                        giphy_gif=observation.get("giphy_gif"),
                     )
             else:
                 # 媒体或旧发送器没有文本观测，不用发送结果补造候选。
@@ -1106,15 +1237,19 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return
 
         # 预占名额，失败路径回滚（与主发送路径同一套语义）
+        prov_epoch = getattr(self, "_consecutive_epoch", {}).get(session_key, 0)
         self._consecutive_replies[session_key] = (
             self._consecutive_replies.get(session_key, 0) + 1
         )
+        if self._consecutive_replies[session_key] >= self._load_settings().behavior.max_consecutive_replies:
+            self._consecutive_blocked_at.setdefault(session_key, time.monotonic())
+        self._last_spoke_at[session_key] = time.monotonic()
 
         # 发送预算与注意力焦点：这两道闸门实现在 codec 里，而这里
         # 直接调 client.send_message 不经过 codec，必须自己查。
         budget_ok, budget_reason = self._send_budget.check(session_key)
         if not budget_ok:
-            self._release_consecutive(session_key)
+            self._release_consecutive(session_key, epoch=prov_epoch)
             self.ctx.logger.warning(
                 f"发送预算拦截挑衅回应: {budget_reason} chat={session_key}"
             )
@@ -1122,7 +1257,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         focus_ok, focus_reason = self._attention.check(session_key)
         if not focus_ok:
-            self._release_consecutive(session_key)
+            self._release_consecutive(session_key, epoch=prov_epoch)
             self.ctx.logger.info(
                 f"注意力焦点拦截挑衅回应: {focus_reason} chat={session_key}"
             )
@@ -1152,11 +1287,11 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 label=session_key,
             )
         except QuietHoursError:
-            self._release_consecutive(session_key)
+            self._release_consecutive(session_key, epoch=prov_epoch)
             self.ctx.logger.info(f"静默时段，放弃挑衅回应: chat={session_key}")
             return
         except Exception as exc:  # noqa: BLE001 - 回应失败不影响主流程
-            self._release_consecutive(session_key)
+            self._release_consecutive(session_key, epoch=prov_epoch)
             self.ctx.logger.warning(f"挑衅回应发送失败: chat={session_key} {exc}")
             return
 
@@ -1198,10 +1333,14 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         capability = "chat.get_stream_by_group_id" if is_group else "chat.get_stream_by_user_id"
         key = "group_id" if is_group else "user_id"
         route_result = await self.ctx.call_capability(capability, platform=PLATFORM_NAME, **{key: session_key})
-        stream = route_result.get("stream") if isinstance(route_result, dict) and route_result.get("success") else None
-        if not (isinstance(stream, dict) and stream.get("stream_id")):
+        sid = _stream_id_from_capability(route_result)
+        if not sid:
+            # 解析失败要把 Host 的原始返回暴露出来：此前 83 次「Host 尚无该会话」
+            # 只有结论没有原因，无法区分是会话未注册、能力报错还是键格式不符。
+            self.ctx.logger.warning(
+                f"Host 会话解析失败: key={key} value={session_key} result={route_result!r}"
+            )
             return ""
-        sid = str(stream["stream_id"])
         self._sticker_routes[sid] = (session_key, is_group)
         self._sticker_routes.move_to_end(sid)
         while len(self._sticker_routes) > 256:
@@ -1254,10 +1393,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self.ctx.logger.info(f"群权重已更新: chat={chat_id} 倍率={multiplier:.2f}")
 
     def _is_user_flooding(self, session_key: str, sender_id: str) -> bool:
-        """判断某个用户是否在刷屏消耗 token。
+        """判断某个用户在窗口内引发的 Host 推理次数是否已达上限。
 
-        只统计\"引发我们回复\"的消息，正常你来我往的聊天远达不到上限；
-        真被刷屏时只对该用户静音，群里其他人不受影响。
+        只统计\"真正路由给 Host、会烧一次推理\"的消息（由
+        ``_note_user_routed`` 在路由前记账），本函数只判断不记账。
+
+        此前每条有文本的入站都计数，限的是\"对方说话的频率\"而不是
+        \"对方引发了多少次推理\"：群里最活跃的真人 10 分钟发 60~70 条，
+        其中大部分本就会被防抖/群聊冷却吞掉、根本不花 token，却让他被
+        持续判为刷屏（10-07 起 1263 条被丢弃），对话上下文也被挖空。
 
         Args:
             session_key: 会话键。
@@ -1275,15 +1419,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         window = settings.behavior.per_user_window
 
         key = (session_key, sender_id)
-        now = time.monotonic()
-        stamps = self._user_message_times.setdefault(key, [])
+        stamps = self._user_message_times.get(key)
+        if not stamps:
+            return False
 
         # 丢弃窗口外的记录，保持列表有界。
-        cutoff = now - window
+        cutoff = time.monotonic() - window
         stamps[:] = [t for t in stamps if t >= cutoff]
-        stamps.append(now)
 
-        if not is_unlimited(session_key) and len(stamps) > limit:
+        if not is_unlimited(session_key) and len(stamps) >= limit:
             self.ctx.logger.info(
                 f"用户消息过于频繁，暂时不回复: chat={session_key} "
                 f"sender={sender_id} 窗口内={len(stamps)}条 上限={limit}"
@@ -1291,7 +1435,60 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             return True
         return False
 
-    def _release_consecutive(self, chat_id: str) -> None:
+    def _reserve_user_route(self, session_key: str, sender_id: str) -> bool:
+        """在路由给 Host 前为该用户占用一次推理额度。
+
+        判定与记账之间不能有 ``await``：入站 handler 是并发调度的，
+        同一人连发时若先判后记，阅读延迟期间的多条会一起越过上限。
+
+        Args:
+            session_key: 会话键。
+            sender_id: 发送者 ID。
+
+        Returns:
+            bool: 占用成功返回 ``True``；已达上限返回 ``False``。
+        """
+
+        if not sender_id:
+            return True
+        if self._is_user_flooding(session_key, sender_id):
+            return False
+        self._user_message_times.setdefault((session_key, sender_id), []).append(time.monotonic())
+        return True
+
+    async def _append_flood_context(
+        self, session_key: str, sender_id: str, sender_name: str, text: str, message_id: Any
+    ) -> None:
+        """把超限用户的消息只写进上下文，不触发 Host 推理。
+
+        直接丢弃会把活跃真人的发言从上下文里挖掉：他接着追问时，
+        模型看到的是断断续续的半截对话。``maisaka.context.append``
+        只追加历史，不唤醒 Planner，因此不花 token。
+
+        Args:
+            session_key: 会话键。
+            sender_id: 发送者 ID。
+            sender_name: 展示用的发送者名称。
+            text: 消息正文。
+            message_id: Telegram 消息 ID。
+        """
+
+        host_stream_id = await self._resolve_host_stream_id(session_key)
+        if not host_stream_id:
+            self.ctx.logger.warning(f"超限消息未写入上下文：Host 尚无该会话 chat={session_key}")
+            return
+        visible_text = f"[{sender_name}]{text}"
+        result = await self.ctx.maisaka.context.append(
+            stream_id=host_stream_id,
+            segments=[{"type": "text", "data": visible_text}],
+            visible_text=visible_text,
+            source_kind="telegram_flood_context",
+            message_id=str(message_id) if message_id is not None else "",
+        )
+        if not isinstance(result, dict) or result.get("success") is not True:
+            self.ctx.logger.error(f"超限消息写入上下文失败: chat={session_key} sender={sender_id} result={result}")
+
+    def _release_consecutive(self, chat_id: str, *, epoch: Optional[int] = None) -> None:
         """归还一个已预占但最终没发出去的连发名额。
 
         预占是为了修复 TOCTOU（检查在入队前、自增在发送成功后，
@@ -1301,13 +1498,19 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         Args:
             chat_id: 之前预占时记下的会话 ID；空串表示没预占过。
+            epoch: 预占时的连发代际号；若期间新入站已清零计数，不回滚新代际计数。
         """
 
         if not chat_id:
             return
+        if epoch is not None and getattr(self, "_consecutive_epoch", {}).get(chat_id, 0) != epoch:
+            return
         current = self._consecutive_replies.get(chat_id, 0)
         if current > 0:
-            self._consecutive_replies[chat_id] = current - 1
+            new_count = current - 1
+            self._consecutive_replies[chat_id] = new_count
+            if new_count < self._load_settings().behavior.max_consecutive_replies:
+                self._consecutive_blocked_at.pop(chat_id, None)
 
     def _is_consecutive_limited(self, chat_id: str) -> bool:
         """判断某会话是否已达连续发言上限。
@@ -1333,7 +1536,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
 
         # 达到上限后进入冷却；冷却结束自动放行并清零，
         # 避免\"一旦触发就永久闭嘴\"。
-        blocked_at = self._consecutive_blocked_at.get(chat_id, self._last_spoke_at.get(chat_id, 0.0))
+        last_spoke = getattr(self, "_last_spoke_at", {})
+        blocked_at = self._consecutive_blocked_at.get(chat_id, last_spoke.get(chat_id, 0.0))
         now = time.monotonic()
 
         if (now - blocked_at) >= settings.behavior.consecutive_cooldown:
@@ -1514,6 +1718,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         )
 
         self._tg_client.observed_stickers = self._observed_stickers
+        self._tg_client.channel_stickers = self._channel_stickers
         self._outbound_codec = TelegramUserOutboundCodec(self._tg_client, self.ctx.logger)
         self._outbound_codec.set_behavior(
             simulate_typing=behavior.simulate_typing,
@@ -1523,6 +1728,9 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             enable_humanize=behavior.enable_humanize,
             max_emoji=behavior.max_emoji_per_message,
             quote_probability=behavior.quote_probability,
+            custom_emoji_suffix_enabled=behavior.custom_emoji_suffix_enabled,
+            custom_emoji_suffix_probability=behavior.custom_emoji_suffix_probability,
+            custom_emoji_suffix_cooldown=behavior.custom_emoji_suffix_cooldown,
         )
         self._outbound_codec.set_presence_manager(self._presence)
         if stickers_enabled():
@@ -1531,6 +1739,12 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 self.ctx.logger.info("UtyaDuck 原生贴纸目录已校验，Telegram official=%s", self._outbound_codec.stickers.server_official)
             except Exception as exc:
                 self.ctx.logger.error("UtyaDuck 目录不可用，贴纸发送禁用: %s", type(exc).__name__)
+        if behavior.custom_emoji_suffix_enabled:
+            try:
+                await self._outbound_codec.custom_emoji.refresh(self._tg_client.client)
+                self.ctx.logger.info("Nachoneko 自定义 emoji 目录已校验，可用 %d 个", self._outbound_codec.custom_emoji.choice_count)
+            except Exception as exc:
+                self.ctx.logger.error("Nachoneko 自定义 emoji 目录不可用，末尾表情停用: %s", type(exc).__name__)
         self._tg_client.ambient_stickers = None
         if ambient_enabled():
             try:
@@ -2097,6 +2311,36 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 仍可通过上下文读到这段时间的群聊内容。
         presence = self._presence
         if presence is not None and not presence.allows_read_receipt():
+            # 睡眠时段不调任何 Telegram API，但若收到白名单私聊或群内直接提及（@），
+            # 从内存中已有的 event.message 提取纯文本记入休息积压账本，供醒来后首次互动时自然补看。
+            if self._rest_backlog is not None:
+                is_priv_msg = bool(getattr(event, "is_private", False))
+                is_ment_msg = bool(getattr(event.message, "mentioned", False))
+                raw_msg_text = str(getattr(event.message, "message", "") or "").strip()
+                priv_allowed = (
+                    is_priv_msg
+                    and chat_settings.enable_private_chat
+                    and (
+                        chat_settings.private_list_type != "whitelist"
+                        or TelegramUserChatFilter._id_matches(chat_key, list(chat_settings.private_list))
+                    )
+                )
+                if (priv_allowed or (is_group_chat and is_ment_msg)) and raw_msg_text:
+                    from .utils import build_topic_group_id
+
+                    backlog_scope = (
+                        chat_key
+                        if is_priv_msg
+                        else build_topic_group_id(chat_id, inbound_codec._resolve_topic_thread_id(event.message))
+                    )
+                    msg_date = getattr(event.message, "date", None)
+                    self._rest_backlog.record(
+                        backlog_scope,
+                        sender_id=str(sender_id),
+                        text=raw_msg_text,
+                        message_id=getattr(event.message, "id", None),
+                        timestamp=msg_date.timestamp() if msg_date is not None else None,
+                    )
             self._funnel_pass(chat_id, event, "presence_offline")
             return
 
@@ -2131,6 +2375,28 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             self._funnel_pass(chat_id, event, "not_whitelisted")
             return
 
+        # 在已授权入站过滤之后、已读/路由延迟之前处理独立停止指令。
+        from src.maisaka.context.continuity_bridge import ledger_call, is_explicit_stop
+        stop_text = str(getattr(event.message, "message", "") or "")
+        stop_directed = bool(getattr(event, "is_private", False) or getattr(event.message, "mentioned", False))
+        if is_explicit_stop(stop_text) and not stop_directed and getattr(event.message, "is_reply", False):
+            replied = await event.get_reply_message()
+            stop_directed = replied is not None and str(replied.sender_id) == self._self_account_id
+        if stop_directed and is_explicit_stop(stop_text):
+            from .utils import build_topic_group_id
+            stop_scope = (str(sender_id) if getattr(event, "is_private", False) else
+                          build_topic_group_id(chat_id, inbound_codec._resolve_topic_thread_id(event.message)))
+            try:
+                stop_sid = await self._resolve_host_stream_id(stop_scope)
+                if stop_sid:
+                    await ledger_call("observe", stop_sid, str(sender_id), str(event.message.id), stop=True,
+                                      source_timestamp=event.message.date.timestamp())
+                    self.ctx.logger.info("互动停止已登记，不启动推理")
+                    return
+            except Exception as exc:
+                self.ctx.logger.warning("互动停止登记降级: %s", type(exc).__name__)
+            # 没有已验证 stream 时不猜 ID；继续 Host 的新入站登记路径。
+
         if getattr(event.message, "sticker", None):
             from .utils import build_topic_group_id
             sticker_scope = build_topic_group_id(chat_id, inbound_codec._resolve_topic_thread_id(event.message))
@@ -2142,8 +2408,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                 await asyncio.sleep(behavior.read_delay)
             await tg_client.mark_read(await self._resolve_read_entity(event), getattr(event.message, "id", None))
 
-        # 仅测试群启用节省token：在媒体下载/Host视觉任务前采样无文字刷图。
-        if str(chat_id) == "-1004309355580" and bool(getattr(event, "is_group", False)):
+        # 指定群聊启用节省 token：在媒体下载/Host 视觉任务前采样无文字刷图。
+        if bool(getattr(event, "is_group", False)) and str(chat_id) in set(getattr(behavior, "image_burst_sample_chats", ()) or ()):
             message = event.message
             thread = getattr(getattr(message, "reply_to", None), "reply_to_top_id", None)
             burst_key = f"{chat_id}:{thread or 0}"
@@ -2191,6 +2457,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if not isinstance(own_inbound_text, str):
             own_inbound_text = strip_reply_envelope(incoming_text)
         is_mention = bool(message_dict.get("is_at"))
+        is_private = bool(getattr(event, "is_private", False))
 
         # 静默时段直接在入站侧丢弃，不喂给 Host。
         #
@@ -2199,9 +2466,18 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 白烧一次推理，还会把静默期的消息混进上下文，
         # 让醒来后的第一句话像在回应几小时前的对话。
         quiet = settings.quiet_hours
-        if not is_unlimited(session_key) and quiet.enable and is_quiet_hours(
+        if not is_private and not is_unlimited(session_key) and quiet.enable and is_quiet_hours(
             start_hour=quiet.start_hour, end_hour=quiet.end_hour
         ):
+            if is_mention and self._rest_backlog is not None and own_inbound_text.strip():
+                msg_date = getattr(event.message, "date", None)
+                self._rest_backlog.record(
+                    session_key,
+                    sender_id=str(sender_id),
+                    text=own_inbound_text,
+                    message_id=getattr(event.message, "id", None),
+                    timestamp=msg_date.timestamp() if msg_date is not None else None,
+                )
             self.ctx.logger.debug(f"静默时段内丢弃入站消息: session={session_key}")
             if self._transcript is not None:
                 await self._transcript.log_event(
@@ -2249,27 +2525,56 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         self._last_inbound_at[session_key] = time.monotonic()
         if str(session_key).startswith("-"):
             self._ambient_scheduler.note_inbound(session_key)
+
+        # 对反复派题、把本账号当问答工具的指定发送者，不再调用 Planner。
+        # 只点一次受全局冷却/小时额度约束的原生表情，然后整条链路早退。
+        if should_deflect_task(
+            chat_id=session_key,
+            sender_id=str(sender_id),
+            text=own_inbound_text,
+            is_private=is_private,
+        ):
+            message_id = self._safe_int(getattr(event.message, "id", None))
+            policy = self._reaction_policy
+            if message_id is not None and policy is not None and policy.reserve_forced(str(chat_id), message_id):
+                task = asyncio.create_task(
+                    self._do_send_reaction(
+                        event,
+                        str(chat_id),
+                        message_id,
+                        own_inbound_text,
+                        force_emoji=task_deflection_reaction(),
+                    ),
+                    name=f"telegram_user_adapter.task-deflection.{chat_id}.{message_id}",
+                )
+                self._reaction_tasks.add(task)
+                task.add_done_callback(self._reaction_tasks.discard)
+            self.ctx.logger.info(
+                f"任务式使唤静默: chat={session_key} sender={sender_id} message={message_id}"
+            )
+            if self._transcript is not None:
+                await self._transcript.log_event(
+                    chat_id=session_key,
+                    event="task_deflection",
+                    detail={"sender_id": str(sender_id), "message_id": message_id},
+                )
+            self._funnel_pass(chat_id, event, "task_deflection")
+            return
+
         # 每条可见入站都进入该会话的短窗口分母，避免只按回复触发
         # 计数而漏掉真实群聊的整体话量。
         self._share_guard_for(session_key).note_inbound()
 
-        # 别人说话了，连发链条断开，重新计数。
+        # 别人说话了，连发链条断开，重新计数（递增代际，防止排队旧发送失败错减新计数）。
+        self._consecutive_epoch[session_key] = self._consecutive_epoch.get(session_key, 0) + 1
         self._consecutive_replies.pop(session_key, None)
         self._consecutive_blocked_at.pop(session_key, None)
 
-        # 防刷 token：同一个人在窗口内引发过多回复时暂时不再理他，
-        # 但不影响群里其他人正常对话。
-        # 只统计有实际文本的消息——贴纸、图片、空消息本来就不会触发
-        # LLM 推理，把它们计入配额会让正常用户被误限流。
-        if own_inbound_text.strip() and self._is_user_flooding(session_key, str(sender_id)):
-            if self._transcript is not None:
-                await self._transcript.log_event(
-                    chat_id=session_key,
-                    event="user_flood_ignored",
-                    detail={"sender_id": str(sender_id)},
-                )
-            self._funnel_pass(chat_id, event, "user_flood")
-            return
+        # 防刷 token 的单用户额度不在这里判：此处是入站最前端，大部分消息
+        # 随后会被防抖、群聊冷却、预判静默吞掉，本来就不花 token。
+        # 在这里按「说话条数」限流会把群里最活跃的真人整段静音
+        # （实测 10 分钟 60~70 条、10-07 起丢弃 1263 条）。
+        # 额度改为在真正路由给 Host 之前占用，见 _reserve_user_route。
 
         # 主动点表情：放在 NSFW 拦截之后，避免给不良内容点赞。
         # 用独立任务跑，点表情要等待随机停顿，绝不能阻塞入站路由。
@@ -2311,14 +2616,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             self._engagement.record_engagement(session_key, str(sender_id))
             await self._sync_engagement_multiplier(session_key)
 
-        # 每条入站都同步一次作息倍率——只在被 @ 时更新的话，
-        # 深夜没人 @ 我们时作息压制就不会生效。
+        # 每条群聊入站都同步一次作息倍率——只在被 @ 时更新的话，
+        # 深夜没人 @ 我们时作息压制就不会生效。私聊不套用群权重与作息压制。
         #
         # 同时把这条消息记为「普通群聊活动」：只记被 @ 的话，
         # compute_multiplier 会因 events 为空而恒返回最低倍率，
         # 表现就是群里聊得火热而账号一直潜水（实测 8 个群全是 0.77）。
-        self._engagement.record_activity(session_key, str(sender_id))
-        await self._sync_engagement_multiplier(session_key)
+        if not is_private:
+            self._engagement.record_activity(session_key, str(sender_id))
+            await self._sync_engagement_multiplier(session_key)
 
         # 模拟真人的「读完再回」延迟，并在此期间做突发合并。
         #
@@ -2331,12 +2637,16 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 防抖（突发合并）：真人是「听完再说」——群里连着来五句，
         # 人读完再回一次，不会逐条应答。逐条机械响应比发言总量
         # 更能解释账号为何被看出不是真人（2026-08-31 因用户举报被封）。
-        arrival_token = self._debouncer.note_arrival(session_key, str(sender_id))
-        read_delay = 0.0 if is_unlimited(session_key) else estimate_read_delay(own_inbound_text)
+        if is_private:
+            # 私聊白名单不受群聊防抖影响；每条消息都进入回复流程。
+            arrival_token = None
+        else:
+            arrival_token = self._debouncer.note_arrival(session_key, str(sender_id))
+        read_delay = 0.0 if is_private or is_unlimited(session_key) else estimate_read_delay(own_inbound_text)
         self.ctx.logger.info(f"阅读延迟 {read_delay:.1f} 秒后处理")
         await asyncio.sleep(read_delay)
 
-        if not is_unlimited(session_key) and self._debouncer.is_superseded(session_key, arrival_token, str(sender_id)):
+        if not is_private and not is_unlimited(session_key) and self._debouncer.is_superseded(session_key, arrival_token, str(sender_id)):
             # 被 @ 也一样合并。
             #
             # 最初担心「被指名却不答」，所以给 mention 开了豁免。但那样
@@ -2410,11 +2720,27 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 注意 evaluate 是纯判断，冷却记账在发送成功后才做——
         # 参考实现在判断时就记账，导致后续被参与率或内容过滤拦掉时
         # 冷却已被白白消耗，表现为"该说话时反而沉默"。
+        additional_info = message_dict.get("message_info", {}).get("additional_config", {}) or {}
+        reply_target = str(additional_info.get("reply_target_user_id") or "")
+        mentions_other_flag = bool(additional_info.get("mentions_other_user"))
+        replies_to_other_flag = bool(reply_target) and reply_target != self._self_account_id
+        followup_active = (
+            not is_private
+            and not is_mention
+            and self._prejudge.is_followup_active(
+                session_key,
+                str(sender_id),
+                mentions_other=mentions_other_flag,
+                replies_to_other=replies_to_other_flag,
+            )
+            and not is_closing_signal(own_inbound_text)
+        )
+        effective_directed = is_mention or followup_active
         trigger = self._trigger.evaluate(
             session_key,
             own_inbound_text,
             is_private=bool(getattr(event, "is_private", False)),
-            is_directed=is_mention,
+            is_directed=effective_directed,
         )
         if not trigger.should_respond:
             self.ctx.logger.info(
@@ -2429,32 +2755,68 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 高风险群用更严格的参与率与间隔覆盖默认值。
         risk_ratio = get_reply_ratio(session_key)
         risk_gap = get_min_gap(session_key)
-        suppressed, suppress_reason = self._small_chat.should_suppress(
-            session_key,
-            member_count=self._recent_speaker_count(session_key),
-            is_directed=is_mention,
-            ratio_override=risk_ratio,
-            min_gap_override=risk_gap,
-        )
+        if is_private:
+            # 私聊不套用群聊的参与率、连发间隔和道别静默。
+            suppressed, suppress_reason = False, "私聊不启用群聊小群约束"
+        else:
+            suppressed, suppress_reason = self._small_chat.should_suppress(
+                session_key,
+                member_count=self._recent_speaker_count(session_key),
+                is_directed=effective_directed,
+                ratio_override=risk_ratio,
+                min_gap_override=risk_gap,
+            )
         if suppressed:
             self.ctx.logger.info(f"小群约束跳过本条: {session_key} {suppress_reason}")
             self._funnel_pass(chat_id, event, "small_chat_suppressed")
             return
 
         # 低成本预判：旁观/纯收尾/同梗重复直接 PASS；被指名永远放行。
-        additional_info = message_dict.get("message_info", {}).get("additional_config", {}) or {}
-        reply_target = str(additional_info.get("reply_target_user_id") or "")
         prejudge = self._prejudge.judge(
             chat_id=session_key,
             text=own_inbound_text,
             is_mention=is_mention,
             is_group=session_key.startswith("-"),
-            mentions_other=bool(additional_info.get("mentions_other_user")),
-            replies_to_other=bool(reply_target) and reply_target != self._self_account_id,
+            mentions_other=mentions_other_flag,
+            replies_to_other=replies_to_other_flag,
+            sender_id=str(sender_id),
         )
         if prejudge.level == MUST_SILENCE:
             self.ctx.logger.info(f"预判静默: {session_key} 原因={prejudge.reason}")
             self._funnel_pass(chat_id, event, prejudge.reason)
+            return
+        if followup_active:
+            message_dict["is_mentioned"] = True
+            self.ctx.logger.info(
+                f"群聊短期跟进窗口命中: chat={session_key} sender={sender_id} text={own_inbound_text[:30]!r}"
+            )
+
+        # 防刷 token：同一个人在窗口内引发过多次 Host 推理时，暂时不再为他唤醒
+        # Planner，但不影响群里其他人。放在所有前置闸门之后、路由之前，
+        # 计的是「真正会烧一次推理」的次数，而不是对方说了多少句。
+        # 超限的消息仍写进上下文，避免他接着追问时模型只看到半截对话。
+        # 私聊白名单要求随时及时回复，不套用此额度；空文本本来就不触发推理。
+        if (
+            not is_private
+            and own_inbound_text.strip()
+            and not self._reserve_user_route(session_key, str(sender_id))
+        ):
+            if self._transcript is not None:
+                # 沿用旧事件名，WebUI 的统计口径（单用户频率拦截）无需改主程序；
+                # detail.context_only 标明这条已写入上下文、只是没唤醒推理。
+                await self._transcript.log_event(
+                    chat_id=session_key,
+                    event="user_flood_ignored",
+                    detail={"sender_id": str(sender_id), "context_only": True},
+                )
+            await self._append_flood_context(
+                session_key,
+                str(sender_id),
+                str(getattr(sender, "username", None) or getattr(sender, "first_name", None) or sender_id),
+                own_inbound_text,
+                getattr(event.message, "id", None),
+            )
+            self._funnel_pass(chat_id, event, "user_flood")
             return
 
         # 只取 codec 已有贴纸识别字段；不把用户正文/emoji 当作视觉识别。
@@ -2470,11 +2832,11 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         key = "group_id" if is_group else "user_id"
         sid = next((s for s, binding in self._sticker_routes.items() if binding == (session_key, is_group)), "")
         try:
-            route_result = ({"success": True, "stream": {"stream_id": sid}} if sid else
-                            await self.ctx.call_capability(capability, platform=PLATFORM_NAME, **{key: session_key}))
-            stream = route_result.get("stream") if route_result.get("success") else None
-            if isinstance(stream, dict) and stream.get("stream_id"):
-                sid = str(stream["stream_id"])
+            if not sid:
+                sid = _stream_id_from_capability(
+                    await self.ctx.call_capability(capability, platform=PLATFORM_NAME, **{key: session_key})
+                )
+            if sid:
                 self._sticker_routes[sid] = (session_key, is_group)
                 self._sticker_routes.move_to_end(sid)
                 while len(self._sticker_routes) > 256:
@@ -2482,6 +2844,19 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
                     self._sticker_contexts.discard(old_target)
         except Exception as exc:
             self.ctx.logger.error("贴纸当前会话绑定失败: %s", type(exc).__name__)
+        if sid and self._rest_backlog is not None:
+            backlog_text = self._rest_backlog.pop_for_session(session_key)
+            if backlog_text:
+                try:
+                    await self.ctx.maisaka.context.append(
+                        stream_id=sid,
+                        segments=[{"type": "text", "data": backlog_text}],
+                        visible_text=backlog_text,
+                        source_kind="telegram_rest_backlog",
+                    )
+                    self.ctx.logger.info(f"已注入休息期积压留言补看: chat={session_key}")
+                except Exception as exc:
+                    self.ctx.logger.warning("休息期积压留言注入失败: %s", type(exc).__name__)
         if sid and session_key not in self._sticker_contexts and self._outbound_codec is not None:
             hint = self._outbound_codec.stickers.planner_hint()
             if hint:
@@ -2501,17 +2876,39 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 此前只有 SOUL.md（我是谁）和 SKILL.md（怎么说话），没有任何地方
         # 记「对方是谁」。同一个人昨天说过在用 OpenWrt，今天再聊路由毫无
         # 印象——真人群友之间会记得"这人搞前端""那位有台 NAS"。
-        # 顺带从这条消息里学：对方自己说出来的稳定事实值得记住。
-        # is_durable_fact 会拒掉"正在装系统"这类临时状态。
-        if self._people.remember(str(sender_id), own_inbound_text):
-            # 记住了新东西就攒一笔，够 20 条落一次盘。
-            #
-            # 只在 on_unload 存的话，进程被 kill -9 或崩溃就全丢了——
-            # 而这个账号本来就可能因为封禁、限流被强制中断。
-            self._people_dirty += 1
-            if self._people_dirty >= self._people_save_interval:
-                self._people.save()
-                self._people_dirty = 0
+        # 会话+用户是身份键；不迁移缺少来源的旧跨群事实。
+        person_scope = json.dumps([session_key, str(sender_id)], ensure_ascii=False)
+        # 只识别完整、自述的纠正/删除请求，不让第三人或引述清除他人记忆。
+        correction = own_inbound_text.strip().startswith(("更正我的", "纠正我的", "我之前说错", "忘记我的", "删除我的"))
+        forget_all = own_inbound_text.strip().rstrip("。.!！") in {"忘记我的全部记忆", "删除我的全部记忆"}
+        if reply_target and reply_target != str(sender_id):
+            self._people.record_peer_interaction(session_key, str(sender_id), reply_target)
+        # 修改、快照与落盘共用异步锁；线程写入期间不得并发改变字典。
+        persist_ok = True
+        async with self._people_lock:
+            changed = bool(self._people.invalidate(person_scope)) if forget_all else False
+            if correction and not forget_all:
+                changed = bool(self._people.dispute(person_scope)) or changed
+            # 模糊纠正保留来源但持久暂停旧候选；Host 侧统一由 person_candidates.py 按会话+用户读取落盘文件。
+            if not correction:
+                changed = self._people.remember(
+                    person_scope, own_inbound_text, source_message_id=str(event.message.id),
+                ) or changed
+            if changed or self._people_dirty:
+                self._people_dirty = 1
+                try:
+                    await self._save_people_locked()
+                    self._people_dirty = 0
+                except OSError:
+                    persist_ok = False
+                    self.ctx.logger.warning("人物候选变更未持久化；保留脏标记，不宣称跨重启成功")
+        # 使用平台原始时间；缺失时明确未知，不能以接收时间重建旧源。
+        additional = message_dict.setdefault("message_info", {}).setdefault("additional_config", {})
+        original_date = getattr(event.message, "date", None)
+        additional["continuity_source_timestamp"] = original_date.timestamp() if original_date is not None else None
+        if correction or forget_all or not persist_ok:
+            # 纠正/删除请求或持久化未完成时，标记禁止 Host 直接从磁盘读取旧候选，防止跨进程状态失步。
+            additional["telegram_user_person_candidates_suppressed"] = True
 
         # 记录"我方将对这条消息作答"，供编辑追踪判定探测模式：
         # 我方回复过的消息事后被改写，是身份探测的典型手法。
@@ -2537,6 +2934,15 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
             )
         except Exception as exc:  # noqa: BLE001 - 路由失败需要暴露具体消息
             self.ctx.logger.error(f"Telegram 消息路由到 Host 失败: {exc}")
+
+    async def _save_people_locked(self) -> None:
+        """调用者持锁；取消时等待写线程结束，避免释放锁后并发修改快照。"""
+        task = asyncio.create_task(asyncio.to_thread(self._people.save))
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await task
+            raise
 
     def _maybe_schedule_reaction(
         self, event: Any, chat_id: str, text: str, *, addressed_to_us: bool = False
@@ -2577,38 +2983,8 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         if is_doubt_aimed_at_us(
             text, replied_to_us=replied_to_us, recently_spoke=recently_spoke
         ):
-            # 指认发生后不能继续照常接话。过去只回一个表情，随后仍由
-            # 路由链正常插话，正好把“什么话都要搭一句”坐实。
-            guard = self._share_guard_for(str(chat_id))
-            # 旁敲/起哄触发静默；直接身份提问不进入投诉静默，
-            # 交由回复链随意否认，一句带过、不解释。发送预算与队列限额照常生效。
-            if is_direct_identity_question(text, replied_to_us=replied_to_us):
-                self._logger.info(
-                    f"直接身份提问，不进入投诉静默，交由正常回复链按否认口径一句带过: chat={chat_id}"
-                )
-                return
-            guard.note_complaint()
-            reason = guard.describe_block()
-            self._logger.info(
-                f"检测到针对我们的 AI 质疑，进入自动静默: chat={chat_id} {reason}"
-            )
-            if self._transcript is not None:
-                task = asyncio.create_task(
-                    self._transcript.log_event(
-                        chat_id=str(chat_id),
-                        event="ai_doubt_silence_started",
-                        detail={
-                            "replied_to_us": replied_to_us,
-                            "recently_spoke": recently_spoke,
-                            "text": text[:200],
-                            "reason": reason or "被针对性质疑",
-                        },
-                    ),
-                    name=f"telegram_user_adapter.doubt-log.{chat_id}",
-                )
-                self._reaction_tasks.add(task)
-                task.add_done_callback(self._reaction_tasks.discard)
-            # 不做嘲讽表情。面对持续质疑再主动做动作只会把焦点锁死。
+            # 自动化身份质疑不是停止请求；不制造投诉静默，也不发嘲讽表情。
+            # 明确停止仍由原有入站投诉/停止规则处理。
             return
 
         # 用 reserve 而不是 should_react：判定通过后要隔 1.5-6.0 秒才真正
@@ -3014,7 +3390,7 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         Args:
             session_key: 会话键。
             incoming_text: 对方消息文本。
-            is_directed: 该入站消息是否明确回复/@我们（群聊中未指向我们的质疑不得归咎于我们上一条发言）。
+            is_directed: 该入站消息是否明确回复/@我们（群聊中未指向我们的「机器人」讨论不得归咎于我们上一条发言，见 2026-11-04 19:38 事故）。
         """
 
         store = self._self_improvement

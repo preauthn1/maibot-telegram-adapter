@@ -13,10 +13,7 @@
 - 导出文本只表达"避免/别再这么说"，不产生任何提高发言倾向的内容。
 - 审核者确认时可选填 ``avoid_text``（我方说错的那句话），有则优先用它描述要避免的说法。
 
-TODO（不在本次范围）：
-- 确认/驳回入口（WebUI 列表或命令行脚本）。确认时应同时写 ``approved=True`` 与
-  ``status="approved"``，驳回写 ``status="rejected"``；当前代码库没有任何写 approved 的入口。
-- 账本按行覆写、没有条目 ID；做确认入口时需要补稳定 ID，避免按行号确认时错位。
+旧记录无来源不自动批准；通过管理员命令按稳定 ID 审核、驳回或删除。
 """
 
 from datetime import datetime, timedelta, timezone
@@ -38,10 +35,16 @@ def _scope_file(session_id: str) -> Path:
     return _ROOT / f"{digest}.jsonl"
 
 
-def record_correction(session_id: str, *, user_id: str, text: str, kind: str = "correction") -> None:
+def record_correction(session_id: str, *, user_id: str, text: str, kind: str = "correction",
+                      source_message_id: str = "") -> None:
     """追加一条待审核纠正记录。"""
 
+    if not session_id or not user_id or not source_message_id:
+        raise ValueError("纠正候选必须具有来源消息 ID")
+    event_id = hashlib.sha256(json.dumps([session_id, str(user_id), str(source_message_id)], ensure_ascii=False).encode()).hexdigest()
     entry = {
+        "id": event_id,
+        "source_message_id": str(source_message_id),
         "at": datetime.now(CN_TZ).isoformat(timespec="seconds"),
         "scope": "chat",
         "session_id": session_id,
@@ -56,9 +59,37 @@ def record_correction(session_id: str, *, user_id: str, text: str, kind: str = "
     with _LOCK:
         path.parent.mkdir(parents=True, exist_ok=True)
         lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+        if any(json.loads(line).get("id") == event_id for line in lines if line.strip()):
+            return
         lines.append(json.dumps(entry, ensure_ascii=False))
-        path.write_text("\n".join(lines[-_MAX_PER_FILE:]) + "\n", encoding="utf-8")
-        path.chmod(0o600)
+        _write_rows(path, [json.loads(line) for line in lines[-_MAX_PER_FILE:]])
+
+
+def _write_rows(path: Path, rows: list) -> None:
+    """同锁内原子替换，失败不伪装成功。"""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    tmp.chmod(0o600)
+    tmp.replace(path)
+
+
+def review_correction(session_id: str, event_id: str, action: str) -> bool:
+    """管理员按稳定来源 ID 审核或删除；旧无来源行不自动获得批准。"""
+    if action not in {"approve", "reject", "delete"}:
+        raise ValueError("invalid review action")
+    with _LOCK:
+        rows = _read_rows(session_id)
+        target = next((row for row in rows if row.get("id") == event_id), None)
+        if target is None:
+            return False
+        if action == "delete":
+            rows.remove(target)
+        else:
+            if not target.get("source_message_id"):
+                raise ValueError("missing correction source")
+            target.update(approved=action == "approve", status="approved" if action == "approve" else "rejected")
+        _write_rows(_scope_file(session_id), rows)
+        return True
 
 
 def _read_rows(session_id: str) -> list:
@@ -91,7 +122,8 @@ def approved_correction_experiences(session_id: str, limit: int = 5) -> List[Dic
     experiences: List[Dict[str, str]] = []
     for row in _read_rows(session_id):
         # 严格比较 True：缺字段、字符串 "true" 等都不算确认
-        if row.get("approved") is not True or row.get("status") == "rejected":
+        if (row.get("approved") is not True or row.get("status") != "approved"
+                or not row.get("source_message_id") or row.get("session_id") != session_id):
             continue
         avoid_text = row.get("avoid_text")
         correction_text = row.get("text")

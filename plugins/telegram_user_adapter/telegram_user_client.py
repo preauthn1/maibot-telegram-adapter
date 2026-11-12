@@ -281,10 +281,9 @@ class TelegramUserClient:
         try:
             await self._client.run_until_disconnected()
         finally:
-            for task in (clock,):
-                if task is not None:
-                    task.cancel()
-            await asyncio.gather(*(task for task in (clock,) if task is not None), return_exceptions=True)
+            if clock is not None:
+                clock.cancel()
+                await asyncio.gather(clock, return_exceptions=True)
 
     async def _profile_clock(self, client: Any) -> None:
         """复用监听客户端更新姓氏；断线随监听任务清理，不创建连接。"""
@@ -494,10 +493,30 @@ class TelegramUserClient:
     async def send_observed_sticker(self, entity: Any, data: Any, *, reply_to: Optional[int] = None) -> Any:
         if self._client is None:
             raise RuntimeError("Telegram 客户端尚未连接")
+        if data.get("source") == "zhaxia_cn":
+            _, document, _ = await self.channel_stickers.resolve(self._client, data["sticker_ref"])
+            sent = await self._client.send_file(entity, document, reply_to=reply_to)
+            return await self.verify_native_sticker(entity, sent)
         return await self.observed_stickers.send(self._client, entity, data["scope"], data["sticker_ref"], reply_to=reply_to)
 
+    async def verify_native_sticker(self, entity: Any, sent: Any) -> Any:
+        """回读刚发送的消息，确认平台实际落成原生贴纸。"""
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+        message_id = int(getattr(sent, "id", 0) or 0)
+        if message_id <= 0:
+            raise ValueError("Telegram 贴纸回执缺少消息 ID")
+        verified = await self._client.get_messages(entity, ids=message_id)
+        if verified is None or not bool(getattr(verified, "sticker", None)):
+            raise ValueError("Telegram 回读消息不是原生贴纸")
+        media = getattr(verified, "media", None)
+        media_type = type(media).__name__ if media is not None else ""
+        if media_type != "MessageMediaDocument":
+            raise ValueError("Telegram 回读媒体不是 MessageMediaDocument")
+        return verified
+
     async def send_native_sticker(self, entity: Any, data: Any, catalog: Any, *, reply_to: Optional[int] = None) -> Any:
-        """发送边界再次解析白名单，绝不接受调用者提供的 Document/文件。"""
+        """发送边界再次解析白名单，并回读确认平台实际类型。"""
         if self._client is None:
             raise RuntimeError("Telegram 客户端尚未连接")
         await catalog.refresh(self._client)
@@ -505,7 +524,20 @@ class TelegramUserClient:
         if selected is None:
             raise ValueError("贴纸不是当前批准套装的精确映射")
         _, document = selected
-        return await self._client.send_file(entity, document, reply_to=reply_to)
+        sent = await self._client.send_file(entity, document, reply_to=reply_to)
+        return await self.verify_native_sticker(entity, sent)
+
+    async def verify_gif(self, entity: Any, sent: Any) -> Any:
+        """回读确认平台实际落成动画 GIF，避免把普通文件当作反应动图记账。"""
+        if self._client is None:
+            raise RuntimeError("Telegram 客户端尚未连接")
+        message_id = int(getattr(sent, "id", 0) or 0)
+        if message_id <= 0:
+            raise ValueError("Telegram GIF 回执缺少消息 ID")
+        verified = await self._client.get_messages(entity, ids=message_id)
+        if verified is None or not bool(getattr(verified, "gif", None)):
+            raise ValueError("Telegram 回读消息不是动画 GIF")
+        return verified
 
     async def send_file(
         self,

@@ -105,6 +105,22 @@ class ReactionPolicy:
         cutoff = now - 3600.0
         self._recent_reactions = [t for t in self._recent_reactions if t >= cutoff]
 
+    def reserve_forced(self, chat_id: str, message_id: int) -> bool:
+        """为确定性业务分支预占一次表情，跳过随机概率但保留全部限流。"""
+
+        if chat_id in self._disabled_chats or (chat_id, message_id) in self._reacted:
+            return False
+        now = time.monotonic()
+        self._prune_hourly(now)
+        if len(self._recent_reactions) >= self._hourly_limit:
+            return False
+        last = self._last_reaction_at.get(chat_id)
+        if last is not None and (now - last) < self._chat_cooldown:
+            return False
+        self._pending_release[(chat_id, message_id)] = last
+        self.mark_reacted(chat_id, message_id)
+        return True
+
     def reserve(self, chat_id: str, message_id: int) -> bool:
         """判断是否点表情；判定通过则**立刻**占用额度。
 
