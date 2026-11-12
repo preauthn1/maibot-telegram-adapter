@@ -91,14 +91,26 @@ async def verify():
         max_consecutive_replies=1, consecutive_cooldown=60,
         per_user_reply_limit=1, per_user_window=60))
     plugin._consecutive_replies = {TARGET: 9, OTHER: 9}
-    plugin._consecutive_blocked_at = {}
+    now_mono = time.monotonic()
+    plugin._consecutive_blocked_at = {TARGET: now_mono, OTHER: now_mono}
+    plugin._last_spoke_at = {TARGET: now_mono, OTHER: now_mono}
+    plugin._consecutive_epoch = {OTHER: 1}
     plugin._user_message_times = {}
     plugin._ctx = SimpleNamespace(logger=logging.getLogger("offline"))
     assert not plugin._is_consecutive_limited(TARGET)
     assert plugin._is_consecutive_limited(OTHER)
+    # 旧代际失败回滚不得扣减新入站重置后的新一轮连发计数
+    plugin._consecutive_replies[OTHER] = 1
+    plugin._release_consecutive(OTHER, epoch=0)
+    assert plugin._consecutive_replies[OTHER] == 1
+    plugin._release_consecutive(OTHER, epoch=1)
+    assert plugin._consecutive_replies[OTHER] == 0 and OTHER not in plugin._consecutive_blocked_at
+    plugin._consecutive_replies[OTHER] = 9
+    plugin._consecutive_blocked_at[OTHER] = now_mono
     for chat in (TARGET, OTHER):
-        assert not plugin._is_user_flooding(chat, "synthetic-sender")
-    assert not plugin._is_user_flooding(TARGET, "synthetic-sender")
+        assert plugin._reserve_user_route(chat, "synthetic-sender")
+    assert plugin._reserve_user_route(TARGET, "synthetic-sender")
+    assert not plugin._reserve_user_route(OTHER, "synthetic-sender")
     assert plugin._is_user_flooding(OTHER, "synthetic-sender")
     share = ShareGuard()
     share.note_complaint()

@@ -1,7 +1,7 @@
 """web_search 内置工具。
 
 用途：聊天中遇到不认识的新名词、新事件、时效性问题时联网查一下，
-避免硬编或者说"不知道"——这两种反应都不像真人。
+无法核实时如实说明，不把失败当事实或个人经历。
 
 用 Tavily API。key 存在 ``config/.tavily_api_keys``（每行一个），
 支持多个 key 轮换：单个 key 免费额度有限，轮换能摊平用量，
@@ -16,8 +16,8 @@ from typing import Any, Dict, List, Optional
 import asyncio
 import itertools
 import json
-import urllib.error
-import urllib.request
+import time
+import aiohttp
 
 from src.common.logger import get_logger
 from src.core.tooling import ToolExecutionContext, ToolExecutionResult, ToolInvocation, ToolSpec
@@ -27,8 +27,11 @@ from .context import BuiltinToolRuntimeContext
 logger = get_logger("maisaka_builtin_web_search")
 
 _TAVILY_ENDPOINT = "https://api.tavily.com/search"
-_KEY_FILE = Path("config/.tavily_api_keys")
+_KEY_FILE = Path(__file__).resolve().parents[3] / "config/.tavily_api_keys"
+# advanced+news 服务端实测约 6.3s，8s 单次超时会频繁误判；放宽并允许一次降级重试。
 _REQUEST_TIMEOUT = 15.0
+_MAX_ATTEMPTS = 3
+_SEARCH_BUDGET = 28.0
 
 # key 轮换游标。模块级保持，让多次调用能真正轮着用。
 _key_cycle: Optional[itertools.cycle] = None
@@ -86,6 +89,9 @@ def get_tool_spec() -> ToolSpec:
             "产品功能、版本、价格、政策、新闻这类会变或你没把握的事实下判断；"
             "群友纠正你或和你说法不一致；遇到不认识、无法解释、疑似乱码或陌生外语片段。"
             "结果不足就说不知道或不回复。接梗带事实判断也先核实；不要把搜索结果之外的猜测写进回复。"
+            "赛程、比分、新闻等时效问题：先把北京时间换算成事件当地日期（如美国赛事用美东日期），"
+            "关键词写明具体日期，并设 topic=news 或 time_range；首次结果不可靠时换关键词再查，"
+            "或用 fetch_url 读官方赛程页。"
         ),
         parameters_schema={
             "type": "object",
@@ -100,6 +106,16 @@ def get_tool_spec() -> ToolSpec:
                     "minimum": 1,
                     "maximum": 5,
                 },
+                "topic": {
+                    "type": "string",
+                    "enum": ["general", "news"],
+                    "description": "news 适合赛程、比分、新闻等近期事件；默认 general。",
+                },
+                "time_range": {
+                    "type": "string",
+                    "enum": ["day", "week", "month", "year"],
+                    "description": "只要最近一段时间的结果；时效问题建议 day 或 week。",
+                },
             },
             "required": ["query"],
         },
@@ -108,42 +124,32 @@ def get_tool_spec() -> ToolSpec:
     )
 
 
-def _do_search(query: str, api_key: str, max_results: int) -> Dict[str, Any]:
-    """执行一次同步 HTTP 搜索请求。
-
-    放在线程里跑，避免阻塞事件循环。
-
-    Args:
-        query: 搜索词。
-        api_key: Tavily API key。
-        max_results: 结果条数。
-
-    Returns:
-        Dict[str, Any]: Tavily 返回的 JSON。
-
-    Raises:
-        urllib.error.HTTPError: HTTP 层错误（如 401/429）。
-        urllib.error.URLError: 网络不可达。
-    """
-
-    payload = json.dumps(
-        {
-            "api_key": api_key,
-            "query": query,
-            "max_results": max_results,
-            "search_depth": "basic",
-            "include_answer": True,
-        }
-    ).encode("utf-8")
-
-    request = urllib.request.Request(
-        _TAVILY_ENDPOINT,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT) as response:
-        return json.loads(response.read().decode("utf-8"))
+async def _do_search(
+    query: str,
+    api_key: str,
+    max_results: int,
+    timeout: float = _REQUEST_TIMEOUT,
+    topic: str = "general",
+    time_range: str = "",
+    depth: str = "advanced",
+) -> Dict[str, Any]:
+    """可取消的 HTTP 请求；总时限覆盖响应体，最多接收 1 MiB。"""
+    payload: Dict[str, Any] = {
+        "api_key": api_key, "query": query, "max_results": max_results,
+        # 时效类问题 basic 深度常命中旧赛季/旧版本页面，统一用 advanced。
+        "search_depth": depth, "include_answer": True, "topic": topic,
+    }
+    if time_range:
+        payload["time_range"] = time_range
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+        async with session.post(_TAVILY_ENDPOINT, json=payload, allow_redirects=False) as response:
+            response.raise_for_status()
+            body = bytearray()
+            async for chunk in response.content.iter_chunked(65536):
+                body.extend(chunk)
+                if len(body) > 1048576:
+                    raise ValueError("search_response_too_large")
+            return json.loads(body.decode("utf-8"))
 
 
 def _format_results(data: Dict[str, Any], max_results: int) -> str:
@@ -206,37 +212,57 @@ async def handle_tool(
     except (TypeError, ValueError):
         max_results = 3
 
+    raw_topic = invocation.arguments.get("topic")
+    topic = raw_topic if raw_topic in {"general", "news"} else "general"
+    raw_range = invocation.arguments.get("time_range")
+    time_range = raw_range if raw_range in {"day", "week", "month", "year"} else ""
     keys = _load_keys()
     if not keys:
         return tool_ctx.build_failure_result(
             invocation.tool_name,
-            "未配置 Tavily API key，无法联网搜索。",
+            "这次查询不可用，尚未核实所需信息。",
+            metadata={"search_status": "unavailable", "reason_code": "missing_credentials"},
         )
 
     # 逐个 key 尝试：某个 key 额度用尽或失效时换下一个。
-    # 不做无限重试——最多把所有 key 试一遍。
+    # 最多尝试 _MAX_ATTEMPTS 个 key，防止网络抖动时长时间阻塞轮次。
     last_error = ""
-    for _ in range(len(keys)):
+    deadline = time.monotonic() + _SEARCH_BUDGET
+    depth = "advanced"
+    for _ in range(min(len(keys), _MAX_ATTEMPTS)):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            last_error = "budget_exhausted"
+            break
         api_key = _next_key()
         if not api_key:
             break
         try:
-            data = await asyncio.to_thread(_do_search, query, api_key, max_results)
-        except urllib.error.HTTPError as exc:
+            data = await asyncio.wait_for(
+                _do_search(query, api_key, max_results, min(_REQUEST_TIMEOUT, remaining), topic, time_range, depth),
+                timeout=remaining,
+            )
+        except aiohttp.ClientResponseError as exc:
             # 401/403 是 key problem，429 是限流，都换下一个 key 重试。
-            last_error = f"HTTP {exc.code}"
-            logger.warning(f"[web_search] key 调用失败({exc.code})，尝试下一个")
-            continue
-        except urllib.error.URLError as exc:
-            last_error = f"网络错误: {exc.reason}"
-            logger.warning(f"[web_search] 网络不可达: {exc.reason}")
+            last_error = "upstream_rejected"
+            logger.warning(f"[web_search] HTTP 状态({exc.status})")
+            if exc.status in {401, 403, 429}:
+                continue
             break
-        except (TimeoutError, json.JSONDecodeError) as exc:
-            last_error = f"{type(exc).__name__}"
-            logger.warning(f"[web_search] 响应异常: {exc}")
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            # 网络抖动/慢响应：换 key 并降级到 basic 再试，仍受总预算约束。
+            last_error = "timeout" if isinstance(exc, TimeoutError) else "network_failure"
+            logger.warning(f"[web_search] {last_error}: {type(exc).__name__} depth={depth}，降级重试")
+            depth = "basic"
+            continue
+        except (ValueError, UnicodeDecodeError) as exc:
+            last_error = "invalid_response"
+            logger.warning(f"[web_search] 响应异常: {type(exc).__name__}")
             break
 
-        formatted = _format_results(data, max_results)
+        if not isinstance(data, dict):
+            last_error = "invalid_response"
+            break
         raw_results = data.get("results")
         valid_results = [
             item for item in raw_results[:max_results]
@@ -245,13 +271,13 @@ async def handle_tool(
         if not valid_results:
             return tool_ctx.build_failure_result(
                 invocation.tool_name,
-                "没有获得可核对的搜索来源；说不知道或不回复，不得编造结论。",
-                metadata={"query": query, "result_count": 0, "search_status": "empty"},
+                "这次没有查到可靠结果，原问题尚未核实。",
+                metadata={"query": query, "result_count": 0, "search_status": "empty", "reason_code": "no_results"},
             )
         logger.info(f"[web_search] 查询完成: {query!r}")
         return tool_ctx.build_success_result(
             invocation.tool_name,
-            formatted,
+            _format_results({**data, "results": valid_results}, max_results),
             metadata={
                 "query": query,
                 "result_count": len(valid_results),
@@ -262,5 +288,6 @@ async def handle_tool(
 
     return tool_ctx.build_failure_result(
         invocation.tool_name,
-        f"搜索失败：{last_error or '所有 API key 均不可用'}。",
+        "这次查询失败，尚未获得可靠依据。",
+        metadata={"search_status": "failed", "reason_code": last_error or "unavailable"},
     )

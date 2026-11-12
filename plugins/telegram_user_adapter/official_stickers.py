@@ -152,8 +152,8 @@ class OfficialDuckStickers:
         emojis = " ".join(e for e in sorted(self._emojis) if self.select(e) is not None)
         return (
             "[Telegram 原生官方贴纸能力：仅 UtyaDuck。适合当前语境且只需简短情绪反应时，"
-            "可以调用 official_duck_sticker(action=list) 查询，或 action=send 加一个下列精确 emoji；也可独立回复该 emoji。"
+            "可以调用 official_duck_sticker(action=list) 查询，或 action=send 加一个下列精确 emoji；也可直接调用 reply 文字回复。"
             "不要附加重复文字，不要把贴纸用于事实回答、技术说明或严肃求助。"
-            "不要猜图片路径、文档 ID 或其他套装。无需反应时继续等待，不为使用贴纸而发言。"
-            "冷却中不发送额外动作。可选 emoji：" + emojis + "]"
+            "不要猜图片路径、文档 ID 或其他套装。群聊无需反应时可继续等待，私聊对方发来表情或互动时优先调用 reply 自然接话，不为凑贴纸而强行发贴纸。"
+            "冷却中不发送额外贴纸动作。可选 emoji：" + emojis + "]"
         )

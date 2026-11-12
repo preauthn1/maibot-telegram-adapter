@@ -163,13 +163,8 @@ class TriggerManager:
             return TriggerDecision(True, TriggerLevel.CASUAL, "实验模式：冷却已解除")
 
         if is_private:
-            elapsed = self._elapsed(session_key, current)
-            if elapsed is not None and elapsed < self.private_cooldown:
-                remaining = self.private_cooldown - elapsed
-                return TriggerDecision(
-                    False, TriggerLevel.NONE, f"私聊冷却中，剩余 {remaining:.1f}s"
-                )
-            return TriggerDecision(True, TriggerLevel.FORCED, "私聊消息")
+            # 白名单私聊不受机器人式冷却影响；收到消息后立即进入回复链。
+            return TriggerDecision(True, TriggerLevel.FORCED, "私聊消息：不设冷却")
 
         # 关注话题：可以更主动，但用独立的较短冷却。
         hit = self._match_keyword(text)

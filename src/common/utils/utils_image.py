@@ -100,17 +100,16 @@ class ImageUtils:
             frame_index = 0
 
             for frame in ImageSequence.Iterator(gif_image):
-                # 确保是RGB格式方便比较
+                # 确保是RGB格式方便比较；使用 int32 计算 MSE 避免 uint8 减法下溢导致大色差被误判为 <1000
                 frame_rgb = frame.convert("RGB")
-                frame_np = np.array(frame_rgb)
+                frame_np = np.array(frame_rgb, dtype=np.int32)
 
                 if frame_index == 0:
                     selected_frames.append(frame_rgb.copy())
                     last_selected_frame_np = frame_np
                 else:
                     # 计算和上一张选中帧的差异（均方误差 MSE）
-                    mse = np.mean((frame_np - last_selected_frame_np) ** 2)
-                    # logger.debug(f"帧 {frame_index} 与上一选中帧的 MSE: {mse}")
+                    mse = float(np.mean((frame_np - last_selected_frame_np) ** 2))
                     if mse > similarity_threshold:
                         selected_frames.append(frame_rgb.copy())
                         last_selected_frame_np = frame_np

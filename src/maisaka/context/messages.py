@@ -369,6 +369,29 @@ def _normalize_inline_text(text: str) -> str:
     return " ".join((text or "").split()).strip()
 
 
+def _label_image_owner(message_sequence: MessageSequence, speaker_name: str, sender_id: str) -> MessageSequence:
+    """在每张图片后面紧跟一行归属说明（昵称 + sender_id）。
+
+    模型看到的图片是一个独立的视觉块，消息头 ``<message sender_id=...>`` 在它之前，
+    两人几秒内各发一张图时，模型很容易把图归错人。2026-10-11 实测：A 发代理设置截图、
+    B 两秒后发 DNS 超时截图，A 问「这样子弄就算好了吗」，Planner 把 B 的图当成 A 的，
+    回答了「DNS 都超时了」。紧贴图片写明发送者，比只靠消息头可靠。
+    带上 sender_id 是因为昵称可能是「-」这类无法区分的值（本次事故里提问者就是）。
+
+    只追加文本，不改动、不删除原有组件。
+    """
+
+    if not any(isinstance(c, ImageComponent) for c in message_sequence.components):
+        return message_sequence
+    owner = f"{speaker_name}（sender_id={sender_id}）" if speaker_name and speaker_name != sender_id else f"sender_id={sender_id}"
+    labelled: list[StandardMessageComponents] = []
+    for component in message_sequence.components:
+        labelled.append(component)
+        if isinstance(component, ImageComponent):
+            labelled.append(TextComponent(f"\n[↑ 这张图是 {owner} 发的]\n"))
+    return MessageSequence(labelled)
+
+
 def _build_item_from_sequence(
     role: RoleType,
     message_sequence: MessageSequence,
@@ -551,6 +574,9 @@ class SessionBackedMessage(LLMContextMessage):
             raw_message = MessageSequence([*raw_message.components, TextComponent(evidence)])
             if source_kind != "guided_reply":
                 visible_text += evidence
+        raw_message = _label_image_owner(
+            raw_message, user.user_cardname or user.user_nickname or "", str(user.user_id or "")
+        )
         # 前缀与可见文本同时快照，后续昵称更新不应改变历史正文边界。
         return cls(
             # 空字符串表示已检查且没有前缀；None 仅用于未记录该信息的旧对象。

@@ -23,6 +23,13 @@ from ..media_budget import MediaBudget, normalize_budget_chat_id
 from ..telegram_user_client import TelegramUserClient
 from ..utils import build_topic_group_id, pick_username
 
+_TEXT_DOC_EXTS = frozenset({
+    ".txt", ".md", ".py", ".json", ".toml", ".yaml", ".yml",
+    ".log", ".csv", ".sh", ".ini", ".cfg", ".conf", ".js", ".ts", ".sql",
+})
+_MAX_TEXT_DOC_BYTES = 64 * 1024
+_MAX_TEXT_DOC_CHARS = 1500
+
 
 class TelegramUserInboundCodec:
     """将 Telethon 消息转换为 Host 侧标准 MessageDict。"""
@@ -224,7 +231,9 @@ class TelegramUserInboundCodec:
         ):
             media_segment = self._media_placeholder(message)
         else:
-            media_segment = await self._build_media_segment(message)
+            media_segment = await self._build_media_segment(
+                message, additional=additional, allow_text_extract=bool(directed or getattr(event, "is_private", False))
+            )
         if media_segment is not None:
             segments.append(media_segment)
 
@@ -273,7 +282,13 @@ class TelegramUserInboundCodec:
             return None
         return {"type": "text", "data": "[媒体]"}
 
-    async def _build_media_segment(self, message: Any) -> Optional[Dict[str, Any]]:
+    async def _build_media_segment(
+        self,
+        message: Any,
+        *,
+        additional: Optional[Dict[str, Any]] = None,
+        allow_text_extract: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         """根据消息媒体类型构造消息段。
 
         Args:
@@ -306,9 +321,31 @@ class TelegramUserInboundCodec:
                 return None
             return {"type": "text", "data": "[视频]"}
         if getattr(message, "document", None) is not None:
+            file_obj = getattr(message, "file", None)
+            file_name = str(getattr(file_obj, "name", None) or "文件")
+            file_size = int(getattr(file_obj, "size", 0) or 0)
+            lower_name = file_name.lower()
+            is_small_text_doc = (
+                allow_text_extract
+                and self._download_media
+                and 0 < file_size <= _MAX_TEXT_DOC_BYTES
+                and any(lower_name.endswith(ext) for ext in _TEXT_DOC_EXTS)
+            )
+            if is_small_text_doc:
+                raw_doc = await self._tg.download_media_bytes(message, _MAX_TEXT_DOC_BYTES)
+                if raw_doc and b"\x00" not in raw_doc[:512]:
+                    decoded = raw_doc.decode("utf-8", errors="replace").strip()
+                    if decoded:
+                        snippet = decoded[:_MAX_TEXT_DOC_CHARS]
+                        if additional is not None:
+                            additional["telegram_text_attachment"] = {
+                                "name": file_name[:128],
+                                "size_bytes": file_size,
+                                "snippet": snippet,
+                            }
+                        return {"type": "text", "data": f"[文件:{file_name}]"}
             if not (getattr(message, "message", "") or "").strip():
                 return None
-            file_name = getattr(getattr(message, "file", None), "name", None) or "文件"
             return {"type": "text", "data": f"[文件:{file_name}]"}
         return {"type": "text", "data": "[媒体]"}
 

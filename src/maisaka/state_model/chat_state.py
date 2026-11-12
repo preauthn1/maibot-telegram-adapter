@@ -42,6 +42,24 @@ WAIT_MIN_SECONDS = 30
 WAIT_MAX_SECONDS = 1800
 WAIT_COOLDOWN_AFTER_UNANSWERED = 3
 WAIT_COOLDOWN_SECONDS = 30 * 60
+# 回放实测：阈值 0.98 时约 13% 的回复会带「聊累了」提示（原 0.6 为 76%）。
+MOOD_HINT_FATIGUE_THRESHOLD = 0.98
+_DAILY_LIFE_ANCHORS = (
+    "今天白天事情不算多，整体状态比较平实松弛",
+    "今天稍微花了点时间折腾手头的东西，说话偏简练直接",
+    "今天状态挺稳的，遇到感兴趣的话题会顺口接两句",
+    "今天节奏比较慢，不急不躁，随口闲聊为主",
+)
+
+
+def daily_life_anchor(now: Optional[datetime] = None) -> str:
+    """生成跨群一致的当日轻量状态锚点（对标 companion_v2/role_work/state/service.py）。
+
+    同一自然日（UTC+8）在所有群和私聊返回同一条轻量状态基调，避免在 A 群说刚忙完、在 B 群说闲了一整天。
+    """
+    current = datetime.now(CN_TZ) if now is None else now.astimezone(CN_TZ)
+    day_seed = current.year * 10000 + current.month * 100 + current.day
+    return _DAILY_LIFE_ANCHORS[day_seed % len(_DAILY_LIFE_ANCHORS)]
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -356,12 +374,17 @@ class ChatStateStore:
 
         state = self.get(chat_key)
         hints = []
-        if state.fatigue > 0.6:
+        # 只在疲劳真正顶满时才提示。fatigue 每发一条 +0.15、半衰期 20 分钟，
+        # 活跃群里几乎一直高于 0.6：2026-10-11 回放 505 条真实出站，76% 的回复
+        # prompt 都带着「有点聊累了」，把整体语气固定成了无奈的 😅 调子。
+        # 这里只调提示阈值，不动 fatigue 本身——它还参与发言频率打分。
+        if state.fatigue > MOOD_HINT_FATIGUE_THRESHOLD:
             hints.append("有点聊累了，话可以更少")
         if state.valence < -0.3:
             hints.append("刚被冷落或怼过，别硬凑热闹")
         elif state.valence > 0.4 and state.flow > 0.4:
             hints.append("聊得挺投入")
+        hints.append(f"今日状态基调：{daily_life_anchor()}")
         return "；".join(hints)
 
     def snapshot(self, chat_key: str) -> dict:

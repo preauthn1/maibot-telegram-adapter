@@ -37,30 +37,44 @@ def prepare_vision_image(
                 actual_format = (image.format or "").lower()
                 if actual_format not in {"jpeg", "png", "webp", "gif"}:
                     raise ValueError(f"不支持的格式: {actual_format}")
-                # 动图（GIF/APNG/动态 WebP）只取第一帧，转成静态 JPEG；
-                # 不能抛错，否则整轮 Planner 都会因一张动图失败。
+                # 动图（GIF）优先横向拼接最多 6 个关键差异帧转为静态 JPEG，保留首帧铺垫+末帧反转语义；
+                # 无法拼接或非 GIF 动图（APNG/动态 WebP）则回退取首帧，不能抛错中断整轮 Planner。
                 animated = bool(getattr(image, "is_animated", False))
-                if animated:
-                    image.seek(0)
-                image.load()  # 小图同样校验，损坏数据不能绕过预处理。
-                if (
-                    not animated
-                    and actual_format in {"jpeg", "png", "webp"}
-                    and len(raw) <= max_bytes
-                    and max(image.size) <= max_side
-                    and image.getexif().get(274, 1) == 1
-                ):
-                    if actual_format == part.normalized_image_format:
-                        return part
-                    return replace(part, image_format=actual_format)
-                normalized = ImageOps.exif_transpose(image)
-                if "A" in normalized.getbands() or "transparency" in normalized.info:
-                    # JPEG 不支持透明度，先合成白底，避免透明区域变黑。
-                    rgba = normalized.convert("RGBA")
-                    working = Image.new("RGB", rgba.size, "white")
-                    working.paste(rgba, mask=rgba.getchannel("A"))
+                storyboard_img: Image.Image | None = None
+                if animated and actual_format == "gif" and int(getattr(image, "n_frames", 1) or 1) > 1:
+                    try:
+                        from src.common.utils.utils_image import ImageUtils
+
+                        sb_bytes = ImageUtils.gif_2_static_image(raw, max_frames=6)
+                        if sb_bytes:
+                            with Image.open(BytesIO(sb_bytes)) as sb_opened:
+                                storyboard_img = sb_opened.convert("RGB")
+                    except Exception:
+                        storyboard_img = None
+                if storyboard_img is not None:
+                    working = storyboard_img
                 else:
-                    working = normalized.convert("RGB")
+                    if animated:
+                        image.seek(0)
+                    image.load()  # 小图同样校验，损坏数据不能绕过预处理。
+                    if (
+                        not animated
+                        and actual_format in {"jpeg", "png", "webp"}
+                        and len(raw) <= max_bytes
+                        and max(image.size) <= max_side
+                        and image.getexif().get(274, 1) == 1
+                    ):
+                        if actual_format == part.normalized_image_format:
+                            return part
+                        return replace(part, image_format=actual_format)
+                    normalized = ImageOps.exif_transpose(image)
+                    if "A" in normalized.getbands() or "transparency" in normalized.info:
+                        # JPEG 不支持透明度，先合成白底，避免透明区域变黑。
+                        rgba = normalized.convert("RGBA")
+                        working = Image.new("RGB", rgba.size, "white")
+                        working.paste(rgba, mask=rgba.getchannel("A"))
+                    else:
+                        working = normalized.convert("RGB")
         working.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
         # 优先保留尺寸，逐步降低质量；仍超限则按原比例缩小后重试。
         for _ in range(16):

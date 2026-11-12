@@ -21,14 +21,14 @@ class _ReplyRecord:
 
 
 class ReplyReuseGuard:
-    """保存有限窗口内的短回复，用于阻止跨聊天流精确复用。"""
+    """保存有限窗口内的短回复，用于阻止同聊天流与跨聊天流精确复用。"""
 
     def __init__(
         self,
         *,
         window_seconds: float = 1800.0,
-        same_chat_window_seconds: float = 600.0,
-        max_text_length: int = 12,
+        same_chat_window_seconds: float = 86400.0,
+        max_text_length: int = 16,
     ) -> None:
         self._window_seconds = window_seconds
         self._same_chat_window_seconds = same_chat_window_seconds
@@ -43,7 +43,8 @@ class ReplyReuseGuard:
         return re.sub(r"[。.!！?？]+$", "", normalized).strip()
 
     def _prune(self, now: float) -> None:
-        while self._records and now - self._records[0].at > self._window_seconds:
+        retention = max(self._window_seconds, self._same_chat_window_seconds)
+        while self._records and now - self._records[0].at > retention:
             self._records.popleft()
 
     def is_recent_cross_chat_duplicate(self, chat_id: str, text: str, *, now: float) -> bool:
@@ -54,7 +55,9 @@ class ReplyReuseGuard:
         if not normalized or len(normalized) > self._max_text_length:
             return False
         return any(
-            record.chat_id != str(chat_id) and record.text == normalized
+            record.chat_id != str(chat_id)
+            and record.text == normalized
+            and now - record.at <= self._window_seconds
             for record in self._records
         )
 

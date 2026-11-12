@@ -90,6 +90,7 @@ _PLUGIN_ALLOWED_RAW_HOST_METHODS = frozenset(
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _RUNNER_DEBUG_FILE_PATH = _PROJECT_ROOT / "logs" / "plugin_runtime_debug" / "runner_rpc_debug.jsonl"
+_RUNNER_DEBUG_MAX_BYTES = 10 * 1024 * 1024
 
 
 class _ContextAwarePlugin(Protocol):
@@ -602,6 +603,9 @@ class PluginRunner:
         try:
             debug_file = self._debug_file_path()
             debug_file.parent.mkdir(parents=True, exist_ok=True)
+            if debug_file.exists() and debug_file.stat().st_size >= _RUNNER_DEBUG_MAX_BYTES:
+                backup_file = debug_file.with_suffix(".jsonl.1")
+                debug_file.replace(backup_file)
             with open(debug_file, "a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
         except Exception as exc:
@@ -2336,14 +2340,17 @@ class PluginRunner:
     async def _handle_health(self, envelope: Envelope) -> Envelope:
         """处理健康检查"""
         inflight = self._inflight_snapshot()
-        await self._write_debug_event(
-            "runner_health_received",
-            {
-                "request_id": envelope.request_id,
-                "inflight_count": len(inflight),
-                "max_inflight_duration_ms": int(inflight[0].get("duration_ms", 0)) if inflight else 0,
-            },
-        )
+        max_inflight_duration_ms = int(inflight[0].get("duration_ms", 0)) if inflight else 0
+        # 仅在存在积压或慢调用（>=1000ms）时落盘心跳事件，避免每 30 秒空转刷爆数十 MB JSONL。
+        if inflight and max_inflight_duration_ms >= 1000:
+            await self._write_debug_event(
+                "runner_health_received",
+                {
+                    "request_id": envelope.request_id,
+                    "inflight_count": len(inflight),
+                    "max_inflight_duration_ms": max_inflight_duration_ms,
+                },
+            )
         await self._dump_inflight_debug("health_check", min_duration_ms=5000)
         uptime_ms = int((time.monotonic() - self._start_time) * 1000)
         health = HealthPayload(

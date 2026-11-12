@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # 合并窗口。取 30s：覆盖 92% 的连续消息，且短于常见的话题切换间隔。
 # 放大到 60s 只多覆盖 7%，却会把两个不同话题的发言错误粘在一起。
-from src.maisaka.context.telegram_evidence import has_telegram_evidence
+from src.maisaka.context.telegram_evidence import has_nontrivial_telegram_evidence
 
 DEFAULT_MERGE_WINDOW_SECONDS = 30.0
 
@@ -118,7 +118,7 @@ def merge_consecutive_messages(
     for message in messages:
         # Metadata belongs to one observed message; merging would lose later
         # provenance and attach first-message entity offsets to combined bodies.
-        if has_telegram_evidence(message):
+        if has_nontrivial_telegram_evidence(message):
             open_segments.clear()
             merged.append(message)
             continue

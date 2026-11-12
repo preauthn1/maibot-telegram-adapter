@@ -142,18 +142,9 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
             if style_block:
                 prompt_lines.append(style_block)
 
-            # Phase 5.1：心情只作为一行辅助信息，不决定内容；读取失败直接跳过。
-            try:
-                from src.maisaka.state_model import get_state_store
-
-                stream_session_id = getattr(getattr(self, "chat_stream", None), "session_id", "") or ""
-                mood_hint = get_state_store().mood_hint(stream_session_id) if stream_session_id else ""
-                if mood_hint:
-                    prompt_lines.append(f"（当下状态，仅供参考：{mood_hint}）")
-            except Exception:  # noqa: BLE001
-                pass
-
             # 身份铁律放在人设最后，紧贴指令边界，降低被后续上下文冲淡的概率。
+            # 注意：瞬态心情提示（mood_hint）随疲劳度动态跳变，已移至尾部 _build_final_user_message()，
+            # 保持 System Prompt 100% 静态以保护 LLM Prefix Cache。
             if global_config.personality.enable_identity_guard:
                 prompt_lines.append(build_identity_prompt_block(bot_name))
 
@@ -727,6 +718,15 @@ class BaseMaisakaReplyGenerator(RetroReplyPromptMixin):
         # 固定 UTC+8，与 Planner 的当前时间、消息时间保持同一时区和日期。
         current_time = format_prompt_datetime(prompt_now())
         sections: List[str] = [f"当前时间：{current_time}"]
+        try:
+            from src.maisaka.state_model import get_state_store
+
+            stream_session_id = getattr(getattr(self, "chat_stream", None), "session_id", "") or ""
+            mood_hint = get_state_store().mood_hint(stream_session_id) if stream_session_id else ""
+            if mood_hint:
+                sections.append(f"（当下状态，仅供参考：{mood_hint}）")
+        except Exception:  # noqa: BLE001
+            pass
         target_message_block = self._build_target_message_block(reply_message)
         if target_message_block:
             sections.append(target_message_block)

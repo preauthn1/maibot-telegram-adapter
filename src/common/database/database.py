@@ -96,6 +96,17 @@ _RUNTIME_PERFORMANCE_INDEXES = (
         "CREATE INDEX IF NOT EXISTS ix_mai_messages_session_id_timestamp "
         "ON mai_messages (session_id, timestamp DESC)",
     ),
+    # WebUI 与监控按 request_type + timestamp 聚合统计 llm_usage，复合索引避免扫数十万行全表
+    (
+        "ix_llm_usage_request_type_timestamp",
+        "CREATE INDEX IF NOT EXISTS ix_llm_usage_request_type_timestamp "
+        "ON llm_usage (request_type, timestamp DESC)",
+    ),
+    (
+        "ix_llm_usage_model_name_timestamp",
+        "CREATE INDEX IF NOT EXISTS ix_llm_usage_model_name_timestamp "
+        "ON llm_usage (model_name, timestamp DESC)",
+    ),
 )
 
 

@@ -38,6 +38,8 @@ from .view_forward_message import get_tool_spec as get_view_forward_message_tool
 from .view_forward_message import handle_tool as handle_view_forward_message_tool
 from .wait import get_tool_spec as get_wait_tool_spec
 from .wait import handle_tool as handle_wait_tool
+from .sports_schedule import get_tool_spec as get_sports_schedule_tool_spec
+from .sports_schedule import handle_tool as handle_sports_schedule_tool
 from .web_search import get_tool_spec as get_web_search_tool_spec
 from .web_search import handle_tool as handle_web_search_tool
 
@@ -128,6 +130,8 @@ BUILTIN_TOOL_ENTRIES: List[BuiltinToolEntry] = [
     # 联网搜索：遇到不认识的新名词时查一下，避免硬编或答"不知道"——
     # 这两种反应在群聊里都不像真人。
     BuiltinToolEntry("web_search", get_web_search_tool_spec, handle_web_search_tool, stage="action"),
+    # 赛程：搜索引擎对"今天赛程"质量差，直接读结构化接口。
+    BuiltinToolEntry("sports_schedule", get_sports_schedule_tool_spec, handle_sports_schedule_tool, stage="action"),
 ]
 
 # 全部内置工具名，供环境变量开关校验拼写。
@@ -230,12 +234,12 @@ def get_builtin_tools(context: Optional[ToolAvailabilityContext] = None) -> List
 def build_builtin_tool_handlers(tool_ctx: BuiltinToolRuntimeContext) -> Dict[str, BuiltinToolHandler]:
     """构建内置工具处理器映射。
 
-    被环境变量禁用的工具在这里也要剔除——只在声明层删掉不够：
+    被环境变量或全局配置禁用的工具在这里也要剔除——只在声明层删掉不够：
     模型"记得"工具名就能硬编调用，handler 还在就会真执行。
     """
 
     return {
         entry.name: lambda invocation, context=None, entry=entry: entry.handle_tool(tool_ctx, invocation, context)
         for entry in BUILTIN_TOOL_ENTRIES
-        if not tool_toggles.is_tool_disabled(entry.name, known=BUILTIN_TOOL_NAMES)
+        if _is_builtin_tool_enabled_by_config(entry)
     }

@@ -30,12 +30,13 @@ Hermes 的几条约束一并借鉴：
 from __future__ import annotations
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import json
 import logging
+import math
 import re
 import time
 
@@ -47,6 +48,9 @@ DEFAULT_MAX_FACTS_PER_PERSON = 8
 
 # 注入 prompt 的默认字符上限。
 DEFAULT_PROMPT_MAX_CHARS = 300
+# 沿用既有纠正账本 500 条的运营容量；30 日为候选保留期，可后续调整。
+DEFAULT_MAX_PEOPLE = 500
+FACT_RETENTION_SECONDS = 30 * 86400
 
 # 自我陈述的开头。只有本人说自己的话才值得记。
 #
@@ -137,6 +141,8 @@ class PersonFact:
 
     text: str
     created_at: float
+    source_message_id: str = ""
+    status: str = "candidate"
 
 
 def is_durable_fact(text: str) -> bool:
@@ -203,9 +209,65 @@ class PeopleMemory:
         self._logger = logger or logging.getLogger(__name__)
         # person_id -> {事实文本: PersonFact}，用 OrderedDict 维持插入序以便淘汰
         self._facts: Dict[str, "OrderedDict[str, PersonFact]"] = {}
+        # 群友双向互动边计数（对标 companion_v2/relationships/group_network.py）：
+        # chat_id -> {(uid_a, uid_b): (count, last_ts)}，无向边按字典序存储。
+        self._peer_edges: Dict[str, Dict[tuple[str, str], tuple[int, float]]] = {}
 
         if storage_path is not None:
             self._load()
+        self.prune()
+
+    def record_peer_interaction(
+        self,
+        chat_id: str,
+        user_a: str,
+        user_b: str,
+        *,
+        now: Optional[float] = None,
+    ) -> None:
+        """记录同群两位成员之间的一次回复/提及互动边。"""
+        a, b = str(user_a or "").strip(), str(user_b or "").strip()
+        if not chat_id or not a or not b or a == b:
+            return
+        edge = (a, b) if a < b else (b, a)
+        current = time.time() if now is None else now
+        edges = self._peer_edges.setdefault(str(chat_id), {})
+        old_cnt, _ = edges.get(edge, (0, 0.0))
+        edges[edge] = (old_cnt + 1, current)
+        if len(edges) > 200:
+            oldest_edge = min(edges, key=lambda k: edges[k][1])
+            del edges[oldest_edge]
+
+    def frequent_co_participants(self, chat_id: str, user_id: str, limit: int = 3) -> List[tuple[str, int]]:
+        """返回与指定群友在同群高频互动的前 N 位伙伴及互动次数。"""
+        uid = str(user_id or "").strip()
+        edges = self._peer_edges.get(str(chat_id))
+        if not uid or not edges:
+            return []
+        cutoff = time.time() - FACT_RETENTION_SECONDS
+        matches: List[tuple[str, int]] = []
+        for (a, b), (cnt, ts) in edges.items():
+            if ts < cutoff or cnt < 2:
+                continue
+            if a == uid:
+                matches.append((b, cnt))
+            elif b == uid:
+                matches.append((a, cnt))
+        matches.sort(key=lambda item: item[1], reverse=True)
+        return matches[:limit]
+
+    def prune(self, *, now: Optional[float] = None) -> None:
+        """过期候选及空用户清理，容量不是信任或自动确认阈值。"""
+        current = time.time() if now is None else now
+        for person_id, bucket in list(self._facts.items()):
+            for text, fact in list(bucket.items()):
+                if current - fact.created_at >= FACT_RETENTION_SECONDS:
+                    del bucket[text]
+            if not bucket:
+                del self._facts[person_id]
+        while len(self._facts) > DEFAULT_MAX_PEOPLE:
+            oldest = min(self._facts, key=lambda key: max(f.created_at for f in self._facts[key].values()))
+            del self._facts[oldest]
 
     def _load(self) -> None:
         """从磁盘恢复记忆。
@@ -239,6 +301,21 @@ class PeopleMemory:
             return
 
         for person_id, items in raw.items():
+            if str(person_id) == "__peer_edges__" and isinstance(items, dict):
+                for chat_key, edge_map in items.items():
+                    if not isinstance(edge_map, dict):
+                        continue
+                    loaded_edges: Dict[tuple[str, str], tuple[int, float]] = {}
+                    for edge_str, val in edge_map.items():
+                        parts = str(edge_str).split(":", 1)
+                        if len(parts) == 2 and isinstance(val, list) and len(val) == 2:
+                            try:
+                                loaded_edges[(parts[0], parts[1])] = (int(val[0]), float(val[1]))
+                            except (TypeError, ValueError):
+                                continue
+                    if loaded_edges:
+                        self._peer_edges[str(chat_key)] = loaded_edges
+                continue
             if not isinstance(items, list):
                 continue
             bucket: "OrderedDict[str, PersonFact]" = OrderedDict()
@@ -248,9 +325,17 @@ class PeopleMemory:
                 text = str(item.get("text", "")).strip()
                 if not text:
                     continue
+                try:
+                    created_at = float(item.get("created_at", 0.0))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(created_at) or created_at > time.time() + 60:
+                    continue
                 bucket[text] = PersonFact(
                     text=text,
-                    created_at=float(item.get("created_at", 0.0)),
+                    created_at=created_at,
+                    source_message_id=str(item.get("source_message_id", "")),
+                    status=str(item.get("status", "candidate")),
                 )
             # 尊重当前容量上限：配置调小后不该把超出的旧事实读回来
             while len(bucket) > self.max_facts_per_person:
@@ -271,13 +356,21 @@ class PeopleMemory:
         if path is None:
             return
 
-        payload = {
+        self.prune()
+        payload: Dict[str, Any] = {
             person_id: [
-                {"text": fact.text, "created_at": fact.created_at}
+                {"text": fact.text, "created_at": fact.created_at,
+                 "source_message_id": fact.source_message_id, "status": fact.status}
                 for fact in bucket.values()
             ]
             for person_id, bucket in self._facts.items()
         }
+        if self._peer_edges:
+            payload["__peer_edges__"] = {
+                chat_key: {f"{a}:{b}": [cnt, ts] for (a, b), (cnt, ts) in edge_map.items()}
+                for chat_key, edge_map in self._peer_edges.items()
+                if edge_map
+            }
 
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -289,9 +382,11 @@ class PeopleMemory:
             tmp.replace(path)
         except OSError as exc:
             self._logger.warning(f"人物记忆写入失败: {exc}")
+            raise
 
     def remember(
-        self, person_id: str, text: str, *, now: Optional[float] = None
+        self, person_id: str, text: str, *, now: Optional[float] = None,
+        source_message_id: str = ""
     ) -> bool:
         """记录一条关于某人的事实。
 
@@ -309,13 +404,17 @@ class PeopleMemory:
                 就会不停触发写盘。
         """
 
-        if not person_id or not text.strip():
+        if not person_id or not text.strip() or not source_message_id:
             return False
 
         if not is_durable_fact(text):
             return False
 
         current = now if now is not None else time.time()
+        self.prune(now=current)
+        if person_id not in self._facts and len(self._facts) >= DEFAULT_MAX_PEOPLE:
+            oldest = min(self._facts, key=lambda key: max(f.created_at for f in self._facts[key].values()))
+            del self._facts[oldest]
         bucket = self._facts.setdefault(person_id, OrderedDict())
 
         normalized = text.strip()
@@ -323,7 +422,8 @@ class PeopleMemory:
             # 已知事实，不重复存储，也不算新增
             return False
 
-        bucket[normalized] = PersonFact(text=normalized, created_at=current)
+        bucket[normalized] = PersonFact(text=normalized, created_at=current,
+                                       source_message_id=str(source_message_id))
 
         # 超容量则淘汰最旧的
         while len(bucket) > self.max_facts_per_person:
@@ -344,7 +444,23 @@ class PeopleMemory:
         bucket = self._facts.get(person_id)
         if not bucket:
             return []
-        return list(bucket.values())
+        return [fact for fact in bucket.values() if fact.source_message_id and fact.status == "candidate"
+                and time.time() - fact.created_at < FACT_RETENTION_SECONDS]
+
+    def dispute(self, person_id: str) -> int:
+        """模糊自我纠正使本作用域旧候选暂停注入；保留来源以供审核。"""
+        bucket = self._facts.get(person_id, {})
+        changed = 0
+        for text, fact in list(bucket.items()):
+            if fact.status == "candidate":
+                bucket[text] = replace(fact, status="disputed")
+                changed += 1
+        return changed
+
+    def invalidate(self, person_id: str) -> int:
+        """纠正或删除请求使本会话候选失效，不推断更正后的事实。"""
+        bucket = self._facts.pop(person_id, {})
+        return len(bucket)
 
     def build_prompt_block(
         self, person_id: str, max_chars: int = DEFAULT_PROMPT_MAX_CHARS
@@ -367,7 +483,7 @@ class PeopleMemory:
         used = 0
         # 从最新往回取：越近的事实越可能与当前话题相关
         for fact in reversed(facts):
-            line = f"- {fact.text}"
+            line = f"- 待核实自述（消息 {fact.source_message_id}，时间 {fact.created_at:.0f}）：{fact.text}"
             if used + len(line) + 1 > max_chars:
                 break
             lines.append(line)

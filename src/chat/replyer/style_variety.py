@@ -101,6 +101,24 @@ def overused_patterns(own_texts: Sequence[str]) -> List[str]:
     if trailing_period / n >= 0.25:
         notes.append(f"你最近 {n} 条里有 {trailing_period} 条句尾带了句号「。」，这次句尾不要加句号")
 
+    # 句式结构轮换（对标 companion_v2/expression/style_rotation.py）：
+    # 防止连续多轮以问号/反问收尾，或连续两轮使用相同的句首起手词
+    def _ends_with_question(txt: str) -> bool:
+        core = re.sub(r"[\U0001f300-\U0001f9ff\U0001fa00-\U0001faff\u2600-\u27bf\s]+$", "", txt)
+        return bool(core) and (core.endswith(("?", "？")) or re.search(r"[吗呢吧呀啊][?？]?$", core) is not None and "?" in core or "？" in core)
+
+    if len(recent) >= 2 and all(_ends_with_question(t) for t in recent[-2:]):
+        notes.append("你前两条回复都以问句或反问收尾，这次严禁在句尾反问或加问号，直接给出平实陈述")
+    else:
+        question_endings = sum(1 for t in recent if _ends_with_question(t))
+        if question_endings / n >= 0.35:
+            notes.append(f"你最近 {n} 条里有 {question_endings} 条以问句收尾，这次直接陈述，不要反问对方")
+
+    if len(recent) >= 2:
+        h1, h2 = recent[-2].strip()[:2], recent[-1].strip()[:2]
+        if len(h1) == 2 and h1 == h2 and not re.match(r"[\W_]", h1[0]):
+            notes.append(f"你刚连续两条都用「{h1}」起手，这次严禁再以「{h1}」开头")
+
     for word, limit in (("先", 2), ("试试", 2), ("目前", 2), ("可以", 3)):
         w_count = sum(1 for t in recent if word in t)
         if w_count >= limit:
@@ -122,11 +140,11 @@ def overused_patterns(own_texts: Sequence[str]) -> List[str]:
     return notes
 
 
-# 口头禅：真人也会偶尔说「确实」（同群真人约 0.5%），但模型默认远高于真人。
+# 口头禅：真人也会偶尔说「确实」（实测同群真人约 0.52%），但模型默认高达 5.88%（11.2 倍）。
 # 治理目标是「降频对齐真人」而非彻底禁绝：
 # 当最近 TIC_WINDOW（120）条**自身发言**里还没出现过「确实」时允许自然使用；
 # 一旦用过一次，接下来 120 条自身发言内进入冷却（提示词提醒 + 若模型仍惯性输出则本地去冗余），
-# 将稳态上限控制在 <= 1/120，与真人频率一致且保留自然语感。
+# 将稳态上限控制在 <= 1/120 (0.83%)，与真人 0.5%~0.7% 频率一致且保留自然语感。
 VERBAL_TICS: Sequence[str] = ("确实", "的确", "那就", "就行", "对喽", "啊？我人啊", "我人啊", "打磨")
 TIC_WINDOW = 120
 
@@ -148,14 +166,14 @@ def strip_verbal_tic_text(text: str) -> str:
         return s
 
     out = s
-    # 1. 句首带标点/空白
+    # 1. 句首带标点/空白：「确实，得留出晋升空间」「那确实，前面几个坑都得补上」
     out = re.sub(
         r"^(?:(?:哈哈+|行吧|对|是这样的|那)[，,\s]*)*(?:确实|的确)[，,、\s]+",
         "",
         out,
     ).strip()
 
-    # 2. 句首无标点
+    # 2. 句首无标点：「确实会不协调」「确实拉胯」「确实够了」「确实省事」
     if re.match(r"^(?:确实|的确)", out):
         rem = re.sub(r"^(?:确实|的确)\s*", "", out).strip()
         if len(rem) >= 2 and not re.match(r"^(?:没有|没|不|不是|没法|不能|不会|并不)", rem):
@@ -163,8 +181,9 @@ def strip_verbal_tic_text(text: str) -> str:
         elif len(rem) == 1:
             out = "真" + rem
 
-    # 3a. 分句或句中副词后跟助动词/程度词（有/是/会/能/要/得/太/很/挺/比较/容易/可能/应该/可以/需要）
-    # 注意：不能剥离「确实没有/确实舒服/确实不错/确实不…」中的「确实」，否则「那我查错了 确实没有」会变成反问语病句「那我查错了没有」。
+    # 3a. 分句或句中副词后跟助动词/程度词（有/是/会/能/要/得/太/很/挺/比较/容易/可能/应该/可以/需要）：
+    # 「这时间确实没人答」「这个确实有点挡」「那确实容易误封」
+    # 注意：不能剥离「确实没有/确实舒服/确实不错/确实厉害/确实不…」中的「确实」，否则「那我查错了 确实没有」会变成反问语病句「那我查错了没有」，「轻量党确实舒服」会变成残句「轻量党舒服」。
     out2 = re.sub(
         r"(?<=[\u4e00-\u9fffA-Za-z0-9\s，,；;：:])\s*(?:确实|的确)\s*(?=(?:有|是|会|能|要|得|需|该|太|很|挺|比较|容易|可能|应该|可以|需要|还得|还得要)[\u4e00-\u9fffA-Za-z0-9])",
         "",
@@ -173,7 +192,7 @@ def strip_verbal_tic_text(text: str) -> str:
     if len(out2) >= 2:
         out = out2
 
-    # 3b. 句中副词后仅跟 1 个字形容词到句末/分句末
+    # 3b. 句中副词后仅跟 1 个字形容词到句末/分句末：「半价确实香」「50 TPS确实爽」
     out3 = re.sub(
         r"(?<=[\u4e00-\u9fffA-Za-z0-9\s])\s*(?:确实|的确)\s*(?=[\u4e00-\u9fff](?:[，,。！!？?\s]|$))",
         "挺",

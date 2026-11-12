@@ -158,6 +158,7 @@ class BuiltinToolRuntimeContext:
         skip_post_process: bool = False,
         enable_splitter: bool = True,
         enable_chinese_typo: bool = True,
+        is_group_chat: bool = True,
     ) -> List[str]:
         """沿用旧回复链的文本后处理，执行分段与错别字注入。"""
 
@@ -169,14 +170,13 @@ class BuiltinToolRuntimeContext:
             reply_text,
             enable_splitter=enable_splitter,
             enable_chinese_typo=enable_chinese_typo,
+            is_group_chat=is_group_chat,
         ):
             normalized_segment = segment.strip()
             if normalized_segment:
                 processed_segments.append(normalized_segment)
 
-        if processed_segments:
-            return processed_segments
-        return [reply_text.strip()]
+        return processed_segments
 
     @staticmethod
     def post_process_reply_segments(
@@ -185,6 +185,7 @@ class BuiltinToolRuntimeContext:
         skip_post_process: bool = False,
         enable_splitter: bool = True,
         enable_chinese_typo: bool = True,
+        is_group_chat: bool = True,
     ) -> List[ProcessedResponseSegment]:
         """执行文本后处理，并保留错别字纠正段的引用提示。"""
 
@@ -196,6 +197,7 @@ class BuiltinToolRuntimeContext:
             reply_text,
             enable_splitter=enable_splitter,
             enable_chinese_typo=enable_chinese_typo,
+            is_group_chat=is_group_chat,
         ):
             normalized_text = segment.text.strip()
             if normalized_text:
@@ -206,9 +208,7 @@ class BuiltinToolRuntimeContext:
                     )
                 )
 
-        if processed_segments:
-            return processed_segments
-        return [ProcessedResponseSegment(reply_text.strip())]
+        return processed_segments
 
     async def post_process_reply_message_items_async(
         self,
@@ -232,6 +232,7 @@ class BuiltinToolRuntimeContext:
             reply_text,
             enable_splitter=enable_splitter,
             enable_chinese_typo=enable_chinese_typo,
+            is_group_chat=bool(getattr(self.runtime, "_is_group_chat", True)),
         )
         return [
             PostProcessedReplyMessage(
@@ -262,6 +263,7 @@ class BuiltinToolRuntimeContext:
                 skip_post_process=skip_post_process,
                 enable_splitter=enable_splitter,
                 enable_chinese_typo=enable_chinese_typo,
+                is_group_chat=bool(getattr(self.runtime, "_is_group_chat", True)),
             )
         ]
 

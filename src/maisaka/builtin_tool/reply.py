@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import json
+import asyncio
 import traceback
 
 from src.chat.replyer.replyer_manager import replyer_manager
@@ -138,7 +139,8 @@ def get_tool_spec() -> ToolSpec:
         "reply_reference": {
             "type": "string",
             "description": (
-                "有助于回复的信息，包括当前聊天状态、人物关系、事实信息、回忆信息。"
+                "有助于回复当前目标 msg_id 的信息，包括当前聊天状态、人物关系、事实信息、回忆信息。"
+                "一次 reply 只针对这一个 msg_id，禁止把不同人或不同消息的多个问题（如两道测试题）合并写进同一条 reply_reference。"
             ),
         },
         "reply_style": {
@@ -390,6 +392,30 @@ async def handle_tool(
             "普通 reply 不能以机器人自身历史消息为目标，请选择用户消息。",
         )
 
+    # 生成前只查状态；不恢复、补登记或提前占用发送尝试。
+    from src.maisaka.context.continuity_bridge import envelope, ledger_call
+    continuity = None
+    if tool_ctx.runtime.chat_stream.platform == "telegram":
+        try:
+            continuity = envelope(tool_ctx.runtime.session_id,
+                                  target_message.message_info.user_info.user_id,
+                                  target_message_id, tool_ctx.engine._active_logical_turn_id)
+            row = await ledger_call("get", continuity["session_id"], continuity["user_id"], target_message_id)
+        except Exception as exc:
+            logger.warning("回复互动账本不可用: %s", type(exc).__name__)
+            row = None
+        if not row or row["last_attempt_at"] is not None or row["status"] not in {"pending", "blocked"}:
+            return tool_ctx.build_failure_result(invocation.tool_name, "目标无可发送的新入站记录，停止本轮。",
+                metadata={"pause_execution": True, "retryable": False})
+
+    async def mark_continuity_blocked(reason):
+        if continuity is not None:
+            try:
+                await ledger_call("record_blocked", continuity["session_id"], continuity["user_id"],
+                                  target_message_id, reason_code=reason)
+            except Exception as exc:
+                logger.warning("互动阻断记录失败: %s", type(exc).__name__)
+
     # 策略停止只覆盖当前逻辑轮；不确定发送单独隔离，绝不自动重放。
     turn_id = getattr(tool_ctx.engine, "_active_logical_turn_id", "")
     if getattr(tool_ctx.runtime, "_reply_terminal_turn", None) != turn_id:
@@ -414,6 +440,33 @@ async def handle_tool(
         )
     if len(terminal_targets) >= 256:
         terminal_targets.pop(next(iter(terminal_targets)))
+
+    # Planner -> Replyer 结构化前置契约校验（Codex 耦合审计 #6）：
+    # 对裸媒体占位符目标或含"看不到视频/让对方发截图"意图的 reply 调用直接按策略静默终止，不进入 Replyer 生成。
+    from src.chat.utils.identity_guard import check_reply_intent_guard
+    _intent_ok, _intent_reason = check_reply_intent_guard(
+        getattr(target_message, "processed_plain_text", "") or "",
+        str(reply_tool_args.get("reply_reference") or ""),
+        is_group_chat=bool(getattr(tool_ctx.runtime, "_is_group_chat", True)),
+    )
+    if not _intent_ok:
+        await mark_continuity_blocked("policy_preflight")
+        metadata = {
+            "delivery_outcome": "policy_dropped",
+            "policy_reason": _intent_reason,
+            "policy_silence": True,
+            "sent": False,
+            "retryable": False,
+            "pause_execution": True,
+            "outcome": "blocked_by_policy",
+        }
+        terminal_targets[target_message_id] = metadata
+        return tool_ctx.build_failure_result(
+            invocation.tool_name,
+            f"策略跳过：目标消息为未解析媒体占位或意图命中模态边界（{_intent_reason}），已静默终止，请勿补发。",
+            structured_content={"msg_id": target_message_id, **metadata},
+            metadata=metadata,
+        )
 
     # Planner/Replyer 共享结构化前置策略：
     # 在调用 Replyer 生成前拦截针对裸媒体占位符、索要截图意图或作者专属 Bug 报告模板的 reply 调用。
@@ -470,6 +523,7 @@ async def handle_tool(
     if tool_ctx.runtime.chat_stream.platform != CLI_PLATFORM_NAME:
         policy = await send_service.preflight_reply_policy(tool_ctx.runtime.session_id, target_message)
         if policy.get("allowed") is not True:
+            await mark_continuity_blocked("policy_preflight")
             reason = str(policy.get("reason") or "策略预检未放行")
             outcome = str(policy.get("outcome") or "preflight_unavailable")
             metadata = {"delivery_outcome": outcome, "policy_reason": reason,
@@ -491,6 +545,7 @@ async def handle_tool(
         )
     except Exception:
         logger.exception(f"{tool_ctx.runtime.log_prefix} 获取回复生成器时发生异常: 目标消息编号={target_message_id}")
+        await mark_continuity_blocked("replyer_unavailable")
         logger.info(traceback.format_exc())
         return tool_ctx.build_failure_result(
             invocation.tool_name,
@@ -498,6 +553,7 @@ async def handle_tool(
         )
 
     if replyer is None:
+        await mark_continuity_blocked("replyer_unavailable")
         logger.error(f"{tool_ctx.runtime.log_prefix} 获取 Maisaka 回复生成器失败")
         return tool_ctx.build_failure_result(
             invocation.tool_name,
@@ -508,20 +564,67 @@ async def handle_tool(
     from src.maisaka.context.messages import ToolResultMessage
 
     current_turn_id = getattr(tool_ctx.engine, "_active_logical_turn_id", "")
+    # fetch_url 读到的权威页面（如结构化赛程接口）同样是本轮依据；只取最近 3 条、每条限长，防止上下文膨胀。
     search_evidence = [
-        message.content
+        str(message.content)[:6000]
         for message in replyer_chat_history
         if isinstance(message, ToolResultMessage)
-        and message.tool_name == "web_search"
+        and message.tool_name in {"web_search", "tavily_search", "fetch_url", "sports_schedule"}
+        and message.success
         and message.logical_turn_id == current_turn_id
         and current_turn_id
-    ]
+    ][-3:]
     if search_evidence:
         # Replyer 的普通历史会过滤工具消息；通过显式参考传递同轮搜索，避免只看 Planner 猜测。
         original_reference = str(reply_tool_args.get("reply_reference") or "")
         reply_tool_args["reply_reference"] = (
             original_reference + "\n本轮搜索依据（不得添加来源之外的猜测）：\n" + "\n".join(search_evidence)
         )
+    elif any(
+        isinstance(message, ToolResultMessage)
+        and message.tool_name in {"web_search", "tavily_search", "fetch_url", "sports_schedule"}
+        and not message.success
+        and message.logical_turn_id == current_turn_id
+        and current_turn_id
+        for message in replyer_chat_history
+    ):
+        # 群聊中若对方并未点名/引用我们，查询失败时直接静默终止，绝不主动跑去汇报"暂时查不到"（2026-10-25 1062376 事故）。
+        _is_group = bool(getattr(tool_ctx.runtime, "_is_group_chat", True))
+        _target_add_cfg = getattr(getattr(target_message, "message_info", None), "additional_config", None) or {}
+        _target_directed = bool(getattr(target_message, "is_at", False) or getattr(target_message, "is_mentioned", False) or _target_add_cfg.get("is_mentioned"))
+        if _is_group and not _target_directed:
+            await mark_continuity_blocked("search_failed_undirected_silence")
+            metadata = {
+                "delivery_outcome": "policy_dropped",
+                "policy_reason": "search_failed_undirected_silence",
+                "policy_silence": True,
+                "sent": False,
+                "retryable": False,
+                "pause_execution": True,
+                "outcome": "blocked_by_policy",
+            }
+            terminal_targets[target_message_id] = metadata
+            return tool_ctx.build_failure_result(
+                invocation.tool_name,
+                "策略跳过：群聊未被点名且本轮搜索未取得依据，保持沉默不发送「暂时查不到」。请勿补发。",
+                structured_content={"msg_id": target_message_id, **metadata},
+                metadata=metadata,
+            )
+        original_reference = str(reply_tool_args.get("reply_reference") or "")
+        reply_tool_args["reply_reference"] = (
+            original_reference
+            + "\n【本轮查询未完成】没有取得可靠搜索依据。准确说明这次未查到或尚未核实，不虚构没看比赛、没关注等个人经历；内部凭据、路径和堆栈不对外展示。失败告知不是原问题已解决。"
+        )
+    if continuity is not None:
+        try:
+            summary = await ledger_call("summary", continuity["session_id"], continuity["user_id"])
+            reply_tool_args["reply_reference"] = str(reply_tool_args.get("reply_reference") or "") + "\n" + summary
+        except Exception as exc:
+            logger.warning("Replyer 互动摘要降级: %s", type(exc).__name__)
+    from src.maisaka.context.person_candidates import current_person_candidates
+    person_candidates = await current_person_candidates(target_message)
+    if person_candidates:
+        reply_tool_args["reply_reference"] = str(reply_tool_args.get("reply_reference") or "") + "\n" + person_candidates
     from src.maisaka.context.reply_memory import collect_reply_memory_references
     memory_references = tuple(collect_reply_memory_references(
         replyer_chat_history, getattr(tool_ctx.engine, '_active_logical_turn_id', '')
@@ -548,6 +651,7 @@ async def handle_tool(
         logger.exception(
             f"{tool_ctx.runtime.log_prefix} 回复生成器执行异常: 目标消息编号={target_message_id} 异常={exc}"
         )
+        await mark_continuity_blocked("generation_failed")
         return tool_ctx.build_failure_result(
             invocation.tool_name,
             "生成可见回复时发生异常。",
@@ -557,6 +661,7 @@ async def handle_tool(
 
     if not reply_text:
         reply_result.monitor_detail = build_reply_monitor_detail(reply_result)
+        await mark_continuity_blocked("generation_empty")
         reply_metadata = _build_monitor_metadata(reply_result)
         logger.warning(
             f"{tool_ctx.runtime.log_prefix} 回复生成器返回空文本: "
@@ -585,6 +690,7 @@ async def handle_tool(
 
     if not reply_text:
         reply_result.completion.response_text = ""
+        await mark_continuity_blocked("postprocess_empty")
         reply_result.monitor_detail = build_reply_monitor_detail(reply_result)
         return tool_ctx.build_failure_result(
             invocation.tool_name,
@@ -609,6 +715,7 @@ async def handle_tool(
         reply_result.monitor_detail = build_reply_monitor_detail(reply_result)
         reply_metadata = _build_monitor_metadata(reply_result)
         logger.exception(f"{tool_ctx.runtime.log_prefix} 解析回复附件失败: {exc}")
+        await mark_continuity_blocked("postprocess_failed")
         return tool_ctx.build_failure_result(
             invocation.tool_name,
             f"解析回复附件失败：{exc}",
@@ -627,6 +734,7 @@ async def handle_tool(
     send_results: list[dict[str, Any]] = []
     first_failure_outcome = ""
     first_failure_reason = ""
+    claimed = False
     try:
         sent = False
         if tool_ctx.runtime.chat_stream.platform == CLI_PLATFORM_NAME:
@@ -642,6 +750,17 @@ async def handle_tool(
                 )
             sent = True
         else:
+            if continuity is not None:
+                # 已完成生成/预检/后处理；整个批次仅此一次原子 claim。
+                try:
+                    claimed = bool(reply_items) and await ledger_call("claim", continuity["session_id"],
+                        continuity["user_id"], target_message_id, continuity["logical_turn_id"])
+                except Exception as exc:
+                    logger.warning("互动发送占用失败: %s", type(exc).__name__)
+                    claimed = False
+                if not claimed:
+                    return tool_ctx.build_failure_result(invocation.tool_name, "目标已停止或已尝试发送，不补发。",
+                        metadata={"pause_execution": True, "retryable": False})
             previous_sent_message = None
             for index, reply_item in enumerate(reply_items):
                 reply_sequence = reply_item.sequence
@@ -665,6 +784,7 @@ async def handle_tool(
                     sync_to_maisaka_history=True,
                     maisaka_source_kind="guided_reply",
                     delivery_report=segment_delivery_report,
+                    continuity_context=continuity,
                 )
                 sent = sent_message is not None
                 if not sent:
@@ -687,8 +807,13 @@ async def handle_tool(
                     segment = sent_message.processed_plain_text
                 delivered_segments.append(segment)
                 sent_message_id = str(getattr(sent_message, "message_id", "") or "").strip()
-                if sent_message_id:
-                    sent_message_ids.append(sent_message_id)
+                receipt_ids = segment_delivery_report.get("sent_message_ids", [])
+                if receipt_ids:
+                    sent_message_ids.extend(str(mid) for mid in receipt_ids if mid)
+                else:
+                    platform_id = str(getattr(sent_message, "platform_message_id", "") or "")
+                    if platform_id:
+                        sent_message_ids.append(platform_id)
                 send_results.append(
                     _build_send_result(
                         index=index,
@@ -699,11 +824,33 @@ async def handle_tool(
                     )
                 )
                 previous_sent_message = sent_message
+                if segment_delivery_report.get("partial_delivery"):
+                    sent = False
+                    first_failure_outcome = "partial"
+                    first_failure_reason = "仅部分分段已确认送达"
+                    break
+    except asyncio.CancelledError:
+        sent = False
+        first_failure_outcome = "delivery_unknown"
+        raise
     except Exception:
         logger.exception(f"{tool_ctx.runtime.log_prefix} 发送文字消息时发生异常，目标消息编号={target_message_id}")
         sent = False
         first_failure_outcome = "delivery_unknown"
         first_failure_reason = "发送或发送后处理异常，无法确认最终状态"
+    finally:
+        if continuity is not None and claimed:
+            # 只记真实回执，不把成功传输当成问题已回答；取消亦保留一次尝试。
+            delivery = ("partial" if sent_message_ids and not sent else
+                        "unknown" if delivery_body_unknown or not sent_message_ids and sent or
+                        first_failure_outcome == "delivery_unknown" else
+                        "sent" if sent else "failed")
+            try:
+                await ledger_call("record_result", continuity["session_id"], continuity["user_id"],
+                    target_message_id, continuity["logical_turn_id"], delivery=delivery,
+                    sent_message_ids=tuple(dict.fromkeys(sent_message_ids))[:32], reason_code="reply_batch_terminal")
+            except Exception as exc:
+                logger.warning("互动回执记录失败（不重发）: %s", type(exc).__name__)
 
     if not sent:
         # 部分成功也不能声称整条回复成功，更不能重放已送达的前缀。

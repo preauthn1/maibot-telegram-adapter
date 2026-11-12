@@ -9,7 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
-from telethon.tl.types import Document, DocumentAttributeSticker, InputStickerSetID, StickerPack
+from telethon.tl.types import Document, DocumentAttributeSticker, InputStickerSetID, MessageMediaDocument, StickerPack
 
 pkg = "plugins.telegram_user_adapter"
 from plugins.telegram_user_adapter.official_stickers import OfficialDuckStickers, PACK_SET_ID
@@ -43,8 +43,8 @@ class Transport:
         self.sent.append((entity, document, kwargs))
         return SimpleNamespace(id=7, sticker=document)
 
-    async def get_entity(self, value):
-        return value
+    async def get_messages(self, entity, ids):
+        return SimpleNamespace(id=ids, sticker=self.sent[-1][1], media=MessageMediaDocument(document=self.sent[-1][1]))
 
 
 async def main():
@@ -84,6 +84,7 @@ async def main():
     target = "-1009000000001::tg-topic::mt=42"
     plugin._sticker_contexts.add(target)
     plugin._sticker_routes["synthetic-stream"] = (target, True)
+    plugin._native_scope = lambda context: (context["stream_id"], target, 100, 42)
     captured = []
     async def gateway(message, *args, **kwargs):
         captured.append(message)

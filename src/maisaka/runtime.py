@@ -189,8 +189,11 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         self._follow_up_first_pending_at = 0.0
         # 我们上一条发言是不是问句（用于判定"回答我们的问题"可打断）。
         self._last_self_reply_was_question = False
+        self._last_private_closing_hint = ""
+        self._recent_deleted_message_ids: list[str] = []
         self._last_message_received_at = 0.0
         self._last_external_message_received_at: Optional[float] = None
+        self._recent_self_deliveries: deque[tuple[float, str, str]] = deque(maxlen=12)
         self._talk_frequency_adjust = 1.0
         self._recent_external_message_intervals: deque[tuple[float, float]] = deque()
         self._wait_timeout_task: Optional[asyncio.Task[None]] = None
@@ -644,6 +647,19 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             if source_kind == "guided_reply":
                 sent_text = (message.processed_plain_text or "").strip()
                 self._last_self_reply_was_question = sent_text.endswith(("?", "？", "吗", "呢"))
+                self._recent_self_deliveries.append(
+                    (time.time(), str(message.message_id or ""), sent_text[:60])
+                )
+                try:
+                    from src.maisaka.state_model import get_private_closing_store
+
+                    get_private_closing_store().on_self_reply(
+                        self.session_id,
+                        sent_text,
+                        is_group=bool(self.chat_stream.is_group_session),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug(f"{self.log_prefix} 私聊收尾状态更新失败（发送）: {exc}")
                 try:
                     state_store = get_state_store()
                     state_store.on_self_reply(self.session_id, text=sent_text)
@@ -669,6 +685,58 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
                 "同步已发送消息到 Maisaka 历史失败: %s", type(exc).__name__
             )
             return False
+
+    def build_interleaved_timing_reminder(self, source_messages: Sequence[SessionMessage]) -> str:
+        """当入站消息与我方排队发送的消息发生时间交错时，构造时序校准提醒。
+
+        对标 companion_v2/conversation/private_reply_context.py：
+        在全局发送队列或防抖等待期间，若对方发出新消息时我方上一条回复尚未真正送达
+        （对方消息 timestamp < 我方消息 delivered_at），显式提示模型区分 before_input 与
+        after_input，避免把对方针对前序话题的短确认（如“好”“嗯”）误判为对新发消息的回应。
+        """
+
+        if not source_messages or not self._recent_self_deliveries:
+            return ""
+        input_times: list[tuple[float, str]] = []
+        for msg in source_messages:
+            user_info = getattr(getattr(msg, "message_info", None), "user_info", None)
+            uid = str(getattr(user_info, "user_id", "") or "")
+            if is_bot_self(getattr(msg, "platform", ""), uid):
+                continue
+            ts = getattr(msg, "timestamp", None)
+            if isinstance(ts, datetime):
+                try:
+                    epoch = ts.timestamp()
+                except (OSError, ValueError):
+                    continue
+                input_times.append((epoch, str(msg.message_id or "")))
+        if not input_times:
+            return ""
+
+        earliest_in_ts, earliest_in_id = min(input_times, key=lambda item: item[0])
+        after_input_deliveries = [
+            (deliv_ts, mid, snippet)
+            for deliv_ts, mid, snippet in self._recent_self_deliveries
+            if deliv_ts > earliest_in_ts and (deliv_ts - earliest_in_ts) <= 120.0
+        ]
+        if not after_input_deliveries:
+            return ""
+
+        before_input_deliveries = [
+            (deliv_ts, mid, snippet)
+            for deliv_ts, mid, snippet in self._recent_self_deliveries
+            if deliv_ts <= earliest_in_ts
+        ]
+        last_before_id = before_input_deliveries[-1][1] if before_input_deliveries else "无"
+        after_desc = "；".join(
+            f"msg_id={mid or '未知'}（{snippet!r}）" for _, mid, snippet in after_input_deliveries[-2:]
+        )
+        return (
+            f"[时序校准提醒] 本轮最早入站消息（msg_id={earliest_in_id}）发出时，"
+            f"我方最新送达的消息是 msg_id={last_before_id}；而我方的 {after_desc} 是在对方打字之后才发出的（擦肩而过）。"
+            "理解对方的简短应声、确认或追问时，它承接的是其打字前已看到的内容，不要误判为对后来刚发出消息的回答；"
+            "同时避免重复承诺后来消息里已经给出的内容。"
+        )
 
     def _schedule_sent_image_recognition(self, message: SessionMessage) -> None:
         """为已发送并同步进历史的图片消息调度后台识图。"""
@@ -979,18 +1047,53 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
 
                 await publish_pending_history(message)
             return
+        # 只在新入站登记，恢复历史和 Replyer 均不得补登记旧源。
+        from src.maisaka.context.continuity_bridge import ledger_call, is_explicit_stop
+        user_id = str(message.message_info.user_info.user_id)
+        stopped = False
+        if message.platform == "telegram" and not is_bot_self(message.platform, user_id):
+            directed = message.message_info.group_info is None or message.is_at or message.is_mentioned
+            stopped = bool(directed and is_explicit_stop(message.processed_plain_text or ""))
+            try:
+                from src.maisaka.context.planner_messages import extract_quote_ids_from_message_sequence
+                quote_ids = extract_quote_ids_from_message_sequence(message.raw_message)
+                await ledger_call("observe", self.session_id, user_id, str(message.message_id),
+                                  reply_to_id=str(quote_ids[0]) if quote_ids else "", stop=stopped,
+                                  source_timestamp=message.message_info.additional_config.get("continuity_source_timestamp"))
+            except Exception as exc:
+                logger.warning("互动账本入站降级: %s", type(exc).__name__)
+        if stopped:
+            return  # 停止只取消同用户既有事项，不唤醒新 Planner。
+        closing_suppressed = False
+        if not self.chat_stream.is_group_session and not is_bot_self(message.platform, user_id):
+            try:
+                from src.maisaka.state_model import get_private_closing_store
+
+                closing_suppressed, closing_hint = get_private_closing_store().on_inbound(
+                    self.session_id,
+                    message.processed_plain_text or "",
+                    is_group=False,
+                )
+                self._last_private_closing_hint = closing_hint
+            except Exception as exc:  # noqa: BLE001
+                logger.debug(f"{self.log_prefix} 私聊收尾状态更新失败（入站）: {exc}")
         if self._running:
             self._ensure_background_tasks_running()
         received_at = time.time()
         self._last_message_received_at = received_at
         self._record_external_message_interval(message, received_at)
-        self._update_chat_state_for_incoming(message)
+        await self._update_chat_state_for_incoming(message)
         self._update_message_trigger_state(message)
         self.message_cache.append(message)
         self._emit_monitor_message_ingested(message)
         self._prune_processed_message_cache()
         if self._is_reply_effect_tracking_enabled():
             asyncio.create_task(self._reply_effect_tracker.observe_user_message(message))
+        if closing_suppressed:
+            logger.info(
+                f"{self.log_prefix} 私聊收尾静默保持：对方发送道别尾声附和，仅入库不唤醒 Planner；msg_id={message.message_id}"
+            )
+            return
         if not self._should_continue_after_focus_gate(message):
             return
         if self._agent_state == self._STATE_RUNNING:
@@ -1024,7 +1127,7 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
         )
         return False
 
-    def _update_chat_state_for_incoming(self, message: SessionMessage) -> None:
+    async def _update_chat_state_for_incoming(self, message: SessionMessage) -> None:
         """Phase 3/4/5：群友发言事件驱动状态更新（规则，不调模型）。"""
 
         try:
@@ -1032,7 +1135,8 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
             if is_bot_self(message.platform, user_id):
                 return
             text = (message.processed_plain_text or "").strip()
-            directed = bool(message.is_at or message.is_mentioned)
+            directed = bool(message.message_info.group_info is None or message.is_at or message.is_mentioned)
+            correction_text = None
             state_store = get_state_store()
             wait_event = state_store.on_external_message(
                 self.session_id,
@@ -1047,12 +1151,18 @@ class MaisakaHeartFlowChatting(MaisakaFocusRuntimeMixin, MaisakaRuntimeDisplayMi
                 logger.info(f"{self.log_prefix} 状态事件: 被明确拒绝，进入冷却")
             elif directed and follow_up_priority(text=core, is_at=False, is_mentioned=False) == "correction":
                 state_store.on_correction(self.session_id, user_id=user_id)
-                record_correction(self.session_id, user_id=user_id, text=core)
+                correction_text = core
             if wait_event:
                 logger.info(f"{self.log_prefix} 等待状态机: {wait_event}")
             state_store.flush()
+            if correction_text is not None:
+                # 新增账本 I/O 不阻塞事件循环；既有状态 flush 不作跨线程改造。
+                await asyncio.to_thread(
+                    record_correction, self.session_id, user_id=user_id, text=correction_text,
+                    source_message_id=message.message_id,
+                )
         except Exception as exc:  # noqa: BLE001
-            logger.debug(f"{self.log_prefix} 聊天状态更新失败（入站）: {exc}")
+            logger.warning(f"{self.log_prefix} 聊天状态更新失败（入站）: {type(exc).__name__}")
 
     def _request_planner_interrupt_for_message(self, message: SessionMessage) -> None:
         """在运行中的 Planner 可打断时，按连续打断限制发起一次中断。
