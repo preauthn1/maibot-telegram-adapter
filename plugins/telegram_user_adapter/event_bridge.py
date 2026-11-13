@@ -125,7 +125,9 @@ class EventBridge:
         from .content_safety import detect_nsfw
         if operation == "catchup" and (detect_spam(text)[0] or detect_nsfw(text)[0]):
             return
-        result = await p.ctx.maisaka.context.append(stream_id=sid, telegram_event={
+        # maibot_sdk 2.9 起 append() 的 segments 是必填位置参数；
+        # telegram_event 路径 Host 侧不消费 segments，传空占位即可。
+        result = await p.ctx.maisaka.context.append(stream_id=sid, segments=[], telegram_event={
             "operation": operation, "chat_id": chat, "target": target,
             "private": bool(event.is_private), "topic": topic,
             "message_id": str(event.message.id), "sender_id": str(event.sender_id),
@@ -145,6 +147,7 @@ class EventBridge:
         chat = str(event.chat_id) if event.chat_id is not None else None
         ids = [str(mid) for mid in event.deleted_ids]
         result = await self.plugin.ctx.maisaka.context.append(stream_id="telegram-event-delete",
+            segments=[],
             telegram_event={"operation": "delete", "chat_id": chat, "message_ids": ids})
         if not isinstance(result, dict) or result.get("success") is not True:
             raise RuntimeError("Telegram 删除未确认")

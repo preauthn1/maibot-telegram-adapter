@@ -73,7 +73,11 @@ class DurableCatchup:
 
     def done(self, task):
         if not task.cancelled() and task.exception() is not None:
-            self.bridge.plugin.ctx.logger.error("Telegram 补历史失败：%s", type(task.exception()).__name__)
+            # 完整回溯才能定位补历史链路中的具体失败点。
+            self.bridge.plugin.ctx.logger.error(
+                "Telegram 补历史失败：%s", type(task.exception()).__name__,
+                exc_info=task.exception()
+            )
 
     async def cancel(self):
         task, self.task = self.task, None
@@ -89,7 +93,19 @@ class DurableCatchup:
         p = self.bridge.plugin
         budget = min(60.0, max(1.0, p._load_settings().catchup.time_budget_seconds))
         try:
-            await asyncio.wait_for(self.fetch(), timeout=budget)
+            # Telegram 监听启动通常早于 Host 聊天流注册；先等精确目标流出现，
+            # 否则冷启动会把整轮补历史静默跳过。
+            deadline = asyncio.get_running_loop().time() + budget
+            while True:
+                settings = p._load_settings()
+                targets = list(dict.fromkeys(settings.catchup.targets))[:32]
+                missing = [target for target in targets
+                           if not await p._resolve_host_stream_id(target)]
+                if not missing or asyncio.get_running_loop().time() >= deadline:
+                    break
+                await asyncio.sleep(min(5.0, max(0.1, deadline - asyncio.get_running_loop().time())))
+            remaining = max(0.1, deadline - asyncio.get_running_loop().time())
+            await asyncio.wait_for(self.fetch(), timeout=remaining)
         except asyncio.TimeoutError:
             p.ctx.logger.warning("Telegram 补历史达到时间上限；未确认消息不会推进水位")
 
