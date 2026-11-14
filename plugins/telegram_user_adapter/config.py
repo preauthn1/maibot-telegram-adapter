@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Iterable, List, Literal
+from typing import Any, ClassVar, Dict, Iterable, List, Literal
 
 from maibot_sdk import Field, PluginConfigBase
 from pydantic import field_validator
@@ -357,6 +357,31 @@ class TelegramUserBehaviorConfig(PluginConfigBase):
         description="启用无文字连发图片节流采样的群聊 ID 列表（节省视觉 Token，默认空）。",
         json_schema_extra={"label": "连发图片采样群聊", "order": 29},
     )
+    chat_multiplier_floors: Dict[str, float] = Field(
+        default_factory=dict,
+        description="按会话键设置插件频率倍率的下限（防止已由 talk_value_rules 显式控频的群聊再被深夜作息与冷群系数二次压低）。",
+        json_schema_extra={"label": "会话倍率下限", "order": 30},
+    )
+
+    @field_validator("chat_multiplier_floors", mode="before")
+    @classmethod
+    def _normalize_chat_multiplier_floors(cls, value: Any) -> Dict[str, float]:
+        """把会话频率倍率下限规范化为非负浮点字典。"""
+
+        if not isinstance(value, dict):
+            return {}
+        normalized: Dict[str, float] = {}
+        for raw_key, raw_val in value.items():
+            key = str(raw_key or "").strip()
+            if not key:
+                continue
+            try:
+                parsed = float(raw_val)
+            except (TypeError, ValueError):
+                continue
+            if parsed > 0:
+                normalized[key] = min(2.0, parsed)
+        return normalized
 
     @field_validator("image_burst_sample_chats", mode="before")
     @classmethod

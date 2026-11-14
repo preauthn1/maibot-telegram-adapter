@@ -74,7 +74,7 @@ from .transcript import ChatTranscriptLogger
 from .trigger import TriggerManager
 from .unlimited_mode import describe as describe_unlimited, frequency_scope, is_unlimited, scoped_frequency
 from .usage_stats import ModelPricing, UsageTracker
-from .utils import parse_topic_group_id
+from .utils import chat_id_aliases, parse_topic_group_id
 from .manual_history import ingest_manual_outgoing
 
 
@@ -1364,6 +1364,18 @@ class TelegramUserAdapterPlugin(MaiBotPlugin):
         # 实测账号 95% 发言挤在 07-09 点，而真人这三小时只占 20%，
         # 这种\"每天固定时段集中说话\"的模式比说错话更容易暴露。
         multiplier *= get_activity_multiplier()
+        # 若会话在配置中显式指定了插件倍率下限（例如已在 Host 侧通过 talk_value_rules
+        # 设定目标频率），则不再被冷群互动系数与深夜作息乘积二次压低；安全与发送闸门不受影响。
+        floors = self._load_settings().behavior.chat_multiplier_floors
+        if floors:
+            aliases = chat_id_aliases(chat_id)
+            matched_floors = [
+                floor_val
+                for cfg_chat, floor_val in floors.items()
+                if aliases & chat_id_aliases(cfg_chat)
+            ]
+            if matched_floors:
+                multiplier = max(multiplier, max(matched_floors))
         if is_unlimited(chat_id):
             multiplier = 1.0
 
